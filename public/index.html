@@ -110,20 +110,12 @@
     }
 
     #sync-bar {
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 6px;
-      padding: 4px 1.4rem;
-      font-size: .65rem;
-      color: var(--mu);
-      background: rgba(0, 0, 0, .2);
-      border-bottom: 1px solid var(--bd)
+      display: none
     }
 
     #sync-dot {
-      width: 7px;
-      height: 7px;
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
       background: #71748a;
       flex-shrink: 0;
@@ -157,22 +149,32 @@
 
     #sync-msg {
       transition: color .3s;
-      flex: 1
+      font-size: .6rem;
+      color: var(--mu)
+    }
+
+    #user-email {
+      font-size: .6rem;
+      color: var(--tx);
+      font-weight: 500;
+      white-space: nowrap
     }
 
     #tb {
       display: flex;
       align-items: center;
-      gap: 6px;
-      padding: .6rem 1.4rem .45rem;
-      flex-wrap: wrap
+      gap: 4px;
+      padding: 3px .8rem;
+      flex-wrap: wrap;
+      background: rgba(0, 0, 0, .2);
+      border-bottom: 1px solid var(--bd)
     }
 
     #sw {
       position: relative;
       flex: 1;
-      min-width: 160px;
-      max-width: 460px
+      min-width: 120px;
+      max-width: 320px
     }
 
     #seb {
@@ -499,40 +501,42 @@
       margin: 4px 0
     }
 
+    #ribbon {
+      display: flex;
+      flex-direction: column
+    }
+
+    #gtabs {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 0;
+      padding: 0 .8rem;
+      background: rgba(0, 0, 0, .25);
+      border-bottom: 1px solid var(--bd);
+      min-height: 24px;
+      align-items: stretch;
+      overflow-x: auto;
+      overflow-y: hidden
+    }
+
     #ptabs {
       display: flex;
       flex-wrap: wrap;
-      gap: 5px;
-      padding: .2rem 1.4rem .3rem;
-      align-items: center
-    }
-
-    .ptab {
-      display: flex;
+      gap: 2px;
+      padding: 0 .8rem;
       align-items: center;
-      gap: 5px;
-      padding: .33rem .8rem;
-      border-radius: 22px;
+      min-height: 22px;
       background: var(--s1);
-      border: 2px solid transparent;
-      cursor: pointer;
-      white-space: nowrap;
-      font-size: .76rem;
-      color: var(--mu);
-      transition: all .18s;
-      user-select: none;
-      backdrop-filter: blur(8px)
+      border-bottom: 1px solid var(--bd)
     }
 
-    .ptab:hover {
-      color: var(--tx);
-      border-color: var(--bd)
+    .ptab.tab-dragover {
+      border-bottom-color: var(--ac);
+      background: rgba(108, 143, 255, .15)
     }
 
-    .ptab.active {
-      background: rgba(108, 143, 255, .18);
-      border-color: rgba(108, 143, 255, .42);
-      color: var(--tx)
+    .ptab.dragging {
+      opacity: .4
     }
 
     .ptnm {
@@ -540,11 +544,12 @@
       background: none;
       border: none;
       font-family: var(--font);
-      font-size: .76rem;
+      font-size: inherit;
       color: inherit;
-      min-width: 22px;
-      max-width: 105px;
-      cursor: default
+      min-width: 0;
+      max-width: none;
+      cursor: default;
+      white-space: nowrap
     }
 
     .ptnm[contenteditable=true] {
@@ -553,19 +558,25 @@
     }
 
     .ptx {
-      width: 13px;
-      height: 13px;
+      width: 12px;
+      height: 12px;
       border-radius: 50%;
       background: none;
       border: none;
       cursor: pointer;
       color: var(--mu);
-      font-size: .55rem;
+      font-size: .5rem;
       display: flex;
       align-items: center;
       justify-content: center;
       transition: all .12s;
-      flex-shrink: 0
+      flex-shrink: 0;
+      opacity: 0
+    }
+
+    .ptab:hover .ptx,
+    .gtab:hover .ptx {
+      opacity: 1
     }
 
     .ptx:hover {
@@ -573,20 +584,388 @@
       color: var(--red)
     }
 
+    #gtabs {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 0;
+      padding: 0 1rem;
+      background: rgba(0, 0, 0, .25);
+      border-bottom: 1px solid var(--bd);
+      min-height: 24px;
+      align-items: stretch;
+      overflow-x: auto;
+      overflow-y: hidden
+    }
+
+    .gtab {
+      padding: 3px 8px;
+      font-size: .7rem;
+      border-radius: 0;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--mu);
+      cursor: pointer;
+      user-select: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all .15s;
+      white-space: nowrap;
+      flex-shrink: 0
+    }
+
+    .gtab:hover {
+      background: rgba(255, 255, 255, .04);
+      color: var(--tx)
+    }
+
+    .gtab.active {
+      border-bottom-color: var(--ac);
+      color: var(--tx);
+      font-weight: 600;
+      background: rgba(108, 143, 255, .06)
+    }
+
+    .ptab {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      white-space: nowrap;
+      font-size: .68rem;
+      color: var(--mu);
+      transition: all .14s;
+      user-select: none;
+      line-height: 1.3
+    }
+
+    .ptab:hover {
+      color: var(--tx);
+      background: rgba(255, 255, 255, .04)
+    }
+
+    .ptab.active {
+      background: rgba(108, 143, 255, .12);
+      border-bottom-color: var(--ac);
+      color: var(--tx)
+    }
+
+    .ptab.tab-dragover {
+      border-bottom-color: var(--ac);
+      background: rgba(108, 143, 255, .15)
+    }
+
+    .ptab.dragging {
+      opacity: .4
+    }
+
+    #live-pv {
+      display: none;
+      position: fixed;
+      z-index: 900;
+      pointer-events: none;
+      width: 340px;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 12px 48px rgba(0, 0, 0, .8);
+      border: 1px solid rgba(255, 255, 255, .12);
+      background: #111;
+      padding: 0
+    }
+
+    #live-pv img {
+      width: 100%;
+      display: block
+    }
+
+    #live-pv .pv-loading {
+      padding: 2rem;
+      text-align: center;
+      color: var(--mu);
+      font-size: .75rem
+    }
+
+    .ib.active-toggle {
+      background: rgba(108, 143, 255, .22);
+      border-color: var(--ac);
+      color: var(--tx)
+    }
+
+    /* INBOX sidebar */
+    #inbox-side {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 280px;
+      min-width: 200px;
+      max-width: 50vw;
+      height: 100vh;
+      background: rgba(10, 12, 22, .97);
+      border-left: 1px solid var(--bd);
+      z-index: 800;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      transition: transform .22s ease;
+      backdrop-filter: blur(12px)
+    }
+
+    #inbox-side.open {
+      transform: translateX(0)
+    }
+
+    #inbox-resize {
+      position: absolute;
+      left: -4px;
+      top: 0;
+      width: 8px;
+      height: 100%;
+      cursor: ew-resize;
+      z-index: 2
+    }
+
+    /* Quick inbox input */
+    #qi {
+      background: rgba(255, 255, 255, .06);
+      border: 1px solid var(--bd);
+      border-radius: 6px;
+      color: var(--tx);
+      font-size: .65rem;
+      padding: 3px 6px;
+      outline: none;
+      width: 110px;
+      min-width: 80px;
+      transition: border-color .15s
+    }
+
+    #qi:focus {
+      border-color: var(--ac)
+    }
+
+    #qi::placeholder {
+      color: var(--mu)
+    }
+
+    /* Duplicate report */
+    #m-dup .mc {
+      max-width: 520px
+    }
+
+    .dup-list {
+      max-height: 50vh;
+      overflow-y: auto;
+      margin: 8px 0
+    }
+
+    .dup-it {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--bd);
+      font-size: .7rem
+    }
+
+    .dup-it img {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      flex-shrink: 0
+    }
+
+    .dup-info {
+      flex: 1;
+      overflow: hidden
+    }
+
+    .dup-url {
+      color: var(--tx);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis
+    }
+
+    .dup-meta {
+      color: var(--mu);
+      font-size: .6rem
+    }
+
+    .dup-it .dup-rm {
+      background: none;
+      border: 1px solid rgba(255, 100, 100, .3);
+      border-radius: 4px;
+      color: #ff6b6b;
+      cursor: pointer;
+      font-size: .6rem;
+      padding: 2px 6px;
+      flex-shrink: 0
+    }
+
+    .inbox-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--bd);
+      font-size: .75rem;
+      font-weight: 600;
+      color: var(--tx)
+    }
+
+    .inbox-hdr button {
+      background: none;
+      border: none;
+      color: var(--mu);
+      cursor: pointer;
+      font-size: .9rem
+    }
+
+    .inbox-add {
+      display: flex;
+      gap: 4px;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--bd)
+    }
+
+    .inbox-add input {
+      flex: 1;
+      background: rgba(255, 255, 255, .06);
+      border: 1px solid var(--bd);
+      border-radius: 5px;
+      color: var(--tx);
+      font-size: .7rem;
+      padding: 4px 6px;
+      outline: none
+    }
+
+    .inbox-add button {
+      background: var(--ac);
+      border: none;
+      border-radius: 5px;
+      color: #fff;
+      font-size: .65rem;
+      padding: 4px 8px;
+      cursor: pointer;
+      white-space: nowrap
+    }
+
+    .inbox-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 0
+    }
+
+    .inbox-it {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      font-size: .7rem;
+      color: var(--tx);
+      border-bottom: 1px solid rgba(255, 255, 255, .04);
+      cursor: default
+    }
+
+    .inbox-it:hover {
+      background: rgba(255, 255, 255, .04)
+    }
+
+    .inbox-it img {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px
+    }
+
+    .inbox-it .inbox-lbl {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap
+    }
+
+    .inbox-it .inbox-url {
+      font-size: .55rem;
+      color: var(--mu);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 100px
+    }
+
+    .inbox-it .inbox-rm {
+      background: none;
+      border: none;
+      color: var(--mu);
+      cursor: pointer;
+      font-size: .7rem;
+      flex-shrink: 0
+    }
+
+    .inbox-it .inbox-mv {
+      background: none;
+      border: none;
+      color: var(--ac);
+      cursor: pointer;
+      font-size: .6rem;
+      flex-shrink: 0
+    }
+
+    /* Contrast helper */
+    .contrast-light #gtabs,
+    .contrast-light #ptabs {
+      color: #1a1a2e
+    }
+
+    .contrast-light .gtab {
+      color: rgba(0, 0, 0, .55)
+    }
+
+    .contrast-light .gtab.active {
+      color: #1a1a2e
+    }
+
+    .contrast-light .ptab {
+      color: rgba(0, 0, 0, .55)
+    }
+
+    .contrast-light .ptab.active {
+      color: #1a1a2e
+    }
+
+    .contrast-light .ptnm {
+      color: inherit
+    }
+
+    .contrast-light .tab-add {
+      color: rgba(0, 0, 0, .35);
+      border-color: rgba(0, 0, 0, .15)
+    }
+
+    #m-settings .mc {
+      max-width: 360px
+    }
+
     .tab-add {
-      width: 24px;
-      height: 24px;
+      width: 18px;
+      height: 18px;
       border-radius: 50%;
-      background: var(--s1);
+      background: transparent;
       border: 1px dashed rgba(255, 255, 255, .13);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: .82rem;
+      font-size: .65rem;
       color: var(--mu);
-      transition: all .2s;
-      flex-shrink: 0
+      transition: all .15s;
+      flex-shrink: 0;
+      margin-left: 4px
     }
 
     .tab-add:hover {
@@ -595,9 +974,10 @@
       color: var(--ac)
     }
 
-    .ptab-cd {
-      width: 8px;
-      height: 8px;
+    .ptab-cd,
+    .gtab-cd {
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
       flex-shrink: 0;
       cursor: pointer
@@ -653,13 +1033,17 @@
       padding: .4rem 1.4rem 1.5rem;
       display: grid;
       gap: .95rem;
-      align-items: start
+      align-items: start;
+      overflow-x: hidden;
+      width: 100%
     }
 
     .col {
       display: flex;
       flex-direction: column;
-      gap: .85rem
+      gap: .85rem;
+      min-width: 0;
+      overflow: hidden
     }
 
     .widget {
@@ -668,7 +1052,9 @@
       transition: box-shadow .2s;
       position: relative;
       backdrop-filter: blur(12px);
-      cursor: default
+      cursor: default;
+      min-width: 0;
+      max-width: 100%
     }
 
     .widget.drag-over-w {
@@ -678,11 +1064,12 @@
     .wh {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: .6rem .82rem .5rem;
+      position: relative;
+      padding: .5rem .75rem .4rem;
       border-bottom: 1px solid var(--bd);
       user-select: none;
-      cursor: grab
+      cursor: grab;
+      overflow: hidden
     }
 
     .wh:active {
@@ -697,14 +1084,28 @@
       color: rgba(255, 255, 255, .42);
       display: flex;
       align-items: center;
-      gap: 5px
+      gap: 5px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+      flex: 1;
+      z-index: 1
     }
 
     .wa {
       display: flex;
       gap: 2px;
       opacity: 0;
-      transition: opacity .15s
+      transition: opacity .15s;
+      position: absolute;
+      right: .5rem;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 2;
+      padding: 2px 4px;
+      border-radius: 5px;
+      background: inherit
     }
 
     .widget:hover .wa {
@@ -820,7 +1221,9 @@
       text-decoration: none;
       color: var(--tx);
       transition: background .12s;
-      position: relative
+      position: relative;
+      min-width: 0;
+      max-width: 100%
     }
 
     .st-it:hover {
@@ -1691,27 +2094,30 @@
   <div id="bgl"></div>
 
   <div id="root">
-    <div id="sync-bar">
-      <span id="user-email" style="color:var(--tx);margin-right:auto;font-weight:500;"></span>
-      <div id="sync-dot" class="loading"></div>
-      <span id="sync-msg">Connecting...</span>
-    </div>
+    <div id="sync-bar"></div>
 
     <div id="tb">
+      <span id="user-email">👤</span>
+      <div id="sync-dot" class="loading"></div>
+      <span id="sync-msg">Connecting...</span>
+      <div class="tb-sep"></div>
+      <input id="qi" type="text" placeholder="✉ Quick Inbox…" autocomplete="off" spellcheck="false"
+        title="Paste URL here to send to Inbox">
       <div id="sw">
         <button id="seb">🔍</button>
-        <input id="si" type="text" placeholder="Search bookmarks…" autocomplete="off" spellcheck="false">
+        <input id="si" type="text" placeholder="Search…" autocomplete="off" spellcheck="false">
         <div id="ep"></div>
         <div id="sr"></div>
       </div>
+      <button class="ib" id="inbox-btn" title="Inbox">📥</button>
+      <button class="ib" id="all-btn" title="Show All Pages">ALL</button>
+      <button class="ib" id="dup-btn" title="Find Duplicate Links">🔎</button>
       <div class="tb-sep"></div>
-      <span style="font-size:.66rem;color:var(--mu);white-space:nowrap">Cols:</span>
-      <div id="col-btns" style="display:flex;gap:3px"></div>
-      <div class="tb-sep"></div>
+      <span style="font-size:.6rem;color:var(--mu);white-space:nowrap">Cols:</span>
+      <div id="col-btns" style="display:flex;gap:2px"></div>
       <div style="position:relative">
-        <button class="ib" id="bg-btn" title="Page Background">🖼️ BG</button>
+        <button class="ib" id="bg-btn" title="Page Background">🖼️</button>
       </div>
-      <div class="tb-sep"></div>
       <div style="position:relative">
         <button class="ib" id="ac-btn" title="Accent Color"><span id="ac-dot"></span></button>
         <div id="ac-pop"></div>
@@ -1726,19 +2132,69 @@
               JSON<input type="file" id="imp-json" accept=".json" style="display:none"></label></div>
           <div class="io-it"><label style="cursor:pointer;display:flex;align-items:center;gap:8px;width:100%">📊 Import
               CSV<input type="file" id="imp-csv" accept=".csv,.xlsx,.xls,.txt" style="display:none"></label></div>
+          <div class="io-it"><label style="cursor:pointer;display:flex;align-items:center;gap:8px;width:100%">🌐 Import
+              Start.me<input type="file" id="imp-startme" accept=".html,.htm" style="display:none"></label></div>
           <div class="io-sep"></div>
           <div class="io-it" id="reset-btn" style="color:var(--red)">🗑️ Reset All</div>
         </div>
       </div>
+      <button class="ib" id="pv-mode-btn" title="Quick Preview Mode">👁️</button>
+      <button class="ib" id="settings-btn" title="Settings">⚙️</button>
       <div class="tb-sep"></div>
       <button class="ib danger" id="logout-btn" title="Sign out" style="color:var(--red)">🚪</button>
     </div>
 
-    <div id="ptabs">
-      <button class="tab-add" id="add-pg" title="New Page">＋</button>
+    <div id="ribbon">
+      <div id="gtabs">
+        <button class="tab-add" id="add-grp" title="New Group">＋</button>
+      </div>
+      <div id="ptabs">
+        <button class="tab-add" id="add-pg" title="New Page">＋</button>
+      </div>
     </div>
 
     <div id="cw"></div>
+  </div>
+
+  <div id="live-pv"></div>
+
+  <div id="inbox-side">
+    <div id="inbox-resize"></div>
+    <div class="inbox-hdr"><span>📥 Inbox</span><button id="inbox-close">✕</button></div>
+    <div class="inbox-add">
+      <input type="url" id="inbox-url" placeholder="Paste URL…">
+      <input type="text" id="inbox-lbl" placeholder="Label" style="max-width:80px">
+      <button id="inbox-add-btn">Add</button>
+    </div>
+    <div class="inbox-list" id="inbox-list"></div>
+  </div>
+
+  <div class="mo" id="m-dup">
+    <div class="mc">
+      <h3>🔎 Duplicate Links</h3>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <button class="btn ba" id="dup-page">This Page</button>
+        <button class="btn bg-btn" id="dup-all">All Pages</button>
+      </div>
+      <div class="dup-list" id="dup-list"></div>
+      <div class="ma">
+        <button class="btn bg-btn" onclick="closeM('m-dup')">Close</button>
+        <button class="btn ba" id="dup-del-all" style="background:#ff4444">🗑️ Remove All Duplicates</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mo" id="m-mv">
+    <div class="mc">
+      <h3>Move / Copy Widget</h3>
+      <div class="fg"><label>To Group</label><select class="fi" id="mv-grp"></select></div>
+      <div class="fg"><label>To Page</label><select class="fi" id="mv-pg"></select></div>
+      <div class="ma">
+        <button class="btn bg-btn" onclick="closeM('m-mv')">Cancel</button>
+        <button class="btn ba" id="mv-copy">📋 Copy</button>
+        <button class="btn ba" id="mv-move">📦 Move</button>
+      </div>
+    </div>
   </div>
 
   <div id="pvt">
@@ -1908,6 +2364,24 @@
     </div>
   </div>
 
+  <div class="mo" id="m-settings">
+    <div class="mc">
+      <h3>⚙️ Settings</h3>
+      <div class="fg"><label>Startup Group</label>
+        <select class="fi" id="set-def-grp">
+          <option value="__last__">🕐 Remember last</option>
+        </select>
+      </div>
+      <div class="fg"><label>Startup Page</label>
+        <select class="fi" id="set-def-pg">
+          <option value="__last__">🕐 Remember last</option>
+        </select>
+      </div>
+      <div class="ma"><button class="btn bg-btn" onclick="closeM('m-settings')">Cancel</button><button class="btn ba"
+          id="ok-settings">Save</button></div>
+    </div>
+  </div>
+
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyB-CeazTspR22753qVHzMlmgePPGVLhYdk",
@@ -1927,16 +2401,17 @@
     let DB_REF = null;
 
     const ENGINES = [{ k: 'bm', ic: '🔖', name: 'Bookmarks (local)', url: '' }, { k: 'g', ic: '🔍', name: 'Google', url: 'https://www.google.com/search?q=' }, { k: 'dd', ic: '🦆', name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=' }, { k: 'bi', ic: '🔷', name: 'Bing', url: 'https://bing.com/search?q=' }, { k: 'br', ic: '🦁', name: 'Brave', url: 'https://search.brave.com/search?q=' }, { k: 'yt', ic: '▶️', name: 'YouTube', url: 'https://youtube.com/results?search_query=' }];
-    const SWATCHES = ['#6c8fff', '#e8c97a', '#7ed4a4', '#ff8fa3', '#c4a0ff', '#ff9f6b', '#4dd0e1', '#f06292'];
-    const TAB_COLORS = ['#6c8fff', '#e8c97a', '#7ed4a4', '#ff8fa3', '#c4a0ff', '#ff9f6b', '#4dd0e1', '#f06292', '#90caf9', '#a5d6a7'];
-    const DEF_COLOR = { r: 18, g: 20, b: 32, a: .94 };
-    const BG_SOLID_SWATCHES = ['#0d0f18', '#0f172a', '#1a0a2e', '#0a1f2e', '#1a1200', '#0d1a10', '#1e1b2e', '#2d1b2e', '#0a0a0a', '#1a1a2e', '#16213e', '#0f3460', '#1a2a1a', '#2a1a1a', '#1a2a2a', '#2a2a1a'];
+    const SWATCHES = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#000000', '#ffffff', '#6c8fff', '#e8c97a', '#7ed4a4', '#ff8fa3', '#c4a0ff', '#ff9f6b', '#4dd0e1', '#f06292'];
+    const TAB_COLORS = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#000000', '#ffffff', '#6c8fff', '#e8c97a', '#7ed4a4', '#ff8fa3', '#c4a0ff', '#ff9f6b', '#4dd0e1', '#f06292', '#90caf9', '#a5d6a7'];
+    const DEF_COLOR = { r: 255, g: 255, b: 255, a: .94 };
+    const BG_SOLID_SWATCHES = ['#ffffff', '#f5f5f5', '#e0e0e0', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#000000', '#0d0f18', '#0f172a', '#1a0a2e', '#0a1f2e', '#1a1200', '#0d1a10', '#1e1b2e', '#2d1b2e', '#0a0a0a', '#1a1a2e', '#16213e', '#0f3460', '#1a2a1a', '#2a1a1a', '#1a2a2a', '#2a2a1a'];
     const BG_GRADIENTS = ['linear-gradient(135deg,#0d0f18 0%,#1a1040 100%)', 'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)', 'linear-gradient(135deg,#1a0a2e 0%,#0d0f18 50%,#0a1f2e 100%)', 'linear-gradient(180deg,#0d0f18 0%,#1a2a1a 100%)', 'linear-gradient(135deg,#0d0f18 0%,#2a1a1a 100%)', 'radial-gradient(ellipse at top,#1a1040 0%,#0d0f18 70%)', 'radial-gradient(ellipse at bottom,#0a1f2e 0%,#0d0f18 70%)', 'linear-gradient(135deg,#0a0a0a 0%,#1a1a2e 100%)', 'linear-gradient(160deg,#0d0f18 0%,#16213e 50%,#0f3460 100%)'];
 
     const DEF = {
-      settings: { engine: 'bm', accent: '#6c8fff' }, cur: 'p0',
+      settings: { engine: 'bm', accent: '#6c8fff' }, cur: 'p0', curGroup: 'g0',
+      groups: [{ id: 'g0', name: 'Main Group' }], inbox: [],
       pages: [{
-        id: 'p0', name: 'Home', cols: 3, bg: '', bgType: 'none',
+        id: 'p0', groupId: 'g0', name: 'Home', cols: 3, bg: '', bgType: 'none',
         widgets: [
           { id: 'w1', col: 0, title: 'Quick Links', emoji: '⚡', type: 'bookmarks', display: 'auto', size: 'md', vis: 'all', color: { ...DEF_COLOR }, items: [{ id: 'i1', label: 'Google', url: 'https://google.com', emoji: '' }, { id: 'i2', label: 'GitHub', url: 'https://github.com', emoji: '' }, { id: 'i3', label: 'YouTube', url: 'https://youtube.com', emoji: '' }, { id: 'i4', label: 'Reddit', url: 'https://reddit.com', emoji: '' }] },
           { id: 'w2', col: 1, title: 'Work', emoji: '💼', type: 'list', display: 'stream', size: 'md', vis: 'all', color: { ...DEF_COLOR }, items: [{ id: 'i5', label: 'Notion', url: 'https://notion.so', emoji: '' }, { id: 'i6', label: 'Figma', url: 'https://figma.com', emoji: '' }] },
@@ -1983,14 +2458,20 @@
     function sanitizeData(d) {
       if (!d) return d;
       if (!d.settings) d.settings = { engine: 'bm', accent: '#6c8fff' };
+      if (!d.groups || !Array.isArray(d.groups) || d.groups.length === 0) {
+        d.groups = [{ id: 'g0', name: 'Main Group' }];
+      }
+      if (!d.curGroup) d.curGroup = d.groups[0].id;
       if (!d.pages) d.pages = JSON.parse(JSON.stringify(DEF.pages));
       d.pages.forEach(p => {
+        if (!p.groupId) p.groupId = d.groups[0].id;
         if (!p.widgets) p.widgets = [];
         p.widgets.forEach(w => {
           if (w.type !== 'note' && !w.items) w.items = [];
         });
       });
       if (!d.cur) d.cur = d.pages[0]?.id || 'p0';
+      if (!d.inbox) d.inbox = [];
       return d;
     }
 
@@ -2001,6 +2482,12 @@
         const data = snap.val();
         if (data) {
           D = sanitizeData(data);
+          if (isFirstLoad) {
+            const dg = D.settings.defaultGroup || '__last__';
+            const dp = D.settings.defaultPage || '__last__';
+            if (dg !== '__last__' && D.groups.some(g => g.id === dg)) { D.curGroup = dg; }
+            if (dp !== '__last__' && D.pages.some(p => p.id === dp)) { D.cur = dp; }
+          }
           renderAll();
         } else if (isFirstLoad) {
           sv();
@@ -2157,11 +2644,19 @@
     };
 
     function _parseImport(raw) {
-      if (raw.settings && raw.pages && Array.isArray(raw.pages) && raw.pages[0]?.widgets) return raw;
+      if (raw.settings && raw.pages && Array.isArray(raw.pages) && raw.pages[0]?.widgets) {
+        if (!raw.groups) {
+          raw.groups = [{ id: 'g0', name: 'Imported Group' }];
+          raw.curGroup = 'g0';
+          raw.pages.forEach(p => p.groupId = 'g0');
+        }
+        return raw;
+      }
       if (raw.pages && Array.isArray(raw.pages)) {
         const result = JSON.parse(JSON.stringify(DEF)); result.pages = [];
+        result.groups = [{ id: 'g0', name: 'Imported Group' }]; result.curGroup = 'g0';
         raw.pages.forEach((pg, pi) => {
-          const newPg = { id: uid(), name: pg.title || pg.name || 'Page ' + (pi + 1), cols: 3, bg: '', bgType: 'none', widgets: [] };
+          const newPg = { id: uid(), groupId: 'g0', name: pg.title || pg.name || 'Page ' + (pi + 1), cols: 3, bg: '', bgType: 'none', widgets: [] };
           const sections = pg.sections || pg.tabs || pg.widgets || [];
           sections.forEach((sec, si) => {
             const bms = sec.bookmark_collection?.bookmarks || sec.items || sec.bookmarks || [];
@@ -2180,6 +2675,8 @@
       }
       if (Array.isArray(raw)) {
         const result = JSON.parse(JSON.stringify(DEF));
+        result.groups = [{ id: 'g0', name: 'Imported Group' }]; result.curGroup = 'g0';
+        result.pages[0].groupId = 'g0';
         const w = { id: uid(), col: 0, title: 'Imported', emoji: '📥', type: 'bookmarks', display: 'auto', size: 'md', vis: 'all', color: { ...DEF_COLOR }, items: [] };
         raw.forEach(bm => { if (bm.url) w.items.push({ id: uid(), label: bm.title || bm.label || bm.name || bm.url, url: bm.url, emoji: '' }); });
         if (w.items.length) { result.pages[0].widgets.push(w); return result; }
@@ -2201,6 +2698,7 @@
       }
       const lines = text.trim().split(/\r?\n/);
       const result = JSON.parse(JSON.stringify(DEF)); result.pages = [];
+      result.groups = [{ id: 'g0', name: 'Imported CSV' }]; result.curGroup = 'g0';
       const pagesMap = {}, widgetsMap = {}; let count = 0;
       lines.forEach((line, i) => {
         if (i === 0) { const h = line.toLowerCase(); if (h.includes('title') || h.includes('url')) return; }
@@ -2208,7 +2706,7 @@
         const label = (cols[0] || '').trim(), url = (cols[1] || '').trim();
         const wName = (cols[2] || 'Imported').trim(), pName = (cols[3] || 'Imported').trim();
         if (!url || !url.startsWith('http')) return;
-        if (!pagesMap[pName]) { pagesMap[pName] = { id: uid(), name: pName, cols: 3, bg: '', bgType: 'none', widgets: [] }; result.pages.push(pagesMap[pName]); }
+        if (!pagesMap[pName]) { pagesMap[pName] = { id: uid(), groupId: 'g0', name: pName, cols: 3, bg: '', bgType: 'none', widgets: [] }; result.pages.push(pagesMap[pName]); }
         const wKey = pagesMap[pName].id + '_' + wName;
         if (!widgetsMap[wKey]) {
           const colIdx = Object.keys(widgetsMap).filter(k => k.startsWith(pagesMap[pName].id + '_')).length % 3;
@@ -2224,25 +2722,587 @@
       } else alert('No valid bookmarks found.');
     }
 
+    document.getElementById('imp-startme').onchange = function (e) {
+      const file = e.target.files[0]; if (!file) return;
+      const r = new FileReader();
+      r.onload = ev => {
+        try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(ev.target.result, 'text/html');
+          const result = { settings: { ...D.settings }, cur: '', curGroup: 'g0', groups: [{ id: 'g0', name: 'Start.me Import' }], pages: [] };
+          const topDL = doc.querySelector('body > DL') || doc.querySelector('DL');
+          if (!topDL) { alert('Invalid Start.me file'); return; }
+
+          // Find all PAGE H3s (top-level pages)
+          const topItems = topDL.children;
+          for (let i = 0; i < topItems.length; i++) {
+            const dt = topItems[i];
+            if (dt.tagName !== 'DT') continue;
+            const h3 = dt.querySelector(':scope > H3');
+            if (!h3) continue;
+            const isPage = h3.getAttribute('PAGE') === 'true';
+            if (!isPage) continue;
+
+            const pageName = h3.textContent.trim();
+            const cols = parseInt(h3.getAttribute('COLUMNS')) || 3;
+            const page = { id: uid(), groupId: 'g0', name: pageName, cols: Math.min(cols, 7), bg: '', bgType: 'none', widgets: [] };
+
+            // Find the DL sibling that contains widgets
+            const pageDL = dt.querySelector(':scope > DL');
+            if (pageDL) {
+              let widgetIdx = 0;
+              const pageDTs = pageDL.children;
+              for (let j = 0; j < pageDTs.length; j++) {
+                const wdt = pageDTs[j];
+                if (wdt.tagName !== 'DT') continue;
+                const wh3 = wdt.querySelector(':scope > H3');
+                if (!wh3) continue;
+
+                const widgetName = wh3.textContent.trim();
+                const widget = {
+                  id: uid(), col: widgetIdx % page.cols, title: widgetName, emoji: '📌',
+                  type: 'bookmarks', display: 'auto', size: 'md', vis: 'all',
+                  color: { ...DEF_COLOR }, items: []
+                };
+
+                // Parse bookmarks inside widget
+                const wDL = wdt.querySelector(':scope > DL');
+                if (wDL) {
+                  parseBookmarks(wDL, widget);
+                }
+
+                if (widget.items.length > 0) {
+                  page.widgets.push(widget);
+                  widgetIdx++;
+                }
+              }
+            }
+            result.pages.push(page);
+          }
+
+          if (result.pages.length === 0) { alert('No pages found in file.'); return; }
+          result.cur = result.pages[0].id;
+
+          if (!confirm('Import ' + result.pages.length + ' pages with ' +
+            result.pages.reduce((s, p) => s + (p.widgets || []).length, 0) + ' widgets?\nThis will REPLACE all current data.')) return;
+
+          D = result; sv(); renderAll();
+          document.getElementById('io-pop').classList.remove('open');
+          const totalBm = result.pages.reduce((s, p) => s + (p.widgets || []).reduce((ss, w) => ss + (w.items || []).length, 0), 0);
+          alert('✅ Imported! ' + result.pages.length + ' pages, ' + totalBm + ' bookmarks.');
+        } catch (err) {
+          alert('Import error: ' + err.message);
+        }
+      };
+      r.readAsText(file);
+      this.value = '';
+    };
+
+    function parseBookmarks(dl, widget) {
+      const items = dl.children;
+      for (let k = 0; k < items.length; k++) {
+        const bdt = items[k];
+        if (bdt.tagName !== 'DT') continue;
+        const a = bdt.querySelector(':scope > A');
+        if (a) {
+          const href = a.getAttribute('HREF') || '';
+          if (href && href.startsWith('http')) {
+            widget.items.push({ id: uid(), label: a.textContent.trim().slice(0, 80), url: href, emoji: '' });
+          }
+        }
+        // Recurse into sub-folders
+        const subH3 = bdt.querySelector(':scope > H3');
+        if (subH3) {
+          const subDL = bdt.querySelector(':scope > DL');
+          if (subDL) parseBookmarks(subDL, widget);
+        }
+      }
+    }
+
     document.getElementById('reset-btn').onclick = () => { if (!confirm('Reset all data?')) return; D = JSON.parse(JSON.stringify(DEF)); sv(); renderAll(); document.getElementById('io-pop').classList.remove('open'); };
-    function buildColBtns() { const c = document.getElementById('col-btns'); c.innerHTML = ''; for (let i = 1; i <= 7; i++) { const b = document.createElement('button'); b.className = 'ib col-btn' + (cp().cols === i ? ' on' : ''); b.textContent = i; b.onclick = () => { cp().cols = i; sv(); buildColBtns(); buildCols(); }; c.appendChild(b); } }
-    function buildTabs() { const bar = document.getElementById('ptabs'); bar.querySelectorAll('.ptab').forEach(t => t.remove()); const addBtn = document.getElementById('add-pg'); D.pages.forEach(pg => { const tab = document.createElement('div'); tab.className = 'ptab' + (pg.id === D.cur ? ' active' : ''); if (pg.tabColor) { tab.style.borderColor = pg.tabColor + '66'; } const cd = document.createElement('div'); cd.className = 'ptab-cd'; cd.style.background = pg.tabColor || 'rgba(255,255,255,.15)'; cd.title = 'Tab color'; cd.onclick = ev => { ev.stopPropagation(); openTcPop(ev, pg.id); }; const nm = document.createElement('span'); nm.className = 'ptnm'; nm.textContent = pg.name; nm.contentEditable = 'false'; nm.onblur = () => { nm.contentEditable = 'false'; pg.name = nm.textContent.trim() || 'Page'; sv(); }; nm.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); nm.blur(); } e.stopPropagation(); }; nm.onclick = e => { if (nm.contentEditable === 'true') e.stopPropagation(); }; tab.addEventListener('dblclick', e => { e.stopPropagation(); nm.contentEditable = 'true'; nm.focus(); const range = document.createRange(); range.selectNodeContents(nm); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); }); tab.onclick = () => { if (nm.contentEditable === 'true') return; D.cur = pg.id; sv(); renderAll(); }; const x = document.createElement('button'); x.className = 'ptx'; x.textContent = '✕'; x.title = 'Delete page'; x.onclick = e => { e.stopPropagation(); delPage(pg.id); }; tab.appendChild(cd); tab.appendChild(nm); if (D.pages.length > 1) tab.appendChild(x); bar.insertBefore(tab, addBtn); }); }
-    document.getElementById('add-pg').onclick = () => { const id = uid(); D.pages.push({ id, name: 'Page ' + (D.pages.length + 1), cols: 3, bg: '', bgType: 'none', widgets: [] }); D.cur = id; sv(); renderAll(); };
-    function delPage(pid) { if (D.pages.length <= 1) { alert('Cannot delete the only page.'); return; } if (!confirm('Delete this page?')) return; D.pages = D.pages.filter(p => p.id !== pid); if (D.cur === pid) D.cur = D.pages[0].id; sv(); renderAll(); }
+    function buildColBtns() { const c = document.getElementById('col-btns'); c.innerHTML = ''; for (let i = 1; i <= 7; i++) { const b = document.createElement('button'); b.className = 'ib col-btn' + (cp().cols === i ? ' on' : ''); b.textContent = i; b.onclick = () => { const page = cp(); const oldCols = page.cols; page.cols = i; if (i < oldCols) { (page.widgets || []).forEach(w => { if (w.col >= i) w.col = i - 1; }); } sv(); buildColBtns(); buildCols(); }; c.appendChild(b); } }
+
+    let _dragGrpId = null;
+    function buildGroups() {
+      const bar = document.getElementById('gtabs');
+      bar.querySelectorAll('.gtab').forEach(t => t.remove());
+      const addBtn = document.getElementById('add-grp');
+
+      D.groups.forEach(g => {
+        const tab = document.createElement('div');
+        tab.className = 'gtab' + (g.id === D.curGroup ? ' active' : '');
+        if (g.tabColor) { tab.style.borderBottomColor = g.id === D.curGroup ? g.tabColor : 'transparent'; }
+        tab.draggable = true;
+        tab.addEventListener('dragstart', e => { _dragGrpId = g.id; tab.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+        tab.addEventListener('dragend', () => { _dragGrpId = null; tab.classList.remove('dragging'); });
+        tab.addEventListener('dragover', e => { e.preventDefault(); if ((_dragGrpId && _dragGrpId !== g.id) || _dragTabId) tab.classList.add('tab-dragover'); });
+        tab.addEventListener('dragleave', () => tab.classList.remove('tab-dragover'));
+        tab.addEventListener('drop', e => {
+          e.preventDefault(); tab.classList.remove('tab-dragover');
+          if (_dragTabId) {
+            const pg = D.pages.find(p => p.id === _dragTabId);
+            if (pg && pg.groupId !== g.id) {
+              pg.groupId = g.id;
+              D.curGroup = g.id;
+              D.cur = pg.id;
+              _dragTabId = null; sv(); renderAll();
+            }
+            return;
+          }
+          if (!_dragGrpId || _dragGrpId === g.id) return;
+          const fromIdx = D.groups.findIndex(p => p.id === _dragGrpId);
+          const toIdx = D.groups.findIndex(p => p.id === g.id);
+          if (fromIdx < 0 || toIdx < 0) return;
+          const [moved] = D.groups.splice(fromIdx, 1);
+          D.groups.splice(toIdx, 0, moved);
+          _dragGrpId = null; sv(); buildGroups();
+        });
+        // Color dot
+        const cd = document.createElement('div'); cd.className = 'gtab-cd'; cd.style.background = g.tabColor || 'rgba(255,255,255,.15)'; cd.title = 'Group color';
+        cd.onclick = ev => { ev.stopPropagation(); openGrpColorPop(ev, g.id); };
+        // Name
+        const nm = document.createElement('span'); nm.className = 'ptnm'; nm.textContent = g.name; nm.contentEditable = 'false';
+        nm.onblur = () => { nm.contentEditable = 'false'; g.name = nm.textContent.trim() || 'Group'; sv(); };
+        nm.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); nm.blur(); } e.stopPropagation(); };
+        nm.onclick = e => { if (nm.contentEditable === 'true') e.stopPropagation(); };
+        tab.addEventListener('dblclick', e => {
+          e.stopPropagation(); nm.contentEditable = 'true'; nm.focus();
+          const range = document.createRange(); range.selectNodeContents(nm);
+          const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+        });
+        tab.onclick = () => {
+          if (nm.contentEditable === 'true') return;
+          D.curGroup = g.id;
+          const firstPageInGroup = D.pages.find(p => p.groupId === g.id);
+          if (firstPageInGroup) D.cur = firstPageInGroup.id;
+          sv(); renderAll();
+        };
+        const x = document.createElement('button'); x.className = 'ptx'; x.textContent = '✕'; x.title = 'Delete group';
+        x.onclick = e => { e.stopPropagation(); delGroup(g.id); };
+        tab.appendChild(cd); tab.appendChild(nm); if (D.groups.length > 1) tab.appendChild(x);
+        bar.insertBefore(tab, addBtn);
+      });
+      // Update ALL button style
+      document.getElementById('all-btn').classList.toggle('active-toggle', D.curGroup === '__all__');
+    }
+
+    function openGrpColorPop(ev, gid) {
+      tcPid = null;
+      const pop = document.getElementById('tc-pop');
+      pop.querySelectorAll('.tc-sw').forEach(s => s.remove());
+      TAB_COLORS.forEach(hex => {
+        const s = document.createElement('div'); s.className = 'tc-sw'; s.style.background = hex;
+        const grp = D.groups.find(g => g.id === gid);
+        s.style.borderColor = grp && grp.tabColor === hex ? '#fff' : 'transparent';
+        s.onclick = () => { if (grp) { grp.tabColor = hex; sv(); buildGroups(); } pop.classList.remove('open'); };
+        pop.insertBefore(s, document.getElementById('tc-none'));
+      });
+      document.getElementById('tc-none').onclick = () => { const grp = D.groups.find(g => g.id === gid); if (grp) { grp.tabColor = ''; sv(); buildGroups(); } pop.classList.remove('open'); };
+      pop.classList.add('open');
+      pop.style.left = Math.min(ev.clientX, window.innerWidth - 150) + 'px';
+      pop.style.top = (ev.clientY + 12) + 'px';
+    }
+
+    // ALL button
+    document.getElementById('all-btn').onclick = () => {
+      if (D.curGroup === '__all__') {
+        D.curGroup = D.groups[0].id;
+        const fp = D.pages.find(p => p.groupId === D.curGroup);
+        if (fp) D.cur = fp.id;
+      } else {
+        D.curGroup = '__all__';
+      }
+      sv(); renderAll();
+    };
+
+    // Preview mode
+    let _pvMode = false;
+    let _livePvTimer = null;
+    document.getElementById('pv-mode-btn').onclick = () => {
+      _pvMode = !_pvMode;
+      document.getElementById('pv-mode-btn').classList.toggle('active-toggle', _pvMode);
+      if (!_pvMode) { document.getElementById('live-pv').style.display = 'none'; }
+    };
+    function posLivePv(ev) {
+      const pv = document.getElementById('live-pv');
+      const W = window.innerWidth, H = window.innerHeight;
+      let x = ev.clientX + 16, y = ev.clientY + 14;
+      if (x + 430 > W) x = ev.clientX - 436;
+      if (y + 310 > H) y = ev.clientY - 316;
+      pv.style.left = Math.max(4, x) + 'px'; pv.style.top = Math.max(4, y) + 'px';
+    }
+
+    // Settings
+    document.getElementById('settings-btn').onclick = () => {
+      const grpSel = document.getElementById('set-def-grp');
+      const pgSel = document.getElementById('set-def-pg');
+      grpSel.innerHTML = '<option value="__last__">🕐 Remember last</option>';
+      D.groups.forEach(g => { const o = document.createElement('option'); o.value = g.id; o.textContent = g.name; grpSel.appendChild(o); });
+      pgSel.innerHTML = '<option value="__last__">🕐 Remember last</option>';
+      D.pages.forEach(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; pgSel.appendChild(o); });
+      grpSel.value = (D.settings.defaultGroup || '__last__');
+      pgSel.value = (D.settings.defaultPage || '__last__');
+      openM('m-settings');
+    };
+    document.getElementById('ok-settings').onclick = () => {
+      D.settings.defaultGroup = document.getElementById('set-def-grp').value;
+      D.settings.defaultPage = document.getElementById('set-def-pg').value;
+      sv(); closeM('m-settings');
+    };
+
+    // Move/Copy Widget
+    let _mvWid = null;
+    function openMvModal(wid) {
+      _mvWid = wid;
+      const gs = document.getElementById('mv-grp');
+      gs.innerHTML = '';
+      D.groups.forEach(g => { const o = document.createElement('option'); o.value = g.id; o.textContent = g.name; gs.appendChild(o); });
+      gs.value = D.curGroup === '__all__' ? D.groups[0].id : D.curGroup;
+      updateMvPages();
+      gs.onchange = updateMvPages;
+      openM('m-mv');
+    }
+    function updateMvPages() {
+      const gid = document.getElementById('mv-grp').value;
+      const ps = document.getElementById('mv-pg');
+      ps.innerHTML = '';
+      D.pages.filter(p => p.groupId === gid).forEach(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; ps.appendChild(o); });
+    }
+    document.getElementById('mv-move').onclick = () => {
+      const w = fw(_mvWid); if (!w) return;
+      const tgtPid = document.getElementById('mv-pg').value;
+      const tgtPage = D.pages.find(p => p.id === tgtPid); if (!tgtPage) return;
+      // Remove from current page
+      D.pages.forEach(p => { p.widgets = (p.widgets || []).filter(x => x.id !== _mvWid); });
+      // Add to target at position 0
+      w.col = 0;
+      if (!tgtPage.widgets) tgtPage.widgets = [];
+      tgtPage.widgets.unshift(w);
+      sv(); buildCols(); closeM('m-mv');
+    };
+    document.getElementById('mv-copy').onclick = () => {
+      const w = fw(_mvWid); if (!w) return;
+      const tgtPid = document.getElementById('mv-pg').value;
+      const tgtPage = D.pages.find(p => p.id === tgtPid); if (!tgtPage) return;
+      const clone = JSON.parse(JSON.stringify(w));
+      clone.id = uid(); clone.col = 0;
+      if (clone.items) clone.items.forEach(it => it.id = uid());
+      if (!tgtPage.widgets) tgtPage.widgets = [];
+      tgtPage.widgets.unshift(clone);
+      sv(); buildCols(); closeM('m-mv');
+    };
+
+    // INBOX sidebar
+    document.getElementById('inbox-btn').onclick = () => {
+      document.getElementById('inbox-side').classList.toggle('open');
+      document.getElementById('inbox-btn').classList.toggle('active-toggle');
+      buildInbox();
+    };
+    document.getElementById('inbox-close').onclick = () => {
+      document.getElementById('inbox-side').classList.remove('open');
+      document.getElementById('inbox-btn').classList.remove('active-toggle');
+    };
+    document.getElementById('inbox-add-btn').onclick = addToInbox;
+    document.getElementById('inbox-url').addEventListener('keydown', e => { if (e.key === 'Enter') addToInbox(); });
+    function addToInbox() {
+      let url = document.getElementById('inbox-url').value.trim();
+      if (!url) return;
+      if (!url.startsWith('http')) url = 'https://' + url;
+      const label = document.getElementById('inbox-lbl').value.trim() || url;
+      if (!D.inbox) D.inbox = [];
+      D.inbox.push({ id: uid(), url, label, ts: Date.now() });
+      document.getElementById('inbox-url').value = '';
+      document.getElementById('inbox-lbl').value = '';
+      sv(); buildInbox();
+    }
+    let _dragInboxId = null;
+    function buildInbox() {
+      const list = document.getElementById('inbox-list');
+      list.innerHTML = '';
+      if (!D.inbox || !D.inbox.length) {
+        list.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--mu);font-size:.7rem">Empty — paste URLs here for later</div>';
+        return;
+      }
+      D.inbox.forEach(item => {
+        const row = document.createElement('div'); row.className = 'inbox-it';
+        row.draggable = true;
+        row.addEventListener('dragstart', e => { _dragInboxId = item.id; e.dataTransfer.effectAllowed = 'move'; row.style.opacity = '.4'; });
+        row.addEventListener('dragend', () => { _dragInboxId = null; row.style.opacity = '1'; });
+        const img = document.createElement('img'); img.src = getFav(item.url); img.onerror = () => { img.style.display = 'none'; };
+        const lbl = document.createElement('span'); lbl.className = 'inbox-lbl'; lbl.textContent = item.label;
+        const url = document.createElement('span'); url.className = 'inbox-url'; url.textContent = domainOf(item.url);
+        const open = document.createElement('a'); open.href = item.url; open.target = '_blank'; open.style.cssText = 'color:var(--ac);font-size:.6rem;text-decoration:none;flex-shrink:0'; open.textContent = '↗';
+        const rm = document.createElement('button'); rm.className = 'inbox-rm'; rm.textContent = '✕';
+        rm.onclick = () => { D.inbox = D.inbox.filter(x => x.id !== item.id); sv(); buildInbox(); };
+        row.appendChild(img); row.appendChild(lbl); row.appendChild(url); row.appendChild(open); row.appendChild(rm);
+        list.appendChild(row);
+      });
+    }
+
+    // Quick inbox input in toolbar
+    document.getElementById('qi').addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        let url = e.target.value.trim();
+        if (!url) return;
+        if (!url.startsWith('http')) url = 'https://' + url;
+        let label = url;
+        try { label = new URL(url).hostname.replace('www.', '').split('.')[0].replace(/^./, c => c.toUpperCase()); } catch (ex) { }
+        if (!D.inbox) D.inbox = [];
+        D.inbox.push({ id: uid(), url, label, ts: Date.now() });
+        e.target.value = '';
+        sv(); buildInbox();
+        // Flash the inbox button
+        const btn = document.getElementById('inbox-btn');
+        btn.style.background = 'var(--ac)';
+        setTimeout(() => { btn.style.background = ''; }, 600);
+      }
+    });
+
+    // Inbox resize
+    (function () {
+      const side = document.getElementById('inbox-side');
+      const handle = document.getElementById('inbox-resize');
+      let resizing = false;
+      handle.addEventListener('mousedown', e => {
+        e.preventDefault();
+        resizing = true;
+        side.style.transition = 'none';
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', () => {
+          resizing = false;
+          side.style.transition = '';
+          document.removeEventListener('mousemove', onMove);
+        }, { once: true });
+      });
+      function onMove(e) {
+        if (!resizing) return;
+        const w = window.innerWidth - e.clientX;
+        if (w >= 200 && w <= window.innerWidth * 0.5) {
+          side.style.width = w + 'px';
+        }
+      }
+    })();
+
+    // Duplicate link detection
+    let _dupScope = 'page'; // 'page' or 'all'
+    document.getElementById('dup-btn').onclick = () => {
+      _dupScope = 'page';
+      document.getElementById('dup-page').classList.add('ba');
+      document.getElementById('dup-page').classList.remove('bg-btn');
+      document.getElementById('dup-all').classList.add('bg-btn');
+      document.getElementById('dup-all').classList.remove('ba');
+      buildDupReport();
+      openM('m-dup');
+    };
+    document.getElementById('dup-page').onclick = () => {
+      _dupScope = 'page';
+      document.getElementById('dup-page').classList.add('ba');
+      document.getElementById('dup-page').classList.remove('bg-btn');
+      document.getElementById('dup-all').classList.add('bg-btn');
+      document.getElementById('dup-all').classList.remove('ba');
+      buildDupReport();
+    };
+    document.getElementById('dup-all').onclick = () => {
+      _dupScope = 'all';
+      document.getElementById('dup-all').classList.add('ba');
+      document.getElementById('dup-all').classList.remove('bg-btn');
+      document.getElementById('dup-page').classList.add('bg-btn');
+      document.getElementById('dup-page').classList.remove('ba');
+      buildDupReport();
+    };
+    function findDups(scope) {
+      const urlMap = {}; // url -> [{pageId, pageName, widgetId, widgetTitle, itemId}]
+      const pages = scope === 'page' ? [cp()] : D.pages;
+      pages.forEach(pg => {
+        (pg.widgets || []).forEach(w => {
+          if (w.type === 'note') return;
+          (w.items || []).forEach(it => {
+            if (!it.url) return;
+            const key = it.url.replace(/\/+$/, '').toLowerCase();
+            if (!urlMap[key]) urlMap[key] = [];
+            urlMap[key].push({ pageId: pg.id, pageName: pg.name, widgetId: w.id, widgetTitle: w.title, itemId: it.id, label: it.label, url: it.url });
+          });
+        });
+      });
+      const dups = {};
+      for (const k in urlMap) { if (urlMap[k].length > 1) dups[k] = urlMap[k]; }
+      return dups;
+    }
+    function buildDupReport() {
+      const list = document.getElementById('dup-list');
+      const dups = findDups(_dupScope);
+      const keys = Object.keys(dups);
+      if (keys.length === 0) {
+        list.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--mu);font-size:.75rem">✅ No duplicates found!</div>';
+        document.getElementById('dup-del-all').style.display = 'none';
+        return;
+      }
+      document.getElementById('dup-del-all').style.display = '';
+      list.innerHTML = '';
+      keys.forEach(url => {
+        const items = dups[url];
+        const row = document.createElement('div'); row.className = 'dup-it';
+        const img = document.createElement('img'); img.src = getFav(items[0].url);
+        img.onerror = () => { img.style.display = 'none'; };
+        const info = document.createElement('div'); info.className = 'dup-info';
+        const urlDiv = document.createElement('div'); urlDiv.className = 'dup-url'; urlDiv.textContent = items[0].label || items[0].url;
+        const meta = document.createElement('div'); meta.className = 'dup-meta';
+        const locations = items.map(i => i.pageName + ' / ' + i.widgetTitle);
+        meta.textContent = items.length + '× — ' + [...new Set(locations)].join(', ');
+        info.appendChild(urlDiv); info.appendChild(meta);
+        const rm = document.createElement('button'); rm.className = 'dup-rm';
+        rm.textContent = 'Remove extras';
+        rm.onclick = () => { removeDups(url, items); buildDupReport(); };
+        row.appendChild(img); row.appendChild(info); row.appendChild(rm);
+        list.appendChild(row);
+      });
+    }
+    function removeDups(urlKey, items) {
+      // Keep first, remove rest
+      for (let i = 1; i < items.length; i++) {
+        const pg = D.pages.find(p => p.id === items[i].pageId);
+        if (!pg) continue;
+        const w = (pg.widgets || []).find(x => x.id === items[i].widgetId);
+        if (!w || !w.items) continue;
+        w.items = w.items.filter(it => it.id !== items[i].itemId);
+      }
+      sv(); buildCols();
+    }
+    document.getElementById('dup-del-all').onclick = () => {
+      const dups = findDups(_dupScope);
+      for (const url in dups) { removeDups(url, dups[url]); }
+      buildDupReport();
+    };
+    function applyContrast() {
+      const pg = cp();
+      const ribbon = document.getElementById('ribbon');
+      if (!ribbon) return;
+      let isLight = false;
+      if (pg.bgType === 'solid' && pg.bg) {
+        isLight = isCssColorLight(pg.bg);
+      } else if (pg.bgType === 'image' && pg.bg) {
+        isLight = false; // images are usually dark enough
+      } else if (pg.bgType === 'gradient' && pg.bg) {
+        // Check first color in gradient
+        const m = pg.bg.match(/#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|rgba?\([^)]+\)/);
+        if (m) isLight = isCssColorLight(m[0]);
+      }
+      ribbon.classList.toggle('contrast-light', isLight);
+    }
+    function isCssColorLight(c) {
+      if (!c) return false;
+      let r = 0, g = 0, b = 0;
+      if (c.startsWith('#')) {
+        const hex = c.length === 4 ? '#' + c[1] + c[1] + c[2] + c[2] + c[3] + c[3] : c;
+        r = parseInt(hex.slice(1, 3), 16); g = parseInt(hex.slice(3, 5), 16); b = parseInt(hex.slice(5, 7), 16);
+      } else if (c.startsWith('rgb')) {
+        const m = c.match(/(\d+)/g);
+        if (m) { r = +m[0]; g = +m[1]; b = +m[2]; }
+      }
+      return (r * 299 + g * 587 + b * 114) / 1000 > 160;
+    }
+    let _dragTabId = null;
+    function buildTabs() {
+      const bar = document.getElementById('ptabs'); bar.querySelectorAll('.ptab').forEach(t => t.remove());
+      const addBtn = document.getElementById('add-pg');
+      const groupPages = D.curGroup === '__all__' ? D.pages : D.pages.filter(p => p.groupId === D.curGroup);
+      groupPages.forEach(pg => {
+        const tab = document.createElement('div');
+        tab.className = 'ptab' + (pg.id === D.cur ? ' active' : '');
+        if (pg.tabColor) { tab.style.borderColor = pg.tabColor + '66'; }
+        tab.draggable = true; tab.dataset.pid = pg.id;
+        tab.addEventListener('dragstart', e => { _dragTabId = pg.id; tab.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+        tab.addEventListener('dragend', () => { _dragTabId = null; tab.classList.remove('dragging'); });
+        tab.addEventListener('dragover', e => { e.preventDefault(); if (_dragTabId && _dragTabId !== pg.id) tab.classList.add('tab-dragover'); });
+        tab.addEventListener('dragleave', () => tab.classList.remove('tab-dragover'));
+        tab.addEventListener('drop', e => {
+          e.preventDefault(); tab.classList.remove('tab-dragover');
+          if (!_dragTabId || _dragTabId === pg.id) return;
+          const fromIdx = D.pages.findIndex(p => p.id === _dragTabId);
+          const toIdx = D.pages.findIndex(p => p.id === pg.id);
+          if (fromIdx < 0 || toIdx < 0) return;
+          const [moved] = D.pages.splice(fromIdx, 1);
+          D.pages.splice(toIdx, 0, moved);
+          _dragTabId = null; sv(); buildTabs();
+        });
+        const cd = document.createElement('div'); cd.className = 'ptab-cd'; cd.style.background = pg.tabColor || 'rgba(255,255,255,.15)'; cd.title = 'Tab color';
+        cd.onclick = ev => { ev.stopPropagation(); openTcPop(ev, pg.id); };
+        const nm = document.createElement('span'); nm.className = 'ptnm'; nm.textContent = pg.name; nm.contentEditable = 'false';
+        nm.onblur = () => { nm.contentEditable = 'false'; pg.name = nm.textContent.trim() || 'Page'; sv(); };
+        nm.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); nm.blur(); } e.stopPropagation(); };
+        nm.onclick = e => { if (nm.contentEditable === 'true') e.stopPropagation(); };
+        tab.addEventListener('dblclick', e => {
+          e.stopPropagation(); nm.contentEditable = 'true'; nm.focus();
+          const range = document.createRange(); range.selectNodeContents(nm);
+          const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+        });
+        tab.onclick = () => { if (nm.contentEditable === 'true') return; D.cur = pg.id; sv(); renderAll(); };
+        const x = document.createElement('button'); x.className = 'ptx'; x.textContent = '✕'; x.title = 'Delete page';
+        x.onclick = e => { e.stopPropagation(); delPage(pg.id); };
+        tab.appendChild(cd); tab.appendChild(nm); if (groupPages.length > 1) tab.appendChild(x);
+        bar.insertBefore(tab, addBtn);
+      });
+    }
+
+    document.getElementById('add-grp').onclick = () => {
+      const id = uid();
+      D.groups.push({ id, name: 'Group ' + (D.groups.length + 1) });
+      const pid = uid();
+      D.pages.push({ id: pid, groupId: id, name: 'Page 1', cols: 3, bg: '', bgType: 'none', widgets: [] });
+      D.curGroup = id;
+      D.cur = pid;
+      sv(); renderAll();
+    };
+
+    document.getElementById('add-pg').onclick = () => {
+      const id = uid();
+      const targetGroup = D.curGroup === '__all__' ? D.groups[0].id : D.curGroup;
+      const groupPages = D.pages.filter(p => p.groupId === targetGroup);
+      D.pages.push({ id, groupId: targetGroup, name: 'Page ' + (groupPages.length + 1), cols: 3, bg: '', bgType: 'none', widgets: [] });
+      D.cur = id; sv(); renderAll();
+    };
+
+    function delGroup(gid) {
+      if (D.groups.length <= 1) { alert('Cannot delete the only group.'); return; }
+      if (!confirm('Delete this group and ALL its pages?')) return;
+      D.pages = D.pages.filter(p => p.groupId !== gid);
+      D.groups = D.groups.filter(g => g.id !== gid);
+      if (D.curGroup === gid) {
+        D.curGroup = D.groups[0].id;
+        D.cur = D.pages.find(p => p.groupId === D.curGroup).id;
+      }
+      sv(); renderAll();
+    }
+
+    function delPage(pid) {
+      const pg = D.pages.find(p => p.id === pid);
+      if (!pg) return;
+      const siblingPages = D.pages.filter(p => p.groupId === pg.groupId);
+      if (siblingPages.length <= 1) { alert('Cannot delete the only page in this group.'); return; }
+      if (!confirm('Delete this page?')) return;
+      D.pages = D.pages.filter(p => p.id !== pid);
+      if (D.cur === pid) {
+        const remaining = D.curGroup === '__all__' ? D.pages : D.pages.filter(p => p.groupId === pg.groupId);
+        D.cur = remaining[0]?.id || D.pages[0]?.id;
+      }
+      sv(); renderAll();
+    }
+
     function openTcPop(ev, pid) { tcPid = pid; const pop = document.getElementById('tc-pop'); pop.querySelectorAll('.tc-sw').forEach(s => s.remove()); TAB_COLORS.forEach(hex => { const s = document.createElement('div'); s.className = 'tc-sw'; s.style.background = hex; const pg = D.pages.find(p => p.id === pid); s.style.borderColor = pg && pg.tabColor === hex ? '#fff' : 'transparent'; s.onclick = () => { setTabColor(pid, hex); pop.classList.remove('open'); }; pop.insertBefore(s, document.getElementById('tc-none')); }); pop.classList.add('open'); pop.style.left = Math.min(ev.clientX, window.innerWidth - 150) + 'px'; pop.style.top = (ev.clientY + 12) + 'px'; }
     document.getElementById('tc-none').onclick = () => { setTabColor(tcPid, ''); document.getElementById('tc-pop').classList.remove('open'); };
     function setTabColor(pid, color) { const pg = D.pages.find(p => p.id === pid); if (!pg) return; pg.tabColor = color; sv(); buildTabs(); }
-    function buildCols() { const page = cp(), wrap = document.getElementById('cw'); wrap.innerHTML = ''; wrap.style.gridTemplateColumns = `repeat(${page.cols},1fr)`; for (let ci = 0; ci < page.cols; ci++) { const col = document.createElement('div'); col.className = 'col'; col.dataset.ci = ci; col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('dragover'); }); col.addEventListener('dragleave', () => col.classList.remove('dragover')); col.addEventListener('drop', e => { e.preventDefault(); col.classList.remove('dragover'); if (!dragWid) return; const w = (page.widgets || []).find(x => x.id === dragWid); if (w) { w.col = ci; sv(); buildCols(); } dragWid = null; }); (page.widgets || []).filter(w => w.col === ci).forEach(w => col.appendChild(buildWidget(w))); const ab = document.createElement('button'); ab.className = 'add-w'; ab.innerHTML = '＋ Add Widget'; ab.onclick = () => { pColIdx = ci; openM('m-aw'); }; col.appendChild(ab); wrap.appendChild(col); } }
-    function buildWidget(w) { const el = document.createElement('div'); el.className = 'widget edit'; el.dataset.wid = w.id; el.draggable = true; const c = w.color || DEF_COLOR; el.style.cssText = `background:${rgba(c)};border:1px solid rgba(255,255,255,${Math.min(c.a * .13, .09)})`; el.addEventListener('dragstart', () => { dragWid = w.id; setTimeout(() => el.classList.add('dragging'), 0); }); el.addEventListener('dragend', () => { el.classList.remove('dragging'); dragWid = null; }); const hdr = document.createElement('div'); hdr.className = 'wh'; hdr.innerHTML = `<div class="wt"><span>${w.emoji || '📌'}</span>${esc(w.title)}</div><div class="wa"><button class="wab" data-dp="${w.id}" title="Display">🖥️</button><button class="wab" data-cl="${w.id}" title="Color">🎨</button><button class="wab" data-rn="${w.id}" title="Rename">✏️</button><button class="wab d" data-dl="${w.id}" title="Delete">🗑️</button></div>`; hdr.querySelector('[data-dp]').onclick = e => { e.stopPropagation(); openDisp(w.id); }; hdr.querySelector('[data-cl]').onclick = e => { e.stopPropagation(); openColModal(w.id); }; hdr.querySelector('[data-rn]').onclick = e => { e.stopPropagation(); openRen(w.id); }; hdr.querySelector('[data-dl]').onclick = e => { e.stopPropagation(); delWidget(w.id); }; el.appendChild(hdr); const body = document.createElement('div'); body.className = 'wb'; if (w.type === 'note') { const ta = document.createElement('textarea'); ta.className = 'note-ta'; ta.placeholder = 'Write notes…'; ta.value = w.content || ''; ta.oninput = () => { w.content = ta.value; sv(); }; body.appendChild(ta); } else if (w.type === 'todo') { buildTodoBody(body, w); } else { buildBmBody(body, w); } el.appendChild(body); return el; }
+    function buildCols() { const page = cp(), wrap = document.getElementById('cw'); wrap.innerHTML = ''; wrap.style.gridTemplateColumns = `repeat(${page.cols},minmax(0,1fr))`; for (let ci = 0; ci < page.cols; ci++) { const col = document.createElement('div'); col.className = 'col'; col.dataset.ci = ci; col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('dragover'); }); col.addEventListener('dragleave', () => col.classList.remove('dragover')); col.addEventListener('drop', e => { e.preventDefault(); col.classList.remove('dragover'); if (!dragWid) return; const w = (page.widgets || []).find(x => x.id === dragWid); if (w) { w.col = ci; sv(); buildCols(); } dragWid = null; }); const colWidgets = (page.widgets || []).filter(w => w.col === ci); /* also include orphaned widgets in last column */ if (ci === page.cols - 1) { (page.widgets || []).filter(w => w.col >= page.cols).forEach(w => colWidgets.push(w)); } colWidgets.forEach(w => col.appendChild(buildWidget(w))); const ab = document.createElement('button'); ab.className = 'add-w'; ab.innerHTML = '＋ Add Widget'; ab.onclick = () => { pColIdx = ci; openM('m-aw'); }; col.appendChild(ab); wrap.appendChild(col); } }
+    function luma(c) { return (c.r * 299 + c.g * 587 + c.b * 114) / 1000; }
+    function buildWidget(w) { const el = document.createElement('div'); el.className = 'widget edit'; el.dataset.wid = w.id; el.draggable = true; const c = w.color || DEF_COLOR; const light = luma(c) > 140; const txtCol = light ? '#1a1a2e' : '#dde1ee'; const muCol = light ? '#555' : 'rgba(255,255,255,.42)'; const bdCol = light ? 'rgba(0,0,0,.1)' : `rgba(255,255,255,${Math.min(c.a * .13, .09)})`; el.style.cssText = `background:${rgba(c)};border:1px solid ${bdCol};color:${txtCol}`; el.addEventListener('dragstart', () => { dragWid = w.id; setTimeout(() => el.classList.add('dragging'), 0); }); el.addEventListener('dragend', () => { el.classList.remove('dragging'); dragWid = null; }); el.addEventListener('dragover', e => { if (_dragInboxId) { e.preventDefault(); el.style.outline = '2px solid var(--ac)'; } }); el.addEventListener('dragleave', () => { el.style.outline = ''; }); el.addEventListener('drop', e => { if (_dragInboxId) { e.preventDefault(); el.style.outline = ''; const inboxItem = (D.inbox || []).find(x => x.id === _dragInboxId); if (inboxItem && w.type !== 'note') { if (!w.items) w.items = []; w.items.push({ id: uid(), label: inboxItem.label, url: inboxItem.url, emoji: '' }); D.inbox = D.inbox.filter(x => x.id !== _dragInboxId); _dragInboxId = null; sv(); buildCols(); buildInbox(); } } }); const hdr = document.createElement('div'); hdr.className = 'wh'; hdr.style.borderBottomColor = bdCol; hdr.innerHTML = `<div class="wt" style="color:${muCol}"><span>${w.emoji || '📌'}</span>${esc(w.title)}</div><div class="wa"><button class="wab" data-dp="${w.id}" title="Display">🖥️</button><button class="wab" data-mv="${w.id}" title="Move/Copy">📋</button><button class="wab" data-cl="${w.id}" title="Color">🎨</button><button class="wab" data-rn="${w.id}" title="Rename">✏️</button><button class="wab d" data-dl="${w.id}" title="Delete">🗑️</button></div>`; hdr.querySelector('[data-dp]').onclick = e => { e.stopPropagation(); openDisp(w.id); }; hdr.querySelector('[data-mv]').onclick = e => { e.stopPropagation(); openMvModal(w.id); }; hdr.querySelector('[data-cl]').onclick = e => { e.stopPropagation(); openColModal(w.id); }; hdr.querySelector('[data-rn]').onclick = e => { e.stopPropagation(); openRen(w.id); }; hdr.querySelector('[data-dl]').onclick = e => { e.stopPropagation(); delWidget(w.id); }; el.appendChild(hdr); const body = document.createElement('div'); body.className = 'wb'; if (w.type === 'note') { const ta = document.createElement('textarea'); ta.className = 'note-ta'; ta.placeholder = 'Write notes…'; ta.value = w.content || ''; ta.style.color = txtCol; ta.oninput = () => { w.content = ta.value; sv(); }; body.appendChild(ta); } else if (w.type === 'todo') { buildTodoBody(body, w); } else { buildBmBody(body, w); } el.appendChild(body); return el; }
     function buildTodoBody(body, w) { const list = document.createElement('div'); list.className = 'todo-list'; (w.items || []).forEach(item => { list.appendChild(mkTodoItem(item, w)); }); const addRow = document.createElement('div'); addRow.className = 'todo-add'; const addIn = document.createElement('input'); addIn.className = 'todo-add-in'; addIn.type = 'text'; addIn.placeholder = 'Add a task…'; addIn.onkeydown = e => { if (e.key === 'Enter') { const txt = addIn.value.trim(); if (!txt) return; if (!w.items) w.items = []; const item = { id: uid(), text: txt, done: false }; w.items.push(item); sv(); list.insertBefore(mkTodoItem(item, w), addRow); addIn.value = ''; } }; addRow.innerHTML = '<span style="font-size:.8rem;color:var(--mu)">＋</span>'; addRow.appendChild(addIn); list.appendChild(addRow); body.appendChild(list); }
     function mkTodoItem(item, w) { const row = document.createElement('div'); row.className = 'todo-it' + (item.done ? ' done' : ''); const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'todo-cb'; cb.checked = !!item.done; cb.onchange = () => { item.done = cb.checked; row.classList.toggle('done', item.done); sv(); }; const txt = document.createElement('input'); txt.type = 'text'; txt.className = 'todo-txt'; txt.value = item.text || ''; txt.readOnly = true; txt.ondblclick = () => { txt.readOnly = false; txt.focus(); }; txt.onblur = () => { txt.readOnly = true; item.text = txt.value; sv(); }; txt.onkeydown = e => { if (e.key === 'Enter') txt.blur(); }; const rm = document.createElement('button'); rm.className = 'rmb mr'; rm.textContent = '✕'; rm.onclick = () => { if (!w.items) return; w.items = w.items.filter(x => x.id !== item.id); sv(); row.remove(); }; row.appendChild(cb); row.appendChild(txt); row.appendChild(rm); return row; }
     function buildBmBody(body, w) { const items = w.items || []; const visN = w.vis === 'all' ? items.length : (parseInt(w.vis) || items.length); const shown = items.slice(0, visN); const sz = w.size || 'md'; let mode = w.display || 'auto'; if (mode === 'auto') mode = shown.length <= 8 ? 'spark' : 'stream'; const wrap = document.createElement('div'); wrap.className = sz; if (mode === 'spark') { wrap.classList.add('spark', sz); shown.forEach(bm => wrap.appendChild(mkSparkItem(bm, w, sz))); } else if (mode === 'cloud') { wrap.classList.add('cloud'); shown.forEach(bm => { const a = document.createElement('a'); a.className = 'cl-it'; a.href = bm.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; if (bm.emoji) a.textContent = bm.emoji + ' ' + bm.label; else a.textContent = bm.label; const rm = mkRm(bm.id, w.id, 'cr'); a.appendChild(rm); setupPv(a, bm); wrap.appendChild(a); }); } else if (mode === 'card') { wrap.classList.add('cards'); shown.forEach(bm => wrap.appendChild(mkCardItem(bm, w, sz))); } else { wrap.classList.add('stream'); shown.forEach(bm => wrap.appendChild(mkStreamItem(bm, w, sz))); } wrap.appendChild(mkAddBtn(w.id)); body.appendChild(wrap); }
     function mkSparkItem(bm, w, sz) { const DIM = { sm: { w: 30, r: 8 }, md: { w: 38, r: 9 }, lg: { w: 48, r: 11 } }; const d = DIM[sz] || DIM.md; const a = document.createElement('a'); a.className = 'sp-it'; a.href = bm.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; const fav = mkFav(bm, d.w, d.w, d.r); const lbl = document.createElement('div'); lbl.className = 'sp-lb'; lbl.textContent = bm.label; const rm = mkRm(bm.id, w.id, 'tr'); a.appendChild(fav); a.appendChild(lbl); a.appendChild(rm); setupPv(a, bm); return a; }
-    function mkStreamItem(bm, w, sz) { const DIM = { sm: { w: 15, r: 5 }, md: { w: 19, r: 5 }, lg: { w: 24, r: 6 } }; const d = DIM[sz] || DIM.md; const a = document.createElement('a'); a.className = 'st-it'; a.href = bm.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; const fav = mkFav(bm, d.w, d.w, d.r); const lbl = document.createElement('span'); lbl.className = 'st-lb'; lbl.textContent = bm.label; const rm = mkRm(bm.id, w.id, 'mr'); a.appendChild(fav); a.appendChild(lbl); a.appendChild(rm); setupPv(a, bm); return a; }
+    function mkStreamItem(bm, w, sz) { const DIM = { sm: { w: 15, r: 5 }, md: { w: 19, r: 5 }, lg: { w: 24, r: 6 } }; const d = DIM[sz] || DIM.md; const a = document.createElement('a'); a.className = 'st-it'; a.href = bm.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.title = bm.label; const fav = mkFav(bm, d.w, d.w, d.r); const lbl = document.createElement('span'); lbl.className = 'st-lb'; lbl.textContent = bm.label; const rm = mkRm(bm.id, w.id, 'mr'); a.appendChild(fav); a.appendChild(lbl); a.appendChild(rm); setupPv(a, bm); return a; }
     function mkCardItem(bm, w, sz) { const DIM = { sm: { w: 24, r: 7 }, md: { w: 32, r: 8 }, lg: { w: 40, r: 9 } }; const d = DIM[sz] || DIM.md; const a = document.createElement('a'); a.className = 'cd-it'; a.href = bm.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; const fav = mkFav(bm, d.w, d.w, d.r); const info = document.createElement('div'); info.className = 'cd-info'; const nm = document.createElement('div'); nm.className = 'cd-nm'; nm.textContent = bm.label; const ur = document.createElement('div'); ur.className = 'cd-url'; ur.textContent = domainOf(bm.url); info.appendChild(nm); info.appendChild(ur); const rm = mkRm(bm.id, w.id, 'mr'); a.appendChild(fav); a.appendChild(info); a.appendChild(rm); setupPv(a, bm); return a; }
     function mkRm(itemId, wid, pos) { const b = document.createElement('button'); b.className = `rmb ${pos}`; b.textContent = '✕'; b.onclick = ev => { ev.stopPropagation(); ev.preventDefault(); rmItem(wid, itemId); }; return b; }
     function mkAddBtn(wid) { const d = document.createElement('div'); d.className = 'add-i'; d.innerHTML = '＋ Add'; d.onclick = () => { pWidId = wid;['bm-u', 'bm-l', 'bm-e'].forEach(id => document.getElementById(id).value = ''); openM('m-bm'); }; return d; }
-    function setupPv(el, bm) { el.addEventListener('mouseenter', ev => { clearTimeout(pvTimer); pvTimer = setTimeout(() => showPv(bm, ev), 700); }); el.addEventListener('mouseleave', () => { clearTimeout(pvTimer); hidePv(); }); el.addEventListener('mousemove', ev => { if (document.getElementById('pvt').style.display === 'block') posPv(ev); }); }
+    function setupPv(el, bm) { el.addEventListener('mouseenter', ev => { clearTimeout(pvTimer); pvTimer = setTimeout(() => { if (_pvMode && bm.url) { const pv = document.getElementById('live-pv'); pv.innerHTML = '<div class="pv-loading">Loading preview…</div>'; const img = document.createElement('img'); img.src = 'https://image.thum.io/get/width/600/' + bm.url; img.onload = () => { pv.innerHTML = ''; pv.appendChild(img); }; img.onerror = () => { pv.innerHTML = '<div class="pv-loading">Preview unavailable</div>'; }; pv.style.display = 'block'; posLivePv(ev); } else { showPv(bm, ev); } }, _pvMode ? 150 : 700); }); el.addEventListener('mouseleave', () => { clearTimeout(pvTimer); hidePv(); const pv = document.getElementById('live-pv'); pv.style.display = 'none'; pv.innerHTML = ''; }); el.addEventListener('mousemove', ev => { if (_pvMode && document.getElementById('live-pv').style.display === 'block') posLivePv(ev); else if (document.getElementById('pvt').style.display === 'block') posPv(ev); }); }
     function showPv(bm, ev) { const pt = document.getElementById('pvt'); const pvFav = document.getElementById('pv-fav'); pvFav.innerHTML = ''; const bg = letterColor(letterOf(bm.label, bm.url)); pvFav.style.background = bg; if (bm.emoji) { pvFav.textContent = bm.emoji; } else { const img = document.createElement('img'); img.src = getFav(bm.url); img.style.cssText = 'width:100%;height:100%;object-fit:contain;border-radius:10px'; img.onerror = () => { img.remove(); pvFav.textContent = letterOf(bm.label, bm.url); pvFav.style.color = '#fff'; pvFav.style.fontSize = '1.5rem'; pvFav.style.fontWeight = '700'; }; pvFav.appendChild(img); } document.getElementById('pv-title').textContent = bm.label; document.getElementById('pv-domain').textContent = domainOf(bm.url); document.getElementById('pv-bar').style.background = `linear-gradient(90deg,${bg},transparent)`; pt.style.display = 'block'; posPv(ev); }
     function hidePv() { document.getElementById('pvt').style.display = 'none'; }
     function posPv(ev) { const pt = document.getElementById('pvt'); const W = window.innerWidth, H = window.innerHeight; const tw = pt.offsetWidth || 262, th = pt.offsetHeight || 100; let x = ev.clientX + 16, y = ev.clientY + 14; if (x + tw > W - 8) x = ev.clientX - tw - 8; if (y + th > H - 8) y = ev.clientY - th - 8; pt.style.left = x + 'px'; pt.style.top = y + 'px'; }
@@ -2304,9 +3364,9 @@
     }
     document.querySelectorAll('.mo').forEach(o => { o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); }); });
     document.addEventListener('click', () => { document.getElementById('ep').classList.remove('open'); document.getElementById('ac-pop').classList.remove('open'); document.getElementById('io-pop').classList.remove('open'); document.getElementById('tc-pop').classList.remove('open'); $sr().classList.remove('show'); });
-    document.getElementById('tb').addEventListener('click', e => e.stopPropagation()); document.getElementById('ptabs').addEventListener('click', e => e.stopPropagation());
+    document.getElementById('tb').addEventListener('click', e => e.stopPropagation()); document.getElementById('ribbon').addEventListener('click', e => e.stopPropagation());
     document.addEventListener('keydown', e => { if (e.key === 'Escape') { document.querySelectorAll('.mo.open').forEach(m => m.classList.remove('open'));['ep', 'ac-pop', 'io-pop', 'tc-pop'].forEach(id => document.getElementById(id).classList.remove('open')); $sr().classList.remove('show'); } if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && !document.querySelector('.mo.open') && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA' && !document.activeElement.getAttribute('contenteditable')) { $si().focus(); } });
-    function renderAll() { buildTabs(); buildColBtns(); buildCols(); applyBG(); buildEP(); buildAcPop(); buildBgSwatches(); document.documentElement.style.setProperty('--ac', D.settings.accent || '#6c8fff'); document.getElementById('ac-dot').style.background = D.settings.accent || '#6c8fff'; }
+    function renderAll() { buildGroups(); buildTabs(); buildColBtns(); buildCols(); applyBG(); applyContrast(); buildEP(); buildAcPop(); buildBgSwatches(); buildInbox(); document.documentElement.style.setProperty('--ac', D.settings.accent || '#6c8fff'); document.getElementById('ac-dot').style.background = D.settings.accent || '#6c8fff'; }
   </script>
 </body>
 
