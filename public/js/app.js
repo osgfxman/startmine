@@ -1,4 +1,4 @@
-﻿      const firebaseConfig = {
+      const firebaseConfig = {
         apiKey: "AIzaSyB-CeazTspR22753qVHzMlmgePPGVLhYdk",
         authDomain: "quran-gfx.firebaseapp.com",
         databaseURL: "https://quran-gfx-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -15,7 +15,7 @@
       let USER_ID = null;
       let DB_REF = null;
 
-      const ENGINES = [{ k: 'bm', ic: 'ðŸ”–', name: 'Bookmarks (local)', url: '' }, { k: 'g', ic: 'ðŸ”', name: 'Google', url: 'https://www.google.com/search?q=' }, { k: 'dd', ic: 'ðŸ¦†', name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=' }, { k: 'bi', ic: 'ðŸ”·', name: 'Bing', url: 'https://bing.com/search?q=' }, { k: 'br', ic: 'ðŸ¦', name: 'Brave', url: 'https://search.brave.com/search?q=' }, { k: 'yt', ic: 'â–¶ï¸', name: 'YouTube', url: 'https://youtube.com/results?search_query=' }];
+      const ENGINES = [{ k: 'bm', ic: '🔖', name: 'Bookmarks (local)', url: '' }, { k: 'g', ic: '🔍', name: 'Google', url: 'https://www.google.com/search?q=' }, { k: 'dd', ic: '🦆', name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=' }, { k: 'bi', ic: '🔷', name: 'Bing', url: 'https://bing.com/search?q=' }, { k: 'br', ic: '🦁', name: 'Brave', url: 'https://search.brave.com/search?q=' }, { k: 'yt', ic: '▶️', name: 'YouTube', url: 'https://youtube.com/results?search_query=' }];
       const SWATCHES = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#000000', '#ffffff', '#6c8fff', '#e8c97a', '#7ed4a4', '#ff8fa3', '#c4a0ff', '#ff9f6b', '#4dd0e1', '#f06292'];
       const TAB_COLORS = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#000000', '#ffffff', '#6c8fff', '#e8c97a', '#7ed4a4', '#ff8fa3', '#c4a0ff', '#ff9f6b', '#4dd0e1', '#f06292', '#90caf9', '#a5d6a7'];
       const DEF_COLOR = { r: 255, g: 255, b: 255, a: .94 };
@@ -28,10 +28,10 @@
         pages: [{
           id: 'p0', groupId: 'g0', name: 'Home', cols: 3, bg: '', bgType: 'none',
           widgets: [
-            { id: 'w1', col: 0, title: 'Quick Links', emoji: 'âš¡', type: 'bookmarks', display: 'auto', size: 'md', vis: 'all', color: { ...DEF_COLOR }, items: [{ id: 'i1', label: 'Google', url: 'https://google.com', emoji: '' }, { id: 'i2', label: 'GitHub', url: 'https://github.com', emoji: '' }, { id: 'i3', label: 'YouTube', url: 'https://youtube.com', emoji: '' }, { id: 'i4', label: 'Reddit', url: 'https://reddit.com', emoji: '' }] },
-            { id: 'w2', col: 1, title: 'Work', emoji: 'ðŸ’¼', type: 'list', display: 'stream', size: 'md', vis: 'all', color: { ...DEF_COLOR }, items: [{ id: 'i5', label: 'Notion', url: 'https://notion.so', emoji: '' }, { id: 'i6', label: 'Figma', url: 'https://figma.com', emoji: '' }] },
-            { id: 'w3', col: 1, title: 'Notes', emoji: 'ðŸ“', type: 'note', display: 'auto', size: 'md', vis: 'all', color: { ...DEF_COLOR }, content: 'Your notes hereâ€¦' },
-            { id: 'w4', col: 2, title: 'Tasks', emoji: 'âœ…', type: 'todo', display: 'auto', size: 'md', vis: 'all', color: { ...DEF_COLOR }, items: [{ id: 'td1', text: 'Add your bookmarks', done: false }] }
+            { id: 'w1', col: 0, title: 'Quick Links', emoji: '⚡', type: 'bookmarks', display: 'auto', size: 'md', vis: 'all', color: { ...DEF_COLOR }, items: [{ id: 'i1', label: 'Google', url: 'https://google.com', emoji: '' }, { id: 'i2', label: 'GitHub', url: 'https://github.com', emoji: '' }, { id: 'i3', label: 'YouTube', url: 'https://youtube.com', emoji: '' }, { id: 'i4', label: 'Reddit', url: 'https://reddit.com', emoji: '' }] },
+            { id: 'w2', col: 1, title: 'Work', emoji: '💼', type: 'list', display: 'stream', size: 'md', vis: 'all', color: { ...DEF_COLOR }, items: [{ id: 'i5', label: 'Notion', url: 'https://notion.so', emoji: '' }, { id: 'i6', label: 'Figma', url: 'https://figma.com', emoji: '' }] },
+            { id: 'w3', col: 1, title: 'Notes', emoji: '📝', type: 'note', display: 'auto', size: 'md', vis: 'all', color: { ...DEF_COLOR }, content: 'Your notes here…' },
+            { id: 'w4', col: 2, title: 'Tasks', emoji: '✅', type: 'todo', display: 'auto', size: 'md', vis: 'all', color: { ...DEF_COLOR }, items: [{ id: 'td1', text: 'Add your bookmarks', done: false }] }
           ]
         }]
       };
@@ -51,7 +51,7 @@
         if (user) {
           USER_ID = user.uid;
           DB_REF = 'users/' + USER_ID + '/startmine_data';
-          document.getElementById('user-email').textContent = 'ðŸ‘¤ ' + user.email;
+          document.getElementById('user-email').textContent = '👤 ' + user.email;
           document.getElementById('login-screen').style.display = 'none';
           document.getElementById('root').style.display = 'flex';
           initDB();
@@ -180,7 +180,7 @@
           document.getElementById('bg-img-prev-el').src = base64;
           // Upload to imgbb for persistent URL
           const btn = document.getElementById('ok-bg');
-          btn.textContent = 'Uploadingâ€¦'; btn.disabled = true;
+          btn.textContent = 'Uploading…'; btn.disabled = true;
           const fd = new FormData();
           fd.append('image', base64.split(',')[1]);
           fetch('https://api.imgbb.com/1/upload?key=c2a058a30580ce5e21608e3ec431b9c0', { method: 'POST', body: fd })
@@ -232,7 +232,7 @@
       function renderSR(q) { srIdx = -1; const c = $sr(); if (!q) { c.classList.remove('show'); return; } const matches = allBm().filter(b => (b.label || '').toLowerCase().includes(q.toLowerCase()) || (b.url || '').toLowerCase().includes(q.toLowerCase())).slice(0, 10); c.innerHTML = ''; if (matches.length) { const hd = document.createElement('div'); hd.className = 'sr-sec'; hd.textContent = 'Bookmarks'; c.appendChild(hd); matches.forEach(bm => { const a = document.createElement('a'); a.className = 'sr-it'; a.href = bm.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; const fv = document.createElement('div'); fv.className = 'sr-fv'; if (bm.emoji) { fv.textContent = bm.emoji; } else { const img = document.createElement('img'); img.src = getFav(bm.url); img.onerror = () => { img.style.display = 'none'; const l = letterOf(bm.label, bm.url); fv.textContent = l; fv.style.cssText = `background:${letterColor(l)};color:#fff;font-weight:700;font-size:.55rem;border-radius:4px;display:flex;align-items:center;justify-content:center` }; fv.appendChild(img); } const nm = document.createElement('span'); nm.className = 'sr-nm'; nm.textContent = bm.label; const pg = document.createElement('span'); pg.className = 'sr-pg'; pg.textContent = bm._pg; a.appendChild(fv); a.appendChild(nm); a.appendChild(pg); c.appendChild(a); }); } const eng = ENGINES.find(e => e.k === D.settings.engine) || ENGINES[1]; if (eng.url) { const hd2 = document.createElement('div'); hd2.className = 'sr-sec'; hd2.textContent = 'Web'; c.appendChild(hd2); const wb = document.createElement('div'); wb.className = 'sr-web'; wb.innerHTML = `<span>${eng.ic}</span> Search "${q}" on ${eng.name}`; wb.onclick = () => { window.open(eng.url + encodeURIComponent(q), '_blank'); $si().value = ''; c.classList.remove('show'); }; c.appendChild(wb); } c.classList.toggle('show', matches.length > 0 || !!eng.url); }
       $si().addEventListener('input', e => { clearTimeout(srTimer); srTimer = setTimeout(() => renderSR(e.target.value.trim()), 80); });
       $si().addEventListener('keydown', e => { const c = $sr(); const items = c.querySelectorAll('.sr-it'); if (e.key === 'ArrowDown') { e.preventDefault(); srIdx = Math.min(srIdx + 1, items.length - 1); items.forEach((el, i) => el.classList.toggle('foc', i === srIdx)); return; } if (e.key === 'ArrowUp') { e.preventDefault(); srIdx = Math.max(srIdx - 1, -1); items.forEach((el, i) => el.classList.toggle('foc', i === srIdx)); return; } if (e.key === 'Enter') { e.preventDefault(); const q = $si().value.trim(); if (!q) return; if (srIdx >= 0 && items[srIdx]) { items[srIdx].click(); $si().value = ''; c.classList.remove('show'); return; } const eng = ENGINES.find(e2 => e2.k === D.settings.engine) || ENGINES[1]; const url = eng.url ? eng.url + encodeURIComponent(q) : 'https://www.google.com/search?q=' + encodeURIComponent(q); window.open(url, '_blank'); $si().value = ''; c.classList.remove('show'); } if (e.key === 'Escape') { c.classList.remove('show'); $si().blur(); } });
-      function buildEP() { const ep = document.getElementById('ep'); ep.innerHTML = ''; ENGINES.forEach(eng => { const d = document.createElement('div'); d.className = 'eopt' + (eng.k === D.settings.engine ? ' on' : ''); d.innerHTML = `<span>${eng.ic}</span><span>${eng.name}</span>`; d.onclick = () => { D.settings.engine = eng.k; sv(); buildEP(); document.getElementById('seb').textContent = ENGINES.find(e => e.k === D.settings.engine)?.ic || 'ðŸ”'; ep.classList.remove('open'); }; ep.appendChild(d); }); document.getElementById('seb').textContent = ENGINES.find(e => e.k === D.settings.engine)?.ic || 'ðŸ”'; }
+      function buildEP() { const ep = document.getElementById('ep'); ep.innerHTML = ''; ENGINES.forEach(eng => { const d = document.createElement('div'); d.className = 'eopt' + (eng.k === D.settings.engine ? ' on' : ''); d.innerHTML = `<span>${eng.ic}</span><span>${eng.name}</span>`; d.onclick = () => { D.settings.engine = eng.k; sv(); buildEP(); document.getElementById('seb').textContent = ENGINES.find(e => e.k === D.settings.engine)?.ic || '🔍'; ep.classList.remove('open'); }; ep.appendChild(d); }); document.getElementById('seb').textContent = ENGINES.find(e => e.k === D.settings.engine)?.ic || '🔍'; }
       document.getElementById('seb').onclick = ev => { ev.stopPropagation(); document.getElementById('ep').classList.toggle('open'); };
       function buildAcPop() { const pop = document.getElementById('ac-pop'); pop.innerHTML = ''; SWATCHES.forEach(hex => { const s = document.createElement('div'); s.className = 'ac-sw'; s.style.background = hex; s.style.borderColor = hex === D.settings.accent ? '#fff' : 'transparent'; s.onclick = () => { D.settings.accent = hex; document.documentElement.style.setProperty('--ac', hex); document.getElementById('ac-dot').style.background = hex; sv(); buildAcPop(); }; pop.appendChild(s); }); }
       document.getElementById('io-btn').onclick = ev => { ev.stopPropagation(); document.getElementById('io-pop').classList.toggle('open'); };
@@ -296,7 +296,7 @@
               const bms = sec.bookmark_collection?.bookmarks || sec.items || sec.bookmarks || [];
               if (bms.length) {
                 const w = {
-                  id: uid(), col: si % 3, title: sec.title || sec.settings?.title || 'Imported', emoji: 'ðŸ“Œ',
+                  id: uid(), col: si % 3, title: sec.title || sec.settings?.title || 'Imported', emoji: '📌',
                   type: 'bookmarks', display: 'auto', size: 'md', vis: 'all', color: { ...DEF_COLOR }, items: []
                 };
                 bms.forEach(bm => w.items.push({ id: uid(), label: bm.title || bm.name || bm.label || '', url: bm.url || '', emoji: '' }));
@@ -311,7 +311,7 @@
           const result = JSON.parse(JSON.stringify(DEF));
           result.groups = [{ id: 'g0', name: 'Imported Group' }]; result.curGroup = 'g0';
           result.pages[0].groupId = 'g0';
-          const w = { id: uid(), col: 0, title: 'Imported', emoji: 'ðŸ“¥', type: 'bookmarks', display: 'auto', size: 'md', vis: 'all', color: { ...DEF_COLOR }, items: [] };
+          const w = { id: uid(), col: 0, title: 'Imported', emoji: '📥', type: 'bookmarks', display: 'auto', size: 'md', vis: 'all', color: { ...DEF_COLOR }, items: [] };
           raw.forEach(bm => { if (bm.url) w.items.push({ id: uid(), label: bm.title || bm.label || bm.name || bm.url, url: bm.url, emoji: '' }); });
           if (w.items.length) { result.pages[0].widgets.push(w); return result; }
         }
@@ -344,7 +344,7 @@
           const wKey = pagesMap[pName].id + '_' + wName;
           if (!widgetsMap[wKey]) {
             const colIdx = Object.keys(widgetsMap).filter(k => k.startsWith(pagesMap[pName].id + '_')).length % 3;
-            widgetsMap[wKey] = { id: uid(), col: colIdx, title: wName, emoji: 'ðŸ“Œ', type: 'bookmarks', display: 'auto', size: 'md', vis: 'all', color: { ...DEF_COLOR }, items: [] };
+            widgetsMap[wKey] = { id: uid(), col: colIdx, title: wName, emoji: '📌', type: 'bookmarks', display: 'auto', size: 'md', vis: 'all', color: { ...DEF_COLOR }, items: [] };
             pagesMap[pName].widgets.push(widgetsMap[wKey]);
           }
           widgetsMap[wKey].items.push({ id: uid(), label, url, emoji: '' }); count++;
@@ -394,7 +394,7 @@
 
                   const widgetName = wh3.textContent.trim();
                   const widget = {
-                    id: uid(), col: widgetIdx % page.cols, title: widgetName, emoji: 'ðŸ“Œ',
+                    id: uid(), col: widgetIdx % page.cols, title: widgetName, emoji: '📌',
                     type: 'bookmarks', display: 'auto', size: 'md', vis: 'all',
                     color: { ...DEF_COLOR }, items: []
                   };
@@ -423,7 +423,7 @@
             D = result; sv(); renderAll();
             document.getElementById('io-pop').classList.remove('open');
             const totalBm = result.pages.reduce((s, p) => s + (p.widgets || []).reduce((ss, w) => ss + (w.items || []).length, 0), 0);
-            alert('âœ… Imported! ' + result.pages.length + ' pages, ' + totalBm + ' bookmarks.');
+            alert('✅ Imported! ' + result.pages.length + ' pages, ' + totalBm + ' bookmarks.');
           } catch (err) {
             alert('Import error: ' + err.message);
           }
@@ -511,7 +511,7 @@
             if (firstPageInGroup) D.cur = firstPageInGroup.id;
             sv(); renderAll();
           };
-          const x = document.createElement('button'); x.className = 'ptx'; x.textContent = 'âœ•'; x.title = 'Delete group';
+          const x = document.createElement('button'); x.className = 'ptx'; x.textContent = '✕'; x.title = 'Delete group';
           x.onclick = e => { e.stopPropagation(); delGroup(g.id); };
           tab.appendChild(cd); tab.appendChild(nm); if (D.groups.length > 1) tab.appendChild(x);
           bar.insertBefore(tab, addBtn);
@@ -570,9 +570,9 @@
       document.getElementById('settings-btn').onclick = () => {
         const grpSel = document.getElementById('set-def-grp');
         const pgSel = document.getElementById('set-def-pg');
-        grpSel.innerHTML = '<option value="__last__">ðŸ• Remember last</option>';
+        grpSel.innerHTML = '<option value="__last__">🕐 Remember last</option>';
         D.groups.forEach(g => { const o = document.createElement('option'); o.value = g.id; o.textContent = g.name; grpSel.appendChild(o); });
-        pgSel.innerHTML = '<option value="__last__">ðŸ• Remember last</option>';
+        pgSel.innerHTML = '<option value="__last__">🕐 Remember last</option>';
         D.pages.forEach(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; pgSel.appendChild(o); });
         grpSel.value = (D.settings.defaultGroup || '__last__');
         pgSel.value = (D.settings.defaultPage || '__last__');
@@ -654,7 +654,7 @@
         const list = document.getElementById('inbox-list');
         list.innerHTML = '';
         if (!D.inbox || !D.inbox.length) {
-          list.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--mu);font-size:.7rem">Empty â€” paste URLs here for later</div>';
+          list.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--mu);font-size:.7rem">Empty — paste URLs here for later</div>';
           return;
         }
         D.inbox.forEach(item => {
@@ -665,8 +665,8 @@
           const img = document.createElement('img'); img.src = getFav(item.url); img.onerror = () => { img.style.display = 'none'; };
           const lbl = document.createElement('span'); lbl.className = 'inbox-lbl'; lbl.textContent = item.label;
           const url = document.createElement('span'); url.className = 'inbox-url'; url.textContent = domainOf(item.url);
-          const open = document.createElement('a'); open.href = item.url; open.target = '_blank'; open.style.cssText = 'color:var(--ac);font-size:.6rem;text-decoration:none;flex-shrink:0'; open.textContent = 'â†—';
-          const rm = document.createElement('button'); rm.className = 'inbox-rm'; rm.textContent = 'âœ•';
+          const open = document.createElement('a'); open.href = item.url; open.target = '_blank'; open.style.cssText = 'color:var(--ac);font-size:.6rem;text-decoration:none;flex-shrink:0'; open.textContent = '↗';
+          const rm = document.createElement('button'); rm.className = 'inbox-rm'; rm.textContent = '✕';
           rm.onclick = () => { D.inbox = D.inbox.filter(x => x.id !== item.id); sv(); buildInbox(); };
           row.appendChild(img); row.appendChild(lbl); row.appendChild(url); row.appendChild(open); row.appendChild(rm);
           list.appendChild(row);
@@ -767,7 +767,7 @@
         const dups = findDups(_dupScope);
         const keys = Object.keys(dups);
         if (keys.length === 0) {
-          list.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--mu);font-size:.75rem">âœ… No duplicates found!</div>';
+          list.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--mu);font-size:.75rem">✅ No duplicates found!</div>';
           document.getElementById('dup-del-all').style.display = 'none';
           return;
         }
@@ -782,7 +782,7 @@
           const urlDiv = document.createElement('div'); urlDiv.className = 'dup-url'; urlDiv.textContent = items[0].label || items[0].url;
           const meta = document.createElement('div'); meta.className = 'dup-meta';
           const locations = items.map(i => i.pageName + ' / ' + i.widgetTitle);
-          meta.textContent = items.length + 'Ã— â€” ' + [...new Set(locations)].join(', ');
+          meta.textContent = items.length + '× — ' + [...new Set(locations)].join(', ');
           info.appendChild(urlDiv); info.appendChild(meta);
           const rm = document.createElement('button'); rm.className = 'dup-rm';
           rm.textContent = 'Remove extras';
@@ -871,7 +871,7 @@
             const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
           });
           tab.onclick = () => { if (nm.contentEditable === 'true') return; D.cur = pg.id; sv(); renderAll(); };
-          const x = document.createElement('button'); x.className = 'ptx'; x.textContent = 'âœ•'; x.title = 'Delete page';
+          const x = document.createElement('button'); x.className = 'ptx'; x.textContent = '✕'; x.title = 'Delete page';
           x.onclick = e => { e.stopPropagation(); delPage(pg.id); };
           tab.appendChild(cd); tab.appendChild(nm); if (groupPages.length > 1) tab.appendChild(x);
           bar.insertBefore(tab, addBtn);
@@ -938,77 +938,31 @@
         document.getElementById('miro-add-float').classList.toggle('show', isMiro);
         document.getElementById('cols-wrap').style.display = isMiro ? 'none' : 'flex';
         if (isMiro) { buildMiroCanvas(); buildOutline(); return; }
-        const wrap = document.getElementById('cw'); wrap.innerHTML = ''; wrap.style.gridTemplateColumns = `repeat(${page.cols},minmax(0,1fr))`; for (let ci = 0; ci < page.cols; ci++) { const col = document.createElement('div'); col.className = 'col'; col.dataset.ci = ci; col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('dragover'); }); col.addEventListener('dragleave', () => col.classList.remove('dragover')); col.addEventListener('drop', e => { e.preventDefault(); col.classList.remove('dragover'); if (!dragWid) return; const w = (page.widgets || []).find(x => x.id === dragWid); if (w) { w.col = ci; sv(); buildCols(); } dragWid = null; }); const colWidgets = (page.widgets || []).filter(w => w.col === ci); if (ci === page.cols - 1) { (page.widgets || []).filter(w => w.col >= page.cols).forEach(w => colWidgets.push(w)); } colWidgets.forEach(w => col.appendChild(buildWidget(w))); const ab = document.createElement('button'); ab.className = 'add-w'; ab.innerHTML = 'ï¼‹ Add Widget'; ab.onclick = () => { pColIdx = ci; openM('m-aw'); }; col.appendChild(ab); wrap.appendChild(col); } buildOutline();
+        const wrap = document.getElementById('cw'); wrap.innerHTML = ''; wrap.style.gridTemplateColumns = `repeat(${page.cols},minmax(0,1fr))`; for (let ci = 0; ci < page.cols; ci++) { const col = document.createElement('div'); col.className = 'col'; col.dataset.ci = ci; col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('dragover'); }); col.addEventListener('dragleave', () => col.classList.remove('dragover')); col.addEventListener('drop', e => { e.preventDefault(); col.classList.remove('dragover'); if (!dragWid) return; const w = (page.widgets || []).find(x => x.id === dragWid); if (w) { w.col = ci; sv(); buildCols(); } dragWid = null; }); const colWidgets = (page.widgets || []).filter(w => w.col === ci); if (ci === page.cols - 1) { (page.widgets || []).filter(w => w.col >= page.cols).forEach(w => colWidgets.push(w)); } colWidgets.forEach(w => col.appendChild(buildWidget(w))); const ab = document.createElement('button'); ab.className = 'add-w'; ab.innerHTML = '＋ Add Widget'; ab.onclick = () => { pColIdx = ci; openM('m-aw'); }; col.appendChild(ab); wrap.appendChild(col); } buildOutline();
       }
       function luma(c) { return (c.r * 299 + c.g * 587 + c.b * 114) / 1000; }
-      function buildWidget(w) { const el = document.createElement('div'); el.className = 'widget edit'; el.dataset.wid = w.id; el.draggable = true; const c = w.color || DEF_COLOR; const light = luma(c) > 140; const txtCol = light ? '#111' : '#dde1ee'; const muCol = light ? '#666' : 'rgba(255,255,255,.42)'; const bdCol = light ? 'rgba(0,0,0,.1)' : `rgba(255,255,255,${Math.min(c.a * .13, .09)})`; el.style.cssText = `background:${rgba(c)};border:1px solid ${bdCol};color:${txtCol};--w-tx:${txtCol};--w-mu:${muCol}`; el.addEventListener('dragstart', () => { dragWid = w.id; setTimeout(() => el.classList.add('dragging'), 0); }); el.addEventListener('dragend', () => { el.classList.remove('dragging'); dragWid = null; }); el.addEventListener('dragover', e => { if (_dragInboxId) { e.preventDefault(); el.style.outline = '2px solid var(--ac)'; } }); el.addEventListener('dragleave', () => { el.style.outline = ''; }); el.addEventListener('drop', e => { if (_dragInboxId) { e.preventDefault(); el.style.outline = ''; const inboxItem = (D.inbox || []).find(x => x.id === _dragInboxId); if (inboxItem && w.type !== 'note') { if (!w.items) w.items = []; w.items.push({ id: uid(), label: inboxItem.label, url: inboxItem.url, emoji: '' }); D.inbox = D.inbox.filter(x => x.id !== _dragInboxId); _dragInboxId = null; sv(); buildCols(); buildInbox(); } } }); const hdr = document.createElement('div'); hdr.className = 'wh'; hdr.style.borderBottomColor = bdCol; hdr.innerHTML = `<div class="wt" style="color:${muCol}"><span>${w.emoji || 'ðŸ“Œ'}</span>${esc(w.title)}</div><div class="wa"><button class="wab" data-dp="${w.id}" title="Display">ðŸ–¥ï¸</button><button class="wab" data-mv="${w.id}" title="Move/Copy">ðŸ“‹</button><button class="wab" data-cl="${w.id}" title="Color">ðŸŽ¨</button><button class="wab" data-rn="${w.id}" title="Rename">âœï¸</button><button class="wab d" data-dl="${w.id}" title="Delete">ðŸ—‘ï¸</button></div>`; hdr.querySelector('[data-dp]').onclick = e => { e.stopPropagation(); openDisp(w.id); }; hdr.querySelector('[data-mv]').onclick = e => { e.stopPropagation(); openMvModal(w.id); }; hdr.querySelector('[data-cl]').onclick = e => { e.stopPropagation(); openColModal(w.id); }; hdr.querySelector('[data-rn]').onclick = e => { e.stopPropagation(); openRen(w.id); }; hdr.querySelector('[data-dl]').onclick = e => { e.stopPropagation(); delWidget(w.id); }; el.appendChild(hdr); const body = document.createElement('div'); body.className = 'wb'; if (w.type === 'note') { const ta = document.createElement('textarea'); ta.className = 'note-ta'; ta.placeholder = 'Write notesâ€¦'; ta.value = w.content || ''; ta.style.color = txtCol; ta.oninput = () => { w.content = ta.value; sv(); }; body.appendChild(ta); } else if (w.type === 'todo') { buildTodoBody(body, w); } else { buildBmBody(body, w); } el.appendChild(body); return el; }
-      function buildTodoBody(body, w) { const list = document.createElement('div'); list.className = 'todo-list'; (w.items || []).forEach(item => { list.appendChild(mkTodoItem(item, w)); }); const addRow = document.createElement('div'); addRow.className = 'todo-add'; const addIn = document.createElement('input'); addIn.className = 'todo-add-in'; addIn.type = 'text'; addIn.placeholder = 'Add a taskâ€¦'; addIn.onkeydown = e => { if (e.key === 'Enter') { const txt = addIn.value.trim(); if (!txt) return; if (!w.items) w.items = []; const item = { id: uid(), text: txt, done: false }; w.items.push(item); sv(); list.insertBefore(mkTodoItem(item, w), addRow); addIn.value = ''; } }; addRow.innerHTML = '<span style="font-size:.8rem;color:var(--mu)">ï¼‹</span>'; addRow.appendChild(addIn); list.appendChild(addRow); body.appendChild(list); }
-      function mkTodoItem(item, w) { const row = document.createElement('div'); row.className = 'todo-it' + (item.done ? ' done' : ''); const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'todo-cb'; cb.checked = !!item.done; cb.onchange = () => { item.done = cb.checked; row.classList.toggle('done', item.done); sv(); }; const txt = document.createElement('input'); txt.type = 'text'; txt.className = 'todo-txt'; txt.value = item.text || ''; txt.readOnly = true; txt.ondblclick = () => { txt.readOnly = false; txt.focus(); }; txt.onblur = () => { txt.readOnly = true; item.text = txt.value; sv(); }; txt.onkeydown = e => { if (e.key === 'Enter') txt.blur(); }; const rm = document.createElement('button'); rm.className = 'rmb mr'; rm.textContent = 'âœ•'; rm.onclick = () => { if (!w.items) return; w.items = w.items.filter(x => x.id !== item.id); sv(); row.remove(); }; row.appendChild(cb); row.appendChild(txt); row.appendChild(rm); return row; }
+      function buildWidget(w) { const el = document.createElement('div'); el.className = 'widget edit'; el.dataset.wid = w.id; el.draggable = true; const c = w.color || DEF_COLOR; const light = luma(c) > 140; const txtCol = light ? '#111' : '#dde1ee'; const muCol = light ? '#666' : 'rgba(255,255,255,.42)'; const bdCol = light ? 'rgba(0,0,0,.1)' : `rgba(255,255,255,${Math.min(c.a * .13, .09)})`; el.style.cssText = `background:${rgba(c)};border:1px solid ${bdCol};color:${txtCol};--w-tx:${txtCol};--w-mu:${muCol}`; el.addEventListener('dragstart', () => { dragWid = w.id; setTimeout(() => el.classList.add('dragging'), 0); }); el.addEventListener('dragend', () => { el.classList.remove('dragging'); dragWid = null; }); el.addEventListener('dragover', e => { if (_dragInboxId) { e.preventDefault(); el.style.outline = '2px solid var(--ac)'; } }); el.addEventListener('dragleave', () => { el.style.outline = ''; }); el.addEventListener('drop', e => { if (_dragInboxId) { e.preventDefault(); el.style.outline = ''; const inboxItem = (D.inbox || []).find(x => x.id === _dragInboxId); if (inboxItem && w.type !== 'note') { if (!w.items) w.items = []; w.items.push({ id: uid(), label: inboxItem.label, url: inboxItem.url, emoji: '' }); D.inbox = D.inbox.filter(x => x.id !== _dragInboxId); _dragInboxId = null; sv(); buildCols(); buildInbox(); } } }); const hdr = document.createElement('div'); hdr.className = 'wh'; hdr.style.borderBottomColor = bdCol; hdr.innerHTML = `<div class="wt" style="color:${muCol}"><span>${w.emoji || '📌'}</span>${esc(w.title)}</div><div class="wa"><button class="wab" data-dp="${w.id}" title="Display">🖥️</button><button class="wab" data-mv="${w.id}" title="Move/Copy">📋</button><button class="wab" data-cl="${w.id}" title="Color">🎨</button><button class="wab" data-rn="${w.id}" title="Rename">✏️</button><button class="wab d" data-dl="${w.id}" title="Delete">🗑️</button></div>`; hdr.querySelector('[data-dp]').onclick = e => { e.stopPropagation(); openDisp(w.id); }; hdr.querySelector('[data-mv]').onclick = e => { e.stopPropagation(); openMvModal(w.id); }; hdr.querySelector('[data-cl]').onclick = e => { e.stopPropagation(); openColModal(w.id); }; hdr.querySelector('[data-rn]').onclick = e => { e.stopPropagation(); openRen(w.id); }; hdr.querySelector('[data-dl]').onclick = e => { e.stopPropagation(); delWidget(w.id); }; el.appendChild(hdr); const body = document.createElement('div'); body.className = 'wb'; if (w.type === 'note') { const ta = document.createElement('textarea'); ta.className = 'note-ta'; ta.placeholder = 'Write notes…'; ta.value = w.content || ''; ta.style.color = txtCol; ta.oninput = () => { w.content = ta.value; sv(); }; body.appendChild(ta); } else if (w.type === 'todo') { buildTodoBody(body, w); } else { buildBmBody(body, w); } el.appendChild(body); return el; }
+      function buildTodoBody(body, w) { const list = document.createElement('div'); list.className = 'todo-list'; (w.items || []).forEach(item => { list.appendChild(mkTodoItem(item, w)); }); const addRow = document.createElement('div'); addRow.className = 'todo-add'; const addIn = document.createElement('input'); addIn.className = 'todo-add-in'; addIn.type = 'text'; addIn.placeholder = 'Add a task…'; addIn.onkeydown = e => { if (e.key === 'Enter') { const txt = addIn.value.trim(); if (!txt) return; if (!w.items) w.items = []; const item = { id: uid(), text: txt, done: false }; w.items.push(item); sv(); list.insertBefore(mkTodoItem(item, w), addRow); addIn.value = ''; } }; addRow.innerHTML = '<span style="font-size:.8rem;color:var(--mu)">＋</span>'; addRow.appendChild(addIn); list.appendChild(addRow); body.appendChild(list); }
+      function mkTodoItem(item, w) { const row = document.createElement('div'); row.className = 'todo-it' + (item.done ? ' done' : ''); const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'todo-cb'; cb.checked = !!item.done; cb.onchange = () => { item.done = cb.checked; row.classList.toggle('done', item.done); sv(); }; const txt = document.createElement('input'); txt.type = 'text'; txt.className = 'todo-txt'; txt.value = item.text || ''; txt.readOnly = true; txt.ondblclick = () => { txt.readOnly = false; txt.focus(); }; txt.onblur = () => { txt.readOnly = true; item.text = txt.value; sv(); }; txt.onkeydown = e => { if (e.key === 'Enter') txt.blur(); }; const rm = document.createElement('button'); rm.className = 'rmb mr'; rm.textContent = '✕'; rm.onclick = () => { if (!w.items) return; w.items = w.items.filter(x => x.id !== item.id); sv(); row.remove(); }; row.appendChild(cb); row.appendChild(txt); row.appendChild(rm); return row; }
       function buildBmBody(body, w) { const items = w.items || []; const visN = w.vis === 'all' ? items.length : (parseInt(w.vis) || items.length); const shown = items.slice(0, visN); const sz = w.size || 'md'; let mode = w.display || 'auto'; if (mode === 'auto') mode = shown.length <= 8 ? 'spark' : 'stream'; const wrap = document.createElement('div'); wrap.className = sz; if (mode === 'spark') { wrap.classList.add('spark', sz); shown.forEach(bm => wrap.appendChild(mkSparkItem(bm, w, sz))); } else if (mode === 'cloud') { wrap.classList.add('cloud'); shown.forEach(bm => { const a = document.createElement('a'); a.className = 'cl-it'; a.href = bm.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; if (bm.emoji) a.textContent = bm.emoji + ' ' + bm.label; else a.textContent = bm.label; const rm = mkRm(bm.id, w.id, 'cr'); a.appendChild(rm); setupPv(a, bm); wrap.appendChild(a); }); } else if (mode === 'card') { wrap.classList.add('cards'); shown.forEach(bm => wrap.appendChild(mkCardItem(bm, w, sz))); } else { wrap.classList.add('stream'); shown.forEach(bm => wrap.appendChild(mkStreamItem(bm, w, sz))); } wrap.appendChild(mkAddBtn(w.id)); body.appendChild(wrap); }
       function mkSparkItem(bm, w, sz) { const DIM = { sm: { w: 30, r: 8 }, md: { w: 38, r: 9 }, lg: { w: 48, r: 11 } }; const d = DIM[sz] || DIM.md; const a = document.createElement('a'); a.className = 'sp-it'; a.href = bm.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; const fav = mkFav(bm, d.w, d.w, d.r); const lbl = document.createElement('div'); lbl.className = 'sp-lb'; lbl.textContent = bm.label; const rm = mkRm(bm.id, w.id, 'tr'); a.appendChild(fav); a.appendChild(lbl); a.appendChild(rm); setupPv(a, bm); return a; }
       function mkStreamItem(bm, w, sz) { const DIM = { sm: { w: 15, r: 5 }, md: { w: 19, r: 5 }, lg: { w: 24, r: 6 } }; const d = DIM[sz] || DIM.md; const a = document.createElement('a'); a.className = 'st-it'; a.href = bm.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.title = bm.label; const fav = mkFav(bm, d.w, d.w, d.r); const lbl = document.createElement('span'); lbl.className = 'st-lb'; lbl.textContent = bm.label; const rm = mkRm(bm.id, w.id, 'mr'); a.appendChild(fav); a.appendChild(lbl); a.appendChild(rm); setupPv(a, bm); return a; }
       function mkCardItem(bm, w, sz) { const DIM = { sm: { w: 24, r: 7 }, md: { w: 32, r: 8 }, lg: { w: 40, r: 9 } }; const d = DIM[sz] || DIM.md; const a = document.createElement('a'); a.className = 'cd-it'; a.href = bm.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; const fav = mkFav(bm, d.w, d.w, d.r); const info = document.createElement('div'); info.className = 'cd-info'; const nm = document.createElement('div'); nm.className = 'cd-nm'; nm.textContent = bm.label; const ur = document.createElement('div'); ur.className = 'cd-url'; ur.textContent = domainOf(bm.url); info.appendChild(nm); info.appendChild(ur); const rm = mkRm(bm.id, w.id, 'mr'); a.appendChild(fav); a.appendChild(info); a.appendChild(rm); setupPv(a, bm); return a; }
-      function mkRm(itemId, wid, pos) { const b = document.createElement('button'); b.className = `rmb ${pos}`; b.textContent = 'âœ•'; b.onclick = ev => { ev.stopPropagation(); ev.preventDefault(); rmItem(wid, itemId); }; return b; }
-      function mkAddBtn(wid) { const d = document.createElement('div'); d.className = 'add-i'; d.innerHTML = 'ï¼‹ Add'; d.onclick = () => { pWidId = wid;['bm-u', 'bm-l', 'bm-e'].forEach(id => document.getElementById(id).value = ''); openM('m-bm'); }; return d; }
-      function setupPv(el, bm) {
-        el.addEventListener('mouseenter', ev => {
-          clearTimeout(pvTimer);
-          pvTimer = setTimeout(() => {
-            if (_pvMode && bm.url) {
-              const pv = document.getElementById('live-pv');
-              pv.innerHTML = '<div class="pv-loading">Loading previewâ€¦</div>';
-              pv.style.display = 'block';
-              posLivePv(ev);
-
-              // If bookmark already has a cached thumbUrl, use it instantly
-              if (bm.thumbUrl) {
-                renderPvImage(pv, bm.thumbUrl);
-              } else {
-                // Otherwise fetch using the robust Miro card fetcher logic
-                fetchCardMeta(bm).then(() => {
-                  if (bm.thumbUrl) {
-                    renderPvImage(pv, bm.thumbUrl);
-                    sv(); // save the cached thumbUrl to local storage
-                  } else {
-                    pv.innerHTML = '<div class="pv-loading">Preview unavailable</div>';
-                  }
-                });
-              }
-            } else {
-              showPv(bm, ev);
-            }
-          }, _pvMode ? 150 : 700);
-        });
-        el.addEventListener('mouseleave', () => {
-          clearTimeout(pvTimer);
-          hidePv();
-          const pv = document.getElementById('live-pv');
-          pv.style.display = 'none';
-          pv.innerHTML = '';
-        });
-        el.addEventListener('mousemove', ev => {
-          if (_pvMode && document.getElementById('live-pv').style.display === 'block') posLivePv(ev);
-          else if (document.getElementById('pvt').style.display === 'block') posPv(ev);
-        });
-      }
-      function renderPvImage(pv, src) {
-        const img = document.createElement('img');
-        img.src = src;
-        img.onload = () => { pv.innerHTML = ''; pv.appendChild(img); };
-        img.onerror = () => { pv.innerHTML = '<div class="pv-loading">Preview unavailable</div>'; };
-      }
+      function mkRm(itemId, wid, pos) { const b = document.createElement('button'); b.className = `rmb ${pos}`; b.textContent = '✕'; b.onclick = ev => { ev.stopPropagation(); ev.preventDefault(); rmItem(wid, itemId); }; return b; }
+      function mkAddBtn(wid) { const d = document.createElement('div'); d.className = 'add-i'; d.innerHTML = '＋ Add'; d.onclick = () => { pWidId = wid;['bm-u', 'bm-l', 'bm-e'].forEach(id => document.getElementById(id).value = ''); openM('m-bm'); }; return d; }
+      function setupPv(el, bm) { el.addEventListener('mouseenter', ev => { clearTimeout(pvTimer); pvTimer = setTimeout(() => { if (_pvMode && bm.url) { const pv = document.getElementById('live-pv'); pv.innerHTML = '<div class="pv-loading">Loading preview…</div>'; const img = document.createElement('img'); img.src = 'https://image.thum.io/get/width/600/' + bm.url; img.onload = () => { pv.innerHTML = ''; pv.appendChild(img); }; img.onerror = () => { pv.innerHTML = '<div class="pv-loading">Preview unavailable</div>'; }; pv.style.display = 'block'; posLivePv(ev); } else { showPv(bm, ev); } }, _pvMode ? 150 : 700); }); el.addEventListener('mouseleave', () => { clearTimeout(pvTimer); hidePv(); const pv = document.getElementById('live-pv'); pv.style.display = 'none'; pv.innerHTML = ''; }); el.addEventListener('mousemove', ev => { if (_pvMode && document.getElementById('live-pv').style.display === 'block') posLivePv(ev); else if (document.getElementById('pvt').style.display === 'block') posPv(ev); }); }
       function showPv(bm, ev) { const pt = document.getElementById('pvt'); const pvFav = document.getElementById('pv-fav'); pvFav.innerHTML = ''; const bg = letterColor(letterOf(bm.label, bm.url)); pvFav.style.background = bg; if (bm.emoji) { pvFav.textContent = bm.emoji; } else { const img = document.createElement('img'); img.src = getFav(bm.url); img.style.cssText = 'width:100%;height:100%;object-fit:contain;border-radius:10px'; img.onerror = () => { img.remove(); pvFav.textContent = letterOf(bm.label, bm.url); pvFav.style.color = '#fff'; pvFav.style.fontSize = '1.5rem'; pvFav.style.fontWeight = '700'; }; pvFav.appendChild(img); } document.getElementById('pv-title').textContent = bm.label; document.getElementById('pv-domain').textContent = domainOf(bm.url); document.getElementById('pv-bar').style.background = `linear-gradient(90deg,${bg},transparent)`; pt.style.display = 'block'; posPv(ev); }
       function hidePv() { document.getElementById('pvt').style.display = 'none'; }
       function posPv(ev) { const pt = document.getElementById('pvt'); const W = window.innerWidth, H = window.innerHeight; const tw = pt.offsetWidth || 262, th = pt.offsetHeight || 100; let x = ev.clientX + 16, y = ev.clientY + 14; if (x + tw > W - 8) x = ev.clientX - tw - 8; if (y + th > H - 8) y = ev.clientY - th - 8; pt.style.left = x + 'px'; pt.style.top = y + 'px'; }
       function delWidget(wid) { if (!confirm('Delete this widget?')) return; D.pages.forEach(p => { p.widgets = (p.widgets || []).filter(w => w.id !== wid); }); sv(); buildCols(); }
       function rmItem(wid, itemId) { const w = fw(wid); if (!w || !w.items) return; w.items = w.items.filter(i => i.id !== itemId); sv(); buildCols(); }
       function openRen(wid) { const w = fw(wid); if (!w) return; renWid = wid; document.getElementById('rn-t').value = w.title; document.getElementById('rn-e').value = w.emoji || ''; openM('m-ren'); }
-      document.getElementById('ok-ren').onclick = () => { const w = fw(renWid); if (!w) return; w.title = document.getElementById('rn-t').value.trim() || w.title; w.emoji = document.getElementById('rn-e').value.trim() || 'ðŸ“Œ'; sv(); buildCols(); closeM('m-ren'); };
+      document.getElementById('ok-ren').onclick = () => { const w = fw(renWid); if (!w) return; w.title = document.getElementById('rn-t').value.trim() || w.title; w.emoji = document.getElementById('rn-e').value.trim() || '📌'; sv(); buildCols(); closeM('m-ren'); };
       let selType = 'bookmarks';
       document.querySelectorAll('.tc').forEach(c => { c.onclick = () => { document.querySelectorAll('.tc').forEach(x => x.classList.remove('sel')); c.classList.add('sel'); selType = c.dataset.t; }; });
       document.getElementById('ok-aw').onclick = () => {
         const t = document.getElementById('nw-t').value.trim() || 'New Widget';
-        const e2 = document.getElementById('nw-e').value.trim() || 'ðŸ“Œ';
+        const e2 = document.getElementById('nw-e').value.trim() || '📌';
         const w = { id: uid(), col: pColIdx, title: t, emoji: e2, type: selType, display: 'auto', size: 'md', vis: 'all', color: { ...DEF_COLOR }, items: selType !== 'note' ? [] : undefined, content: selType === 'note' ? '' : undefined };
         const page = cp();
         if (!page.widgets) page.widgets = [];
@@ -1018,7 +972,7 @@
       document.getElementById('bm-u').addEventListener('blur', () => { const u = document.getElementById('bm-u').value.trim(); if (u && !document.getElementById('bm-l').value) { try { const h = new URL(u).hostname.replace('www.', ''); document.getElementById('bm-l').value = h.split('.')[0].replace(/^./, c => c.toUpperCase()); } catch (e3) { } } });
       document.getElementById('ok-bm').onclick = () => {
         let url = document.getElementById('bm-u').value.trim();
-        if (!url) { alert('ÙŠØ§ Ù‡Ù†Ø¯Ø³Ø©ØŒ Ù„Ø§Ø²Ù… ØªÙƒØªØ¨ Ù„ÙŠÙ†Ùƒ Ø§Ù„Ù…ÙˆÙ‚Ø¹ Ø§Ù„Ø£ÙˆÙ„!'); return; }
+        if (!url) { alert('يا هندسة، لازم تكتب لينك الموقع الأول!'); return; }
         if (!url.startsWith('http')) url = 'https://' + url;
         const label = document.getElementById('bm-l').value.trim() || url;
         const emoji = document.getElementById('bm-e').value.trim();
@@ -1059,6 +1013,5 @@
       document.querySelectorAll('.mo').forEach(o => { o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); }); });
       document.addEventListener('click', () => { document.getElementById('ep').classList.remove('open'); document.getElementById('io-pop').classList.remove('open'); document.getElementById('tc-pop').classList.remove('open'); $sr().classList.remove('show'); });
       document.getElementById('tb').addEventListener('click', e => e.stopPropagation()); document.getElementById('ribbon').addEventListener('click', e => e.stopPropagation());
-      document.addEventListener('keydown', e => { if (e.key === 'F2') { e.preventDefault(); toggleOutline(); return; } if (e.key === 'Escape') { document.querySelectorAll('.mo.open').forEach(m => m.classList.remove('open'));['ep', 'io-pop', 'tc-pop'].forEach(id => document.getElementById(id).classList.remove('open')); $sr().classList.remove('show'); } if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && !document.querySelector('.mo.open') && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA' && !document.activeElement.getAttribute('contenteditable')) { try { const p = cp(); if (p && p.pageType === 'miro' && e.key.toLowerCase() === 'n') return; } catch (err) { } $si().focus(); } });
+      document.addEventListener('keydown', e => { if (e.key === 'F2') { e.preventDefault(); toggleOutline(); return; } if (e.key === 'Escape') { document.querySelectorAll('.mo.open').forEach(m => m.classList.remove('open'));['ep', 'io-pop', 'tc-pop'].forEach(id => document.getElementById(id).classList.remove('open')); $sr().classList.remove('show'); } if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && !document.querySelector('.mo.open') && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA' && !document.activeElement.getAttribute('contenteditable')) { $si().focus(); } });
       function renderAll() { buildGroups(); buildTabs(); buildColBtns(); buildCols(); applyBG(); applyContrast(); buildEP(); buildAcPop(); buildBgSwatches(); buildInbox(); document.documentElement.style.setProperty('--ac', D.settings.accent || '#6c8fff'); document.getElementById('ac-dot').style.background = D.settings.accent || '#6c8fff'; }
-

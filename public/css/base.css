@@ -1,4 +1,4 @@
-﻿    /* CSS Styles */
+    /* CSS Styles */
     *,
     *::before,
     *::after {
@@ -2167,4 +2167,3 @@
     .widget.outline-hl {
       animation: outlineHighlight 1.2s ease;
     }
-

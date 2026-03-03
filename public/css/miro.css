@@ -1,4 +1,4 @@
-﻿    /* â”€â”€â”€ Miro Page â”€â”€â”€ */
+    /* ─── Miro Page ─── */
     #miro-canvas {
       position: relative;
       flex: 1;
@@ -392,7 +392,7 @@
       }
     }
 
-    /* â”€â”€â”€ Multi-Select & Grid Alignment â”€â”€â”€ */
+    /* ─── Multi-Select & Grid Alignment ─── */
     .miro-card.miro-selected {
       outline: 2px solid var(--ac);
       outline-offset: 2px;
@@ -477,7 +477,7 @@
       display: block;
     }
 
-    /* â”€â”€â”€ Sticky Notes â”€â”€â”€ */
+    /* ─── Sticky Notes ─── */
     .miro-sticky {
       position: absolute;
       border-radius: 4px;
@@ -556,15 +556,8 @@
       word-wrap: break-word;
       overflow-wrap: break-word;
       overflow: hidden;
-      cursor: default;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-    }
-
-    .ms-text[contenteditable="true"] {
       cursor: text;
+      text-align: center;
     }
 
     .ms-text:empty::before {

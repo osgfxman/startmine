@@ -1,17 +1,22 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
   <title>Startmine</title>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/miro.css">
+  </style>
 </head>
+
 <body>
 
   <div id="login-screen">
@@ -38,57 +43,57 @@
     <div id="sync-bar"></div>
 
     <div id="tb">
-      <button class="ib" id="outline-btn" title="Page Outline (F2)">ðŸ“‘</button>
-      <span id="user-email">ðŸ‘¤</span>
+      <button class="ib" id="outline-btn" title="Page Outline (F2)">📑</button>
+      <span id="user-email">👤</span>
       <div id="sync-dot" class="loading"></div>
       <span id="sync-msg">Connecting...</span>
       <div class="tb-sep"></div>
-      <input id="qi" type="text" placeholder="âœ‰ Quick Inboxâ€¦" autocomplete="off" spellcheck="false"
+      <input id="qi" type="text" placeholder="✉ Quick Inbox…" autocomplete="off" spellcheck="false"
         title="Paste URL here to send to Inbox">
       <div id="sw">
-        <button id="seb">ðŸ”</button>
-        <input id="si" type="text" placeholder="Searchâ€¦" autocomplete="off" spellcheck="false">
+        <button id="seb">🔍</button>
+        <input id="si" type="text" placeholder="Search…" autocomplete="off" spellcheck="false">
         <div id="ep"></div>
         <div id="sr"></div>
       </div>
       <button class="ib" id="all-btn" title="Show All Pages">ALL</button>
-      <button class="ib" id="dup-btn" title="Find Duplicate Links">ðŸ”Ž</button>
+      <button class="ib" id="dup-btn" title="Find Duplicate Links">🔎</button>
       <div class="tb-sep"></div>
-      <button class="ib" id="miro-toggle" title="Miro Mode â€” new pages become infinite canvas">M</button>
+      <button class="ib" id="miro-toggle" title="Miro Mode — new pages become infinite canvas">M</button>
       <div id="cols-wrap" style="display:flex;align-items:center;gap:4px">
         <span style="font-size:.6rem;color:var(--mu);white-space:nowrap">Cols:</span>
         <div id="col-btns" style="display:flex;gap:2px"></div>
       </div>
       <div style="position:relative">
-        <button class="ib" id="bg-btn" title="Page Background">ðŸ–¼ï¸</button>
+        <button class="ib" id="bg-btn" title="Page Background">🖼️</button>
       </div>
       <div style="position:relative">
-        <button class="ib" id="io-btn" title="Import / Export">â‡…</button>
+        <button class="ib" id="io-btn" title="Import / Export">⇅</button>
         <div id="io-pop">
-          <div class="io-it" id="exp-json">ðŸ“¤ Export JSON</div>
-          <div class="io-it" id="exp-csv">ðŸ“Š Export CSV</div>
+          <div class="io-it" id="exp-json">📤 Export JSON</div>
+          <div class="io-it" id="exp-csv">📊 Export CSV</div>
           <div class="io-sep"></div>
-          <div class="io-it"><label style="cursor:pointer;display:flex;align-items:center;gap:8px;width:100%">ðŸ“¥ Import
+          <div class="io-it"><label style="cursor:pointer;display:flex;align-items:center;gap:8px;width:100%">📥 Import
               JSON<input type="file" id="imp-json" accept=".json" style="display:none"></label></div>
-          <div class="io-it"><label style="cursor:pointer;display:flex;align-items:center;gap:8px;width:100%">ðŸ“Š Import
+          <div class="io-it"><label style="cursor:pointer;display:flex;align-items:center;gap:8px;width:100%">📊 Import
               CSV<input type="file" id="imp-csv" accept=".csv,.xlsx,.xls,.txt" style="display:none"></label></div>
-          <div class="io-it"><label style="cursor:pointer;display:flex;align-items:center;gap:8px;width:100%">ðŸŒ Import
+          <div class="io-it"><label style="cursor:pointer;display:flex;align-items:center;gap:8px;width:100%">🌐 Import
               Start.me<input type="file" id="imp-startme" accept=".html,.htm" style="display:none"></label></div>
           <div class="io-sep"></div>
-          <div class="io-it" id="reset-btn" style="color:var(--red)">ðŸ—‘ï¸ Reset All</div>
+          <div class="io-it" id="reset-btn" style="color:var(--red)">🗑️ Reset All</div>
         </div>
       </div>
-      <button class="ib" id="pv-mode-btn" title="Quick Preview Mode">ðŸ‘ï¸</button>
-      <button class="ib" id="settings-btn" title="Settings">âš™ï¸</button>
-      <button class="ib" id="inbox-btn" title="Inbox">ðŸ“¥</button>
+      <button class="ib" id="pv-mode-btn" title="Quick Preview Mode">👁️</button>
+      <button class="ib" id="settings-btn" title="Settings">⚙️</button>
+      <button class="ib" id="inbox-btn" title="Inbox">📥</button>
     </div>
 
     <div id="ribbon">
       <div id="gtabs">
-        <button class="tab-add" id="add-grp" title="New Group">ï¼‹</button>
+        <button class="tab-add" id="add-grp" title="New Group">＋</button>
       </div>
       <div id="ptabs">
-        <button class="tab-add" id="add-pg" title="New Page">ï¼‹</button>
+        <button class="tab-add" id="add-pg" title="New Page">＋</button>
       </div>
     </div>
 
@@ -111,7 +116,7 @@
     <!-- Outline Sidebar -->
     <div id="outline-side">
       <div id="outline-resize"></div>
-      <div class="outline-hdr"><span>ðŸ“‘ Outline</span><button id="outline-close">âœ•</button></div>
+      <div class="outline-hdr"><span>📑 Outline</span><button id="outline-close">✕</button></div>
       <div class="outline-list" id="outline-list"></div>
     </div>
   </div>
@@ -120,9 +125,9 @@
 
   <div id="inbox-side">
     <div id="inbox-resize"></div>
-    <div class="inbox-hdr"><span>ðŸ“¥ Inbox</span><button id="inbox-close">âœ•</button></div>
+    <div class="inbox-hdr"><span>📥 Inbox</span><button id="inbox-close">✕</button></div>
     <div class="inbox-add">
-      <input type="url" id="inbox-url" placeholder="Paste URLâ€¦">
+      <input type="url" id="inbox-url" placeholder="Paste URL…">
       <input type="text" id="inbox-lbl" placeholder="Label" style="max-width:80px">
       <button id="inbox-add-btn">Add</button>
     </div>
@@ -131,7 +136,7 @@
 
   <div class="mo" id="m-dup">
     <div class="mc">
-      <h3>ðŸ”Ž Duplicate Links</h3>
+      <h3>🔎 Duplicate Links</h3>
       <div style="display:flex;gap:6px;margin-bottom:8px">
         <button class="btn ba" id="dup-page">This Page</button>
         <button class="btn bg-btn" id="dup-all">All Pages</button>
@@ -139,7 +144,7 @@
       <div class="dup-list" id="dup-list"></div>
       <div class="ma">
         <button class="btn bg-btn" onclick="closeM('m-dup')">Close</button>
-        <button class="btn ba" id="dup-del-all" style="background:#ff4444">ðŸ—‘ï¸ Remove All Duplicates</button>
+        <button class="btn ba" id="dup-del-all" style="background:#ff4444">🗑️ Remove All Duplicates</button>
       </div>
     </div>
   </div>
@@ -151,8 +156,8 @@
       <div class="fg"><label>To Page</label><select class="fi" id="mv-pg"></select></div>
       <div class="ma">
         <button class="btn bg-btn" onclick="closeM('m-mv')">Cancel</button>
-        <button class="btn ba" id="mv-copy">ðŸ“‹ Copy</button>
-        <button class="btn ba" id="mv-move">ðŸ“¦ Move</button>
+        <button class="btn ba" id="mv-copy">📋 Copy</button>
+        <button class="btn ba" id="mv-move">📦 Move</button>
       </div>
     </div>
   </div>
@@ -170,27 +175,27 @@
     </div>
   </div>
   <div class="tc-pop" id="tc-pop">
-    <div class="tc-none" id="tc-none">âœ• No color</div>
+    <div class="tc-none" id="tc-none">✕ No color</div>
   </div>
 
   <div class="mo" id="m-aw">
     <div class="mc">
       <h3>Add Widget</h3>
-      <div class="fg"><label>Title</label><input type="text" class="fi" id="nw-t" placeholder="My Linksâ€¦"></div>
-      <div class="fg"><label>Emoji</label><input type="text" class="fi" id="nw-e" placeholder="ðŸ“Œ" maxlength="2"></div>
+      <div class="fg"><label>Title</label><input type="text" class="fi" id="nw-t" placeholder="My Links…"></div>
+      <div class="fg"><label>Emoji</label><input type="text" class="fi" id="nw-e" placeholder="📌" maxlength="2"></div>
       <div class="fg"><label>Type</label>
         <div class="tg">
           <div class="tc sel" data-t="bookmarks">
-            <div class="ic">ðŸ”²</div>Bookmarks
+            <div class="ic">🔲</div>Bookmarks
           </div>
           <div class="tc" data-t="list">
-            <div class="ic">ðŸ“‹</div>List
+            <div class="ic">📋</div>List
           </div>
           <div class="tc" data-t="note">
-            <div class="ic">ðŸ“</div>Note
+            <div class="ic">📝</div>Note
           </div>
           <div class="tc" data-t="todo">
-            <div class="ic">âœ…</div>To-Do
+            <div class="ic">✅</div>To-Do
           </div>
         </div>
       </div>
@@ -204,7 +209,7 @@
       <h3>Add Bookmark</h3>
       <div class="fg"><label>URL</label><input type="url" class="fi" id="bm-u" placeholder="https://example.com"></div>
       <div class="fg"><label>Label</label><input type="text" class="fi" id="bm-l" placeholder="Example"></div>
-      <div class="fg"><label>Emoji (optional)</label><input type="text" class="fi" id="bm-e" placeholder="ðŸŒ"
+      <div class="fg"><label>Emoji (optional)</label><input type="text" class="fi" id="bm-e" placeholder="🌐"
           maxlength="2"></div>
       <div class="ma"><button class="btn bg-btn" onclick="closeM('m-bm')">Cancel</button><button class="btn ba"
           id="ok-bm">Add</button></div>
@@ -214,7 +219,7 @@
   <!-- Miro Add Card Modal -->
   <div class="mo" id="m-miro-add">
     <div class="mc">
-      <h3>ðŸ“‹ Add Card</h3>
+      <h3>📋 Add Card</h3>
       <div class="fg"><label>URL</label><input type="url" class="fi" id="miro-add-url" placeholder="https://example.com"
           autocomplete="off"></div>
       <div class="fg"><label>Label (optional)</label><input type="text" class="fi" id="miro-add-label"
@@ -227,7 +232,7 @@
   <!-- Sticky Note Modal -->
   <div class="mo" id="m-miro-sticky">
     <div class="mc">
-      <h3>ðŸ“ Add Sticky Note</h3>
+      <h3>📝 Add Sticky Note</h3>
       <div class="fg"><label>Text</label><textarea class="fi" id="sn-add-text" rows="3"
           placeholder="Type your note..."></textarea></div>
       <div class="fg"><label>Color</label>
@@ -242,8 +247,8 @@
       </div>
       <div class="fg"><label>Shape</label>
         <div class="sn-shapes">
-          <button class="sn-shp sel" data-shape="square">â–  Square</button>
-          <button class="sn-shp" data-shape="rect">â–¬ Rectangle</button>
+          <button class="sn-shp sel" data-shape="square">■ Square</button>
+          <button class="sn-shp" data-shape="rect">▬ Rectangle</button>
         </div>
       </div>
       <div class="ma"><button class="btn bg-btn" onclick="closeM('m-miro-sticky')">Cancel</button><button class="btn ba"
@@ -253,23 +258,23 @@
 
   <!-- Zoom Controls -->
   <div id="miro-zoom">
-    <button id="mz-out" title="Zoom Out">âˆ’</button>
+    <button id="mz-out" title="Zoom Out">−</button>
     <input type="range" id="mz-slider" min="10" max="400" value="100">
-    <button id="mz-in" title="Zoom In">ï¼‹</button>
+    <button id="mz-in" title="Zoom In">＋</button>
     <span class="mz-pct" id="mz-pct">100%</span>
     <button id="mz-fit" title="Fit to screen">Fit</button>
     <button id="mz-reset" title="Reset to 100%">1:1</button>
   </div>
 
   <!-- Miro floating add button + menu -->
-  <button id="miro-add-float" title="Add to canvas">ï¼‹</button>
+  <button id="miro-add-float" title="Add to canvas">＋</button>
   <div id="miro-add-menu">
-    <button class="miro-add-opt" id="miro-opt-card">ðŸ“‹ Add Card</button>
-    <button class="miro-add-opt" id="miro-opt-sticky">ðŸ“ Add Sticky Note</button>
+    <button class="miro-add-opt" id="miro-opt-card">📋 Add Card</button>
+    <button class="miro-add-opt" id="miro-opt-sticky">📝 Add Sticky Note</button>
   </div>
 
   <!-- Sticky create hint -->
-  <div class="sn-create-hint" id="sn-create-hint">ðŸ“ Click anywhere to place a sticky note â€¢ Press Esc to cancel</div>
+  <div class="sn-create-hint" id="sn-create-hint">📝 Click anywhere to place a sticky note • Press Esc to cancel</div>
 
   <div class="mo" id="m-ren">
     <div class="mc">
@@ -286,11 +291,11 @@
       <h3>Display Settings</h3>
       <div class="sl">Layout</div>
       <div class="dr-g" id="dm-g">
-        <label class="dr sel"><input type="radio" name="dm" value="auto" checked> âœ¨ Auto â€” smart layout</label>
-        <label class="dr"><input type="radio" name="dm" value="spark"> ðŸ”² Icons Grid</label>
-        <label class="dr"><input type="radio" name="dm" value="stream"> ðŸ“‹ List</label>
-        <label class="dr"><input type="radio" name="dm" value="card"> ðŸ—‚ï¸ Detailed Cards</label>
-        <label class="dr"><input type="radio" name="dm" value="cloud"> â˜ï¸ Tag Cloud</label>
+        <label class="dr sel"><input type="radio" name="dm" value="auto" checked> ✨ Auto — smart layout</label>
+        <label class="dr"><input type="radio" name="dm" value="spark"> 🔲 Icons Grid</label>
+        <label class="dr"><input type="radio" name="dm" value="stream"> 📋 List</label>
+        <label class="dr"><input type="radio" name="dm" value="card"> 🗂️ Detailed Cards</label>
+        <label class="dr"><input type="radio" name="dm" value="cloud"> ☁️ Tag Cloud</label>
       </div>
       <div class="fg"><label>Size</label><select class="fi" id="dm-sz">
           <option value="sm">Small</option>
@@ -303,7 +308,7 @@
           <option value="10">10</option>
           <option value="15">15</option>
         </select></div>
-      <div class="ma"><button class="btn bg-btn bsm" id="dp-all">âœ¦ Apply to all</button><button class="btn bg-btn"
+      <div class="ma"><button class="btn bg-btn bsm" id="dp-all">✦ Apply to all</button><button class="btn bg-btn"
           onclick="closeM('m-dp')">Cancel</button><button class="btn ba" id="ok-dp">Apply</button></div>
     </div>
   </div>
@@ -339,9 +344,9 @@
     <div class="mc wide">
       <h3>Page Background</h3>
       <div class="bg-tabs">
-        <div class="bg-tab sel" data-bt="solid">ðŸŽ¨ Solid</div>
-        <div class="bg-tab" data-bt="gradient">ðŸŒˆ Gradient</div>
-        <div class="bg-tab" data-bt="image">ðŸ–¼ï¸ Image</div>
+        <div class="bg-tab sel" data-bt="solid">🎨 Solid</div>
+        <div class="bg-tab" data-bt="gradient">🌈 Gradient</div>
+        <div class="bg-tab" data-bt="image">🖼️ Image</div>
       </div>
       <div class="bg-panel show" id="bg-p-solid">
         <div class="sl">Preset Colors</div>
@@ -366,7 +371,7 @@
         <div class="fg">
           <label>Upload Image</label>
           <label class="add-i" style="cursor:pointer;margin-top:0">
-            ðŸ“ Choose image from device
+            📁 Choose image from device
             <input type="file" id="bg-up" accept="image/*" style="display:none">
           </label>
         </div>
@@ -376,7 +381,7 @@
         </div>
       </div>
       <div class="ma">
-        <button class="btn bg-btn bsm danger" id="bg-clr-btn" style="margin-right:auto;color:var(--red)">âœ• Clear
+        <button class="btn bg-btn bsm danger" id="bg-clr-btn" style="margin-right:auto;color:var(--red)">✕ Clear
           BG</button>
         <button class="btn bg-btn" onclick="closeM('m-bg')">Cancel</button>
         <button class="btn ba" id="ok-bg">Apply</button>
@@ -386,15 +391,15 @@
 
   <div class="mo" id="m-settings">
     <div class="mc">
-      <h3>âš™ï¸ Settings</h3>
+      <h3>⚙️ Settings</h3>
       <div class="fg"><label>Startup Group</label>
         <select class="fi" id="set-def-grp">
-          <option value="__last__">ðŸ• Remember last</option>
+          <option value="__last__">🕐 Remember last</option>
         </select>
       </div>
       <div class="fg"><label>Startup Page</label>
         <select class="fi" id="set-def-pg">
-          <option value="__last__">ðŸ• Remember last</option>
+          <option value="__last__">🕐 Remember last</option>
         </select>
         <div class="fg"><label>Accent Color</label>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -405,7 +410,7 @@
         </div>
         <div class="ma" style="justify-content:space-between">
           <button class="btn" id="logout-btn"
-            style="color:var(--red);background:rgba(255,80,80,.1);border:1px solid rgba(255,80,80,.2)">ðŸšª Sign
+            style="color:var(--red);background:rgba(255,80,80,.1);border:1px solid rgba(255,80,80,.2)">🚪 Sign
             Out</button>
           <div style="display:flex;gap:6px">
             <button class="btn bg-btn" onclick="closeM('m-settings')">Cancel</button>
@@ -415,13 +420,12 @@
       </div>
     </div>
 
-
-    <script src="js/app.js"></script>
-    <script src="js/outline.js"></script>
-    <script src="js/miro-engine.js"></script>
-    <script src="js/thumbnails.js"></script>
-    <script src="js/miro-cards.js"></script>
-    <script src="js/alignment.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/outline.js"></script>
+  <script src="js/miro-engine.js"></script>
+  <script src="js/thumbnails.js"></script>
+  <script src="js/miro-cards.js"></script>
+  <script src="js/alignment.js"></script>
 </body>
 
 </html>

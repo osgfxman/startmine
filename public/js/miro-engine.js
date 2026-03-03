@@ -1,4 +1,4 @@
-﻿      /* â”€â”€â”€ Miro Page Engine â”€â”€â”€ */
+      /* ─── Miro Page Engine ─── */
       let _miroMode = false;
       let _miroPanning = false, _miroPanStartX = 0, _miroPanStartY = 0;
       let _miroCardDrag = null, _miroCardResize = null;
@@ -100,7 +100,7 @@
         // Delete button (overlaid)
         const del = document.createElement('button');
         del.className = 'mc-del';
-        del.textContent = 'âœ•';
+        del.textContent = '✕';
         del.onclick = e => { e.stopPropagation(); deleteMiroCard(card.id); };
 
         // Open link button
@@ -109,7 +109,7 @@
         openBtn.href = card.url;
         openBtn.target = '_blank';
         openBtn.rel = 'noopener noreferrer';
-        openBtn.textContent = 'â†—';
+        openBtn.textContent = '↗';
         openBtn.onclick = e => e.stopPropagation();
 
         // Thumbnail
@@ -131,7 +131,7 @@
           queueCardFetch(card);
         }
 
-        // Drag logic â€” drag from thumbnail area (supports multi-select group drag)
+        // Drag logic — drag from thumbnail area (supports multi-select group drag)
         thumb.addEventListener('mousedown', e => {
           if (e.target.closest('.mc-del') || e.target.closest('.mc-open') || e.target.closest('.mc-resize')) return;
           e.stopPropagation();
@@ -226,35 +226,6 @@
         canvas.addEventListener('mousedown', e => {
           if (e.target !== canvas && e.target.id !== 'miro-board') return;
           e.preventDefault();
-
-          if (typeof _stickyCreateMode !== 'undefined' && _stickyCreateMode) {
-            try {
-              const page = cp();
-              const canvasRect = canvas.getBoundingClientRect();
-              const zoom = (page.zoom || 100) / 100;
-              const bx = (e.clientX - canvasRect.left - (page.panX || 0)) / zoom;
-              const by = (e.clientY - canvasRect.top - (page.panY || 0)) / zoom;
-              if (!page.miroCards) page.miroCards = [];
-              const w = 280, h = 160;
-              const card = { id: uid(), type: 'sticky', text: '', color: 'yellow', shape: 'rect', x: bx - w / 2, y: by - h / 2, w, h };
-              page.miroCards.push(card);
-
-              _stickyCreateMode = false;
-              canvas.classList.remove('sn-create-mode');
-              const hint = document.getElementById('sn-create-hint');
-              if (hint) hint.classList.remove('show');
-              sv(); buildMiroCanvas(); buildOutline();
-
-              requestAnimationFrame(() => {
-                const newEl = document.querySelector(`[data-cid="${card.id}"] .ms-text`);
-                if (newEl) {
-                  newEl.contentEditable = true;
-                  newEl.focus();
-                }
-              });
-              return;
-            } catch (err) { }
-          }
 
           const page = cp();
           const isMiro = page.pageType === 'miro';
@@ -420,7 +391,7 @@
         sv();
       };
 
-      // Floating add button â†’ menu toggle
+      // Floating add button → menu toggle
       document.getElementById('miro-add-float').onclick = () => {
         document.getElementById('miro-add-menu').classList.toggle('show');
       };
@@ -503,4 +474,3 @@
         page.miroCards.push(card);
         sv(); buildMiroCanvas(); buildOutline(); closeM('m-miro-add');
       };
-

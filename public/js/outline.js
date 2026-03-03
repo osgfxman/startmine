@@ -1,4 +1,4 @@
-﻿      /* â”€â”€â”€ Outline Sidebar â”€â”€â”€ */
+      /* ─── Outline Sidebar ─── */
       function toggleOutline() {
         const side = document.getElementById('outline-side');
         const isOpen = side.classList.toggle('open');
@@ -58,7 +58,7 @@
             item.title = c.label || c.url;
             const emoji = document.createElement('span');
             emoji.className = 'ol-emoji';
-            emoji.textContent = 'ðŸ”—';
+            emoji.textContent = '🔗';
             const title = document.createElement('span');
             title.className = 'ol-title';
             title.textContent = c.label || domainOf(c.url);
@@ -80,7 +80,7 @@
           item.title = w.title;
           const emoji = document.createElement('span');
           emoji.className = 'ol-emoji';
-          emoji.textContent = w.emoji || 'ðŸ“Œ';
+          emoji.textContent = w.emoji || '📌';
           const title = document.createElement('span');
           title.className = 'ol-title';
           title.textContent = w.title;

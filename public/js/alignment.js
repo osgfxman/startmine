@@ -1,4 +1,4 @@
-﻿      // â”€â”€â”€ Alignment Handle Drag â”€â”€â”€
+      // ─── Alignment Handle Drag ───
       (function () {
         const handle = document.getElementById('miro-align-handle');
         const indicator = document.getElementById('miro-col-indicator');
@@ -26,7 +26,7 @@
             if (c) origCards.push({ id: c.id, x: c.x || 0, y: c.y || 0, w: c.w || 280, h: c.h || 240 });
           });
 
-          // Calculate uniform card size (average) â€” used only in Ctrl mode
+          // Calculate uniform card size (average) — used only in Ctrl mode
           uniformW = Math.round(origCards.reduce((s, c) => s + c.w, 0) / origCards.length);
           uniformH = Math.round(origCards.reduce((s, c) => s + c.h, 0) / origCards.length);
 
@@ -71,7 +71,7 @@
               const newY = anchorY + row * (uniformH + gap);
               const c = (page.miroCards || []).find(x => x.id === oc.id);
               if (c) { c.x = newX; c.y = newY; c.w = uniformW; c.h = uniformH; }
-              const el = document.querySelector(`[data-cid="${oc.id}"]`);
+              const el = document.querySelector(`.miro-card[data-cid="${oc.id}"]`);
               if (el) {
                 el.style.left = newX + 'px'; el.style.top = newY + 'px';
                 el.style.width = uniformW + 'px'; el.style.height = uniformH + 'px';
@@ -105,7 +105,7 @@
               const newY = anchorY + rowOffsets[row] + (cellH - oc.h) / 2;
               const c = (page.miroCards || []).find(x => x.id === oc.id);
               if (c) { c.x = newX; c.y = newY; } // keep original w/h
-              const el = document.querySelector(`[data-cid="${oc.id}"]`);
+              const el = document.querySelector(`.miro-card[data-cid="${oc.id}"]`);
               if (el) {
                 el.style.left = newX + 'px'; el.style.top = newY + 'px';
                 el.style.width = oc.w + 'px'; el.style.height = oc.h + 'px';
@@ -116,8 +116,8 @@
           updateMiroSelFrame();
 
           // Show column indicator near cursor
-          const modeLabel = _forceUniform ? ' âŠž' : '';
-          indicator.textContent = `${cols} col${cols > 1 ? 's' : ''} Ã— ${rows} row${rows > 1 ? 's' : ''}${modeLabel}`;
+          const modeLabel = _forceUniform ? ' ⊞' : '';
+          indicator.textContent = `${cols} col${cols > 1 ? 's' : ''} × ${rows} row${rows > 1 ? 's' : ''}${modeLabel}`;
           indicator.classList.add('show');
           indicator.style.left = (e.clientX + 20) + 'px';
           indicator.style.top = (e.clientY - 20) + 'px';
@@ -136,6 +136,30 @@
       // Click on empty canvas deselects
       document.getElementById('miro-canvas').addEventListener('click', e => {
         if ((e.target === document.getElementById('miro-canvas') || e.target.id === 'miro-board') && !_alignDragging && !_justRubberBanded) {
+          // If in sticky creation mode, create a note at click position
+          if (_stickyCreateMode) {
+            const page = cp();
+            const canvas = document.getElementById('miro-canvas');
+            const canvasRect = canvas.getBoundingClientRect();
+            const zoom = (page.zoom || 100) / 100;
+            const bx = (e.clientX - canvasRect.left - (page.panX || 0)) / zoom;
+            const by = (e.clientY - canvasRect.top - (page.panY || 0)) / zoom;
+            if (!page.miroCards) page.miroCards = [];
+            const w = 280, h = 160;
+            const card = { id: uid(), type: 'sticky', text: '', color: 'yellow', shape: 'rect', x: bx - w / 2, y: by - h / 2, w, h };
+            page.miroCards.push(card);
+            // Exit creation mode
+            _stickyCreateMode = false;
+            canvas.classList.remove('sn-create-mode');
+            document.getElementById('sn-create-hint').classList.remove('show');
+            sv(); buildMiroCanvas(); buildOutline();
+            // Focus the new note's text
+            requestAnimationFrame(() => {
+              const newEl = document.querySelector(`[data-cid="${card.id}"] .ms-text`);
+              if (newEl) newEl.focus();
+            });
+            return;
+          }
           clearMiroSelection();
         }
       });
@@ -144,21 +168,17 @@
       document.addEventListener('keydown', e => {
         // Don't trigger if user is typing in an input/textarea/contenteditable
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
-        try {
-          const page = cp();
-          if (!page || page.pageType !== 'miro') return;
-        } catch (err) { return; }
+        const page = cp();
+        if (page.pageType !== 'miro') return;
 
         if (e.key === 'n' || e.key === 'N') {
           _stickyCreateMode = true;
           document.getElementById('miro-canvas').classList.add('sn-create-mode');
-          const hint = document.getElementById('sn-create-hint');
-          if (hint) hint.classList.add('show');
+          document.getElementById('sn-create-hint').classList.add('show');
         }
-        if (e.key === 'Escape' && typeof _stickyCreateMode !== 'undefined' && _stickyCreateMode) {
+        if (e.key === 'Escape' && _stickyCreateMode) {
           _stickyCreateMode = false;
           document.getElementById('miro-canvas').classList.remove('sn-create-mode');
-          const hint = document.getElementById('sn-create-hint');
-          if (hint) hint.classList.remove('show');
+          document.getElementById('sn-create-hint').classList.remove('show');
         }
       });
