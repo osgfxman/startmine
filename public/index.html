@@ -2367,15 +2367,55 @@
       white-space: nowrap;
     }
 
-    .miro-card .mc-resize {
+    .miro-card .mc-resize-br,
+    .miro-card .mc-resize-bl,
+    .miro-card .mc-resize-tr,
+    .miro-card .mc-resize-tl {
       position: absolute;
+      width: 14px;
+      height: 14px;
+      z-index: 4;
+      opacity: 0;
+      transition: opacity .12s;
+    }
+
+    .miro-card:hover .mc-resize-br,
+    .miro-card:hover .mc-resize-bl,
+    .miro-card:hover .mc-resize-tr,
+    .miro-card:hover .mc-resize-tl {
+      opacity: 1;
+    }
+
+    .miro-card .mc-resize-br {
       right: 0;
       bottom: 0;
-      width: 16px;
-      height: 16px;
       cursor: nwse-resize;
-      background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, .15) 50%);
+      background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, .18) 50%);
       border-radius: 0 0 12px 0;
+    }
+
+    .miro-card .mc-resize-tl {
+      left: 0;
+      top: 0;
+      cursor: nwse-resize;
+      background: linear-gradient(315deg, transparent 50%, rgba(255, 255, 255, .18) 50%);
+      border-radius: 12px 0 0 0;
+    }
+
+    .miro-card .mc-resize-tr {
+      right: 0;
+      top: 0;
+      cursor: nesw-resize;
+      background: linear-gradient(225deg, transparent 50%, rgba(255, 255, 255, .18) 50%);
+      border-radius: 0 12px 0 0;
+    }
+
+    .miro-card .mc-resize-bl {
+      left: 0;
+      bottom: 0;
+      cursor: nesw-resize;
+      background: linear-gradient(45deg, transparent 50%, rgba(255, 255, 255, .18) 50%);
+      border-radius: 0 0 0 12px;
     }
 
     .miro-card .mc-open {
@@ -2621,6 +2661,419 @@
     #miro-col-indicator.show {
       display: block;
     }
+
+    /* ─── Sticky Notes ─── */
+    .miro-sticky {
+      position: absolute;
+      border-radius: 4px;
+      cursor: default;
+      display: flex;
+      flex-direction: column;
+      transition: box-shadow .15s;
+      min-width: 100px;
+      min-height: 100px;
+      box-shadow: 2px 3px 12px rgba(0, 0, 0, .18), 0 1px 3px rgba(0, 0, 0, .12);
+      overflow: visible;
+    }
+
+    .miro-sticky:hover {
+      box-shadow: 3px 5px 18px rgba(0, 0, 0, .25), 0 2px 6px rgba(0, 0, 0, .15);
+    }
+
+    .miro-sticky.miro-hl {
+      animation: outlineHighlight 1.2s ease;
+    }
+
+    .miro-sticky.miro-selected {
+      outline: 2px solid var(--ac);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 4px rgba(108, 143, 255, .18), 2px 3px 12px rgba(0, 0, 0, .18);
+    }
+
+    /* Sticky note colors */
+    .miro-sticky.sn-yellow {
+      background: #f9e96b;
+    }
+
+    .miro-sticky.sn-pink {
+      background: #f4a4c0;
+    }
+
+    .miro-sticky.sn-green {
+      background: #a6d89b;
+    }
+
+    .miro-sticky.sn-blue {
+      background: #84c6e8;
+    }
+
+    .miro-sticky.sn-purple {
+      background: #c9a6e8;
+    }
+
+    .miro-sticky.sn-orange {
+      background: #f5b971;
+    }
+
+    /* Fold corner */
+    .miro-sticky::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 20px;
+      height: 20px;
+      background: linear-gradient(135deg, transparent 50%, rgba(0, 0, 0, .06) 50%);
+      border-radius: 0 0 4px 0;
+      pointer-events: none;
+    }
+
+    /* Sticky text */
+    .ms-text {
+      flex: 1;
+      padding: 10px 12px;
+      outline: none;
+      color: #1a1a1a;
+      font-family: var(--font);
+      font-weight: 500;
+      line-height: 1.3;
+      word-break: break-word;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      overflow: hidden;
+      cursor: text;
+      text-align: center;
+    }
+
+    .ms-text:empty::before {
+      content: 'Type here...';
+      color: rgba(0, 0, 0, .28);
+      pointer-events: none;
+    }
+
+    /* Sticky delete */
+    .miro-sticky .mc-del {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      z-index: 3;
+      background: rgba(0, 0, 0, .35);
+      border: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      cursor: pointer;
+      font-size: .65rem;
+      opacity: 0;
+      transition: opacity .12s, color .12s;
+    }
+
+    .miro-sticky:hover .mc-del {
+      opacity: 1;
+    }
+
+    .miro-sticky .mc-del:hover {
+      color: var(--red);
+    }
+
+    /* Shape toggle handle */
+    .ms-shape-toggle {
+      position: absolute;
+      left: -20px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 32px;
+      background: rgba(0, 0, 0, .25);
+      border-radius: 4px 0 0 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255, 255, 255, .7);
+      font-size: .6rem;
+      opacity: 0;
+      transition: opacity .12s;
+      pointer-events: all;
+    }
+
+    .miro-sticky:hover .ms-shape-toggle {
+      opacity: 1;
+    }
+
+    .ms-shape-toggle:hover {
+      background: rgba(0, 0, 0, .4);
+      color: #fff;
+    }
+
+    /* Sticky 4-corner resize */
+    .miro-sticky .mc-resize-br,
+    .miro-sticky .mc-resize-bl,
+    .miro-sticky .mc-resize-tr,
+    .miro-sticky .mc-resize-tl {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      z-index: 4;
+      opacity: 0;
+      transition: opacity .12s;
+    }
+
+    .miro-sticky:hover .mc-resize-br,
+    .miro-sticky:hover .mc-resize-bl,
+    .miro-sticky:hover .mc-resize-tr,
+    .miro-sticky:hover .mc-resize-tl {
+      opacity: 1;
+    }
+
+    .miro-sticky .mc-resize-br {
+      right: 0;
+      bottom: 0;
+      cursor: nwse-resize;
+      background: linear-gradient(135deg, transparent 50%, rgba(0, 0, 0, .12) 50%);
+    }
+
+    .miro-sticky .mc-resize-tl {
+      left: 0;
+      top: 0;
+      cursor: nwse-resize;
+      background: linear-gradient(315deg, transparent 50%, rgba(0, 0, 0, .12) 50%);
+    }
+
+    .miro-sticky .mc-resize-tr {
+      right: 0;
+      top: 0;
+      cursor: nesw-resize;
+      background: linear-gradient(225deg, transparent 50%, rgba(0, 0, 0, .12) 50%);
+    }
+
+    .miro-sticky .mc-resize-bl {
+      left: 0;
+      bottom: 0;
+      cursor: nesw-resize;
+      background: linear-gradient(45deg, transparent 50%, rgba(0, 0, 0, .12) 50%);
+    }
+
+    /* Floating add menu */
+    #miro-add-menu {
+      position: fixed;
+      bottom: 60px;
+      right: 24px;
+      z-index: 601;
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      background: var(--s2);
+      border: 1px solid var(--bd);
+      border-radius: 12px;
+      padding: 6px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, .5);
+      backdrop-filter: blur(12px);
+    }
+
+    #miro-add-menu.show {
+      display: flex;
+    }
+
+    .miro-add-opt {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: none;
+      background: none;
+      color: var(--tx);
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: .78rem;
+      white-space: nowrap;
+      transition: background .12s;
+    }
+
+    .miro-add-opt:hover {
+      background: rgba(108, 143, 255, .12);
+    }
+
+    /* Color picker for sticky notes */
+    .sn-colors {
+      display: flex;
+      gap: 6px;
+      margin: .5rem 0;
+    }
+
+    .sn-csw {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform .12s, border-color .12s;
+    }
+
+    .sn-csw:hover {
+      transform: scale(1.15);
+    }
+
+    .sn-csw.sel {
+      border-color: #333;
+      transform: scale(1.1);
+    }
+
+    .sn-csw.c-yellow {
+      background: #f9e96b;
+    }
+
+    .sn-csw.c-pink {
+      background: #f4a4c0;
+    }
+
+    .sn-csw.c-green {
+      background: #a6d89b;
+    }
+
+    .sn-csw.c-blue {
+      background: #84c6e8;
+    }
+
+    .sn-csw.c-purple {
+      background: #c9a6e8;
+    }
+
+    .sn-csw.c-orange {
+      background: #f5b971;
+    }
+
+    /* Shape picker */
+    .sn-shapes {
+      display: flex;
+      gap: 8px;
+      margin: .5rem 0;
+    }
+
+    .sn-shp {
+      padding: 6px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--bd);
+      background: var(--s1);
+      color: var(--mu);
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: .75rem;
+      transition: all .12s;
+    }
+
+    .sn-shp:hover {
+      border-color: var(--ac);
+      color: var(--tx);
+    }
+
+    .sn-shp.sel {
+      border-color: var(--ac);
+      color: var(--tx);
+      background: rgba(108, 143, 255, .12);
+    }
+
+    /* Sticky creation cursor mode */
+    #miro-canvas.sn-create-mode {
+      cursor: crosshair !important;
+    }
+
+    .sn-create-hint {
+      position: fixed;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(249, 233, 107, .92);
+      color: #1a1a1a;
+      padding: 6px 18px;
+      border-radius: 8px;
+      font-size: .78rem;
+      font-weight: 600;
+      z-index: 900;
+      display: none;
+      pointer-events: none;
+      box-shadow: 0 3px 12px rgba(0, 0, 0, .15);
+    }
+
+    .sn-create-hint.show {
+      display: block;
+    }
+
+    /* Sticky toolbar (on click) */
+    .sn-toolbar {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--s2);
+      border: 1px solid var(--bd);
+      border-radius: 10px;
+      padding: 6px 10px;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, .45);
+      backdrop-filter: blur(12px);
+      z-index: 10;
+      white-space: nowrap;
+    }
+
+    .sn-toolbar.show {
+      display: flex;
+    }
+
+    .sn-toolbar .sn-tb-color {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform .1s, border-color .1s;
+      flex-shrink: 0;
+    }
+
+    .sn-toolbar .sn-tb-color:hover {
+      transform: scale(1.2);
+    }
+
+    .sn-toolbar .sn-tb-color.sel {
+      border-color: #333;
+    }
+
+    .sn-toolbar .sn-tb-sep {
+      width: 1px;
+      height: 18px;
+      background: var(--bd);
+      margin: 0 2px;
+    }
+
+    .sn-toolbar .sn-tb-size {
+      padding: 2px 8px;
+      border-radius: 5px;
+      border: 1px solid var(--bd);
+      background: none;
+      color: var(--tx);
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: .65rem;
+      font-weight: 600;
+      transition: all .1s;
+    }
+
+    .sn-toolbar .sn-tb-size:hover {
+      background: rgba(108, 143, 255, .15);
+      border-color: var(--ac);
+    }
+
+    .sn-toolbar .sn-tb-size.sel {
+      background: rgba(108, 143, 255, .18);
+      border-color: var(--ac);
+    }
   </style>
 </head>
 
@@ -2836,6 +3289,33 @@
     </div>
   </div>
 
+  <!-- Sticky Note Modal -->
+  <div class="mo" id="m-miro-sticky">
+    <div class="mc">
+      <h3>📝 Add Sticky Note</h3>
+      <div class="fg"><label>Text</label><textarea class="fi" id="sn-add-text" rows="3"
+          placeholder="Type your note..."></textarea></div>
+      <div class="fg"><label>Color</label>
+        <div class="sn-colors">
+          <div class="sn-csw c-yellow sel" data-color="yellow"></div>
+          <div class="sn-csw c-pink" data-color="pink"></div>
+          <div class="sn-csw c-green" data-color="green"></div>
+          <div class="sn-csw c-blue" data-color="blue"></div>
+          <div class="sn-csw c-purple" data-color="purple"></div>
+          <div class="sn-csw c-orange" data-color="orange"></div>
+        </div>
+      </div>
+      <div class="fg"><label>Shape</label>
+        <div class="sn-shapes">
+          <button class="sn-shp sel" data-shape="square">■ Square</button>
+          <button class="sn-shp" data-shape="rect">▬ Rectangle</button>
+        </div>
+      </div>
+      <div class="ma"><button class="btn bg-btn" onclick="closeM('m-miro-sticky')">Cancel</button><button class="btn ba"
+          id="ok-miro-sticky">Add Note</button></div>
+    </div>
+  </div>
+
   <!-- Zoom Controls -->
   <div id="miro-zoom">
     <button id="mz-out" title="Zoom Out">−</button>
@@ -2846,8 +3326,15 @@
     <button id="mz-reset" title="Reset to 100%">1:1</button>
   </div>
 
-  <!-- Miro floating add button -->
-  <button id="miro-add-float" title="Add Card">＋</button>
+  <!-- Miro floating add button + menu -->
+  <button id="miro-add-float" title="Add to canvas">＋</button>
+  <div id="miro-add-menu">
+    <button class="miro-add-opt" id="miro-opt-card">📋 Add Card</button>
+    <button class="miro-add-opt" id="miro-opt-sticky">📝 Add Sticky Note</button>
+  </div>
+
+  <!-- Sticky create hint -->
+  <div class="sn-create-hint" id="sn-create-hint">📝 Click anywhere to place a sticky note • Press Esc to cancel</div>
 
   <div class="mo" id="m-ren">
     <div class="mc">
@@ -4153,6 +4640,7 @@
       const _miroSelected = new Set();
       let _alignDragging = false;
       let _justRubberBanded = false;
+      let _stickyCreateMode = false;
 
       document.getElementById('miro-toggle').onclick = () => {
         _miroMode = !_miroMode;
@@ -4162,13 +4650,13 @@
       function addMiroSelect(cid) {
         if (_miroSelected.has(cid)) return;
         _miroSelected.add(cid);
-        const el = document.querySelector(`.miro-card[data-cid="${cid}"]`);
+        const el = document.querySelector(`[data-cid="${cid}"]`);
         if (el) el.classList.add('miro-selected');
       }
       function removeMiroSelect(cid) {
         if (!_miroSelected.has(cid)) return;
         _miroSelected.delete(cid);
-        const el = document.querySelector(`.miro-card[data-cid="${cid}"]`);
+        const el = document.querySelector(`[data-cid="${cid}"]`);
         if (el) el.classList.remove('miro-selected');
       }
       function toggleMiroSelect(cid) {
@@ -4178,7 +4666,7 @@
       }
       function clearMiroSelection() {
         _miroSelected.forEach(cid => {
-          const el = document.querySelector(`.miro-card[data-cid="${cid}"]`);
+          const el = document.querySelector(`[data-cid="${cid}"]`);
           if (el) el.classList.remove('miro-selected');
         });
         _miroSelected.clear();
@@ -4218,7 +4706,7 @@
         if (!page.miroCards) page.miroCards = [];
         const board = document.getElementById('miro-board');
         // Remove only card elements, preserve selection overlays
-        board.querySelectorAll('.miro-card').forEach(el => el.remove());
+        board.querySelectorAll('.miro-card, .miro-sticky').forEach(el => el.remove());
         // Clear selection state
         _miroSelected.clear();
         document.getElementById('miro-sel-frame').style.display = 'none';
@@ -4230,7 +4718,8 @@
         document.getElementById('mz-pct').textContent = (page.zoom || 100) + '%';
 
         page.miroCards.forEach(card => {
-          board.appendChild(buildMiroCard(card));
+          if (card.type === 'sticky') board.appendChild(buildMiroSticky(card));
+          else board.appendChild(buildMiroCard(card));
         });
       }
 
@@ -4346,35 +4835,13 @@
         meta.appendChild(favicon);
         meta.appendChild(info);
 
-        // Resize handle
-        const resize = document.createElement('div');
-        resize.className = 'mc-resize';
-        resize.addEventListener('mousedown', e => {
-          e.stopPropagation();
-          const page = cp();
-          const zoom = (page.zoom || 100) / 100;
-          const startX = e.clientX, startY = e.clientY;
-          const origW = card.w || 280, origH = card.h || 240;
-          function onMove(ev) {
-            card.w = Math.max(160, origW + (ev.clientX - startX) / zoom);
-            card.h = Math.max(100, origH + (ev.clientY - startY) / zoom);
-            el.style.width = card.w + 'px';
-            el.style.height = card.h + 'px';
-          }
-          function onUp() {
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-            sv();
-          }
-          document.addEventListener('mousemove', onMove);
-          document.addEventListener('mouseup', onUp);
-        });
+        // 4-corner resize handles
+        attachCornerResize(el, card, 160, 100);
 
         el.appendChild(del);
         el.appendChild(openBtn);
         el.appendChild(thumb);
         el.appendChild(meta);
-        el.appendChild(resize);
         return el;
       }
 
@@ -4559,12 +5026,64 @@
         sv();
       };
 
-      // Add card
+      // Floating add button → menu toggle
       document.getElementById('miro-add-float').onclick = () => {
+        document.getElementById('miro-add-menu').classList.toggle('show');
+      };
+      // Close menu when clicking elsewhere
+      document.addEventListener('click', e => {
+        if (!e.target.closest('#miro-add-float') && !e.target.closest('#miro-add-menu')) {
+          document.getElementById('miro-add-menu').classList.remove('show');
+        }
+      });
+      document.getElementById('miro-opt-card').onclick = () => {
+        document.getElementById('miro-add-menu').classList.remove('show');
         document.getElementById('miro-add-url').value = '';
         document.getElementById('miro-add-label').value = '';
         openM('m-miro-add');
       };
+      document.getElementById('miro-opt-sticky').onclick = () => {
+        document.getElementById('miro-add-menu').classList.remove('show');
+        document.getElementById('sn-add-text').value = '';
+        document.querySelectorAll('.sn-csw').forEach(s => s.classList.remove('sel'));
+        document.querySelector('.sn-csw.c-yellow').classList.add('sel');
+        document.querySelectorAll('.sn-shp').forEach(s => s.classList.remove('sel'));
+        document.querySelector('.sn-shp[data-shape="square"]').classList.add('sel');
+        openM('m-miro-sticky');
+      };
+      // Sticky note color picker
+      document.querySelectorAll('.sn-csw').forEach(sw => {
+        sw.onclick = () => {
+          document.querySelectorAll('.sn-csw').forEach(s => s.classList.remove('sel'));
+          sw.classList.add('sel');
+        };
+      });
+      // Sticky note shape picker
+      document.querySelectorAll('.sn-shp').forEach(sh => {
+        sh.onclick = () => {
+          document.querySelectorAll('.sn-shp').forEach(s => s.classList.remove('sel'));
+          sh.classList.add('sel');
+        };
+      });
+      // Create sticky note
+      document.getElementById('ok-miro-sticky').onclick = () => {
+        const text = document.getElementById('sn-add-text').value.trim();
+        const color = document.querySelector('.sn-csw.sel')?.dataset.color || 'yellow';
+        const shape = document.querySelector('.sn-shp.sel')?.dataset.shape || 'square';
+        const page = cp();
+        if (!page.miroCards) page.miroCards = [];
+        const canvas = document.getElementById('miro-canvas');
+        const zoom = (page.zoom || 100) / 100;
+        const cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
+        const cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+        const w = shape === 'square' ? 200 : 280;
+        const h = shape === 'square' ? 200 : 160;
+        const card = { id: uid(), type: 'sticky', text, color, shape, x: cx - w / 2, y: cy - h / 2, w, h };
+        page.miroCards.push(card);
+        sv(); buildMiroCanvas(); buildOutline(); closeM('m-miro-sticky');
+      };
+
+      // Add card (existing)
       document.getElementById('miro-add-url').addEventListener('blur', () => {
         const u = document.getElementById('miro-add-url').value.trim();
         if (u && !document.getElementById('miro-add-label').value) {
@@ -4805,7 +5324,231 @@
         if (titleEl && card.label) titleEl.textContent = card.label;
       }
 
-      /* ─── Alignment Handle Drag & Canvas Click ───*/
+      /* ─── 4-Corner Resize + Sticky Notes ─── */
+
+      function attachCornerResize(el, card, minW, minH) {
+        ['br', 'bl', 'tr', 'tl'].forEach(corner => {
+          const handle = document.createElement('div');
+          handle.className = 'mc-resize-' + corner;
+          handle.addEventListener('mousedown', e => {
+            e.stopPropagation();
+            const page = cp();
+            const zoom = (page.zoom || 100) / 100;
+            const sx = e.clientX, sy = e.clientY;
+            const oX = card.x || 0, oY = card.y || 0, oW = card.w || 280, oH = card.h || 240;
+            function onMove(ev) {
+              const dx = (ev.clientX - sx) / zoom;
+              const dy = (ev.clientY - sy) / zoom;
+              let nw = oW, nh = oH, nx = oX, ny = oY;
+              if (corner === 'br') { nw = oW + dx; nh = oH + dy; }
+              else if (corner === 'bl') { nw = oW - dx; nx = oX + dx; nh = oH + dy; }
+              else if (corner === 'tr') { nw = oW + dx; nh = oH - dy; ny = oY + dy; }
+              else if (corner === 'tl') { nw = oW - dx; nx = oX + dx; nh = oH - dy; ny = oY + dy; }
+              // Enforce min size
+              if (nw < minW) { if (corner === 'bl' || corner === 'tl') nx = oX + oW - minW; nw = minW; }
+              if (nh < minH) { if (corner === 'tr' || corner === 'tl') ny = oY + oH - minH; nh = minH; }
+              card.x = nx; card.y = ny; card.w = nw; card.h = nh;
+              el.style.left = nx + 'px'; el.style.top = ny + 'px';
+              el.style.width = nw + 'px'; el.style.height = nh + 'px';
+              // Auto-size text for sticky notes
+              const textEl = el.querySelector('.ms-text');
+              if (textEl) autoSizeText(textEl, el);
+              updateMiroSelFrame();
+            }
+            function onUp() {
+              document.removeEventListener('mousemove', onMove);
+              document.removeEventListener('mouseup', onUp);
+              sv();
+            }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+          });
+          el.appendChild(handle);
+        });
+      }
+
+      function buildMiroSticky(card) {
+        const el = document.createElement('div');
+        el.className = 'miro-sticky sn-' + (card.color || 'yellow');
+        el.dataset.cid = card.id;
+        el.style.left = (card.x || 0) + 'px';
+        el.style.top = (card.y || 0) + 'px';
+        el.style.width = (card.w || 280) + 'px';
+        el.style.height = (card.h || 160) + 'px';
+
+        // Delete button
+        const del = document.createElement('button');
+        del.className = 'mc-del';
+        del.textContent = '✕';
+        del.onclick = e => { e.stopPropagation(); deleteMiroCard(card.id); };
+
+        // On-click toolbar (color + S/M/L)
+        const toolbar = document.createElement('div');
+        toolbar.className = 'sn-toolbar';
+        const snColors = ['yellow', 'pink', 'green', 'blue', 'purple', 'orange'];
+        const snColorHex = { yellow: '#f9e96b', pink: '#f4a4c0', green: '#a6d89b', blue: '#84c6e8', purple: '#c9a6e8', orange: '#f5b971' };
+        snColors.forEach(c => {
+          const dot = document.createElement('div');
+          dot.className = 'sn-tb-color' + (c === card.color ? ' sel' : '');
+          dot.style.background = snColorHex[c];
+          dot.dataset.color = c;
+          dot.onclick = ev => {
+            ev.stopPropagation();
+            card.color = c;
+            // Update class
+            el.className = 'miro-sticky sn-' + c + (el.classList.contains('miro-selected') ? ' miro-selected' : '');
+            toolbar.querySelectorAll('.sn-tb-color').forEach(d => d.classList.remove('sel'));
+            dot.classList.add('sel');
+            sv();
+          };
+          toolbar.appendChild(dot);
+        });
+        // Separator
+        const sep = document.createElement('div'); sep.className = 'sn-tb-sep';
+        toolbar.appendChild(sep);
+        // S / M / L size buttons
+        const sizes = { S: { w: 140, h: 80 }, M: { w: 280, h: 160 }, L: { w: 420, h: 240 } };
+        Object.entries(sizes).forEach(([label, sz]) => {
+          const btn = document.createElement('button');
+          btn.className = 'sn-tb-size';
+          btn.textContent = label;
+          // Highlight current size
+          if (Math.abs((card.w || 280) - sz.w) < 30 && Math.abs((card.h || 160) - sz.h) < 30) btn.classList.add('sel');
+          btn.onclick = ev => {
+            ev.stopPropagation();
+            card.w = sz.w; card.h = sz.h;
+            el.style.width = sz.w + 'px'; el.style.height = sz.h + 'px';
+            toolbar.querySelectorAll('.sn-tb-size').forEach(b => b.classList.remove('sel'));
+            btn.classList.add('sel');
+            autoSizeText(text, el);
+            updateMiroSelFrame();
+            sv();
+          };
+          toolbar.appendChild(btn);
+        });
+
+        // Text area
+        const text = document.createElement('div');
+        text.className = 'ms-text';
+        text.contentEditable = true;
+        text.textContent = card.text || '';
+        text.addEventListener('input', () => {
+          card.text = text.textContent;
+          autoSizeText(text, el);
+          sv();
+        });
+        text.addEventListener('blur', () => { card.text = text.textContent; sv(); });
+        // Prevent drag when editing
+        text.addEventListener('mousedown', e => {
+          if (document.activeElement === text) e.stopPropagation();
+        });
+
+        // Shape toggle handle
+        const toggle = document.createElement('div');
+        toggle.className = 'ms-shape-toggle';
+        toggle.textContent = (card.w || 280) > (card.h || 160) ? '■' : '▬';
+        toggle.title = 'Toggle shape';
+        toggle.onclick = e => {
+          e.stopPropagation();
+          if ((card.w || 280) >= (card.h || 160)) {
+            // Currently landscape → make square
+            const side = Math.max(card.w || 280, card.h || 160);
+            card.w = side; card.h = side;
+          } else {
+            // Currently square/portrait → make landscape
+            card.w = Math.max(card.w || 280, 280);
+            card.h = Math.round(card.w / 1.75);
+          }
+          sv(); buildMiroCanvas();
+        };
+
+        // Show/hide toolbar on click
+        el.addEventListener('click', e => {
+          if (e.target.closest('.mc-del') || e.target.closest('.ms-shape-toggle') || e.target.closest('.sn-toolbar')) return;
+          // Close other toolbars
+          document.querySelectorAll('.sn-toolbar.show').forEach(t => { if (t !== toolbar) t.classList.remove('show'); });
+          toolbar.classList.toggle('show');
+        });
+        // Close toolbar when clicking elsewhere
+        document.addEventListener('click', e => {
+          if (!el.contains(e.target)) toolbar.classList.remove('show');
+        });
+
+        // Drag support (same as cards — multi-select group drag)
+        el.addEventListener('mousedown', e => {
+          if (e.target.closest('.mc-del') || e.target.closest('.mc-resize-br') || e.target.closest('.mc-resize-bl') || e.target.closest('.mc-resize-tr') || e.target.closest('.mc-resize-tl') || e.target.closest('.ms-shape-toggle') || e.target.closest('.sn-toolbar')) return;
+          if (document.activeElement === text && e.target === text) return;
+          e.stopPropagation();
+          if (e.ctrlKey || e.metaKey) { toggleMiroSelect(card.id); return; }
+          if (!_miroSelected.has(card.id)) { clearMiroSelection(); addMiroSelect(card.id); }
+          const page = cp();
+          const zoom = (page.zoom || 100) / 100;
+          const startX = e.clientX, startY = e.clientY;
+          const origPositions = new Map();
+          _miroSelected.forEach(cid => {
+            const c = (page.miroCards || []).find(x => x.id === cid);
+            if (c) origPositions.set(cid, { x: c.x || 0, y: c.y || 0 });
+          });
+          let moved = false;
+          function onMove(ev) {
+            moved = true;
+            const dx = (ev.clientX - startX) / zoom, dy = (ev.clientY - startY) / zoom;
+            origPositions.forEach((orig, cid) => {
+              const c = (page.miroCards || []).find(x => x.id === cid);
+              if (!c) return;
+              c.x = orig.x + dx; c.y = orig.y + dy;
+              const cardEl = document.querySelector(`[data-cid="${cid}"]`);
+              if (cardEl) { cardEl.style.left = c.x + 'px'; cardEl.style.top = c.y + 'px'; }
+            });
+            updateMiroSelFrame();
+          }
+          function onUp() { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); if (moved) sv(); }
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        });
+
+        // 4-corner resize
+        attachCornerResize(el, card, 100, 80);
+
+        el.appendChild(del);
+        el.appendChild(toolbar);
+        el.appendChild(toggle);
+        el.appendChild(text);
+
+        // Auto-size text after render
+        requestAnimationFrame(() => autoSizeText(text, el));
+        return el;
+      }
+
+      function autoSizeText(textEl, containerEl) {
+        if (!textEl.textContent.trim()) { textEl.style.fontSize = '18px'; return; }
+        const padX = 24, padY = 20;
+        const maxW = containerEl.offsetWidth - padX;
+        const maxH = containerEl.offsetHeight - padY;
+        let lo = 8, hi = 120, best = 14;
+        // Binary search for largest font that fits
+        while (lo <= hi) {
+          const mid = Math.floor((lo + hi) / 2);
+          textEl.style.fontSize = mid + 'px';
+          if (textEl.scrollWidth <= maxW + 2 && textEl.scrollHeight <= maxH + 2) {
+            best = mid;
+            lo = mid + 1;
+          } else {
+            hi = mid - 1;
+          }
+        }
+        textEl.style.fontSize = best + 'px';
+      }
+
+      // Update selection queries to include sticky notes
+      function addMiroSelectEl(cid) {
+        const el = document.querySelector(`[data-cid="${cid}"]`);
+        if (el) el.classList.add('miro-selected');
+      }
+      function removeMiroSelectEl(cid) {
+        const el = document.querySelector(`[data-cid="${cid}"]`);
+        if (el) el.classList.remove('miro-selected');
+      }
 
       // ─── Alignment Handle Drag ───
       (function () {
@@ -4945,10 +5688,55 @@
       // Click on empty canvas deselects
       document.getElementById('miro-canvas').addEventListener('click', e => {
         if ((e.target === document.getElementById('miro-canvas') || e.target.id === 'miro-board') && !_alignDragging && !_justRubberBanded) {
+          // If in sticky creation mode, create a note at click position
+          if (_stickyCreateMode) {
+            const page = cp();
+            const canvas = document.getElementById('miro-canvas');
+            const canvasRect = canvas.getBoundingClientRect();
+            const zoom = (page.zoom || 100) / 100;
+            const bx = (e.clientX - canvasRect.left - (page.panX || 0)) / zoom;
+            const by = (e.clientY - canvasRect.top - (page.panY || 0)) / zoom;
+            if (!page.miroCards) page.miroCards = [];
+            const w = 280, h = 160;
+            const card = { id: uid(), type: 'sticky', text: '', color: 'yellow', shape: 'rect', x: bx - w / 2, y: by - h / 2, w, h };
+            page.miroCards.push(card);
+            // Exit creation mode
+            _stickyCreateMode = false;
+            canvas.classList.remove('sn-create-mode');
+            document.getElementById('sn-create-hint').classList.remove('show');
+            sv(); buildMiroCanvas(); buildOutline();
+            // Focus the new note's text
+            requestAnimationFrame(() => {
+              const newEl = document.querySelector(`[data-cid="${card.id}"] .ms-text`);
+              if (newEl) newEl.focus();
+            });
+            return;
+          }
           clearMiroSelection();
+        }
+      });
+
+      // N key = enter sticky note creation mode
+      document.addEventListener('keydown', e => {
+        // Don't trigger if user is typing in an input/textarea/contenteditable
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+        const page = cp();
+        if (page.pageType !== 'miro') return;
+
+        if (e.key === 'n' || e.key === 'N') {
+          _stickyCreateMode = true;
+          document.getElementById('miro-canvas').classList.add('sn-create-mode');
+          document.getElementById('sn-create-hint').classList.add('show');
+        }
+        if (e.key === 'Escape' && _stickyCreateMode) {
+          _stickyCreateMode = false;
+          document.getElementById('miro-canvas').classList.remove('sn-create-mode');
+          document.getElementById('sn-create-hint').classList.remove('show');
         }
       });
     </script>
 </body>
+
+</html>
 
 </html>
