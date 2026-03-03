@@ -94,7 +94,7 @@ async function fetchCardMeta(card) {
   // Pre-warm: triggers screenshot generation on their server
   try {
     await fetch(wpBase, { mode: 'no-cors' });
-  } catch (e) {}
+  } catch (e) { }
   await delay(5000);
   // Poll: try 4 times with 3-second intervals, bypass browser cache via fetch+blob
   for (let attempt = 0; attempt < 4; attempt++) {
@@ -112,7 +112,7 @@ async function fetchCardMeta(card) {
   const thumBase = 'https://image.thum.io/get/width/600/' + card.url;
   try {
     await fetch(thumBase, { mode: 'no-cors' });
-  } catch (e) {}
+  } catch (e) { }
   await delay(5000);
   for (let attempt = 0; attempt < 3; attempt++) {
     const blobUrl = await fetchImageNoCache(thumBase);
@@ -524,18 +524,15 @@ function autoSizeText(textEl, containerEl) {
     textEl.style.fontSize = '18px';
     return;
   }
-  const padX = 24,
-    padY = 20;
-  const maxW = containerEl.offsetWidth - padX;
-  const maxH = containerEl.offsetHeight - padY;
   let lo = 8,
     hi = 120,
-    best = 14;
-  // Binary search for largest font that fits
+    best = 8;
+  // Binary search for largest font that fits without overflow
   while (lo <= hi) {
     const mid = Math.floor((lo + hi) / 2);
     textEl.style.fontSize = mid + 'px';
-    if (textEl.scrollWidth <= maxW + 2 && textEl.scrollHeight <= maxH + 2) {
+    // Check if text overflows the element's flex-allocated area
+    if (textEl.scrollHeight <= textEl.clientHeight + 2) {
       best = mid;
       lo = mid + 1;
     } else {
