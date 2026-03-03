@@ -1,1 +1,1 @@
-      // Merged into thumbnails.js
+// Merged into thumbnails.js
