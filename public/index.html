@@ -2024,6 +2024,477 @@
       border-color: #fff
     }
 
+    /* Outline Sidebar */
+    #outline-side {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 210px;
+      min-width: 120px;
+      max-width: 50vw;
+      height: 100vh;
+      background: rgba(10, 12, 22, .95);
+      border-right: 1px solid var(--bd);
+      z-index: 790;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(-100%);
+      transition: transform .25s cubic-bezier(.4, 0, .2, 1);
+      backdrop-filter: blur(14px);
+      overflow: hidden
+    }
+
+    #outline-side.open {
+      transform: translateX(0)
+    }
+
+    #outline-resize {
+      position: absolute;
+      right: -4px;
+      top: 0;
+      width: 8px;
+      height: 100%;
+      cursor: ew-resize;
+      z-index: 2
+    }
+
+    .outline-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px 8px;
+      border-bottom: 1px solid var(--bd);
+      font-size: .72rem;
+      font-weight: 600;
+      color: var(--tx);
+      letter-spacing: .04em
+    }
+
+    .outline-hdr button {
+      background: none;
+      border: none;
+      color: var(--mu);
+      cursor: pointer;
+      font-size: .85rem;
+      transition: color .15s
+    }
+
+    .outline-hdr button:hover {
+      color: var(--tx)
+    }
+
+    .outline-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 0
+    }
+
+    .outline-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 14px;
+      font-size: .72rem;
+      color: var(--mu);
+      cursor: pointer;
+      transition: all .14s;
+      text-decoration: none;
+      border-left: 2.5px solid transparent;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis
+    }
+
+    .outline-item:hover {
+      background: rgba(255, 255, 255, .05);
+      color: var(--tx);
+      border-left-color: rgba(108, 143, 255, .4)
+    }
+
+    .outline-item.active {
+      background: rgba(108, 143, 255, .1);
+      color: var(--tx);
+      border-left-color: var(--ac);
+      font-weight: 500
+    }
+
+    .outline-item .ol-emoji {
+      flex-shrink: 0;
+      font-size: .78rem
+    }
+
+    .outline-item .ol-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap
+    }
+
+    .outline-empty {
+      padding: 1.5rem;
+      text-align: center;
+      color: var(--mu);
+      font-size: .68rem
+    }
+
+    /* Shift main content when outline is open */
+    body.outline-open #root {
+      margin-left: var(--outline-w, 210px);
+      transition: margin-left .25s cubic-bezier(.4, 0, .2, 1)
+    }
+
+    body:not(.outline-open) #root {
+      margin-left: 0;
+      transition: margin-left .25s cubic-bezier(.4, 0, .2, 1)
+    }
+
+    /* Inbox pushed to right */
+    #inbox-btn {
+      margin-left: auto
+    }
+
+    /* Widget highlight animation */
+    @keyframes outlineHighlight {
+      0% {
+        box-shadow: 0 0 0 0 rgba(108, 143, 255, 0);
+      }
+
+      15% {
+        box-shadow: 0 0 0 3px rgba(108, 143, 255, .55);
+      }
+
+      30% {
+        box-shadow: 0 0 0 0 rgba(108, 143, 255, 0);
+      }
+
+      50% {
+        box-shadow: 0 0 0 3px rgba(108, 143, 255, .55);
+      }
+
+      70% {
+        box-shadow: 0 0 0 0 rgba(108, 143, 255, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(108, 143, 255, 0);
+      }
+    }
+
+    .widget.outline-hl {
+      animation: outlineHighlight 1.2s ease;
+    }
+
+    /* ─── Miro Page ─── */
+    #miro-canvas {
+      position: relative;
+      flex: 1;
+      overflow: hidden;
+      cursor: grab;
+      background:
+        radial-gradient(circle, rgba(255, 255, 255, .04) 1px, transparent 1px);
+      background-size: 24px 24px;
+      user-select: none;
+      min-height: calc(100vh - 100px)
+    }
+
+    #miro-canvas:active {
+      cursor: grabbing
+    }
+
+    #miro-canvas.hidden {
+      display: none
+    }
+
+    #miro-board {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 0;
+      height: 0;
+      transform-origin: 0 0;
+    }
+
+    .miro-card {
+      position: absolute;
+      background: var(--s2);
+      border: 1px solid var(--bd);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, .45);
+      cursor: default;
+      display: flex;
+      flex-direction: column;
+      transition: box-shadow .15s;
+      min-width: 160px;
+      min-height: 100px;
+    }
+
+    .miro-card:hover {
+      box-shadow: 0 6px 28px rgba(0, 0, 0, .6);
+    }
+
+    .miro-card.miro-hl {
+      animation: outlineHighlight 1.2s ease;
+    }
+
+    .miro-card .mc-del {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      z-index: 3;
+      background: rgba(0, 0, 0, .55);
+      border: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--mu);
+      cursor: pointer;
+      font-size: .7rem;
+      opacity: 0;
+      transition: opacity .12s, color .12s;
+    }
+
+    .miro-card:hover .mc-del {
+      opacity: 1
+    }
+
+    .miro-card .mc-del:hover {
+      color: var(--red)
+    }
+
+    .miro-card .mc-thumb {
+      flex: 1;
+      overflow: hidden;
+      background: #1a1c2a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 80px;
+      position: relative;
+    }
+
+    .miro-card .mc-thumb {
+      cursor: grab;
+    }
+
+    .miro-card .mc-thumb:active {
+      cursor: grabbing;
+    }
+
+    .miro-card .mc-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .miro-card .mc-thumb .mc-loading {
+      color: var(--mu);
+      font-size: .65rem;
+    }
+
+    .miro-card .mc-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: rgba(255, 255, 255, .85);
+      text-transform: uppercase;
+      position: relative;
+    }
+
+    .miro-card .mc-placeholder .mc-ph-spinner {
+      position: absolute;
+      bottom: 8px;
+      right: 8px;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, .2);
+      border-top-color: rgba(255, 255, 255, .7);
+      border-radius: 50%;
+      animation: miroSpin .6s linear infinite;
+    }
+
+    @keyframes miroSpin {
+      to {
+        transform: rotate(360deg)
+      }
+    }
+
+    .miro-card .mc-meta {
+      padding: 5px 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--s2);
+      border-top: 1px solid var(--bd);
+    }
+
+    .miro-card .mc-meta img {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    .miro-card .mc-meta-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .miro-card .mc-title {
+      font-size: .72rem;
+      font-weight: 600;
+      color: var(--tx);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .miro-card .mc-domain {
+      font-size: .58rem;
+      color: var(--mu);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .miro-card .mc-resize {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      width: 16px;
+      height: 16px;
+      cursor: nwse-resize;
+      background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, .15) 50%);
+      border-radius: 0 0 12px 0;
+    }
+
+    .miro-card .mc-open {
+      position: absolute;
+      top: 8px;
+      right: 30px;
+      background: rgba(0, 0, 0, .5);
+      border: none;
+      color: #fff;
+      font-size: .65rem;
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity .12s;
+      text-decoration: none;
+    }
+
+    .miro-card:hover .mc-open {
+      opacity: 1
+    }
+
+    .miro-card .mc-open:hover {
+      background: var(--ac)
+    }
+
+    /* Zoom controls */
+    #miro-zoom {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: none;
+      align-items: center;
+      gap: 8px;
+      background: var(--s2);
+      border: 1px solid var(--bd);
+      border-radius: 10px;
+      padding: 5px 12px;
+      z-index: 600;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, .5);
+      backdrop-filter: blur(12px);
+    }
+
+    #miro-zoom.show {
+      display: flex
+    }
+
+    #miro-zoom button {
+      background: none;
+      border: none;
+      color: var(--mu);
+      cursor: pointer;
+      font-size: .78rem;
+      padding: 2px 4px;
+      border-radius: 4px;
+      transition: all .12s;
+    }
+
+    #miro-zoom button:hover {
+      background: rgba(255, 255, 255, .08);
+      color: var(--tx);
+    }
+
+    #miro-zoom input[type=range] {
+      width: 100px;
+      height: 3px;
+    }
+
+    #miro-zoom .mz-pct {
+      font-size: .68rem;
+      color: var(--tx);
+      min-width: 36px;
+      text-align: center;
+      font-weight: 600;
+    }
+
+    /* Miro add card floating button */
+    #miro-add-float {
+      position: fixed;
+      bottom: 60px;
+      right: 24px;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--ac);
+      border: none;
+      color: #fff;
+      font-size: 1.3rem;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(108, 143, 255, .5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 600;
+      transition: transform .15s, box-shadow .15s;
+    }
+
+    #miro-add-float.show {
+      display: flex
+    }
+
+    #miro-add-float:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 24px rgba(108, 143, 255, .7);
+    }
+
+    /* M toggle in toolbar */
+    .ib.miro-on {
+      background: linear-gradient(135deg, #6c8fff, #c4a0ff);
+      border-color: #c4a0ff;
+      color: #fff;
+      font-weight: 700;
+    }
+
     ::-webkit-scrollbar {
       width: 3px;
       height: 3px
@@ -2048,6 +2519,10 @@
       .tg {
         grid-template-columns: repeat(2, 1fr)
       }
+
+      body.outline-open #root {
+        margin-left: var(--outline-w, 180px)
+      }
     }
 
     @media(max-width:540px) {
@@ -2056,6 +2531,95 @@
         order: 3;
         max-width: 100%
       }
+
+      body.outline-open #root {
+        margin-left: var(--outline-w, 160px)
+      }
+    }
+
+    /* ─── Multi-Select & Grid Alignment ─── */
+    .miro-card.miro-selected {
+      outline: 2px solid var(--ac);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 4px rgba(108, 143, 255, .18), 0 4px 20px rgba(0, 0, 0, .45);
+    }
+
+    #miro-sel-box {
+      position: absolute;
+      border: 1.5px dashed var(--ac);
+      background: rgba(108, 143, 255, .08);
+      pointer-events: none;
+      z-index: 10;
+      border-radius: 4px;
+      display: none;
+    }
+
+    #miro-sel-frame {
+      position: absolute;
+      border: 1.5px solid rgba(108, 143, 255, .45);
+      border-radius: 6px;
+      pointer-events: none;
+      z-index: 9;
+      display: none;
+    }
+
+    #miro-align-handle {
+      position: absolute;
+      top: -18px;
+      right: -18px;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(80, 85, 110, .92);
+      border: 2px solid rgba(255, 255, 255, .18);
+      cursor: grab;
+      pointer-events: all;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform .12s, background .12s, box-shadow .12s;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, .4);
+      z-index: 12;
+    }
+
+    #miro-align-handle:hover {
+      background: rgba(108, 143, 255, .85);
+      transform: scale(1.12);
+      box-shadow: 0 3px 16px rgba(108, 143, 255, .5);
+    }
+
+    #miro-align-handle:active {
+      cursor: grabbing;
+      background: var(--ac);
+      transform: scale(1.05);
+    }
+
+    #miro-align-handle svg {
+      width: 16px;
+      height: 16px;
+      fill: rgba(255, 255, 255, .85);
+    }
+
+    /* Column count indicator during alignment drag */
+    #miro-col-indicator {
+      position: fixed;
+      background: rgba(18, 20, 32, .92);
+      border: 1px solid var(--ac);
+      border-radius: 8px;
+      padding: 4px 12px;
+      font-size: .72rem;
+      font-weight: 600;
+      color: var(--tx);
+      z-index: 1000;
+      pointer-events: none;
+      display: none;
+      white-space: nowrap;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, .5);
+    }
+
+    #miro-col-indicator.show {
+      display: block;
     }
   </style>
 </head>
@@ -2086,6 +2650,7 @@
     <div id="sync-bar"></div>
 
     <div id="tb">
+      <button class="ib" id="outline-btn" title="Page Outline (F2)">📑</button>
       <span id="user-email">👤</span>
       <div id="sync-dot" class="loading"></div>
       <span id="sync-msg">Connecting...</span>
@@ -2098,12 +2663,14 @@
         <div id="ep"></div>
         <div id="sr"></div>
       </div>
-      <button class="ib" id="inbox-btn" title="Inbox">📥</button>
       <button class="ib" id="all-btn" title="Show All Pages">ALL</button>
       <button class="ib" id="dup-btn" title="Find Duplicate Links">🔎</button>
       <div class="tb-sep"></div>
-      <span style="font-size:.6rem;color:var(--mu);white-space:nowrap">Cols:</span>
-      <div id="col-btns" style="display:flex;gap:2px"></div>
+      <button class="ib" id="miro-toggle" title="Miro Mode — new pages become infinite canvas">M</button>
+      <div id="cols-wrap" style="display:flex;align-items:center;gap:4px">
+        <span style="font-size:.6rem;color:var(--mu);white-space:nowrap">Cols:</span>
+        <div id="col-btns" style="display:flex;gap:2px"></div>
+      </div>
       <div style="position:relative">
         <button class="ib" id="bg-btn" title="Page Background">🖼️</button>
       </div>
@@ -2125,6 +2692,7 @@
       </div>
       <button class="ib" id="pv-mode-btn" title="Quick Preview Mode">👁️</button>
       <button class="ib" id="settings-btn" title="Settings">⚙️</button>
+      <button class="ib" id="inbox-btn" title="Inbox">📥</button>
     </div>
 
     <div id="ribbon">
@@ -2137,6 +2705,27 @@
     </div>
 
     <div id="cw"></div>
+    <div id="miro-canvas" class="hidden">
+      <div id="miro-board">
+        <div id="miro-sel-box"></div>
+        <div id="miro-sel-frame">
+          <div id="miro-align-handle"><svg viewBox="0 0 16 16">
+              <rect x="1" y="1" width="6" height="6" rx="1" />
+              <rect x="9" y="1" width="6" height="6" rx="1" />
+              <rect x="1" y="9" width="6" height="6" rx="1" />
+              <rect x="9" y="9" width="6" height="6" rx="1" />
+            </svg></div>
+        </div>
+      </div>
+    </div>
+    <div id="miro-col-indicator"></div>
+
+    <!-- Outline Sidebar -->
+    <div id="outline-side">
+      <div id="outline-resize"></div>
+      <div class="outline-hdr"><span>📑 Outline</span><button id="outline-close">✕</button></div>
+      <div class="outline-list" id="outline-list"></div>
+    </div>
   </div>
 
   <div id="live-pv"></div>
@@ -2233,6 +2822,32 @@
           id="ok-bm">Add</button></div>
     </div>
   </div>
+
+  <!-- Miro Add Card Modal -->
+  <div class="mo" id="m-miro-add">
+    <div class="mc">
+      <h3>📋 Add Card</h3>
+      <div class="fg"><label>URL</label><input type="url" class="fi" id="miro-add-url" placeholder="https://example.com"
+          autocomplete="off"></div>
+      <div class="fg"><label>Label (optional)</label><input type="text" class="fi" id="miro-add-label"
+          placeholder="Auto-detect from URL"></div>
+      <div class="ma"><button class="btn bg-btn" onclick="closeM('m-miro-add')">Cancel</button><button class="btn ba"
+          id="ok-miro-add">Add Card</button></div>
+    </div>
+  </div>
+
+  <!-- Zoom Controls -->
+  <div id="miro-zoom">
+    <button id="mz-out" title="Zoom Out">−</button>
+    <input type="range" id="mz-slider" min="10" max="400" value="100">
+    <button id="mz-in" title="Zoom In">＋</button>
+    <span class="mz-pct" id="mz-pct">100%</span>
+    <button id="mz-fit" title="Fit to screen">Fit</button>
+    <button id="mz-reset" title="Reset to 100%">1:1</button>
+  </div>
+
+  <!-- Miro floating add button -->
+  <button id="miro-add-float" title="Add Card">＋</button>
 
   <div class="mo" id="m-ren">
     <div class="mc">
@@ -3273,7 +3888,11 @@
         const id = uid();
         const targetGroup = D.curGroup === '__all__' ? D.groups[0].id : D.curGroup;
         const groupPages = D.pages.filter(p => p.groupId === targetGroup);
-        D.pages.push({ id, groupId: targetGroup, name: 'Page ' + (groupPages.length + 1), cols: 3, bg: '', bgType: 'none', widgets: [] });
+        if (_miroMode) {
+          D.pages.push({ id, groupId: targetGroup, name: 'Miro ' + (groupPages.length + 1), pageType: 'miro', miroCards: [], zoom: 100, panX: 0, panY: 0, bg: '', bgType: 'none', widgets: [] });
+        } else {
+          D.pages.push({ id, groupId: targetGroup, name: 'Page ' + (groupPages.length + 1), cols: 3, bg: '', bgType: 'none', widgets: [] });
+        }
         D.cur = id; sv(); renderAll();
       };
 
@@ -3306,7 +3925,17 @@
       function openTcPop(ev, pid) { tcPid = pid; const pop = document.getElementById('tc-pop'); pop.querySelectorAll('.tc-sw').forEach(s => s.remove()); TAB_COLORS.forEach(hex => { const s = document.createElement('div'); s.className = 'tc-sw'; s.style.background = hex; const pg = D.pages.find(p => p.id === pid); s.style.borderColor = pg && pg.tabColor === hex ? '#fff' : 'transparent'; s.onclick = () => { setTabColor(pid, hex); pop.classList.remove('open'); }; pop.insertBefore(s, document.getElementById('tc-none')); }); pop.classList.add('open'); pop.style.left = Math.min(ev.clientX, window.innerWidth - 150) + 'px'; pop.style.top = (ev.clientY + 12) + 'px'; }
       document.getElementById('tc-none').onclick = () => { setTabColor(tcPid, ''); document.getElementById('tc-pop').classList.remove('open'); };
       function setTabColor(pid, color) { const pg = D.pages.find(p => p.id === pid); if (!pg) return; pg.tabColor = color; sv(); buildTabs(); }
-      function buildCols() { const page = cp(), wrap = document.getElementById('cw'); wrap.innerHTML = ''; wrap.style.gridTemplateColumns = `repeat(${page.cols},minmax(0,1fr))`; for (let ci = 0; ci < page.cols; ci++) { const col = document.createElement('div'); col.className = 'col'; col.dataset.ci = ci; col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('dragover'); }); col.addEventListener('dragleave', () => col.classList.remove('dragover')); col.addEventListener('drop', e => { e.preventDefault(); col.classList.remove('dragover'); if (!dragWid) return; const w = (page.widgets || []).find(x => x.id === dragWid); if (w) { w.col = ci; sv(); buildCols(); } dragWid = null; }); const colWidgets = (page.widgets || []).filter(w => w.col === ci); /* also include orphaned widgets in last column */ if (ci === page.cols - 1) { (page.widgets || []).filter(w => w.col >= page.cols).forEach(w => colWidgets.push(w)); } colWidgets.forEach(w => col.appendChild(buildWidget(w))); const ab = document.createElement('button'); ab.className = 'add-w'; ab.innerHTML = '＋ Add Widget'; ab.onclick = () => { pColIdx = ci; openM('m-aw'); }; col.appendChild(ab); wrap.appendChild(col); } }
+      function buildCols() {
+        const page = cp();
+        const isMiro = page.pageType === 'miro';
+        document.getElementById('cw').style.display = isMiro ? 'none' : '';
+        document.getElementById('miro-canvas').classList.toggle('hidden', !isMiro);
+        document.getElementById('miro-zoom').classList.toggle('show', isMiro);
+        document.getElementById('miro-add-float').classList.toggle('show', isMiro);
+        document.getElementById('cols-wrap').style.display = isMiro ? 'none' : 'flex';
+        if (isMiro) { buildMiroCanvas(); buildOutline(); return; }
+        const wrap = document.getElementById('cw'); wrap.innerHTML = ''; wrap.style.gridTemplateColumns = `repeat(${page.cols},minmax(0,1fr))`; for (let ci = 0; ci < page.cols; ci++) { const col = document.createElement('div'); col.className = 'col'; col.dataset.ci = ci; col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('dragover'); }); col.addEventListener('dragleave', () => col.classList.remove('dragover')); col.addEventListener('drop', e => { e.preventDefault(); col.classList.remove('dragover'); if (!dragWid) return; const w = (page.widgets || []).find(x => x.id === dragWid); if (w) { w.col = ci; sv(); buildCols(); } dragWid = null; }); const colWidgets = (page.widgets || []).filter(w => w.col === ci); if (ci === page.cols - 1) { (page.widgets || []).filter(w => w.col >= page.cols).forEach(w => colWidgets.push(w)); } colWidgets.forEach(w => col.appendChild(buildWidget(w))); const ab = document.createElement('button'); ab.className = 'add-w'; ab.innerHTML = '＋ Add Widget'; ab.onclick = () => { pColIdx = ci; openM('m-aw'); }; col.appendChild(ab); wrap.appendChild(col); } buildOutline();
+      }
       function luma(c) { return (c.r * 299 + c.g * 587 + c.b * 114) / 1000; }
       function buildWidget(w) { const el = document.createElement('div'); el.className = 'widget edit'; el.dataset.wid = w.id; el.draggable = true; const c = w.color || DEF_COLOR; const light = luma(c) > 140; const txtCol = light ? '#111' : '#dde1ee'; const muCol = light ? '#666' : 'rgba(255,255,255,.42)'; const bdCol = light ? 'rgba(0,0,0,.1)' : `rgba(255,255,255,${Math.min(c.a * .13, .09)})`; el.style.cssText = `background:${rgba(c)};border:1px solid ${bdCol};color:${txtCol};--w-tx:${txtCol};--w-mu:${muCol}`; el.addEventListener('dragstart', () => { dragWid = w.id; setTimeout(() => el.classList.add('dragging'), 0); }); el.addEventListener('dragend', () => { el.classList.remove('dragging'); dragWid = null; }); el.addEventListener('dragover', e => { if (_dragInboxId) { e.preventDefault(); el.style.outline = '2px solid var(--ac)'; } }); el.addEventListener('dragleave', () => { el.style.outline = ''; }); el.addEventListener('drop', e => { if (_dragInboxId) { e.preventDefault(); el.style.outline = ''; const inboxItem = (D.inbox || []).find(x => x.id === _dragInboxId); if (inboxItem && w.type !== 'note') { if (!w.items) w.items = []; w.items.push({ id: uid(), label: inboxItem.label, url: inboxItem.url, emoji: '' }); D.inbox = D.inbox.filter(x => x.id !== _dragInboxId); _dragInboxId = null; sv(); buildCols(); buildInbox(); } } }); const hdr = document.createElement('div'); hdr.className = 'wh'; hdr.style.borderBottomColor = bdCol; hdr.innerHTML = `<div class="wt" style="color:${muCol}"><span>${w.emoji || '📌'}</span>${esc(w.title)}</div><div class="wa"><button class="wab" data-dp="${w.id}" title="Display">🖥️</button><button class="wab" data-mv="${w.id}" title="Move/Copy">📋</button><button class="wab" data-cl="${w.id}" title="Color">🎨</button><button class="wab" data-rn="${w.id}" title="Rename">✏️</button><button class="wab d" data-dl="${w.id}" title="Delete">🗑️</button></div>`; hdr.querySelector('[data-dp]').onclick = e => { e.stopPropagation(); openDisp(w.id); }; hdr.querySelector('[data-mv]').onclick = e => { e.stopPropagation(); openMvModal(w.id); }; hdr.querySelector('[data-cl]').onclick = e => { e.stopPropagation(); openColModal(w.id); }; hdr.querySelector('[data-rn]').onclick = e => { e.stopPropagation(); openRen(w.id); }; hdr.querySelector('[data-dl]').onclick = e => { e.stopPropagation(); delWidget(w.id); }; el.appendChild(hdr); const body = document.createElement('div'); body.className = 'wb'; if (w.type === 'note') { const ta = document.createElement('textarea'); ta.className = 'note-ta'; ta.placeholder = 'Write notes…'; ta.value = w.content || ''; ta.style.color = txtCol; ta.oninput = () => { w.content = ta.value; sv(); }; body.appendChild(ta); } else if (w.type === 'todo') { buildTodoBody(body, w); } else { buildBmBody(body, w); } el.appendChild(body); return el; }
       function buildTodoBody(body, w) { const list = document.createElement('div'); list.className = 'todo-list'; (w.items || []).forEach(item => { list.appendChild(mkTodoItem(item, w)); }); const addRow = document.createElement('div'); addRow.className = 'todo-add'; const addIn = document.createElement('input'); addIn.className = 'todo-add-in'; addIn.type = 'text'; addIn.placeholder = 'Add a task…'; addIn.onkeydown = e => { if (e.key === 'Enter') { const txt = addIn.value.trim(); if (!txt) return; if (!w.items) w.items = []; const item = { id: uid(), text: txt, done: false }; w.items.push(item); sv(); list.insertBefore(mkTodoItem(item, w), addRow); addIn.value = ''; } }; addRow.innerHTML = '<span style="font-size:.8rem;color:var(--mu)">＋</span>'; addRow.appendChild(addIn); list.appendChild(addRow); body.appendChild(list); }
@@ -3380,8 +4009,945 @@
       document.querySelectorAll('.mo').forEach(o => { o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); }); });
       document.addEventListener('click', () => { document.getElementById('ep').classList.remove('open'); document.getElementById('io-pop').classList.remove('open'); document.getElementById('tc-pop').classList.remove('open'); $sr().classList.remove('show'); });
       document.getElementById('tb').addEventListener('click', e => e.stopPropagation()); document.getElementById('ribbon').addEventListener('click', e => e.stopPropagation());
-      document.addEventListener('keydown', e => { if (e.key === 'Escape') { document.querySelectorAll('.mo.open').forEach(m => m.classList.remove('open'));['ep', 'io-pop', 'tc-pop'].forEach(id => document.getElementById(id).classList.remove('open')); $sr().classList.remove('show'); } if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && !document.querySelector('.mo.open') && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA' && !document.activeElement.getAttribute('contenteditable')) { $si().focus(); } });
+      document.addEventListener('keydown', e => { if (e.key === 'F2') { e.preventDefault(); toggleOutline(); return; } if (e.key === 'Escape') { document.querySelectorAll('.mo.open').forEach(m => m.classList.remove('open'));['ep', 'io-pop', 'tc-pop'].forEach(id => document.getElementById(id).classList.remove('open')); $sr().classList.remove('show'); } if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && !document.querySelector('.mo.open') && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA' && !document.activeElement.getAttribute('contenteditable')) { $si().focus(); } });
       function renderAll() { buildGroups(); buildTabs(); buildColBtns(); buildCols(); applyBG(); applyContrast(); buildEP(); buildAcPop(); buildBgSwatches(); buildInbox(); document.documentElement.style.setProperty('--ac', D.settings.accent || '#6c8fff'); document.getElementById('ac-dot').style.background = D.settings.accent || '#6c8fff'; }
+
+      /* ─── Outline Sidebar ─── */
+      function toggleOutline() {
+        const side = document.getElementById('outline-side');
+        const isOpen = side.classList.toggle('open');
+        document.body.classList.toggle('outline-open', isOpen);
+        document.getElementById('outline-btn').classList.toggle('active-toggle', isOpen);
+      }
+      document.getElementById('outline-btn').onclick = toggleOutline;
+      document.getElementById('outline-close').onclick = () => {
+        document.getElementById('outline-side').classList.remove('open');
+        document.body.classList.remove('outline-open');
+        document.getElementById('outline-btn').classList.remove('active-toggle');
+      };
+
+      // Outline resize
+      (function () {
+        const side = document.getElementById('outline-side');
+        const handle = document.getElementById('outline-resize');
+        let resizing = false;
+        handle.addEventListener('mousedown', e => {
+          e.preventDefault();
+          resizing = true;
+          side.style.transition = 'none';
+          document.body.style.transition = 'none';
+          document.getElementById('root').style.transition = 'none';
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', () => {
+            resizing = false;
+            side.style.transition = '';
+            document.body.style.transition = '';
+            document.getElementById('root').style.transition = '';
+            document.removeEventListener('mousemove', onMove);
+          }, { once: true });
+        });
+        function onMove(e) {
+          if (!resizing) return;
+          const w = e.clientX;
+          if (w >= 120 && w <= window.innerWidth * 0.5) {
+            side.style.width = w + 'px';
+            document.documentElement.style.setProperty('--outline-w', w + 'px');
+          }
+        }
+      })();
+
+      function buildOutline() {
+        const list = document.getElementById('outline-list');
+        list.innerHTML = '';
+        const page = cp();
+        if (page.pageType === 'miro') {
+          const cards = page.miroCards || [];
+          if (!cards.length) {
+            list.innerHTML = '<div class="outline-empty">No cards on this canvas</div>';
+            return;
+          }
+          cards.forEach(c => {
+            const item = document.createElement('div');
+            item.className = 'outline-item';
+            item.title = c.label || c.url;
+            const emoji = document.createElement('span');
+            emoji.className = 'ol-emoji';
+            emoji.textContent = '🔗';
+            const title = document.createElement('span');
+            title.className = 'ol-title';
+            title.textContent = c.label || domainOf(c.url);
+            item.appendChild(emoji);
+            item.appendChild(title);
+            item.onclick = () => scrollToMiroCard(c.id);
+            list.appendChild(item);
+          });
+          return;
+        }
+        const widgets = page.widgets || [];
+        if (!widgets.length) {
+          list.innerHTML = '<div class="outline-empty">No widgets on this page</div>';
+          return;
+        }
+        widgets.forEach(w => {
+          const item = document.createElement('div');
+          item.className = 'outline-item';
+          item.title = w.title;
+          const emoji = document.createElement('span');
+          emoji.className = 'ol-emoji';
+          emoji.textContent = w.emoji || '📌';
+          const title = document.createElement('span');
+          title.className = 'ol-title';
+          title.textContent = w.title;
+          item.appendChild(emoji);
+          item.appendChild(title);
+          item.onclick = () => scrollToWidget(w.id);
+          list.appendChild(item);
+        });
+      }
+
+      function scrollToWidget(wid) {
+        const el = document.querySelector(`.widget[data-wid="${wid}"]`);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.remove('outline-hl');
+        void el.offsetWidth;
+        el.classList.add('outline-hl');
+        el.addEventListener('animationend', () => el.classList.remove('outline-hl'), { once: true });
+        document.querySelectorAll('.outline-item').forEach(i => i.classList.remove('active'));
+        const page = cp();
+        const idx = (page.widgets || []).findIndex(w => w.id === wid);
+        const items = document.querySelectorAll('.outline-item');
+        if (idx >= 0 && items[idx]) items[idx].classList.add('active');
+      }
+
+      function scrollToMiroCard(cid) {
+        const page = cp();
+        const card = (page.miroCards || []).find(c => c.id === cid);
+        if (!card) return;
+        const canvas = document.getElementById('miro-canvas');
+        const zoom = (page.zoom || 100) / 100;
+        // Pan so the card is centered
+        page.panX = canvas.clientWidth / 2 - ((card.x || 0) + (card.w || 280) / 2) * zoom;
+        page.panY = canvas.clientHeight / 2 - ((card.y || 0) + (card.h || 240) / 2) * zoom;
+        document.getElementById('miro-board').style.transform =
+          `translate(${page.panX}px,${page.panY}px) scale(${zoom})`;
+        sv();
+        // Highlight
+        const el = document.querySelector(`.miro-card[data-cid="${cid}"]`);
+        if (el) {
+          el.classList.remove('miro-hl');
+          void el.offsetWidth;
+          el.classList.add('miro-hl');
+          el.addEventListener('animationend', () => el.classList.remove('miro-hl'), { once: true });
+        }
+        // Update active state
+        document.querySelectorAll('.outline-item').forEach(i => i.classList.remove('active'));
+        const idx = (page.miroCards || []).findIndex(c => c.id === cid);
+        const items = document.querySelectorAll('.outline-item');
+        if (idx >= 0 && items[idx]) items[idx].classList.add('active');
+      }
+      /* ─── Miro Page Engine ─── */
+      let _miroMode = false;
+      let _miroPanning = false, _miroPanStartX = 0, _miroPanStartY = 0;
+      let _miroCardDrag = null, _miroCardResize = null;
+      const _miroSelected = new Set();
+      let _alignDragging = false;
+      let _justRubberBanded = false;
+
+      document.getElementById('miro-toggle').onclick = () => {
+        _miroMode = !_miroMode;
+        document.getElementById('miro-toggle').classList.toggle('miro-on', _miroMode);
+      };
+
+      function addMiroSelect(cid) {
+        if (_miroSelected.has(cid)) return;
+        _miroSelected.add(cid);
+        const el = document.querySelector(`.miro-card[data-cid="${cid}"]`);
+        if (el) el.classList.add('miro-selected');
+      }
+      function removeMiroSelect(cid) {
+        if (!_miroSelected.has(cid)) return;
+        _miroSelected.delete(cid);
+        const el = document.querySelector(`.miro-card[data-cid="${cid}"]`);
+        if (el) el.classList.remove('miro-selected');
+      }
+      function toggleMiroSelect(cid) {
+        if (_miroSelected.has(cid)) removeMiroSelect(cid);
+        else addMiroSelect(cid);
+        updateMiroSelFrame();
+      }
+      function clearMiroSelection() {
+        _miroSelected.forEach(cid => {
+          const el = document.querySelector(`.miro-card[data-cid="${cid}"]`);
+          if (el) el.classList.remove('miro-selected');
+        });
+        _miroSelected.clear();
+        document.getElementById('miro-sel-frame').style.display = 'none';
+      }
+      function getSelectedCardsBBox() {
+        const page = cp();
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        _miroSelected.forEach(cid => {
+          const c = (page.miroCards || []).find(x => x.id === cid);
+          if (!c) return;
+          minX = Math.min(minX, c.x || 0);
+          minY = Math.min(minY, c.y || 0);
+          maxX = Math.max(maxX, (c.x || 0) + (c.w || 280));
+          maxY = Math.max(maxY, (c.y || 0) + (c.h || 240));
+        });
+        return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY };
+      }
+      function updateMiroSelFrame() {
+        const frame = document.getElementById('miro-sel-frame');
+        if (_miroSelected.size < 2) {
+          frame.style.display = 'none';
+          return;
+        }
+        const bbox = getSelectedCardsBBox();
+        if (bbox.w <= 0 || bbox.h <= 0) { frame.style.display = 'none'; return; }
+        const pad = 12;
+        frame.style.display = 'block';
+        frame.style.left = (bbox.minX - pad) + 'px';
+        frame.style.top = (bbox.minY - pad) + 'px';
+        frame.style.width = (bbox.w + pad * 2) + 'px';
+        frame.style.height = (bbox.h + pad * 2) + 'px';
+      }
+
+      function buildMiroCanvas() {
+        const page = cp();
+        if (!page.miroCards) page.miroCards = [];
+        const board = document.getElementById('miro-board');
+        // Remove only card elements, preserve selection overlays
+        board.querySelectorAll('.miro-card').forEach(el => el.remove());
+        // Clear selection state
+        _miroSelected.clear();
+        document.getElementById('miro-sel-frame').style.display = 'none';
+        document.getElementById('miro-sel-box').style.display = 'none';
+        const zoom = (page.zoom || 100) / 100;
+        const px = page.panX || 0, py = page.panY || 0;
+        board.style.transform = `translate(${px}px,${py}px) scale(${zoom})`;
+        document.getElementById('mz-slider').value = page.zoom || 100;
+        document.getElementById('mz-pct').textContent = (page.zoom || 100) + '%';
+
+        page.miroCards.forEach(card => {
+          board.appendChild(buildMiroCard(card));
+        });
+      }
+
+      function buildMiroCard(card) {
+        const el = document.createElement('div');
+        el.className = 'miro-card';
+        el.dataset.cid = card.id;
+        el.style.left = (card.x || 0) + 'px';
+        el.style.top = (card.y || 0) + 'px';
+        el.style.width = (card.w || 280) + 'px';
+        el.style.height = (card.h || 240) + 'px';
+
+        // Delete button (overlaid)
+        const del = document.createElement('button');
+        del.className = 'mc-del';
+        del.textContent = '✕';
+        del.onclick = e => { e.stopPropagation(); deleteMiroCard(card.id); };
+
+        // Open link button
+        const openBtn = document.createElement('a');
+        openBtn.className = 'mc-open';
+        openBtn.href = card.url;
+        openBtn.target = '_blank';
+        openBtn.rel = 'noopener noreferrer';
+        openBtn.textContent = '↗';
+        openBtn.onclick = e => e.stopPropagation();
+
+        // Thumbnail
+        const thumb = document.createElement('div');
+        thumb.className = 'mc-thumb';
+
+        if (card.thumbUrl) {
+          const thumbImg = document.createElement('img');
+          thumbImg.src = card.thumbUrl;
+          thumbImg.alt = card.label || '';
+          thumbImg.loading = 'lazy';
+          thumbImg.onerror = () => {
+            thumb.innerHTML = '';
+            thumb.appendChild(buildMiroPlaceholder(card, true));
+          };
+          thumb.appendChild(thumbImg);
+        } else {
+          thumb.appendChild(buildMiroPlaceholder(card, true));
+          queueCardFetch(card);
+        }
+
+        // Drag logic — drag from thumbnail area (supports multi-select group drag)
+        thumb.addEventListener('mousedown', e => {
+          if (e.target.closest('.mc-del') || e.target.closest('.mc-open') || e.target.closest('.mc-resize')) return;
+          e.stopPropagation();
+          // Ctrl+Click toggle selection
+          if (e.ctrlKey || e.metaKey) {
+            toggleMiroSelect(card.id);
+            return;
+          }
+          // If card is not selected, select only this card (unless part of multi-select)
+          if (!_miroSelected.has(card.id)) {
+            clearMiroSelection();
+            addMiroSelect(card.id);
+          }
+          const page = cp();
+          const zoom = (page.zoom || 100) / 100;
+          const startX = e.clientX, startY = e.clientY;
+          // Store original positions for all selected cards
+          const origPositions = new Map();
+          _miroSelected.forEach(cid => {
+            const c = (page.miroCards || []).find(x => x.id === cid);
+            if (c) origPositions.set(cid, { x: c.x || 0, y: c.y || 0 });
+          });
+          let moved = false;
+          function onMove(ev) {
+            moved = true;
+            const dx = (ev.clientX - startX) / zoom;
+            const dy = (ev.clientY - startY) / zoom;
+            origPositions.forEach((orig, cid) => {
+              const c = (page.miroCards || []).find(x => x.id === cid);
+              if (!c) return;
+              c.x = orig.x + dx;
+              c.y = orig.y + dy;
+              const cardEl = document.querySelector(`.miro-card[data-cid="${cid}"]`);
+              if (cardEl) {
+                cardEl.style.left = c.x + 'px';
+                cardEl.style.top = c.y + 'px';
+              }
+            });
+            updateMiroSelFrame();
+          }
+          function onUp() {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            if (moved) sv();
+          }
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        });
+
+        // Metadata footer
+        const meta = document.createElement('div');
+        meta.className = 'mc-meta';
+        const favicon = document.createElement('img');
+        favicon.src = getFav(card.url);
+        favicon.onerror = () => { favicon.style.display = 'none'; };
+        const info = document.createElement('div');
+        info.className = 'mc-meta-info';
+        const title = document.createElement('div');
+        title.className = 'mc-title';
+        title.textContent = card.label || domainOf(card.url);
+        const domain = document.createElement('div');
+        domain.className = 'mc-domain';
+        domain.textContent = domainOf(card.url);
+        info.appendChild(title);
+        info.appendChild(domain);
+        meta.appendChild(favicon);
+        meta.appendChild(info);
+
+        // Resize handle
+        const resize = document.createElement('div');
+        resize.className = 'mc-resize';
+        resize.addEventListener('mousedown', e => {
+          e.stopPropagation();
+          const page = cp();
+          const zoom = (page.zoom || 100) / 100;
+          const startX = e.clientX, startY = e.clientY;
+          const origW = card.w || 280, origH = card.h || 240;
+          function onMove(ev) {
+            card.w = Math.max(160, origW + (ev.clientX - startX) / zoom);
+            card.h = Math.max(100, origH + (ev.clientY - startY) / zoom);
+            el.style.width = card.w + 'px';
+            el.style.height = card.h + 'px';
+          }
+          function onUp() {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            sv();
+          }
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        });
+
+        el.appendChild(del);
+        el.appendChild(openBtn);
+        el.appendChild(thumb);
+        el.appendChild(meta);
+        el.appendChild(resize);
+        return el;
+      }
+
+      function deleteMiroCard(cid) {
+        const page = cp();
+        if (!page.miroCards) return;
+        page.miroCards = page.miroCards.filter(c => c.id !== cid);
+        sv(); buildMiroCanvas(); buildOutline();
+      }
+
+      // Canvas Pan + Rubber-band selection
+      (function () {
+        const canvas = document.getElementById('miro-canvas');
+        let _rubberBanding = false;
+        let _rbStartX = 0, _rbStartY = 0;
+
+        canvas.addEventListener('mousedown', e => {
+          if (e.target !== canvas && e.target.id !== 'miro-board') return;
+          e.preventDefault();
+
+          const page = cp();
+          const isMiro = page.pageType === 'miro';
+
+          // Right-click or middle-click: always pan
+          if (e.button !== 0) {
+            _miroPanning = true;
+            _miroPanStartX = e.clientX - (page.panX || 0);
+            _miroPanStartY = e.clientY - (page.panY || 0);
+            canvas.style.cursor = 'grabbing';
+            return;
+          }
+
+          // Space held: pan mode (future enhancement)
+          // Left-click on empty space: start rubber-band selection if miro page
+          if (isMiro) {
+            _rubberBanding = true;
+            const zoom = (page.zoom || 100) / 100;
+            const canvasRect = canvas.getBoundingClientRect();
+            _rbStartX = (e.clientX - canvasRect.left - (page.panX || 0)) / zoom;
+            _rbStartY = (e.clientY - canvasRect.top - (page.panY || 0)) / zoom;
+            const box = document.getElementById('miro-sel-box');
+            box.style.left = _rbStartX + 'px';
+            box.style.top = _rbStartY + 'px';
+            box.style.width = '0px';
+            box.style.height = '0px';
+            box.style.display = 'block';
+            if (!e.ctrlKey && !e.metaKey) clearMiroSelection();
+            canvas.style.cursor = 'crosshair';
+            return;
+          }
+
+          // Regular pan for non-miro
+          _miroPanning = true;
+          _miroPanStartX = e.clientX - (page.panX || 0);
+          _miroPanStartY = e.clientY - (page.panY || 0);
+          canvas.style.cursor = 'grabbing';
+        });
+
+        document.addEventListener('mousemove', e => {
+          // Rubber-band drag
+          if (_rubberBanding) {
+            const page = cp();
+            const zoom = (page.zoom || 100) / 100;
+            const canvasRect = canvas.getBoundingClientRect();
+            const curX = (e.clientX - canvasRect.left - (page.panX || 0)) / zoom;
+            const curY = (e.clientY - canvasRect.top - (page.panY || 0)) / zoom;
+            const box = document.getElementById('miro-sel-box');
+            const x = Math.min(_rbStartX, curX);
+            const y = Math.min(_rbStartY, curY);
+            const w = Math.abs(curX - _rbStartX);
+            const h = Math.abs(curY - _rbStartY);
+            box.style.left = x + 'px';
+            box.style.top = y + 'px';
+            box.style.width = w + 'px';
+            box.style.height = h + 'px';
+            // Live selection preview
+            if (w > 5 || h > 5) {
+              const page2 = cp();
+              (page2.miroCards || []).forEach(c => {
+                const cx = c.x || 0, cy = c.y || 0, cw = c.w || 280, ch2 = c.h || 240;
+                const intersects = !(cx + cw < x || cx > x + w || cy + ch2 < y || cy > y + h);
+                if (intersects) addMiroSelect(c.id);
+                else if (!e.ctrlKey && !e.metaKey) removeMiroSelect(c.id);
+              });
+            }
+            return;
+          }
+
+          if (!_miroPanning) return;
+          const page = cp();
+          page.panX = e.clientX - _miroPanStartX;
+          page.panY = e.clientY - _miroPanStartY;
+          const zoom = (page.zoom || 100) / 100;
+          document.getElementById('miro-board').style.transform =
+            `translate(${page.panX}px,${page.panY}px) scale(${zoom})`;
+        });
+
+        document.addEventListener('mouseup', e => {
+          if (_rubberBanding) {
+            _rubberBanding = false;
+            _justRubberBanded = true;
+            setTimeout(() => { _justRubberBanded = false; }, 50);
+            document.getElementById('miro-sel-box').style.display = 'none';
+            document.getElementById('miro-canvas').style.cursor = 'grab';
+            updateMiroSelFrame();
+            return;
+          }
+          if (_miroPanning) {
+            _miroPanning = false;
+            document.getElementById('miro-canvas').style.cursor = 'grab';
+            sv();
+          }
+        });
+
+        // Mouse wheel zoom
+        canvas.addEventListener('wheel', e => {
+          e.preventDefault();
+          const page = cp();
+          let z = page.zoom || 100;
+          const delta = e.deltaY > 0 ? -5 : 5;
+          z = Math.max(10, Math.min(400, z + delta));
+          page.zoom = z;
+          const zoom = z / 100;
+          document.getElementById('miro-board').style.transform =
+            `translate(${page.panX || 0}px,${page.panY || 0}px) scale(${zoom})`;
+          document.getElementById('mz-slider').value = z;
+          document.getElementById('mz-pct').textContent = z + '%';
+          sv();
+        }, { passive: false });
+      })();
+
+      // Zoom controls
+      document.getElementById('mz-slider').oninput = function () {
+        const page = cp();
+        page.zoom = +this.value;
+        const zoom = page.zoom / 100;
+        document.getElementById('miro-board').style.transform =
+          `translate(${page.panX || 0}px,${page.panY || 0}px) scale(${zoom})`;
+        document.getElementById('mz-pct').textContent = page.zoom + '%';
+        sv();
+      };
+      document.getElementById('mz-in').onclick = () => {
+        const page = cp();
+        page.zoom = Math.min(400, (page.zoom || 100) + 10);
+        document.getElementById('mz-slider').value = page.zoom;
+        document.getElementById('mz-slider').oninput();
+      };
+      document.getElementById('mz-out').onclick = () => {
+        const page = cp();
+        page.zoom = Math.max(10, (page.zoom || 100) - 10);
+        document.getElementById('mz-slider').value = page.zoom;
+        document.getElementById('mz-slider').oninput();
+      };
+      document.getElementById('mz-reset').onclick = () => {
+        const page = cp();
+        page.zoom = 100;
+        document.getElementById('mz-slider').value = 100;
+        document.getElementById('mz-slider').oninput();
+      };
+      document.getElementById('mz-fit').onclick = () => {
+        const page = cp();
+        if (!page.miroCards || !page.miroCards.length) return;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        page.miroCards.forEach(c => {
+          minX = Math.min(minX, c.x || 0);
+          minY = Math.min(minY, c.y || 0);
+          maxX = Math.max(maxX, (c.x || 0) + (c.w || 280));
+          maxY = Math.max(maxY, (c.y || 0) + (c.h || 240));
+        });
+        const canvas = document.getElementById('miro-canvas');
+        const cw = canvas.clientWidth, ch = canvas.clientHeight;
+        const contentW = maxX - minX + 60, contentH = maxY - minY + 60;
+        const zoom = Math.min(cw / contentW, ch / contentH, 4) * 100;
+        page.zoom = Math.max(10, Math.min(400, Math.round(zoom)));
+        page.panX = (cw / 2) - ((minX + maxX) / 2) * (page.zoom / 100);
+        page.panY = (ch / 2) - ((minY + maxY) / 2) * (page.zoom / 100);
+        document.getElementById('mz-slider').value = page.zoom;
+        document.getElementById('mz-pct').textContent = page.zoom + '%';
+        const z = page.zoom / 100;
+        document.getElementById('miro-board').style.transform =
+          `translate(${page.panX}px,${page.panY}px) scale(${z})`;
+        sv();
+      };
+
+      // Add card
+      document.getElementById('miro-add-float').onclick = () => {
+        document.getElementById('miro-add-url').value = '';
+        document.getElementById('miro-add-label').value = '';
+        openM('m-miro-add');
+      };
+      document.getElementById('miro-add-url').addEventListener('blur', () => {
+        const u = document.getElementById('miro-add-url').value.trim();
+        if (u && !document.getElementById('miro-add-label').value) {
+          try {
+            const h = new URL(u).hostname.replace('www.', '');
+            document.getElementById('miro-add-label').value =
+              h.split('.')[0].replace(/^./, c => c.toUpperCase());
+          } catch (e4) { }
+        }
+      });
+      document.getElementById('ok-miro-add').onclick = () => {
+        let url = document.getElementById('miro-add-url').value.trim();
+        if (!url) return;
+        if (!url.startsWith('http')) url = 'https://' + url;
+        const label = document.getElementById('miro-add-label').value.trim() || domainOf(url);
+        const page = cp();
+        if (!page.miroCards) page.miroCards = [];
+        const canvas = document.getElementById('miro-canvas');
+        const zoom = (page.zoom || 100) / 100;
+        const cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
+        const cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+        const card = { id: uid(), url, label, x: cx - 140, y: cy - 120, w: 280, h: 240 };
+        page.miroCards.push(card);
+        sv(); buildMiroCanvas(); buildOutline(); closeM('m-miro-add');
+      };
+
+      /* ─── Fast Thumbnail Cache Engine ─── */
+      const THUMB_GRADIENTS = [
+        'linear-gradient(135deg,#667eea,#764ba2)',
+        'linear-gradient(135deg,#f093fb,#f5576c)',
+        'linear-gradient(135deg,#4facfe,#00f2fe)',
+        'linear-gradient(135deg,#43e97b,#38f9d7)',
+        'linear-gradient(135deg,#fa709a,#fee140)',
+        'linear-gradient(135deg,#a18cd1,#fbc2eb)',
+        'linear-gradient(135deg,#fccb90,#d57eeb)',
+        'linear-gradient(135deg,#e0c3fc,#8ec5fc)',
+        'linear-gradient(135deg,#f6d365,#fda085)',
+        'linear-gradient(135deg,#96fbc4,#f9f586)',
+      ];
+
+      function buildMiroPlaceholder(card, showSpinner) {
+        const ph = document.createElement('div');
+        ph.className = 'mc-placeholder';
+        const letter = (card.label || card.url || 'U')[0].toUpperCase();
+        const hash = (card.url || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+        ph.style.background = THUMB_GRADIENTS[hash % THUMB_GRADIENTS.length];
+        ph.textContent = letter;
+        if (showSpinner && !card.thumbUrl) {
+          const sp = document.createElement('div');
+          sp.className = 'mc-ph-spinner';
+          ph.appendChild(sp);
+        }
+        return ph;
+      }
+
+      // Concurrent fetch queue
+      const _fetchQueue = [];
+      let _fetchActive = 0;
+      const MAX_CONCURRENT = 6;
+
+      function queueCardFetch(card) {
+        _fetchQueue.push(card);
+        processFetchQueue();
+      }
+
+      function processFetchQueue() {
+        while (_fetchActive < MAX_CONCURRENT && _fetchQueue.length) {
+          const card = _fetchQueue.shift();
+          _fetchActive++;
+          fetchCardMeta(card).finally(() => {
+            _fetchActive--;
+            processFetchQueue();
+          });
+        }
+      }
+
+      async function fetchCardMeta(card) {
+        // Step 1: Try jsonlink.io for OG metadata + image
+        let ogImage = null;
+        try {
+          const ctrl = new AbortController();
+          const tmr = setTimeout(() => ctrl.abort(), 5000);
+          const resp = await fetch(
+            `https://jsonlink.io/api/extract?url=${encodeURIComponent(card.url)}`,
+            { signal: ctrl.signal }
+          );
+          clearTimeout(tmr);
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.images && data.images.length) ogImage = data.images[0];
+            if (data.title && (!card.label || card.label === domainOf(card.url))) {
+              card.label = data.title;
+            }
+            if (data.description) card.desc = data.description;
+          }
+        } catch (e) { /* timeout or network error */ }
+
+        // Update label/desc immediately if we got them
+        if (card.label || card.desc) { sv(); buildOutline(); updateCardMeta(card); }
+
+        // Step 2: If we got an OG image, verify it actually loads
+        if (ogImage) {
+          const ok = await testImageLoad(ogImage, 6000);
+          if (ok) {
+            card.thumbUrl = ogImage;
+            sv(); updateCardThumb(card);
+            return;
+          }
+        }
+
+        // Step 3: WordPress mshots — pre-warm then poll with forced cache bypass
+        const wpBase = `https://s0.wp.com/mshots/v1/${encodeURIComponent(card.url)}?w=600`;
+        // Pre-warm: triggers screenshot generation on their server
+        try { await fetch(wpBase, { mode: 'no-cors' }); } catch (e) { }
+        await delay(5000);
+        // Poll: try 4 times with 3-second intervals, bypass browser cache via fetch+blob
+        for (let attempt = 0; attempt < 4; attempt++) {
+          const blobUrl = await fetchImageNoCache(wpBase);
+          if (blobUrl) {
+            card.thumbUrl = wpBase;
+            sv(); updateCardThumbDirect(card, blobUrl);
+            return;
+          }
+          if (attempt < 3) await delay(3000);
+        }
+
+        // Step 4: image.thum.io — same approach
+        const thumBase = 'https://image.thum.io/get/width/600/' + card.url;
+        try { await fetch(thumBase, { mode: 'no-cors' }); } catch (e) { }
+        await delay(5000);
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const blobUrl = await fetchImageNoCache(thumBase);
+          if (blobUrl) {
+            card.thumbUrl = thumBase;
+            sv(); updateCardThumbDirect(card, blobUrl);
+            return;
+          }
+          if (attempt < 2) await delay(3000);
+        }
+
+        // All failed — remove spinner
+        const spinner = document.querySelector(
+          `.miro-card[data-cid="${card.id}"] .mc-ph-spinner`
+        );
+        if (spinner) spinner.remove();
+      }
+
+      function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+      // Fetch image bypassing browser cache, return blob URL or null
+      async function fetchImageNoCache(url) {
+        try {
+          const resp = await fetch(url, { cache: 'reload' });
+          if (!resp.ok) return null;
+          const ct = resp.headers.get('content-type') || '';
+          if (!ct.startsWith('image/')) return null;
+          const blob = await resp.blob();
+          if (blob.size < 1000) return null; // too small, likely placeholder
+          // Create a temporary image to check dimensions
+          const blobUrl = URL.createObjectURL(blob);
+          const ok = await new Promise(resolve => {
+            const img = new Image();
+            img.onload = () => {
+              // Reject WordPress placeholder (typically 400x300 or very small)
+              if (img.naturalWidth === 400 && img.naturalHeight === 300) resolve(false);
+              else if (img.naturalWidth <= 10) resolve(false);
+              else resolve(true);
+            };
+            img.onerror = () => resolve(false);
+            img.src = blobUrl;
+          });
+          if (ok) return blobUrl;
+          URL.revokeObjectURL(blobUrl);
+          return null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      // Show a blob URL directly in the card thumbnail
+      function updateCardThumbDirect(card, blobUrl) {
+        const el = document.querySelector(`.miro-card[data-cid="${card.id}"]`);
+        if (!el) { URL.revokeObjectURL(blobUrl); return; }
+        const thumb = el.querySelector('.mc-thumb');
+        if (!thumb) { URL.revokeObjectURL(blobUrl); return; }
+        const img = document.createElement('img');
+        img.src = blobUrl;
+        img.alt = card.label || '';
+        img.onload = () => {
+          thumb.innerHTML = '';
+          thumb.appendChild(img);
+        };
+        img.onerror = () => URL.revokeObjectURL(blobUrl);
+        updateCardMeta(card);
+      }
+
+      // Same as testRealScreenshot but accepts any valid image (for OG images)
+      function testImageLoad(url, timeout) {
+        return new Promise(resolve => {
+          const img = new Image();
+          const tmr = setTimeout(() => { img.src = ''; resolve(false); }, timeout);
+          img.onload = () => { clearTimeout(tmr); resolve(img.naturalWidth > 2); };
+          img.onerror = () => { clearTimeout(tmr); resolve(false); };
+          img.src = url;
+        });
+      }
+
+      function updateCardMeta(card) {
+        const el = document.querySelector(`.miro-card[data-cid="${card.id}"]`);
+        if (!el) return;
+        const titleEl = el.querySelector('.mc-title');
+        if (titleEl && card.label) titleEl.textContent = card.label;
+      }
+
+      function updateCardThumb(card) {
+        const el = document.querySelector(`.miro-card[data-cid="${card.id}"]`);
+        if (!el) return;
+        const thumb = el.querySelector('.mc-thumb');
+        if (!thumb || !card.thumbUrl) return;
+
+        const img = document.createElement('img');
+        img.src = card.thumbUrl;
+        img.alt = card.label || '';
+        img.loading = 'lazy';
+        img.onload = () => {
+          if (img.naturalWidth <= 2) return; // WordPress mshots placeholder
+          thumb.innerHTML = '';
+          thumb.appendChild(img);
+        };
+        img.onerror = () => {
+          // Remove spinner, keep placeholder
+          const sp = thumb.querySelector('.mc-ph-spinner');
+          if (sp) sp.remove();
+        };
+
+        // Update title in metadata
+        const titleEl = el.querySelector('.mc-title');
+        if (titleEl && card.label) titleEl.textContent = card.label;
+      }
+
+      /* ─── Alignment Handle Drag & Canvas Click ───*/
+
+      // ─── Alignment Handle Drag ───
+      (function () {
+        const handle = document.getElementById('miro-align-handle');
+        const indicator = document.getElementById('miro-col-indicator');
+        let startX = 0, baseCols = 0, totalCards = 0;
+        let origCards = []; // {id, x, y, w, h}
+        let anchorX = 0, anchorY = 0;
+        let uniformW = 280, uniformH = 240;
+        let _forceUniform = false;
+
+        handle.addEventListener('mousedown', e => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (_miroSelected.size < 2) return;
+
+          _alignDragging = true;
+          _forceUniform = e.ctrlKey || e.metaKey; // Ctrl+drag = uniform sizing
+          startX = e.clientX;
+          totalCards = _miroSelected.size;
+          baseCols = Math.round(Math.sqrt(totalCards));
+
+          const page = cp();
+          origCards = [];
+          _miroSelected.forEach(cid => {
+            const c = (page.miroCards || []).find(x => x.id === cid);
+            if (c) origCards.push({ id: c.id, x: c.x || 0, y: c.y || 0, w: c.w || 280, h: c.h || 240 });
+          });
+
+          // Calculate uniform card size (average) — used only in Ctrl mode
+          uniformW = Math.round(origCards.reduce((s, c) => s + c.w, 0) / origCards.length);
+          uniformH = Math.round(origCards.reduce((s, c) => s + c.h, 0) / origCards.length);
+
+          // Anchor = top-left of bounding box
+          anchorX = Math.min(...origCards.map(c => c.x));
+          anchorY = Math.min(...origCards.map(c => c.y));
+
+          // Immediately arrange in initial grid
+          arrangeGrid(baseCols, e);
+
+          document.addEventListener('mousemove', onAlignMove);
+          document.addEventListener('mouseup', onAlignUp);
+        });
+
+        function onAlignMove(e) {
+          if (!_alignDragging) return;
+          const deltaX = e.clientX - startX;
+          // Moving right = more columns, moving left = fewer columns (like Miro)
+          const colDelta = Math.round(deltaX / 100);
+          const cols = clamp(baseCols + colDelta, 1, totalCards);
+          arrangeGrid(cols, e);
+        }
+
+        function arrangeGrid(cols, e) {
+          const page = cp();
+          const gap = 18;
+          const rows = Math.ceil(totalCards / cols);
+
+          // Sort cards by their original position (left-to-right, top-to-bottom)
+          const sorted = [...origCards].sort((a, b) => {
+            const rowA = Math.floor(a.y / 100), rowB = Math.floor(b.y / 100);
+            if (Math.abs(rowA - rowB) > 0) return rowA - rowB;
+            return a.x - b.x;
+          });
+
+          if (_forceUniform) {
+            // Ctrl mode: all cards get uniform size
+            sorted.forEach((oc, i) => {
+              const col = i % cols;
+              const row = Math.floor(i / cols);
+              const newX = anchorX + col * (uniformW + gap);
+              const newY = anchorY + row * (uniformH + gap);
+              const c = (page.miroCards || []).find(x => x.id === oc.id);
+              if (c) { c.x = newX; c.y = newY; c.w = uniformW; c.h = uniformH; }
+              const el = document.querySelector(`.miro-card[data-cid="${oc.id}"]`);
+              if (el) {
+                el.style.left = newX + 'px'; el.style.top = newY + 'px';
+                el.style.width = uniformW + 'px'; el.style.height = uniformH + 'px';
+              }
+            });
+          } else {
+            // Default mode: preserve each card's original size
+            // Calculate max width per column and max height per row
+            const colMaxW = new Array(cols).fill(0);
+            const rowMaxH = new Array(rows).fill(0);
+            sorted.forEach((oc, i) => {
+              const col = i % cols;
+              const row = Math.floor(i / cols);
+              colMaxW[col] = Math.max(colMaxW[col], oc.w);
+              rowMaxH[row] = Math.max(rowMaxH[row], oc.h);
+            });
+
+            // Calculate cumulative offsets for each column and row
+            const colOffsets = [0];
+            for (let ci = 1; ci < cols; ci++) colOffsets[ci] = colOffsets[ci - 1] + colMaxW[ci - 1] + gap;
+            const rowOffsets = [0];
+            for (let ri = 1; ri < rows; ri++) rowOffsets[ri] = rowOffsets[ri - 1] + rowMaxH[ri - 1] + gap;
+
+            sorted.forEach((oc, i) => {
+              const col = i % cols;
+              const row = Math.floor(i / cols);
+              // Center card within its cell
+              const cellW = colMaxW[col];
+              const cellH = rowMaxH[row];
+              const newX = anchorX + colOffsets[col] + (cellW - oc.w) / 2;
+              const newY = anchorY + rowOffsets[row] + (cellH - oc.h) / 2;
+              const c = (page.miroCards || []).find(x => x.id === oc.id);
+              if (c) { c.x = newX; c.y = newY; } // keep original w/h
+              const el = document.querySelector(`.miro-card[data-cid="${oc.id}"]`);
+              if (el) {
+                el.style.left = newX + 'px'; el.style.top = newY + 'px';
+                el.style.width = oc.w + 'px'; el.style.height = oc.h + 'px';
+              }
+            });
+          }
+
+          updateMiroSelFrame();
+
+          // Show column indicator near cursor
+          const modeLabel = _forceUniform ? ' ⊞' : '';
+          indicator.textContent = `${cols} col${cols > 1 ? 's' : ''} × ${rows} row${rows > 1 ? 's' : ''}${modeLabel}`;
+          indicator.classList.add('show');
+          indicator.style.left = (e.clientX + 20) + 'px';
+          indicator.style.top = (e.clientY - 20) + 'px';
+        }
+
+        function onAlignUp() {
+          _alignDragging = false;
+          document.removeEventListener('mousemove', onAlignMove);
+          document.removeEventListener('mouseup', onAlignUp);
+          indicator.classList.remove('show');
+          sv();
+          updateMiroSelFrame();
+        }
+      })();
+
+      // Click on empty canvas deselects
+      document.getElementById('miro-canvas').addEventListener('click', e => {
+        if ((e.target === document.getElementById('miro-canvas') || e.target.id === 'miro-board') && !_alignDragging && !_justRubberBanded) {
+          clearMiroSelection();
+        }
+      });
     </script>
 </body>
 
