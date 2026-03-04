@@ -1398,10 +1398,20 @@ function buildMiroBookmarkWidget(card) {
   hdr.innerHTML = `
     <div class="wt" style="color:${muCol}"><span>${card.emoji || '📌'}</span>${card.title || 'Bookmarks'}</div>
     <div class="wa">
+      <button class="wab" data-explode="${card.id}" title="Extract all links to canvas">🗃️</button>
       <button class="wab" data-dp="${card.id}" title="Display Settings">🖥️</button>
       <button class="wab d mc-del" title="Delete">🗑️</button>
     </div>
   `;
+
+  // Explode behavior
+  const expBtn = hdr.querySelector('[data-explode]');
+  if (expBtn) {
+    expBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (typeof explodeMiroWidget === 'function') explodeMiroWidget(card.id);
+    };
+  }
 
   // Apply Settings behavior
   const dpBtn = hdr.querySelector('[data-dp]');

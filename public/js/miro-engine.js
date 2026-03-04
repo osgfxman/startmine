@@ -1376,3 +1376,62 @@ document.addEventListener('paste', (e) => {
 })();
 
 // (Grid and Mindmap tools now use click-to-place logic within the miro-canvas click event)
+
+// =========== EXPLODE WIDGET ===========
+window.explodeMiroWidget = function (widgetId) {
+  const page = cp();
+  if (!page || !page.miroCards) return;
+
+  const wIdx = page.miroCards.findIndex(c => c.id === widgetId && c.type === 'bwidget');
+  if (wIdx === -1) return;
+
+  const widget = page.miroCards[wIdx];
+  if (!widget.items || widget.items.length === 0) {
+    console.warn("Widget has no links to explode.");
+    return;
+  }
+
+  // Calculate grid layout for extracted cards
+  const startX = widget.x || 0;
+  const startY = widget.y || 0;
+  const cardW = 280;
+  const cardH = 240;
+  const gap = 20;
+  const cols = 4; // 4 cards per row
+
+  const extractedCards = widget.items.map((item, index) => {
+    const row = Math.floor(index / cols);
+    const col = index % cols;
+    return {
+      id: uid(),
+      type: 'card',
+      url: item.url,
+      label: item.title || domainOf(item.url),
+      x: startX + (col * (cardW + gap)),
+      y: startY + (row * (cardH + gap)),
+      w: cardW,
+      h: cardH
+    };
+  });
+
+  // Remove the old widget
+  page.miroCards.splice(wIdx, 1);
+
+  // Add the new cards
+  page.miroCards.push(...extractedCards);
+
+  // Ensure selection is clear so the user doesn't accidentally move ghost selections
+  clearMiroSelection();
+
+  // Save and redraw
+  sv();
+  buildMiroCanvas();
+  if (typeof buildOutline === 'function') buildOutline();
+};
+
+window.addEventListener('resize', () => {
+  const page = cp();
+  if (page && page.pageType === 'miro') {
+    buildMiroCanvas();
+  }
+});
