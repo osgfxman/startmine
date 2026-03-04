@@ -112,7 +112,7 @@ function updateMiroGrid() {
 
   function addLevel(screenSize, alpha) {
     if (alpha < 0.002) return;
-    const c = `rgba(255,255,255,${alpha.toFixed(4)})`;
+    const c = `rgba(0,0,0,${alpha.toFixed(4)})`;
     layers.push(
       `linear-gradient(${c} 1px, transparent 1px)`,
       `linear-gradient(90deg, ${c} 1px, transparent 1px)`,
@@ -414,27 +414,181 @@ function deleteMiroCard(cid) {
     }
   });
 
-  // Mouse wheel zoom
+  // ─── Enhanced Wheel: trackpad-aware (ctrlKey = pinch → zoom at cursor, else pan) ───
   canvas.addEventListener(
     'wheel',
     (e) => {
       e.preventDefault();
       const page = cp();
       let z = page.zoom || 100;
-      const delta = e.deltaY > 0 ? -5 : 5;
-      z = Math.max(10, Math.min(400, z + delta));
+
+      if (e.ctrlKey || e.metaKey) {
+        // Trackpad pinch or Ctrl+scroll → zoom at cursor position
+        const rect = canvas.getBoundingClientRect();
+        const cursorX = e.clientX - rect.left;
+        const cursorY = e.clientY - rect.top;
+        const oldZoom = z / 100;
+
+        const delta = -e.deltaY * 0.8;
+        z = Math.max(10, Math.min(400, z + delta));
+        const newZoom = z / 100;
+
+        // Adjust pan so cursor stays over the same board point
+        page.panX = cursorX - (cursorX - (page.panX || 0)) * (newZoom / oldZoom);
+        page.panY = cursorY - (cursorY - (page.panY || 0)) * (newZoom / oldZoom);
+      } else {
+        // Regular mouse wheel → zoom (simple)
+        const delta = e.deltaY > 0 ? -5 : 5;
+        z = Math.max(10, Math.min(400, z + delta));
+      }
+
       page.zoom = z;
-      const zoom = z / 100;
-      document.getElementById('miro-board').style.transform =
-        `translate(${page.panX || 0}px,${page.panY || 0}px) scale(${zoom})`;
-      document.getElementById('mz-slider').value = z;
-      document.getElementById('mz-pct').textContent = z + '%';
-      updateMiroGrid();
-      sv();
+      applyZoomPan(page);
     },
     { passive: false },
   );
+
+  // ─── Touch: pinch-to-zoom + single-finger pan ───
+  let _touchStartDist = 0;
+  let _touchStartZoom = 100;
+  let _touchStartPanX = 0;
+  let _touchStartPanY = 0;
+  let _touchStartMidX = 0;
+  let _touchStartMidY = 0;
+  let _touchPanning = false;
+  let _touchPanStartX = 0;
+  let _touchPanStartY = 0;
+
+  canvas.addEventListener('touchstart', (e) => {
+    if (e.target !== canvas && e.target.id !== 'miro-board') return;
+    const page = cp();
+
+    if (e.touches.length === 2) {
+      // Pinch start
+      e.preventDefault();
+      const t0 = e.touches[0], t1 = e.touches[1];
+      _touchStartDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+      _touchStartZoom = page.zoom || 100;
+      _touchStartPanX = page.panX || 0;
+      _touchStartPanY = page.panY || 0;
+      _touchStartMidX = (t0.clientX + t1.clientX) / 2;
+      _touchStartMidY = (t0.clientY + t1.clientY) / 2;
+      _touchPanning = false;
+    } else if (e.touches.length === 1) {
+      // Single finger pan
+      _touchPanning = true;
+      _touchPanStartX = e.touches[0].clientX - (page.panX || 0);
+      _touchPanStartY = e.touches[0].clientY - (page.panY || 0);
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', (e) => {
+    const page = cp();
+
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const t0 = e.touches[0], t1 = e.touches[1];
+      const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+      const midX = (t0.clientX + t1.clientX) / 2;
+      const midY = (t0.clientY + t1.clientY) / 2;
+
+      // Zoom
+      const scale = dist / _touchStartDist;
+      const newZoom = Math.max(10, Math.min(400, Math.round(_touchStartZoom * scale)));
+      const oldZoomFrac = _touchStartZoom / 100;
+      const newZoomFrac = newZoom / 100;
+
+      // Adjust pan so pinch center stays fixed + track finger movement
+      const rect = canvas.getBoundingClientRect();
+      const anchorX = _touchStartMidX - rect.left;
+      const anchorY = _touchStartMidY - rect.top;
+      page.panX = midX - rect.left - (anchorX - _touchStartPanX) * (newZoomFrac / oldZoomFrac);
+      page.panY = midY - rect.top - (anchorY - _touchStartPanY) * (newZoomFrac / oldZoomFrac);
+      page.zoom = newZoom;
+      applyZoomPan(page);
+      _touchPanning = false;
+    } else if (e.touches.length === 1 && _touchPanning) {
+      e.preventDefault();
+      page.panX = e.touches[0].clientX - _touchPanStartX;
+      page.panY = e.touches[0].clientY - _touchPanStartY;
+      const zoom = (page.zoom || 100) / 100;
+      document.getElementById('miro-board').style.transform =
+        `translate(${page.panX}px,${page.panY}px) scale(${zoom})`;
+      updateMiroGrid();
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', (e) => {
+    if (e.touches.length === 0) {
+      _touchPanning = false;
+      sv();
+    } else if (e.touches.length === 1) {
+      // Switched from pinch to single finger — restart pan
+      const page = cp();
+      _touchPanning = true;
+      _touchPanStartX = e.touches[0].clientX - (page.panX || 0);
+      _touchPanStartY = e.touches[0].clientY - (page.panY || 0);
+    }
+  });
+
+  // ─── Double-click + drag → zoom ───
+  let _dblDragActive = false;
+  let _dblDragStartY = 0;
+  let _dblDragStartZoom = 100;
+  let _lastClickTime = 0;
+  let _lastClickX = 0;
+  let _lastClickY = 0;
+
+  canvas.addEventListener('mousedown', (e) => {
+    if (e.target !== canvas && e.target.id !== 'miro-board') return;
+    const now = Date.now();
+    const dx = Math.abs(e.clientX - _lastClickX);
+    const dy = Math.abs(e.clientY - _lastClickY);
+    if (now - _lastClickTime < 350 && dx < 10 && dy < 10 && e.button === 0) {
+      // Second click within 350ms — enter drag-zoom mode
+      e.preventDefault();
+      e.stopPropagation();
+      _dblDragActive = true;
+      _dblDragStartY = e.clientY;
+      _dblDragStartZoom = cp().zoom || 100;
+      canvas.style.cursor = 'ns-resize';
+      // Prevent rubber-band from starting
+      _rubberBanding = false;
+      document.getElementById('miro-sel-box').style.display = 'none';
+    }
+    _lastClickTime = now;
+    _lastClickX = e.clientX;
+    _lastClickY = e.clientY;
+  }, true); // capture phase so it fires before the rubber-band handler
+
+  document.addEventListener('mousemove', (e) => {
+    if (!_dblDragActive) return;
+    e.preventDefault();
+    const page = cp();
+    const dragDelta = _dblDragStartY - e.clientY; // drag up = zoom in
+    const newZoom = Math.max(10, Math.min(400, _dblDragStartZoom + dragDelta * 0.8));
+    page.zoom = Math.round(newZoom);
+    applyZoomPan(page);
+  });
+
+  document.addEventListener('mouseup', (e) => {
+    if (_dblDragActive) {
+      _dblDragActive = false;
+      canvas.style.cursor = 'grab';
+      sv();
+    }
+  });
 })();
+
+// ─── Central zoom/pan apply helper ───
+function applyZoomPan(page) {
+  const zoom = (page.zoom || 100) / 100;
+  document.getElementById('miro-board').style.transform =
+    `translate(${page.panX || 0}px,${page.panY || 0}px) scale(${zoom})`;
+  document.getElementById('mz-slider').value = page.zoom || 100;
+  document.getElementById('mz-pct').textContent = (page.zoom || 100) + '%';
+  updateMiroGrid();
+}
 
 // Zoom controls
 document.getElementById('mz-slider').oninput = function () {

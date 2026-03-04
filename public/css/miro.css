@@ -6,6 +6,7 @@
   background: var(--bg, #0d0f18);
   user-select: none;
   min-height: calc(100vh - 100px);
+  touch-action: none;
 }
 
 #miro-canvas:active {
