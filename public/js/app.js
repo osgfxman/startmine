@@ -1927,42 +1927,54 @@ function buildCols() {
   }
   const wrap = document.getElementById('cw');
   wrap.innerHTML = '';
-  wrap.style.gridTemplateColumns = `repeat(${page.cols},minmax(0,1fr))`;
-  for (let ci = 0; ci < page.cols; ci++) {
-    const col = document.createElement('div');
-    col.className = 'col';
-    col.dataset.ci = ci;
-    col.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      col.classList.add('dragover');
+  const numCols = page.cols || 3;
+  wrap.style.gridTemplateColumns = `repeat(${numCols},minmax(0,1fr))`;
+
+  // Group widgets by column
+  const colBuckets = [];
+  for (let ci = 0; ci < numCols; ci++) colBuckets.push([]);
+  (page.widgets || []).forEach((w) => {
+    const ci = Math.min(w.col || 0, numCols - 1);
+    colBuckets[ci].push(w);
+  });
+
+  // Render widgets per column, applying grid-column for span
+  for (let ci = 0; ci < numCols; ci++) {
+    colBuckets[ci].forEach((w) => {
+      const el = buildWidget(w);
+      const span = Math.min(w.colSpan || 1, numCols - ci);
+      el.style.gridColumn = `${ci + 1} / span ${span}`;
+      // Drop zone on widget itself
+      el.addEventListener('dragover', (e) => { e.preventDefault(); });
+      el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (!dragWid) return;
+        const dw = (page.widgets || []).find((x) => x.id === dragWid);
+        if (dw) { dw.col = ci; sv(); buildCols(); }
+        dragWid = null;
+      });
+      wrap.appendChild(el);
     });
-    col.addEventListener('dragleave', () => col.classList.remove('dragover'));
-    col.addEventListener('drop', (e) => {
-      e.preventDefault();
-      col.classList.remove('dragover');
-      if (!dragWid) return;
-      const w = (page.widgets || []).find((x) => x.id === dragWid);
-      if (w) {
-        w.col = ci;
-        sv();
-        buildCols();
-      }
-      dragWid = null;
-    });
-    const colWidgets = (page.widgets || []).filter((w) => w.col === ci);
-    if (ci === page.cols - 1) {
-      (page.widgets || []).filter((w) => w.col >= page.cols).forEach((w) => colWidgets.push(w));
-    }
-    colWidgets.forEach((w) => col.appendChild(buildWidget(w)));
+  }
+
+  // Add-widget buttons per column
+  for (let ci = 0; ci < numCols; ci++) {
     const ab = document.createElement('button');
     ab.className = 'add-w';
     ab.innerHTML = '＋ Add Widget';
-    ab.onclick = () => {
-      pColIdx = ci;
-      openM('m-aw');
-    };
-    col.appendChild(ab);
-    wrap.appendChild(col);
+    ab.style.gridColumn = `${ci + 1}`;
+    ab.onclick = () => { pColIdx = ci; openM('m-aw'); };
+    // Drop zone on add button
+    ab.addEventListener('dragover', (e) => { e.preventDefault(); ab.classList.add('dragover'); });
+    ab.addEventListener('dragleave', () => ab.classList.remove('dragover'));
+    ab.addEventListener('drop', (e) => {
+      e.preventDefault(); ab.classList.remove('dragover');
+      if (!dragWid) return;
+      const dw = (page.widgets || []).find((x) => x.id === dragWid);
+      if (dw) { dw.col = ci; sv(); buildCols(); }
+      dragWid = null;
+    });
+    wrap.appendChild(ab);
   }
   buildOutline();
 }
@@ -2017,7 +2029,16 @@ function buildWidget(w) {
   hdr.className = 'wh';
   hdr.style.borderBottomColor = bdCol;
   const exportBtn = (w.type === 'bookmarks' || w.type === 'list') ? `<button class="wab" data-ex2m="${w.id}" title="Export to Miro Page">🚀</button>` : '';
-  hdr.innerHTML = `<div class="wt" style="color:${muCol}"><span>${w.emoji || '📌'}</span>${esc(w.title)}</div><div class="wa">${exportBtn}<button class="wab" data-dp="${w.id}" title="Display">🖥️</button><button class="wab" data-mv="${w.id}" title="Move/Copy">📋</button><button class="wab" data-cl="${w.id}" title="Color">🎨</button><button class="wab" data-rn="${w.id}" title="Rename">✏️</button><button class="wab d" data-dl="${w.id}" title="Delete">🗑️</button></div>`;
+  const spanLabel = (w.colSpan && w.colSpan > 1) ? w.colSpan : '';
+  const spanBtn = `<button class="wab" data-sp="${w.id}" title="Column Span: ${w.colSpan || 1}">↔${spanLabel}</button>`;
+  hdr.innerHTML = `<div class="wt" style="color:${muCol}"><span>${w.emoji || '📌'}</span>${esc(w.title)}</div><div class="wa">${spanBtn}${exportBtn}<button class="wab" data-dp="${w.id}" title="Display">🖥️</button><button class="wab" data-mv="${w.id}" title="Move/Copy">📋</button><button class="wab" data-cl="${w.id}" title="Color">🎨</button><button class="wab" data-rn="${w.id}" title="Rename">✏️</button><button class="wab d" data-dl="${w.id}" title="Delete">🗑️</button></div>`;
+  hdr.querySelector('[data-sp]').onclick = (e) => {
+    e.stopPropagation();
+    const page = cp();
+    const maxSpan = page.cols || 3;
+    w.colSpan = ((w.colSpan || 1) % maxSpan) + 1;
+    sv(); buildCols();
+  };
   const ex2mBtn = hdr.querySelector('[data-ex2m]');
   if (ex2mBtn) {
     ex2mBtn.onclick = (e) => {
