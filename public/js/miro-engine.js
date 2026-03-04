@@ -928,25 +928,33 @@ function setActiveTool(tool) {
   _shapeMode = tool === 'shape';
   _stickyCreateMode = tool === 'sticky';
   _textCreateMode = tool === 'text';
+  _gridCreateMode = tool === 'grid';
+  _mindmapCreateMode = tool === 'mindmap';
+
   const hint = document.getElementById('sn-create-hint');
   if (_stickyCreateMode) { hint.textContent = '📝 Click anywhere to place a sticky note • Press Esc to cancel'; hint.style.display = 'block'; }
   else if (_textCreateMode) { hint.textContent = '✏️ Click anywhere to place text • Press Esc to cancel'; hint.style.display = 'block'; }
+  else if (_gridCreateMode) { hint.textContent = '📊 Click anywhere to place a table • Press Esc to cancel'; hint.style.display = 'block'; }
+  else if (_mindmapCreateMode) { hint.textContent = '🧠 Click anywhere to place a mind map • Press Esc to cancel'; hint.style.display = 'block'; }
   else { hint.style.display = 'none'; }
+
   document.getElementById('miro-pen-toolbar').classList.toggle('show', _penMode);
-  const cursor = (_penMode || _shapeMode || _stickyCreateMode || _textCreateMode) ? 'crosshair' : 'grab';
+  const cursor = (_penMode || _shapeMode || _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode) ? 'crosshair' : 'grab';
   document.getElementById('miro-canvas').style.cursor = cursor;
   if (!_shapeMode) document.getElementById('miro-shape-panel').classList.remove('show');
 }
 
 let _textCreateMode = false;
+let _gridCreateMode = false;
+let _mindmapCreateMode = false;
 
 document.getElementById('mtb-select').onclick = () => setActiveTool('select');
 document.getElementById('mtb-sticky').onclick = () => setActiveTool('sticky');
 document.getElementById('mtb-text').onclick = () => setActiveTool('text');
 
-// Canvas click handler for click-to-place modes (sticky & text)
+// Canvas click handler for click-to-place modes
 document.getElementById('miro-canvas').addEventListener('click', (e) => {
-  if (!_stickyCreateMode && !_textCreateMode) return;
+  if (!_stickyCreateMode && !_textCreateMode && !_gridCreateMode && !_mindmapCreateMode) return;
   if (e.target.closest('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, #miro-toolbar, .mc-del')) return;
   const page = cp();
   if (!page.miroCards) page.miroCards = [];
@@ -954,11 +962,32 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
   const rect = document.getElementById('miro-canvas').getBoundingClientRect();
   const bx = (e.clientX - rect.left - (page.panX || 0)) / zoom;
   const by = (e.clientY - rect.top - (page.panY || 0)) / zoom;
+
   if (_stickyCreateMode) {
     page.miroCards.push({ id: uid(), type: 'sticky', text: '', color: 'yellow', shape: 'rect', x: bx - 140, y: by - 80, w: 280, h: 160 });
   } else if (_textCreateMode) {
     page.miroCards.push({ id: uid(), type: 'text', text: 'Text', x: bx - 60, y: by - 15, w: 120, h: 30, fontSize: 24, fontFamily: 'Inter', color: '#ffffff' });
+  } else if (_gridCreateMode) {
+    const rows = 3, cols = 3;
+    const cells = [];
+    for (let r = 0; r < rows; r++) { const row = []; for (let c = 0; c < cols; c++) row.push(''); cells.push(row); }
+    const w = cols * 120, h = rows * 40;
+    page.miroCards.push({ id: uid(), type: 'grid', rows, cols, cells, x: bx - w / 2, y: by - h / 2, w, h, headerColor: 'none', borderColor: '#555' });
+  } else if (_mindmapCreateMode) {
+    const rootId = uid(), child1 = uid(), child2 = uid(), child3 = uid();
+    page.miroCards.push({
+      id: uid(), type: 'mindmap', x: bx - 300, y: by - 200, w: 600, h: 400,
+      root: {
+        id: rootId, text: 'Main Topic', color: '#6c8fff',
+        children: [
+          { id: child1, text: 'Branch 1', color: '#ff6b6b', children: [] },
+          { id: child2, text: 'Branch 2', color: '#51cf66', children: [] },
+          { id: child3, text: 'Branch 3', color: '#ffd43b', children: [] },
+        ],
+      },
+    });
   }
+
   sv(); buildMiroCanvas(); buildOutline();
   setActiveTool('select');
 });
@@ -976,8 +1005,7 @@ document.querySelectorAll('.msp-item').forEach(item => {
 });
 document.getElementById('mtb-pen').onclick = () => setActiveTool('pen');
 document.getElementById('mtb-grid').onclick = () => {
-  createMiroGrid();
-  setActiveTool('select');
+  setActiveTool('grid');
 };
 document.getElementById('mtb-image').onclick = () => {
   document.getElementById('miro-opt-image').click();
@@ -989,8 +1017,7 @@ document.getElementById('mtb-card').onclick = () => {
 };
 document.getElementById('pen-cancel').onclick = () => setActiveTool('select');
 document.getElementById('mtb-mindmap').onclick = () => {
-  createMiroMindMap();
-  setActiveTool('select');
+  setActiveTool('mindmap');
 };
 
 // ─── Keyboard Shortcuts ───
@@ -1005,14 +1032,15 @@ document.addEventListener('keydown', (e) => {
   if (document.activeElement && document.activeElement.tagName === 'INPUT') document.activeElement.blur();
 
   switch (key) {
-    case 'v': e.preventDefault(); setActiveTool('select'); break;
-    case 'n': e.preventDefault(); document.getElementById('mtb-sticky').click(); break;
-    case 't': e.preventDefault(); document.getElementById('mtb-text').click(); break;
-    case 's': if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); document.getElementById('mtb-shape').click(); } break;
-    case 'p': e.preventDefault(); document.getElementById('mtb-pen').click(); break;
-    case 'g': e.preventDefault(); document.getElementById('mtb-grid').click(); break;
-    case 'm': e.preventDefault(); document.getElementById('mtb-mindmap').click(); break;
-    case 'i': e.preventDefault(); document.getElementById('mtb-image').click(); break;
+    case 'v': case 'ر': e.preventDefault(); setActiveTool('select'); break;
+    case 'n': case 'ى': e.preventDefault(); document.getElementById('mtb-sticky').click(); break;
+    case 't': case 'ف': e.preventDefault(); document.getElementById('mtb-text').click(); break;
+    case 's': case 'س': if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); document.getElementById('mtb-shape').click(); } break;
+    case 'p': case 'ح': e.preventDefault(); document.getElementById('mtb-pen').click(); break;
+    case 'g': case 'ل': e.preventDefault(); document.getElementById('mtb-grid').click(); break;
+    case 'm': case 'ة': e.preventDefault(); document.getElementById('mtb-mindmap').click(); break;
+    case 'i': case 'ه': e.preventDefault(); document.getElementById('mtb-image').click(); break;
+    case 'b': case 'لا': e.preventDefault(); document.getElementById('mtb-card').click(); break;
     case 'escape':
       setActiveTool('select');
       document.getElementById('miro-shape-panel').classList.remove('show');
@@ -1028,6 +1056,44 @@ document.addEventListener('keydown', (e) => {
         sv(); buildMiroCanvas(); buildOutline();
       }
       break;
+  }
+});
+
+document.addEventListener('paste', (e) => {
+  // Ignore if pasting into an input element
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+
+  const page = cp();
+  if (page.pageType !== 'miro') return;
+
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  if (!text) return;
+
+  // Check if it's a valid URL roughly
+  let url = text.trim();
+  if (/^(https?:\/\/[^\s]+)$/i.test(url) || /^(www\.[^\s]+)$/i.test(url)) {
+    e.preventDefault();
+    if (!url.startsWith('http')) url = 'https://' + url;
+
+    if (!page.miroCards) page.miroCards = [];
+    const canvas = document.getElementById('miro-canvas');
+    const zoom = (page.zoom || 100) / 100;
+
+    // Paste at center of the viewport
+    const cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
+    const cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+
+    const label = domainOf(url);
+    const card = { id: uid(), url, label, x: cx - 140, y: cy - 120, w: 280, h: 240 };
+
+    page.miroCards.push(card);
+    sv();
+    buildMiroCanvas();
+    buildOutline();
+
+    if (typeof queueCardFetch !== 'undefined') {
+      queueCardFetch(card);
+    }
   }
 });
 
@@ -1177,53 +1243,4 @@ document.addEventListener('keydown', (e) => {
   });
 })();
 
-// ─── Grid/Table Tool ───
-function createMiroGrid(rows, cols) {
-  rows = rows || 3; cols = cols || 3;
-  const page = cp();
-  if (!page.miroCards) page.miroCards = [];
-  const canvas = document.getElementById('miro-canvas');
-  const zoom = (page.zoom || 100) / 100;
-  const cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
-  const cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
-  const cells = [];
-  for (let r = 0; r < rows; r++) {
-    const row = [];
-    for (let c = 0; c < cols; c++) row.push('');
-    cells.push(row);
-  }
-  const w = cols * 120, h = rows * 40;
-  const card = {
-    id: uid(), type: 'grid', rows, cols, cells,
-    x: cx - w / 2, y: cy - h / 2, w, h,
-    headerColor: 'none', borderColor: '#555',
-  };
-  page.miroCards.push(card);
-  sv(); buildMiroCanvas(); buildOutline();
-}
-
-// ─── Mind Map Tool ───
-function createMiroMindMap() {
-  const page = cp();
-  if (!page.miroCards) page.miroCards = [];
-  const canvas = document.getElementById('miro-canvas');
-  const zoom = (page.zoom || 100) / 100;
-  const cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
-  const cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
-  const rootId = uid();
-  const child1 = uid(), child2 = uid(), child3 = uid();
-  const card = {
-    id: uid(), type: 'mindmap',
-    x: cx - 300, y: cy - 200, w: 600, h: 400,
-    root: {
-      id: rootId, text: 'Main Topic', color: '#6c8fff',
-      children: [
-        { id: child1, text: 'Branch 1', color: '#ff6b6b', children: [] },
-        { id: child2, text: 'Branch 2', color: '#51cf66', children: [] },
-        { id: child3, text: 'Branch 3', color: '#ffd43b', children: [] },
-      ],
-    },
-  };
-  page.miroCards.push(card);
-  sv(); buildMiroCanvas(); buildOutline();
-}
+// (Grid and Mindmap tools now use click-to-place logic within the miro-canvas click event)

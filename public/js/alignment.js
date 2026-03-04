@@ -171,7 +171,7 @@ document.addEventListener('keydown', (e) => {
   const page = cp();
   if (page.pageType !== 'miro') return;
 
-  if (e.key === 'n' || e.key === 'N') {
+  if (e.key === 'n' || e.key === 'N' || e.key === 'ى') {
     _stickyCreateMode = true;
     document.getElementById('miro-canvas').classList.add('sn-create-mode');
     document.getElementById('sn-create-hint').classList.add('show');
