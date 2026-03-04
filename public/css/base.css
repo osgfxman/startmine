@@ -1035,6 +1035,11 @@ body {
   max-width: 100%;
 }
 
+.widget:hover {
+  overflow: visible;
+  z-index: 50;
+}
+
 .widget.drag-over-w {
   box-shadow: 0 0 0 2px var(--ac) inset;
 }
@@ -1047,7 +1052,13 @@ body {
   border-bottom: 1px solid var(--bd);
   user-select: none;
   cursor: grab;
+  /* changed to visible on hover below so dropdowns can escape */
   overflow: hidden;
+}
+
+.widget:hover .wh {
+  overflow: visible;
+  z-index: 50;
 }
 
 .wh:active {
@@ -1113,6 +1124,70 @@ body {
 .wab.d:hover {
   background: rgba(255, 96, 96, 0.15);
   color: var(--red);
+}
+
+/* Gear Dropdown for Widget Headers */
+.gear-dropdown {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.gear-dropdown:hover .gear-menu {
+  display: flex;
+}
+
+.gear-dropdown .gear-btn {
+  font-size: 14px;
+  opacity: 0.6;
+}
+
+.gear-dropdown:hover .gear-btn {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.gear-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  padding: 6px;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 100;
+  min-width: 160px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+
+.gear-menu .wab {
+  width: 100%;
+  height: 28px;
+  text-align: left;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  color: var(--tx);
+  opacity: 0.8;
+}
+
+.gear-menu .wab:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.gear-menu .wab.d {
+  color: #ff6060;
+}
+
+.gear-menu .wab.d:hover {
+  background: rgba(255, 96, 96, 0.15);
 }
 
 .wb {

@@ -67,6 +67,41 @@
   border-radius: 3px;
 }
 
+/* Expose header actions inside Miro Widgets */
+.miro-widget .wh {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid transparent;
+}
+
+.miro-widget .wa {
+  display: flex;
+  gap: 4px;
+  opacity: 1 !important;
+  position: relative !important;
+  transform: none !important;
+  top: auto !important;
+  right: auto !important;
+}
+
+.miro-widget .wab {
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0.6;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.miro-widget .wab:hover {
+  opacity: 1;
+  background: rgba(128, 128, 128, 0.2);
+}
+
 .miro-card.miro-hl {
   animation: outlineHighlight 1.2s ease;
 }

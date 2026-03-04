@@ -1145,13 +1145,32 @@ document.addEventListener('paste', (e) => {
     } catch (err) { console.error('Miro Clipboard parse err', err); }
   };
 
+  const text = (e.clipboardData || window.clipboardData).getData('text') || '';
+
+  // 1. Is it a STARTMINE internal paste string? (Highest Priority)
+  if (text.startsWith('STARTMINE_MIRO:')) {
+    handleMiroPasting(text.replace('STARTMINE_MIRO:', ''));
+    return;
+  }
+
+  // 2. Fallback to localStorage clipboard (used by the Gear Menu "Copy to Miro" button)
+  const ls = localStorage.getItem('miro_clipboard');
+  if (ls && ls !== '[]') {
+    handleMiroPasting(ls);
+    // Clear it so normal image pasting can resume later if needed
+    localStorage.removeItem('miro_clipboard');
+    return;
+  }
+
   let imagePasted = false;
 
-  // 1. Check for images first
+  // 3. Check for images natively copied (Lower Priority than Widgets)
   if (e.clipboardData && e.clipboardData.items) {
     for (let i = 0; i < e.clipboardData.items.length; i++) {
-      if (e.clipboardData.items[i].type.indexOf('image') !== -1) {
-        const blob = e.clipboardData.items[i].getAsFile();
+      const item = e.clipboardData.items[i];
+      if (item.type.indexOf('image') !== -1) {
+        const blob = item.getAsFile();
+        if (!blob) continue;
         imagePasted = true;
 
         const reader = new FileReader();
@@ -1176,29 +1195,14 @@ document.addEventListener('paste', (e) => {
           img.src = dataUrl;
         };
         reader.readAsDataURL(blob);
+        break; // Process only the first image
       }
     }
   }
 
-  // If an image was handled, don't try to process text fallback for this paste event.
+  // If an image was handled, don't try to process text fallback.
   if (imagePasted) return;
-
-  // 2. Fallback to Text Handling
-  const text = (e.clipboardData || window.clipboardData).getData('text');
-
-  // If there's no text (and no image was pasted), check if we explicitly have an old localstorage clipboard as an absolute deepest fallback.
-  // Note: Usually Ctrl+C writes to OS clipboard, so this is rarely needed, but good for cross-tab if native clipboard fails.
-  if (!text) {
-    const ls = localStorage.getItem('miro_clipboard');
-    if (ls) handleMiroPasting(ls);
-    return;
-  }
-
-  // 3. Is it a STARTMINE internal paste string?
-  if (text.startsWith('STARTMINE_MIRO:')) {
-    handleMiroPasting(text.replace('STARTMINE_MIRO:', ''));
-    return;
-  }
+  if (!text) return;
 
   // 4. It's external Text or URL
   if (!page.miroCards) page.miroCards = [];

@@ -2030,10 +2030,30 @@ function buildWidget(w) {
   const hdr = document.createElement('div');
   hdr.className = 'wh';
   hdr.style.borderBottomColor = bdCol;
-  const exportBtn = (w.type === 'bookmarks' || w.type === 'list') ? `<button class="wab" data-ex2m="${w.id}" title="Export to Miro Page">🚀</button>` : '';
+  const exportBtn = (w.type === 'bookmarks' || w.type === 'list') ? `<button class="wab" data-ex2m="${w.id}" title="Export as New Miro Page">🚀 Export as Miro Page</button>` : '';
   const spanLabel = (w.colSpan && w.colSpan > 1) ? w.colSpan : '';
-  const spanBtn = `<button class="wab" data-sp="${w.id}" title="Column Span: ${w.colSpan || 1}">↔${spanLabel}</button>`;
-  hdr.innerHTML = `<div class="wt" style="color:${muCol}"><span>${w.emoji || '📌'}</span>${esc(w.title)}</div><div class="wa">${spanBtn}${exportBtn}<button class="wab" data-dp="${w.id}" title="Display">🖥️</button><button class="wab" data-mv="${w.id}" title="Move/Copy">📋</button><button class="wab" data-cl="${w.id}" title="Color">🎨</button><button class="wab" data-rn="${w.id}" title="Rename">✏️</button><button class="wab d" data-dl="${w.id}" title="Delete">🗑️</button></div>`;
+  const spanBtn = `<button class="wab" data-sp="${w.id}" title="Column Span: ${w.colSpan || 1}">↔ Span ${spanLabel}</button>`;
+  const copyMiroBtn = (w.type === 'bookmarks') ? `<button class="wab" data-copymiro="${w.id}" title="Copy to Miro Clipboard">📋 Copy to Miro</button>` : '';
+
+  hdr.innerHTML = `
+    <div class="wt" style="color:${muCol}"><span>${w.emoji || '📌'}</span>${esc(w.title)}</div>
+    <div class="wa">
+      <div class="gear-dropdown">
+        <button class="wab gear-btn" title="Options">⚙️</button>
+        <div class="gear-menu">
+          ${spanBtn}
+          ${copyMiroBtn}
+          ${exportBtn}
+          <button class="wab" data-dp="${w.id}" title="Display Settings">🖥️ Display</button>
+          <button class="wab" data-mv="${w.id}" title="Move or Copy">📋 Move/Copy</button>
+          <button class="wab" data-cl="${w.id}" title="Change Color">🎨 Color</button>
+          <button class="wab" data-rn="${w.id}" title="Rename">✏️ Rename</button>
+          <button class="wab d" data-dl="${w.id}" title="Delete">🗑️ Delete</button>
+        </div>
+      </div>
+    </div>
+  `;
+
   hdr.querySelector('[data-sp]').onclick = (e) => {
     e.stopPropagation();
     const page = cp();
@@ -2046,6 +2066,13 @@ function buildWidget(w) {
     ex2mBtn.onclick = (e) => {
       e.stopPropagation();
       exportToMiro(w.id);
+    };
+  }
+  const cmBtn = hdr.querySelector('[data-copymiro]');
+  if (cmBtn) {
+    cmBtn.onclick = (e) => {
+      e.stopPropagation();
+      exportToMiroClipboard(w.id);
     };
   }
   hdr.querySelector('[data-dp]').onclick = (e) => {
@@ -2708,7 +2735,35 @@ function renderAll() {
   } catch (e) { /* quota exceeded */ }
 }
 
-// ─── Export Bookmark Widget to Miro Page ───
+// ─── Export Bookmark Widget to Miro Clipboard (Copy Paste) ───
+function exportToMiroClipboard(widgetId) {
+  const w = fw(widgetId);
+  if (!w || !w.items || !w.items.length) {
+    alert('No bookmarks to export.');
+    return;
+  }
+
+  const miroCard = {
+    id: uid(),
+    type: 'bwidget',
+    title: w.title || 'Bookmarks',
+    emoji: w.emoji || '🗂️',
+    items: JSON.parse(JSON.stringify(w.items || [])),
+    x: 100,
+    y: 100,
+    w: 320,
+    h: 400,
+    color: w.color || { r: 50, g: 50, b: 50, a: 0.8 },
+    display: w.display || 'auto',
+    size: w.size || 'md',
+    vis: w.vis || 'all'
+  };
+
+  localStorage.setItem('miro_clipboard', JSON.stringify([miroCard]));
+  alert('✅ Widget copied!\nOpen a Miro page and press Ctrl+V to paste the fully interactive widget.');
+}
+
+// ─── Export Bookmark Widget to Miro Page (Legacy Grid) ───
 function exportToMiro(widgetId) {
   const w = fw(widgetId);
   if (!w || !w.items || !w.items.length) {
