@@ -87,6 +87,10 @@ function buildOutline() {
         item.title = `Table ${c.rows || 3}×${c.cols || 3}`;
         emoji.textContent = '📊';
         title.textContent = `Table ${c.rows || 3}×${c.cols || 3}`;
+      } else if (c.type === 'mindmap') {
+        item.title = c.root?.text || 'Mind Map';
+        emoji.textContent = '🧠';
+        title.textContent = c.root?.text || 'Mind Map';
       } else {
         item.title = c.label || c.url;
         emoji.textContent = '🔗';

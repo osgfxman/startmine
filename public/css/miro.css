@@ -1742,3 +1742,67 @@
   cursor: pointer;
   padding: 0;
 }
+
+/* ─── Mind Map Widget ─── */
+.miro-mindmap {
+  position: absolute;
+  cursor: default;
+  overflow: visible;
+}
+
+.miro-mindmap.miro-selected {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+}
+
+.miro-mindmap.miro-hl {
+  animation: outlineHighlight 1.2s ease;
+}
+
+.miro-mindmap .mc-del {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  z-index: 3;
+  background: rgba(0, 0, 0, .55);
+  border: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mu);
+  cursor: pointer;
+  font-size: .65rem;
+  opacity: 0;
+  transition: opacity .12s;
+}
+
+.miro-mindmap:hover .mc-del {
+  opacity: 1;
+}
+
+.miro-mindmap .mc-del:hover {
+  color: var(--red);
+}
+
+.mm-node {
+  transition: box-shadow .12s, transform .1s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mm-node:hover {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .3);
+  transform: scale(1.04);
+  z-index: 5;
+}
+
+/* Shape panel selected item */
+.msp-item.sel {
+  outline: 2px solid var(--ac);
+  outline-offset: -2px;
+  border-radius: 8px;
+}

@@ -141,7 +141,7 @@ function buildMiroCanvas() {
   if (!page.miroCards) page.miroCards = [];
   const board = document.getElementById('miro-board');
   // Remove only card elements, preserve selection overlays
-  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid').forEach((el) => el.remove());
+  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap').forEach((el) => el.remove());
   // Clear selection state
   _miroSelected.clear();
   document.getElementById('miro-sel-frame').style.display = 'none';
@@ -160,6 +160,7 @@ function buildMiroCanvas() {
     else if (card.type === 'shape') board.appendChild(buildMiroShape(card));
     else if (card.type === 'pen') board.appendChild(buildMiroPen(card));
     else if (card.type === 'grid') board.appendChild(buildMiroGridCard(card));
+    else if (card.type === 'mindmap') board.appendChild(buildMiroMindMap(card));
     else board.appendChild(buildMiroCard(card));
   });
   updateMiroGrid();
@@ -418,33 +419,26 @@ function deleteMiroCard(cid) {
     }
   });
 
-  // ─── Enhanced Wheel: trackpad-aware (ctrlKey = pinch → zoom at cursor, else pan) ───
+  // ─── Wheel: ALWAYS zoom at cursor position (like Miro.com) ───
   canvas.addEventListener(
     'wheel',
     (e) => {
       e.preventDefault();
       const page = cp();
       let z = page.zoom || 100;
+      const rect = canvas.getBoundingClientRect();
+      const cursorX = e.clientX - rect.left;
+      const cursorY = e.clientY - rect.top;
+      const oldZoom = z / 100;
 
-      if (e.ctrlKey || e.metaKey) {
-        // Trackpad pinch or Ctrl+scroll → zoom at cursor position
-        const rect = canvas.getBoundingClientRect();
-        const cursorX = e.clientX - rect.left;
-        const cursorY = e.clientY - rect.top;
-        const oldZoom = z / 100;
+      // Both trackpad pinch and regular scroll → zoom at cursor
+      const delta = e.ctrlKey ? (-e.deltaY * 0.8) : (e.deltaY > 0 ? -5 : 5);
+      z = Math.max(10, Math.min(400, z + delta));
+      const newZoom = z / 100;
 
-        const delta = -e.deltaY * 0.8;
-        z = Math.max(10, Math.min(400, z + delta));
-        const newZoom = z / 100;
-
-        // Adjust pan so cursor stays over the same board point
-        page.panX = cursorX - (cursorX - (page.panX || 0)) * (newZoom / oldZoom);
-        page.panY = cursorY - (cursorY - (page.panY || 0)) * (newZoom / oldZoom);
-      } else {
-        // Regular mouse wheel → zoom (simple)
-        const delta = e.deltaY > 0 ? -5 : 5;
-        z = Math.max(10, Math.min(400, z + delta));
-      }
+      // Adjust pan so cursor stays over the same board point
+      page.panX = cursorX - (cursorX - (page.panX || 0)) * (newZoom / oldZoom);
+      page.panY = cursorY - (cursorY - (page.panY || 0)) * (newZoom / oldZoom);
 
       page.zoom = z;
       applyZoomPan(page);
@@ -910,26 +904,38 @@ document.getElementById('miro-canvas').addEventListener('drop', (e) => {
 // ─── Vertical Toolbar Handlers ───
 let _activeTool = 'select';
 let _penMode = false;
+let _shapeMode = false;
+let _activeShapeType = 'rect';
 let _penPoints = [];
 let _penDrawing = false;
 
 function setActiveTool(tool) {
   _activeTool = tool;
   document.querySelectorAll('.mtb-btn').forEach(b => b.classList.remove('sel'));
-  const btnMap = { select: 'mtb-select', sticky: 'mtb-sticky', text: 'mtb-text', shape: 'mtb-shape', pen: 'mtb-pen', grid: 'mtb-grid', image: 'mtb-image', card: 'mtb-card' };
+  const btnMap = { select: 'mtb-select', sticky: 'mtb-sticky', text: 'mtb-text', shape: 'mtb-shape', pen: 'mtb-pen', grid: 'mtb-grid', mindmap: 'mtb-mindmap', image: 'mtb-image', card: 'mtb-card' };
   const btn = document.getElementById(btnMap[tool]);
   if (btn) btn.classList.add('sel');
-  // Reset modes
   _penMode = tool === 'pen';
+  _shapeMode = tool === 'shape';
   _stickyCreateMode = false;
   document.getElementById('sn-create-hint').style.display = 'none';
   document.getElementById('miro-pen-toolbar').classList.toggle('show', _penMode);
-  document.getElementById('miro-canvas').style.cursor = _penMode ? 'crosshair' : 'grab';
+  const cursor = (_penMode || _shapeMode) ? 'crosshair' : 'grab';
+  document.getElementById('miro-canvas').style.cursor = cursor;
+  if (!_shapeMode) document.getElementById('miro-shape-panel').classList.remove('show');
 }
 
 document.getElementById('mtb-select').onclick = () => setActiveTool('select');
 document.getElementById('mtb-sticky').onclick = () => {
-  document.getElementById('miro-opt-sticky').click();
+  // Direct create yellow rect sticky at center
+  const page = cp();
+  if (!page.miroCards) page.miroCards = [];
+  const canvas = document.getElementById('miro-canvas');
+  const zoom = (page.zoom || 100) / 100;
+  const cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
+  const cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+  page.miroCards.push({ id: uid(), type: 'sticky', text: '', color: 'yellow', shape: 'rect', x: cx - 140, y: cy - 80, w: 280, h: 160 });
+  sv(); buildMiroCanvas(); buildOutline();
   setActiveTool('select');
 };
 document.getElementById('mtb-text').onclick = () => {
@@ -937,9 +943,17 @@ document.getElementById('mtb-text').onclick = () => {
   setActiveTool('select');
 };
 document.getElementById('mtb-shape').onclick = () => {
-  document.getElementById('miro-opt-shape').click();
-  setActiveTool('select');
+  setActiveTool('shape');
+  document.getElementById('miro-shape-panel').classList.add('show');
 };
+// Shape panel item click → set active shape type for draw mode
+document.querySelectorAll('.msp-item').forEach(item => {
+  item.addEventListener('click', () => {
+    _activeShapeType = item.dataset.shape;
+    document.querySelectorAll('.msp-item').forEach(i => i.classList.remove('sel'));
+    item.classList.add('sel');
+  });
+});
 document.getElementById('mtb-pen').onclick = () => setActiveTool('pen');
 document.getElementById('mtb-grid').onclick = () => {
   createMiroGrid();
@@ -954,6 +968,10 @@ document.getElementById('mtb-card').onclick = () => {
   setActiveTool('select');
 };
 document.getElementById('pen-cancel').onclick = () => setActiveTool('select');
+document.getElementById('mtb-mindmap').onclick = () => {
+  createMiroMindMap();
+  setActiveTool('select');
+};
 
 // ─── Keyboard Shortcuts ───
 document.addEventListener('keydown', (e) => {
@@ -962,14 +980,19 @@ document.addEventListener('keydown', (e) => {
   const page = cp();
   if (page.pageType !== 'miro') return;
 
-  switch (e.key.toLowerCase()) {
-    case 'v': setActiveTool('select'); break;
-    case 'n': document.getElementById('mtb-sticky').click(); break;
-    case 't': document.getElementById('mtb-text').click(); break;
-    case 's': if (!e.ctrlKey && !e.metaKey) { document.getElementById('mtb-shape').click(); } break;
-    case 'p': document.getElementById('mtb-pen').click(); break;
-    case 'g': document.getElementById('mtb-grid').click(); break;
-    case 'i': document.getElementById('mtb-image').click(); break;
+  const key = e.key.toLowerCase();
+  // Blur any focused input to prevent typing in search box
+  if (document.activeElement && document.activeElement.tagName === 'INPUT') document.activeElement.blur();
+
+  switch (key) {
+    case 'v': e.preventDefault(); setActiveTool('select'); break;
+    case 'n': e.preventDefault(); document.getElementById('mtb-sticky').click(); break;
+    case 't': e.preventDefault(); document.getElementById('mtb-text').click(); break;
+    case 's': if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); document.getElementById('mtb-shape').click(); } break;
+    case 'p': e.preventDefault(); document.getElementById('mtb-pen').click(); break;
+    case 'g': e.preventDefault(); document.getElementById('mtb-grid').click(); break;
+    case 'm': e.preventDefault(); document.getElementById('mtb-mindmap').click(); break;
+    case 'i': e.preventDefault(); document.getElementById('mtb-image').click(); break;
     case 'escape':
       setActiveTool('select');
       document.getElementById('miro-shape-panel').classList.remove('show');
@@ -977,6 +1000,7 @@ document.addEventListener('keydown', (e) => {
     case 'delete':
     case 'backspace':
       if (_miroSelected.size > 0) {
+        e.preventDefault();
         _miroSelected.forEach(cid => {
           page.miroCards = (page.miroCards || []).filter(c => c.id !== cid);
         });
@@ -987,14 +1011,15 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// ─── Pen Tool (Freehand Drawing) ───
+// ─── Pen Tool (Freehand Drawing with Live Preview) ───
 (function () {
   const canvas = document.getElementById('miro-canvas');
-  let startBoardX = 0, startBoardY = 0;
+  const board = document.getElementById('miro-board');
+  let liveSvg = null;
 
   canvas.addEventListener('mousedown', (e) => {
     if (!_penMode || e.button !== 0) return;
-    if (e.target !== canvas && e.target.id !== 'miro-board') return;
+    if (e.target !== canvas && e.target.id !== 'miro-board' && !e.target.closest('#miro-board')) return;
     e.preventDefault(); e.stopPropagation();
     _penDrawing = true;
     const page = cp();
@@ -1002,43 +1027,133 @@ document.addEventListener('keydown', (e) => {
     const rect = canvas.getBoundingClientRect();
     const bx = (e.clientX - rect.left - (page.panX || 0)) / zoom;
     const by = (e.clientY - rect.top - (page.panY || 0)) / zoom;
-    startBoardX = bx; startBoardY = by;
     _penPoints = [{ x: bx, y: by }];
-    canvas.style.cursor = 'crosshair';
+    // Create live SVG preview on board (same coordinate space)
+    liveSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    liveSvg.setAttribute('width', '99999');
+    liveSvg.setAttribute('height', '99999');
+    liveSvg.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:9999;overflow:visible;';
+    const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    pathEl.setAttribute('d', `M${bx},${by}`);
+    pathEl.setAttribute('fill', 'none');
+    pathEl.setAttribute('stroke', document.getElementById('pen-color').value || '#333');
+    pathEl.setAttribute('stroke-width', document.getElementById('pen-width').value || '3');
+    pathEl.setAttribute('stroke-linecap', 'round');
+    pathEl.setAttribute('stroke-linejoin', 'round');
+    liveSvg.appendChild(pathEl);
+    board.appendChild(liveSvg);
   }, true);
 
   document.addEventListener('mousemove', (e) => {
-    if (!_penDrawing) return;
+    if (!_penDrawing || !liveSvg) return;
     const page = cp();
     const zoom = (page.zoom || 100) / 100;
     const rect = canvas.getBoundingClientRect();
     const bx = (e.clientX - rect.left - (page.panX || 0)) / zoom;
     const by = (e.clientY - rect.top - (page.panY || 0)) / zoom;
     _penPoints.push({ x: bx, y: by });
+    // Update live path
+    let d = `M${_penPoints[0].x},${_penPoints[0].y}`;
+    for (let i = 1; i < _penPoints.length; i++) d += ` L${_penPoints[i].x},${_penPoints[i].y}`;
+    liveSvg.querySelector('path').setAttribute('d', d);
   });
 
   document.addEventListener('mouseup', () => {
     if (!_penDrawing) return;
     _penDrawing = false;
+    if (liveSvg) { liveSvg.remove(); liveSvg = null; }
     if (_penPoints.length < 2) return;
-    // Calculate bounding box
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     _penPoints.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); });
     const pad = 10;
     const w = maxX - minX + pad * 2, h = maxY - minY + pad * 2;
-    // Normalize points relative to bounding box
     const normalized = _penPoints.map(p => ({ x: p.x - minX + pad, y: p.y - minY + pad }));
     const page = cp();
     if (!page.miroCards) page.miroCards = [];
-    const card = {
+    page.miroCards.push({
       id: uid(), type: 'pen', points: normalized,
       x: minX - pad, y: minY - pad, w, h,
       penColor: document.getElementById('pen-color').value || '#333',
       penWidth: +(document.getElementById('pen-width').value) || 3,
-    };
-    page.miroCards.push(card);
+    });
     sv(); buildMiroCanvas(); buildOutline();
     _penPoints = [];
+  });
+})();
+
+// ─── Shape Draw Mode (click-drag or double-click) ───
+(function () {
+  const canvas = document.getElementById('miro-canvas');
+  let shapeDrawing = false, shapeStartX = 0, shapeStartY = 0;
+  let previewEl = null;
+
+  canvas.addEventListener('mousedown', (e) => {
+    if (!_shapeMode || e.button !== 0) return;
+    if (e.target !== canvas && e.target.id !== 'miro-board') return;
+    e.preventDefault(); e.stopPropagation();
+    shapeDrawing = true;
+    const page = cp();
+    const zoom = (page.zoom || 100) / 100;
+    const rect = canvas.getBoundingClientRect();
+    shapeStartX = (e.clientX - rect.left - (page.panX || 0)) / zoom;
+    shapeStartY = (e.clientY - rect.top - (page.panY || 0)) / zoom;
+    // Create preview rect
+    previewEl = document.createElement('div');
+    previewEl.style.cssText = `position:absolute;border:2px dashed var(--ac);pointer-events:none;z-index:9999;left:${shapeStartX}px;top:${shapeStartY}px;width:0;height:0;`;
+    document.getElementById('miro-board').appendChild(previewEl);
+  }, true);
+
+  document.addEventListener('mousemove', (e) => {
+    if (!shapeDrawing || !previewEl) return;
+    const page = cp();
+    const zoom = (page.zoom || 100) / 100;
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left - (page.panX || 0)) / zoom;
+    const my = (e.clientY - rect.top - (page.panY || 0)) / zoom;
+    const x = Math.min(shapeStartX, mx), y = Math.min(shapeStartY, my);
+    const w = Math.abs(mx - shapeStartX), h = Math.abs(my - shapeStartY);
+    previewEl.style.left = x + 'px'; previewEl.style.top = y + 'px';
+    previewEl.style.width = w + 'px'; previewEl.style.height = h + 'px';
+  });
+
+  document.addEventListener('mouseup', (e) => {
+    if (!shapeDrawing) return;
+    shapeDrawing = false;
+    if (previewEl) { previewEl.remove(); previewEl = null; }
+    const page = cp();
+    const zoom = (page.zoom || 100) / 100;
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left - (page.panX || 0)) / zoom;
+    const my = (e.clientY - rect.top - (page.panY || 0)) / zoom;
+    const w = Math.abs(mx - shapeStartX), h = Math.abs(my - shapeStartY);
+    if (w < 10 && h < 10) return; // too small, ignore (double-click handles default)
+    const x = Math.min(shapeStartX, mx), y = Math.min(shapeStartY, my);
+    if (!page.miroCards) page.miroCards = [];
+    page.miroCards.push({
+      id: uid(), type: 'shape', shape: _activeShapeType || 'rect',
+      x, y, w: Math.max(w, 40), h: Math.max(h, 40),
+      fillColor: 'none', strokeColor: '#333333', strokeWidth: 2, opacity: 1,
+    });
+    sv(); buildMiroCanvas(); buildOutline();
+  });
+
+  // Double-click → place default shape at center
+  canvas.addEventListener('dblclick', (e) => {
+    if (!_shapeMode) return;
+    if (e.target !== canvas && e.target.id !== 'miro-board') return;
+    e.preventDefault();
+    const page = cp();
+    if (!page.miroCards) page.miroCards = [];
+    const zoom = (page.zoom || 100) / 100;
+    const r = canvas.getBoundingClientRect();
+    const cx = (e.clientX - r.left - (page.panX || 0)) / zoom;
+    const cy = (e.clientY - r.top - (page.panY || 0)) / zoom;
+    page.miroCards.push({
+      id: uid(), type: 'shape', shape: _activeShapeType || 'rect',
+      x: cx - 80, y: cy - 60, w: 160, h: 120,
+      fillColor: 'none', strokeColor: '#333333', strokeWidth: 2, opacity: 1,
+    });
+    sv(); buildMiroCanvas(); buildOutline();
   });
 })();
 
@@ -1061,7 +1176,33 @@ function createMiroGrid(rows, cols) {
   const card = {
     id: uid(), type: 'grid', rows, cols, cells,
     x: cx - w / 2, y: cy - h / 2, w, h,
-    headerColor: '#6c8fff', borderColor: '#ccc',
+    headerColor: 'none', borderColor: '#555',
+  };
+  page.miroCards.push(card);
+  sv(); buildMiroCanvas(); buildOutline();
+}
+
+// ─── Mind Map Tool ───
+function createMiroMindMap() {
+  const page = cp();
+  if (!page.miroCards) page.miroCards = [];
+  const canvas = document.getElementById('miro-canvas');
+  const zoom = (page.zoom || 100) / 100;
+  const cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
+  const cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+  const rootId = uid();
+  const child1 = uid(), child2 = uid(), child3 = uid();
+  const card = {
+    id: uid(), type: 'mindmap',
+    x: cx - 300, y: cy - 200, w: 600, h: 400,
+    root: {
+      id: rootId, text: 'Main Topic', color: '#6c8fff',
+      children: [
+        { id: child1, text: 'Branch 1', color: '#ff6b6b', children: [] },
+        { id: child2, text: 'Branch 2', color: '#51cf66', children: [] },
+        { id: child3, text: 'Branch 3', color: '#ffd43b', children: [] },
+      ],
+    },
   };
   page.miroCards.push(card);
   sv(); buildMiroCanvas(); buildOutline();
