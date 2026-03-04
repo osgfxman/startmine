@@ -822,14 +822,18 @@ function buildMiroShape(card) {
   const toolbar = document.createElement('div');
   toolbar.className = 'msh-toolbar';
   toolbar.innerHTML = `
-    <label title="Fill"><span style="font-size:.65rem">Fill</span><input type="color" class="msh-fill" value="${card.fillColor || '#6c8fff'}"></label>
-    <label title="Stroke"><span style="font-size:.65rem">Stroke</span><input type="color" class="msh-stroke" value="${card.strokeColor || '#333333'}"></label>
+    <label title="Fill"><span style="font-size:.65rem">Fill</span><input type="color" class="msh-fill" value="${card.fillColor === 'none' ? '#6c8fff' : (card.fillColor || '#6c8fff')}"></label>
+    <button class="mt-btn msh-nofill ${card.fillColor === 'none' ? 'sel' : ''}" title="No Fill">⊘</button>
+    <label title="Stroke"><span style="font-size:.65rem">Stroke</span><input type="color" class="msh-stroke" value="${card.strokeColor === 'none' ? '#333333' : (card.strokeColor || '#333333')}"></label>
+    <button class="mt-btn msh-nostroke ${card.strokeColor === 'none' ? 'sel' : ''}" title="No Stroke">⊘</button>
     <label title="Width"><span style="font-size:.65rem">W</span><input type="number" class="msh-sw" value="${card.strokeWidth ?? 2}" min="0" max="20"></label>
     <label title="Opacity"><span style="font-size:.65rem">Op</span><input type="range" class="msh-op" value="${Math.round((card.opacity ?? 1) * 100)}" min="0" max="100"></label>`;
 
   function updateSVG() { svgWrap.innerHTML = renderShapeSVG(card); }
-  toolbar.querySelector('.msh-fill').oninput = function () { card.fillColor = this.value; updateSVG(); sv(); };
-  toolbar.querySelector('.msh-stroke').oninput = function () { card.strokeColor = this.value; updateSVG(); sv(); };
+  toolbar.querySelector('.msh-fill').oninput = function () { card.fillColor = this.value; toolbar.querySelector('.msh-nofill').classList.remove('sel'); updateSVG(); sv(); };
+  toolbar.querySelector('.msh-nofill').onclick = function (e) { e.stopPropagation(); card.fillColor = card.fillColor === 'none' ? '#6c8fff' : 'none'; this.classList.toggle('sel', card.fillColor === 'none'); updateSVG(); sv(); };
+  toolbar.querySelector('.msh-stroke').oninput = function () { card.strokeColor = this.value; toolbar.querySelector('.msh-nostroke').classList.remove('sel'); updateSVG(); sv(); };
+  toolbar.querySelector('.msh-nostroke').onclick = function (e) { e.stopPropagation(); card.strokeColor = card.strokeColor === 'none' ? '#333' : 'none'; this.classList.toggle('sel', card.strokeColor === 'none'); updateSVG(); sv(); };
   toolbar.querySelector('.msh-sw').onchange = function () { card.strokeWidth = +this.value; updateSVG(); sv(); };
   toolbar.querySelector('.msh-op').oninput = function () { card.opacity = +this.value / 100; updateSVG(); sv(); };
 
@@ -872,5 +876,137 @@ function buildMiroShape(card) {
   el.appendChild(del);
   el.appendChild(toolbar);
   el.appendChild(svgWrap);
+  return el;
+}
+
+/* ─── Pen (Freehand Drawing) Widget ─── */
+function buildMiroPen(card) {
+  const el = document.createElement('div');
+  el.className = 'miro-pen';
+  el.dataset.cid = card.id;
+  el.style.left = (card.x || 0) + 'px';
+  el.style.top = (card.y || 0) + 'px';
+  el.style.width = (card.w || 100) + 'px';
+  el.style.height = (card.h || 100) + 'px';
+
+  const pts = card.points || [];
+  let d = '';
+  if (pts.length > 0) {
+    d = `M${pts[0].x},${pts[0].y}`;
+    for (let i = 1; i < pts.length; i++) d += ` L${pts[i].x},${pts[i].y}`;
+  }
+  el.innerHTML = `<svg width="100%" height="100%" viewBox="0 0 ${card.w || 100} ${card.h || 100}" preserveAspectRatio="none"><path d="${d}" fill="none" stroke="${card.penColor || '#333'}" stroke-width="${card.penWidth || 3}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+  const del = document.createElement('button');
+  del.className = 'mc-del'; del.textContent = '✕';
+  del.onclick = (e) => { e.stopPropagation(); deleteMiroCard(card.id); };
+  el.appendChild(del);
+
+  // Drag
+  el.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.mc-del')) return;
+    e.stopPropagation();
+    if (e.ctrlKey || e.metaKey) { toggleMiroSelect(card.id); return; }
+    if (!_miroSelected.has(card.id)) { clearMiroSelection(); addMiroSelect(card.id); }
+    const page = cp(); const zoom = (page.zoom || 100) / 100;
+    const startX = e.clientX, startY = e.clientY;
+    const origPositions = new Map();
+    _miroSelected.forEach(cid => { const c = (page.miroCards || []).find(x => x.id === cid); if (c) origPositions.set(cid, { x: c.x || 0, y: c.y || 0 }); });
+    let moved = false;
+    function onMove(ev) {
+      moved = true; const dx = (ev.clientX - startX) / zoom, dy = (ev.clientY - startY) / zoom;
+      origPositions.forEach((orig, cid) => {
+        const c = (page.miroCards || []).find(x => x.id === cid); if (!c) return; c.x = orig.x + dx; c.y = orig.y + dy;
+        const cardEl = document.querySelector(`[data-cid="${cid}"]`); if (cardEl) { cardEl.style.left = c.x + 'px'; cardEl.style.top = c.y + 'px'; }
+      }); updateMiroSelFrame();
+    }
+    function onUp() { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); if (moved) sv(); }
+    document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+  });
+
+  return el;
+}
+
+/* ─── Grid/Table Widget ─── */
+function buildMiroGridCard(card) {
+  const el = document.createElement('div');
+  el.className = 'miro-grid';
+  el.dataset.cid = card.id;
+  el.style.left = (card.x || 0) + 'px';
+  el.style.top = (card.y || 0) + 'px';
+  el.style.width = (card.w || 360) + 'px';
+
+  const del = document.createElement('button');
+  del.className = 'mc-del'; del.textContent = '✕';
+  del.onclick = (e) => { e.stopPropagation(); deleteMiroCard(card.id); };
+
+  const table = document.createElement('table');
+  table.className = 'mg-table';
+  const rows = card.rows || 3, cols = card.cols || 3;
+  if (!card.cells) {
+    card.cells = [];
+    for (let r = 0; r < rows; r++) { const row = []; for (let c = 0; c < cols; c++) row.push(''); card.cells.push(row); }
+  }
+  for (let r = 0; r < rows; r++) {
+    const tr = document.createElement('tr');
+    for (let c = 0; c < cols; c++) {
+      const td = document.createElement('td');
+      td.contentEditable = true;
+      td.textContent = card.cells[r]?.[c] || '';
+      if (r === 0) td.style.background = card.headerColor || '#6c8fff';
+      td.oninput = () => { card.cells[r][c] = td.textContent; sv(); };
+      td.onmousedown = (e) => e.stopPropagation();
+      tr.appendChild(td);
+    }
+    table.appendChild(tr);
+  }
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'mg-toolbar';
+  toolbar.innerHTML = `
+    <button class="mt-btn" data-act="+row" title="Add Row">+ Row</button>
+    <button class="mt-btn" data-act="-row" title="Remove Row">- Row</button>
+    <button class="mt-btn" data-act="+col" title="Add Column">+ Col</button>
+    <button class="mt-btn" data-act="-col" title="Remove Column">- Col</button>
+    <label title="Header"><span style="font-size:.6rem">Hdr</span><input type="color" class="mg-hdr-clr" value="${card.headerColor || '#6c8fff'}"></label>`;
+
+  toolbar.querySelector('[data-act="+row"]').onclick = (e) => { e.stopPropagation(); card.rows++; card.cells.push(Array(card.cols).fill('')); card.h = card.rows * 40; sv(); buildMiroCanvas(); };
+  toolbar.querySelector('[data-act="-row"]').onclick = (e) => { e.stopPropagation(); if (card.rows <= 1) return; card.rows--; card.cells.pop(); card.h = card.rows * 40; sv(); buildMiroCanvas(); };
+  toolbar.querySelector('[data-act="+col"]').onclick = (e) => { e.stopPropagation(); card.cols++; card.cells.forEach(r => r.push('')); card.w = card.cols * 120; sv(); buildMiroCanvas(); };
+  toolbar.querySelector('[data-act="-col"]').onclick = (e) => { e.stopPropagation(); if (card.cols <= 1) return; card.cols--; card.cells.forEach(r => r.pop()); card.w = card.cols * 120; sv(); buildMiroCanvas(); };
+  toolbar.querySelector('.mg-hdr-clr').oninput = function () { card.headerColor = this.value; sv(); buildMiroCanvas(); };
+
+  el.addEventListener('click', (e) => {
+    if (e.target.closest('.mc-del') || e.target.closest('.mg-toolbar')) return;
+    document.querySelectorAll('.mg-toolbar.show').forEach(t => { if (t !== toolbar) t.classList.remove('show'); });
+    toolbar.classList.toggle('show');
+  });
+  document.addEventListener('click', (e) => { if (!el.contains(e.target)) toolbar.classList.remove('show'); });
+
+  // Drag
+  el.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.mc-del') || e.target.closest('.mg-toolbar') || e.target.tagName === 'TD') return;
+    e.stopPropagation();
+    if (e.ctrlKey || e.metaKey) { toggleMiroSelect(card.id); return; }
+    if (!_miroSelected.has(card.id)) { clearMiroSelection(); addMiroSelect(card.id); }
+    const page = cp(); const zoom = (page.zoom || 100) / 100;
+    const startX = e.clientX, startY = e.clientY;
+    const origPositions = new Map();
+    _miroSelected.forEach(cid => { const c2 = (page.miroCards || []).find(x => x.id === cid); if (c2) origPositions.set(cid, { x: c2.x || 0, y: c2.y || 0 }); });
+    let moved = false;
+    function onMove(ev) {
+      moved = true; const dx = (ev.clientX - startX) / zoom, dy = (ev.clientY - startY) / zoom;
+      origPositions.forEach((orig, cid) => {
+        const c2 = (page.miroCards || []).find(x => x.id === cid); if (!c2) return; c2.x = orig.x + dx; c2.y = orig.y + dy;
+        const cardEl = document.querySelector(`[data-cid="${cid}"]`); if (cardEl) { cardEl.style.left = c2.x + 'px'; cardEl.style.top = c2.y + 'px'; }
+      }); updateMiroSelFrame();
+    }
+    function onUp() { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); if (moved) sv(); }
+    document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+  });
+
+  el.appendChild(del);
+  el.appendChild(toolbar);
+  el.appendChild(table);
   return el;
 }

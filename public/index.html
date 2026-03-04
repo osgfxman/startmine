@@ -287,14 +287,60 @@
     <button id="mz-reset" title="Reset to 100%">1:1</button>
   </div>
 
-  <!-- Miro floating add button + menu -->
-  <button id="miro-add-float" title="Add to canvas">＋</button>
-  <div id="miro-add-menu">
-    <button class="miro-add-opt" id="miro-opt-card">📋 Add Card</button>
-    <button class="miro-add-opt" id="miro-opt-sticky">📝 Add Sticky Note</button>
-    <button class="miro-add-opt" id="miro-opt-image">🖼️ Upload Image</button>
-    <button class="miro-add-opt" id="miro-opt-text">✏️ Add Text</button>
-    <button class="miro-add-opt" id="miro-opt-shape">⬡ Add Shape</button>
+  <!-- Miro Vertical Toolbar -->
+  <div id="miro-toolbar">
+    <button class="mtb-btn sel" id="mtb-select" title="Select (V)"><svg viewBox="0 0 24 24" width="20" height="20">
+        <path d="M4 2l12 16-4-1-3 5-2-1 3-5-6-2z" fill="currentColor" />
+      </svg></button>
+    <button class="mtb-btn" id="mtb-sticky" title="Sticky Note (N)"><svg viewBox="0 0 24 24" width="20" height="20">
+        <rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.8" />
+        <line x1="7" y1="9" x2="17" y2="9" stroke="currentColor" stroke-width="1.5" />
+        <line x1="7" y1="13" x2="14" y2="13" stroke="currentColor" stroke-width="1.5" />
+      </svg></button>
+    <button class="mtb-btn" id="mtb-text" title="Text (T)"><svg viewBox="0 0 24 24" width="20" height="20"><text x="5"
+          y="19" font-size="18" font-weight="700" fill="currentColor">T</text></svg></button>
+    <button class="mtb-btn" id="mtb-shape" title="Shape (S)"><svg viewBox="0 0 24 24" width="20" height="20">
+        <rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.8" />
+      </svg></button>
+    <button class="mtb-btn" id="mtb-pen" title="Pen (P)"><svg viewBox="0 0 24 24" width="20" height="20">
+        <path d="M3 21l1.5-5.5L17 3l3 3L7.5 18.5z" fill="none" stroke="currentColor" stroke-width="1.8" />
+        <line x1="14" y1="6" x2="18" y2="10" stroke="currentColor" stroke-width="1.5" />
+      </svg></button>
+    <button class="mtb-btn" id="mtb-grid" title="Grid / Table (G)"><svg viewBox="0 0 24 24" width="20" height="20">
+        <rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <line x1="3" y1="10" x2="21" y2="10" stroke="currentColor" stroke-width="1.2" />
+        <line x1="3" y1="17" x2="21" y2="17" stroke="currentColor" stroke-width="1.2" />
+        <line x1="10" y1="3" x2="10" y2="21" stroke="currentColor" stroke-width="1.2" />
+        <line x1="17" y1="3" x2="17" y2="21" stroke="currentColor" stroke-width="1.2" />
+      </svg></button>
+    <button class="mtb-btn" id="mtb-image" title="Image (I)"><svg viewBox="0 0 24 24" width="20" height="20">
+        <rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <circle cx="9" cy="9" r="2" fill="currentColor" />
+        <path d="M3 17l5-5 3 3 4-4 6 6v2H3z" fill="currentColor" opacity=".5" />
+      </svg></button>
+    <button class="mtb-btn" id="mtb-card" title="Bookmark Card"><svg viewBox="0 0 24 24" width="20" height="20">
+        <rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <line x1="7" y1="8" x2="17" y2="8" stroke="currentColor" stroke-width="1" />
+        <line x1="7" y1="12" x2="17" y2="12" stroke="currentColor" stroke-width="1" />
+        <line x1="7" y1="16" x2="12" y2="16" stroke="currentColor" stroke-width="1" />
+      </svg></button>
+  </div>
+
+  <!-- Pen toolbar (color + thickness) -->
+  <div id="miro-pen-toolbar">
+    <input type="color" id="pen-color" value="#333333" title="Pen Color">
+    <input type="number" id="pen-width" value="3" min="1" max="20" title="Pen Width">
+    <button id="pen-cancel" title="Cancel (Esc)">✕</button>
+  </div>
+
+  <!-- Legacy floating menu (hidden, keeping IDs for compatibility) -->
+  <button id="miro-add-float" style="display:none" title="Add to canvas">＋</button>
+  <div id="miro-add-menu" style="display:none">
+    <button class="miro-add-opt" id="miro-opt-card">📋</button>
+    <button class="miro-add-opt" id="miro-opt-sticky">📝</button>
+    <button class="miro-add-opt" id="miro-opt-image">🖼️</button>
+    <button class="miro-add-opt" id="miro-opt-text">✏️</button>
+    <button class="miro-add-opt" id="miro-opt-shape">⬡</button>
   </div>
 
   <!-- Shape side panel -->

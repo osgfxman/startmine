@@ -1475,3 +1475,270 @@
 .msp-close:hover {
   color: var(--tx);
 }
+
+/* ─── Vertical Toolbar ─── */
+#miro-toolbar {
+  position: fixed;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 12px;
+  padding: 6px 4px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, .45);
+  backdrop-filter: blur(12px);
+  z-index: 601;
+}
+
+#miro-toolbar.show {
+  display: flex;
+}
+
+.mtb-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--mu);
+  cursor: pointer;
+  transition: all .12s;
+}
+
+.mtb-btn:hover {
+  background: rgba(108, 143, 255, .12);
+  color: var(--tx);
+}
+
+.mtb-btn.sel {
+  background: rgba(108, 143, 255, .2);
+  color: var(--ac);
+}
+
+.mtb-btn svg {
+  pointer-events: none;
+}
+
+/* ─── Pen Toolbar ─── */
+#miro-pen-toolbar {
+  position: fixed;
+  left: 60px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  padding: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+  backdrop-filter: blur(12px);
+  z-index: 602;
+}
+
+#miro-pen-toolbar.show {
+  display: flex;
+}
+
+#miro-pen-toolbar input[type="color"] {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  padding: 0;
+}
+
+#miro-pen-toolbar input[type="number"] {
+  width: 38px;
+  text-align: center;
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  color: var(--tx);
+  border-radius: 5px;
+  padding: 2px;
+  font-size: .65rem;
+}
+
+#miro-pen-toolbar button {
+  background: none;
+  border: 1px solid var(--bd);
+  color: var(--mu);
+  cursor: pointer;
+  border-radius: 5px;
+  padding: 2px 6px;
+  font-size: .6rem;
+  transition: all .12s;
+}
+
+#miro-pen-toolbar button:hover {
+  color: var(--tx);
+  border-color: var(--ac);
+}
+
+/* ─── Pen Widget ─── */
+.miro-pen {
+  position: absolute;
+  cursor: default;
+  overflow: visible;
+}
+
+.miro-pen.miro-selected {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+}
+
+.miro-pen.miro-hl {
+  animation: outlineHighlight 1.2s ease;
+}
+
+.miro-pen svg {
+  pointer-events: none;
+}
+
+.miro-pen .mc-del {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  z-index: 3;
+  background: rgba(0, 0, 0, .55);
+  border: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mu);
+  cursor: pointer;
+  font-size: .65rem;
+  opacity: 0;
+  transition: opacity .12s;
+}
+
+.miro-pen:hover .mc-del {
+  opacity: 1;
+}
+
+.miro-pen .mc-del:hover {
+  color: var(--red);
+}
+
+/* ─── Grid/Table Widget ─── */
+.miro-grid {
+  position: absolute;
+  cursor: default;
+  overflow: visible;
+}
+
+.miro-grid.miro-selected {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+}
+
+.miro-grid.miro-hl {
+  animation: outlineHighlight 1.2s ease;
+}
+
+.miro-grid .mc-del {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  z-index: 3;
+  background: rgba(0, 0, 0, .55);
+  border: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mu);
+  cursor: pointer;
+  font-size: .65rem;
+  opacity: 0;
+  transition: opacity .12s;
+}
+
+.miro-grid:hover .mc-del {
+  opacity: 1;
+}
+
+.miro-grid .mc-del:hover {
+  color: var(--red);
+}
+
+.mg-table {
+  border-collapse: collapse;
+  width: 100%;
+  background: var(--s1);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.mg-table td {
+  border: 1px solid rgba(108, 143, 255, .15);
+  padding: 6px 10px;
+  font-size: .72rem;
+  color: var(--tx);
+  outline: none;
+  min-width: 40px;
+  transition: background .1s;
+}
+
+.mg-table td:focus {
+  background: rgba(108, 143, 255, .08);
+}
+
+.mg-table tr:first-child td {
+  color: #fff;
+  font-weight: 600;
+}
+
+.mg-toolbar {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  padding: 5px 8px;
+  display: none;
+  align-items: center;
+  gap: 5px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+  backdrop-filter: blur(12px);
+  z-index: 10;
+  white-space: nowrap;
+}
+
+.mg-toolbar.show {
+  display: flex;
+}
+
+.mg-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--mu);
+  font-family: var(--font);
+}
+
+.mg-toolbar input[type="color"] {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+}

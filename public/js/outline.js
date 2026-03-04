@@ -79,6 +79,14 @@ function buildOutline() {
         item.title = c.shape || 'Shape';
         emoji.textContent = '⬡';
         title.textContent = c.shape ? c.shape.charAt(0).toUpperCase() + c.shape.slice(1) : 'Shape';
+      } else if (c.type === 'pen') {
+        item.title = 'Drawing';
+        emoji.textContent = '🖊️';
+        title.textContent = 'Drawing';
+      } else if (c.type === 'grid') {
+        item.title = `Table ${c.rows || 3}×${c.cols || 3}`;
+        emoji.textContent = '📊';
+        title.textContent = `Table ${c.rows || 3}×${c.cols || 3}`;
       } else {
         item.title = c.label || c.url;
         emoji.textContent = '🔗';

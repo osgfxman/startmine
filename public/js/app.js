@@ -1918,6 +1918,7 @@ function buildCols() {
   document.getElementById('miro-canvas').classList.toggle('hidden', !isMiro);
   document.getElementById('miro-zoom').classList.toggle('show', isMiro);
   document.getElementById('miro-add-float').classList.toggle('show', isMiro);
+  document.getElementById('miro-toolbar').classList.toggle('show', isMiro);
   document.getElementById('cols-wrap').style.display = isMiro ? 'none' : 'flex';
   if (isMiro) {
     buildMiroCanvas();

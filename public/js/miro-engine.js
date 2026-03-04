@@ -141,7 +141,7 @@ function buildMiroCanvas() {
   if (!page.miroCards) page.miroCards = [];
   const board = document.getElementById('miro-board');
   // Remove only card elements, preserve selection overlays
-  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape').forEach((el) => el.remove());
+  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid').forEach((el) => el.remove());
   // Clear selection state
   _miroSelected.clear();
   document.getElementById('miro-sel-frame').style.display = 'none';
@@ -158,6 +158,8 @@ function buildMiroCanvas() {
     else if (card.type === 'image') board.appendChild(buildMiroImage(card));
     else if (card.type === 'text') board.appendChild(buildMiroText(card));
     else if (card.type === 'shape') board.appendChild(buildMiroShape(card));
+    else if (card.type === 'pen') board.appendChild(buildMiroPen(card));
+    else if (card.type === 'grid') board.appendChild(buildMiroGridCard(card));
     else board.appendChild(buildMiroCard(card));
   });
   updateMiroGrid();
@@ -897,10 +899,170 @@ document.getElementById('miro-canvas').addEventListener('drop', (e) => {
   const y = (e.clientY - rect.top - (page.panY || 0)) / zoom;
   const card = {
     id: uid(), type: 'shape', shape: shapeType, x: x - 80, y: y - 60,
-    w: 160, h: 120, fillColor: '#6c8fff', strokeColor: '#333333',
+    w: 160, h: 120, fillColor: 'none', strokeColor: '#333333',
     strokeWidth: 2, opacity: 1,
   };
   page.miroCards.push(card);
   sv(); buildMiroCanvas(); buildOutline();
   document.getElementById('miro-shape-panel').classList.remove('show');
 });
+
+// ─── Vertical Toolbar Handlers ───
+let _activeTool = 'select';
+let _penMode = false;
+let _penPoints = [];
+let _penDrawing = false;
+
+function setActiveTool(tool) {
+  _activeTool = tool;
+  document.querySelectorAll('.mtb-btn').forEach(b => b.classList.remove('sel'));
+  const btnMap = { select: 'mtb-select', sticky: 'mtb-sticky', text: 'mtb-text', shape: 'mtb-shape', pen: 'mtb-pen', grid: 'mtb-grid', image: 'mtb-image', card: 'mtb-card' };
+  const btn = document.getElementById(btnMap[tool]);
+  if (btn) btn.classList.add('sel');
+  // Reset modes
+  _penMode = tool === 'pen';
+  _stickyCreateMode = false;
+  document.getElementById('sn-create-hint').style.display = 'none';
+  document.getElementById('miro-pen-toolbar').classList.toggle('show', _penMode);
+  document.getElementById('miro-canvas').style.cursor = _penMode ? 'crosshair' : 'grab';
+}
+
+document.getElementById('mtb-select').onclick = () => setActiveTool('select');
+document.getElementById('mtb-sticky').onclick = () => {
+  document.getElementById('miro-opt-sticky').click();
+  setActiveTool('select');
+};
+document.getElementById('mtb-text').onclick = () => {
+  document.getElementById('miro-opt-text').click();
+  setActiveTool('select');
+};
+document.getElementById('mtb-shape').onclick = () => {
+  document.getElementById('miro-opt-shape').click();
+  setActiveTool('select');
+};
+document.getElementById('mtb-pen').onclick = () => setActiveTool('pen');
+document.getElementById('mtb-grid').onclick = () => {
+  createMiroGrid();
+  setActiveTool('select');
+};
+document.getElementById('mtb-image').onclick = () => {
+  document.getElementById('miro-opt-image').click();
+  setActiveTool('select');
+};
+document.getElementById('mtb-card').onclick = () => {
+  document.getElementById('miro-opt-card').click();
+  setActiveTool('select');
+};
+document.getElementById('pen-cancel').onclick = () => setActiveTool('select');
+
+// ─── Keyboard Shortcuts ───
+document.addEventListener('keydown', (e) => {
+  // Don't trigger during text input
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.contentEditable === 'true') return;
+  const page = cp();
+  if (page.pageType !== 'miro') return;
+
+  switch (e.key.toLowerCase()) {
+    case 'v': setActiveTool('select'); break;
+    case 'n': document.getElementById('mtb-sticky').click(); break;
+    case 't': document.getElementById('mtb-text').click(); break;
+    case 's': if (!e.ctrlKey && !e.metaKey) { document.getElementById('mtb-shape').click(); } break;
+    case 'p': document.getElementById('mtb-pen').click(); break;
+    case 'g': document.getElementById('mtb-grid').click(); break;
+    case 'i': document.getElementById('mtb-image').click(); break;
+    case 'escape':
+      setActiveTool('select');
+      document.getElementById('miro-shape-panel').classList.remove('show');
+      break;
+    case 'delete':
+    case 'backspace':
+      if (_miroSelected.size > 0) {
+        _miroSelected.forEach(cid => {
+          page.miroCards = (page.miroCards || []).filter(c => c.id !== cid);
+        });
+        _miroSelected.clear();
+        sv(); buildMiroCanvas(); buildOutline();
+      }
+      break;
+  }
+});
+
+// ─── Pen Tool (Freehand Drawing) ───
+(function () {
+  const canvas = document.getElementById('miro-canvas');
+  let startBoardX = 0, startBoardY = 0;
+
+  canvas.addEventListener('mousedown', (e) => {
+    if (!_penMode || e.button !== 0) return;
+    if (e.target !== canvas && e.target.id !== 'miro-board') return;
+    e.preventDefault(); e.stopPropagation();
+    _penDrawing = true;
+    const page = cp();
+    const zoom = (page.zoom || 100) / 100;
+    const rect = canvas.getBoundingClientRect();
+    const bx = (e.clientX - rect.left - (page.panX || 0)) / zoom;
+    const by = (e.clientY - rect.top - (page.panY || 0)) / zoom;
+    startBoardX = bx; startBoardY = by;
+    _penPoints = [{ x: bx, y: by }];
+    canvas.style.cursor = 'crosshair';
+  }, true);
+
+  document.addEventListener('mousemove', (e) => {
+    if (!_penDrawing) return;
+    const page = cp();
+    const zoom = (page.zoom || 100) / 100;
+    const rect = canvas.getBoundingClientRect();
+    const bx = (e.clientX - rect.left - (page.panX || 0)) / zoom;
+    const by = (e.clientY - rect.top - (page.panY || 0)) / zoom;
+    _penPoints.push({ x: bx, y: by });
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!_penDrawing) return;
+    _penDrawing = false;
+    if (_penPoints.length < 2) return;
+    // Calculate bounding box
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    _penPoints.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); });
+    const pad = 10;
+    const w = maxX - minX + pad * 2, h = maxY - minY + pad * 2;
+    // Normalize points relative to bounding box
+    const normalized = _penPoints.map(p => ({ x: p.x - minX + pad, y: p.y - minY + pad }));
+    const page = cp();
+    if (!page.miroCards) page.miroCards = [];
+    const card = {
+      id: uid(), type: 'pen', points: normalized,
+      x: minX - pad, y: minY - pad, w, h,
+      penColor: document.getElementById('pen-color').value || '#333',
+      penWidth: +(document.getElementById('pen-width').value) || 3,
+    };
+    page.miroCards.push(card);
+    sv(); buildMiroCanvas(); buildOutline();
+    _penPoints = [];
+  });
+})();
+
+// ─── Grid/Table Tool ───
+function createMiroGrid(rows, cols) {
+  rows = rows || 3; cols = cols || 3;
+  const page = cp();
+  if (!page.miroCards) page.miroCards = [];
+  const canvas = document.getElementById('miro-canvas');
+  const zoom = (page.zoom || 100) / 100;
+  const cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
+  const cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+  const cells = [];
+  for (let r = 0; r < rows; r++) {
+    const row = [];
+    for (let c = 0; c < cols; c++) row.push('');
+    cells.push(row);
+  }
+  const w = cols * 120, h = rows * 40;
+  const card = {
+    id: uid(), type: 'grid', rows, cols, cells,
+    x: cx - w / 2, y: cy - h / 2, w, h,
+    headerColor: '#6c8fff', borderColor: '#ccc',
+  };
+  page.miroCards.push(card);
+  sv(); buildMiroCanvas(); buildOutline();
+}
