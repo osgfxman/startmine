@@ -101,9 +101,9 @@ function updateMiroGrid() {
   const coarseScreen = coarse * zoom;
 
   // Opacity: fade in based on screen pixel spacing — tuned to match Miro.com
-  const fineAlpha = clamp((fineScreen - 6) / 25, 0, 1) * 0.3;
-  const medAlpha = clamp((medScreen - 6) / 40, 0, 1) * 0.5;
-  const coarseAlpha = clamp((coarseScreen - 6) / 60, 0, 1) * 0.7;
+  const fineAlpha = clamp((fineScreen - 6) / 25, 0, 1) * 0.05;
+  const medAlpha = clamp((medScreen - 6) / 40, 0, 1) * 0.10;
+  const coarseAlpha = clamp((coarseScreen - 6) / 60, 0, 1) * 0.16;
 
   // Build CSS background layers (horizontal + vertical lines per level)
   const layers = [];

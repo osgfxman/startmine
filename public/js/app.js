@@ -2015,7 +2015,15 @@ function buildWidget(w) {
   const hdr = document.createElement('div');
   hdr.className = 'wh';
   hdr.style.borderBottomColor = bdCol;
-  hdr.innerHTML = `<div class="wt" style="color:${muCol}"><span>${w.emoji || '📌'}</span>${esc(w.title)}</div><div class="wa"><button class="wab" data-dp="${w.id}" title="Display">🖥️</button><button class="wab" data-mv="${w.id}" title="Move/Copy">📋</button><button class="wab" data-cl="${w.id}" title="Color">🎨</button><button class="wab" data-rn="${w.id}" title="Rename">✏️</button><button class="wab d" data-dl="${w.id}" title="Delete">🗑️</button></div>`;
+  const exportBtn = (w.type === 'bookmarks' || w.type === 'list') ? `<button class="wab" data-ex2m="${w.id}" title="Export to Miro Page">🚀</button>` : '';
+  hdr.innerHTML = `<div class="wt" style="color:${muCol}"><span>${w.emoji || '📌'}</span>${esc(w.title)}</div><div class="wa">${exportBtn}<button class="wab" data-dp="${w.id}" title="Display">🖥️</button><button class="wab" data-mv="${w.id}" title="Move/Copy">📋</button><button class="wab" data-cl="${w.id}" title="Color">🎨</button><button class="wab" data-rn="${w.id}" title="Rename">✏️</button><button class="wab d" data-dl="${w.id}" title="Delete">🗑️</button></div>`;
+  const ex2mBtn = hdr.querySelector('[data-ex2m]');
+  if (ex2mBtn) {
+    ex2mBtn.onclick = (e) => {
+      e.stopPropagation();
+      exportToMiro(w.id);
+    };
+  }
   hdr.querySelector('[data-dp]').onclick = (e) => {
     e.stopPropagation();
     openDisp(w.id);
@@ -2650,4 +2658,81 @@ function renderAll() {
   buildInbox();
   document.documentElement.style.setProperty('--ac', D.settings.accent || '#6c8fff');
   document.getElementById('ac-dot').style.background = D.settings.accent || '#6c8fff';
+  // Cache locally for fast reload
+  try {
+    localStorage.setItem('startmine_cache', JSON.stringify(D));
+    localStorage.setItem('startmine_cache_ts', '' + Date.now());
+  } catch (e) { /* quota exceeded */ }
 }
+
+// ─── Export Bookmark Widget to Miro Page ───
+function exportToMiro(widgetId) {
+  const w = fw(widgetId);
+  if (!w || !w.items || !w.items.length) {
+    alert('No bookmarks to export.');
+    return;
+  }
+  if (!confirm(`Export "${w.title}" (${w.items.length} links) to a new Miro page?`)) return;
+
+  const pageId = uid();
+  const targetGroup = D.curGroup === '__all__' ? D.groups[0].id : D.curGroup;
+
+  // Grid layout: arrange cards in columns
+  const CARD_W = 280;
+  const CARD_H = 240;
+  const GAP = 20;
+  const COLS = Math.min(Math.ceil(Math.sqrt(w.items.length)), 6);
+
+  const miroCards = w.items.map((bm, i) => {
+    const col = i % COLS;
+    const row = Math.floor(i / COLS);
+    return {
+      id: uid(),
+      type: 'card',
+      url: bm.url,
+      label: bm.label || '',
+      x: col * (CARD_W + GAP),
+      y: row * (CARD_H + GAP),
+      w: CARD_W,
+      h: CARD_H,
+    };
+  });
+
+  D.pages.push({
+    id: pageId,
+    groupId: targetGroup,
+    name: w.title || 'Exported',
+    pageType: 'miro',
+    miroCards,
+    zoom: 100,
+    panX: 40,
+    panY: 40,
+    bg: '',
+    bgType: 'none',
+    widgets: [],
+  });
+
+  D.cur = pageId;
+  sv();
+  renderAll();
+}
+
+// ─── Local Cache: instant load from localStorage on startup ───
+(function initLocalCache() {
+  const origInitDB = initDB;
+  initDB = function () {
+    // Load cached data first for instant render
+    try {
+      const cached = localStorage.getItem('startmine_cache');
+      if (cached) {
+        const data = JSON.parse(cached);
+        if (data && data.pages) {
+          D = sanitizeData(data);
+          renderAll();
+        }
+      }
+    } catch (e) { /* ignore parse errors */ }
+    // Then start Firebase real-time listener (will overwrite with fresh data)
+    origInitDB();
+  };
+})();
