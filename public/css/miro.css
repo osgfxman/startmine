@@ -45,6 +45,28 @@
   box-shadow: 0 6px 28px rgba(0, 0, 0, 0.6);
 }
 
+.miro-widget {
+  position: absolute;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.15s;
+}
+
+.miro-widget:hover {
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.6);
+}
+
+.miro-widget .wb::-webkit-scrollbar {
+  width: 6px;
+}
+
+.miro-widget .wb::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
 .miro-card.miro-hl {
   animation: outlineHighlight 1.2s ease;
 }

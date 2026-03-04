@@ -1367,3 +1367,81 @@ function buildMiroMindMap(card) {
   el.appendChild(container);
   return el;
 }
+
+/* ─── Bookmark Widget ─── */
+function buildMiroBookmarkWidget(card) {
+  const el = document.createElement('div');
+  el.className = 'miro-widget edit'; // re-uses normal widget styles plus absolute overrides
+  el.dataset.cid = card.id;
+  el.style.left = (card.x || 0) + 'px';
+  el.style.top = (card.y || 0) + 'px';
+  el.style.width = (card.w || 320) + 'px';
+  el.style.height = (card.h || 400) + 'px';
+  el.style.position = 'absolute';
+  el.style.overflow = 'hidden';
+
+  // Apply colors if any defaults specified (fallback to standard dark mode logic)
+  const c = card.color || { r: 50, g: 50, b: 50, a: 0.8 };
+  // Luma calculation copy-pasted for consistency
+  const light = ((c.r * 299 + c.g * 587 + c.b * 114) / 1000) > 140;
+  const txtCol = light ? '#111' : '#dde1ee';
+  const muCol = light ? '#666' : 'rgba(255,255,255,.42)';
+  const bdCol = light ? 'rgba(0,0,0,.1)' : `rgba(255,255,255,${Math.min(c.a * 0.13, 0.09)})`;
+  el.style.cssText += `background:rgba(${c.r},${c.g},${c.b},${c.a});border:1px solid ${bdCol};color:${txtCol};--w-tx:${txtCol};--w-mu:${muCol};`;
+
+  // Custom Header
+  const hdr = document.createElement('div');
+  hdr.className = 'wh';
+  hdr.style.borderBottomColor = bdCol;
+
+  // Header Actions
+  hdr.innerHTML = `
+    <div class="wt" style="color:${muCol}"><span>${card.emoji || '📌'}</span>${card.title || 'Bookmarks'}</div>
+    <div class="wa">
+      <button class="wab" data-dp="${card.id}" title="Display Settings">🖥️</button>
+      <button class="wab d mc-del" title="Delete">🗑️</button>
+    </div>
+  `;
+
+  // Apply Settings behavior
+  const dpBtn = hdr.querySelector('[data-dp]');
+  if (dpBtn) {
+    dpBtn.onclick = (e) => {
+      e.stopPropagation();
+      openDisp(card.id);
+    };
+  }
+
+  // Delete behavior
+  const delBtn = hdr.querySelector('.mc-del');
+  if (delBtn) {
+    delBtn.onclick = (e) => {
+      e.stopPropagation();
+      deleteMiroCard(card.id);
+    };
+  }
+
+  el.appendChild(hdr);
+
+  // Widget Body wrapper
+  const body = document.createElement('div');
+  body.className = 'wb';
+  body.style.height = 'calc(100% - 32px)';
+  body.style.overflowY = 'auto';
+
+  // Use the existing dashboard buildBmBody to populate items!
+  buildBmBody(body, card);
+
+  el.appendChild(body);
+
+  // Drag logic (bypass drag on links, delete buttons, add buttons, settings, options)
+  const ignoreSelectors = ['.mc-del', '.rmb', '.add-i', '.wab', '.sp-it', '.st-it', '.cd-it', '.cl-it', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.mg-toolbar', '.sn-toolbar', '.msh-toolbar', '.mt-toolbar'];
+  if (typeof miroSetupCardDrag === 'function') {
+    miroSetupCardDrag(el, card, ignoreSelectors);
+  }
+
+  // Sizing anchors
+  attachCornerResize(el, card, 130, 80);
+
+  return el;
+}

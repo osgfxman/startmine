@@ -306,7 +306,9 @@ function cp() {
 }
 function fw(id) {
   for (const p of D.pages) {
-    const w = (p.widgets || []).find((x) => x.id === id);
+    let w = (p.widgets || []).find((x) => x.id === id);
+    if (w) return w;
+    w = (p.miroCards || []).find((x) => x.id === id);
     if (w) return w;
   }
   return null;
@@ -2451,7 +2453,11 @@ document.getElementById('ok-bm').onclick = () => {
   if (!w.items) w.items = [];
   w.items.push({ id: uid(), label, url, emoji });
   sv();
-  buildCols();
+  if (cp().pageType === 'miro') {
+    if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+  } else {
+    buildCols();
+  }
   closeM('m-bm');
 };
 function openDisp(wid) {
@@ -2482,7 +2488,11 @@ document.getElementById('ok-dp').onclick = () => {
   w.size = document.getElementById('dm-sz').value;
   w.vis = document.getElementById('dm-vi').value;
   sv();
-  buildCols();
+  if (cp().pageType === 'miro') {
+    if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+  } else {
+    buildCols();
+  }
   closeM('m-dp');
 };
 document.getElementById('dp-all').onclick = () => {
@@ -2496,8 +2506,19 @@ document.getElementById('dp-all').onclick = () => {
       w.vis = vis;
     }
   });
+  (cp().miroCards || []).forEach((w) => {
+    if (w.type === 'bwidget') {
+      w.display = mode;
+      w.size = sz;
+      w.vis = vis;
+    }
+  });
   sv();
-  buildCols();
+  if (cp().pageType === 'miro') {
+    if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+  } else {
+    buildCols();
+  }
   closeM('m-dp');
 };
 function openColModal(wid) {
