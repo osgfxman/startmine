@@ -403,9 +403,7 @@ function deleteMiroCard(cid) {
       page.panX = cursorX - (boardPointX * newZoom);
       page.panY = cursorY - (boardPointY * newZoom);
 
-      document.getElementById('miro-board').style.transform = `translate(${page.panX}px,${page.panY}px) scale(${newZoom})`;
-      document.getElementById('mz-slider').value = page.zoom;
-      document.getElementById('mz-pct').textContent = page.zoom + '%';
+      applyZoomPan(page);
 
       // Debounced save so zoom state persists
       clearTimeout(_wheelSvTimer);
