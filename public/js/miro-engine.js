@@ -213,60 +213,10 @@ function buildMiroCard(card) {
   }
 
   // Drag logic — drag from thumbnail area (supports multi-select group drag)
-  thumb.addEventListener('mousedown', (e) => {
-    if (
-      e.target.closest('.mc-del') ||
-      e.target.closest('.mc-open') ||
-      e.target.closest('.mc-resize')
-    )
-      return;
-    e.stopPropagation();
-    // Ctrl+Click toggle selection
-    if (e.ctrlKey || e.metaKey) {
-      toggleMiroSelect(card.id);
-      return;
-    }
-    // If card is not selected, select only this card (unless part of multi-select)
-    if (!_miroSelected.has(card.id)) {
-      clearMiroSelection();
-      addMiroSelect(card.id);
-    }
-    const page = cp();
-    const zoom = (page.zoom || 100) / 100;
-    const startX = e.clientX,
-      startY = e.clientY;
-    // Store original positions for all selected cards
-    const origPositions = new Map();
-    _miroSelected.forEach((cid) => {
-      const c = (page.miroCards || []).find((x) => x.id === cid);
-      if (c) origPositions.set(cid, { x: c.x || 0, y: c.y || 0 });
-    });
-    let moved = false;
-    function onMove(ev) {
-      moved = true;
-      const dx = (ev.clientX - startX) / zoom;
-      const dy = (ev.clientY - startY) / zoom;
-      origPositions.forEach((orig, cid) => {
-        const c = (page.miroCards || []).find((x) => x.id === cid);
-        if (!c) return;
-        c.x = orig.x + dx;
-        c.y = orig.y + dy;
-        const cardEl = document.querySelector(`[data-cid="${cid}"]`);
-        if (cardEl) {
-          cardEl.style.left = c.x + 'px';
-          cardEl.style.top = c.y + 'px';
-        }
-      });
-      updateMiroSelFrame();
-    }
-    function onUp() {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      if (moved) sv();
-    }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  });
+  // We use the new global Alt-Drag duplication helper from thumbnails.js
+  if (typeof miroSetupCardDrag === 'function') {
+    miroSetupCardDrag(thumb, card, ['.mc-del', '.mc-open', '.mc-resize']);
+  }
 
   // Metadata footer
   const meta = document.createElement('div');
@@ -431,23 +381,32 @@ function deleteMiroCard(cid) {
     (e) => {
       e.preventDefault();
       const page = cp();
-      let z = page.zoom || 100;
+
       const rect = canvas.getBoundingClientRect();
       const cursorX = e.clientX - rect.left;
       const cursorY = e.clientY - rect.top;
-      const oldZoom = z / 100;
+
+      const oldZoom = (page.zoom || 100) / 100;
+
+      // Calculate cursor position RELATIVE to the unscaled board origin
+      const boardPointX = (cursorX - (page.panX || 0)) / oldZoom;
+      const boardPointY = (cursorY - (page.panY || 0)) / oldZoom;
 
       // Both trackpad pinch and regular scroll → zoom at cursor
       const delta = e.ctrlKey ? (-e.deltaY * 0.8) : (e.deltaY > 0 ? -5 : 5);
-      z = Math.max(10, Math.min(400, z + delta));
-      const newZoom = z / 100;
+      let newZoomNum = Math.max(10, Math.min(400, (page.zoom || 100) + delta));
+      page.zoom = newZoomNum;
 
-      // Adjust pan so cursor stays over the same board point
-      page.panX = cursorX - (cursorX - (page.panX || 0)) * (newZoom / oldZoom);
-      page.panY = cursorY - (cursorY - (page.panY || 0)) * (newZoom / oldZoom);
+      const newZoom = newZoomNum / 100;
 
-      page.zoom = z;
-      applyZoomPan(page);
+      // Adjust pan so the exact unscaled board point remains under the cursor screen point
+      page.panX = cursorX - (boardPointX * newZoom);
+      page.panY = cursorY - (boardPointY * newZoom);
+
+      document.getElementById('miro-board').style.transform = `translate(${page.panX}px,${page.panY}px) scale(${newZoom})`;
+      document.getElementById('mz-slider').value = page.zoom;
+      document.getElementById('mz-pct').textContent = page.zoom + '%';
+
       // Debounced save so zoom state persists
       clearTimeout(_wheelSvTimer);
       _wheelSvTimer = setTimeout(() => sv(), 300);
