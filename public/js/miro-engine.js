@@ -964,9 +964,19 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
   const by = (e.clientY - rect.top - (page.panY || 0)) / zoom;
 
   if (_stickyCreateMode) {
-    page.miroCards.push({ id: uid(), type: 'sticky', text: '', color: 'yellow', shape: 'rect', x: bx - 140, y: by - 80, w: 280, h: 160 });
+    const newId = uid();
+    page.miroCards.push({ id: newId, type: 'sticky', text: '', color: 'yellow', shape: 'rect', x: bx - 140, y: by - 80, w: 280, h: 160 });
+    setTimeout(() => {
+      const el = document.querySelector(`.miro-sticky[data-cid="${newId}"] .ms-text`);
+      if (el) el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    }, 50);
   } else if (_textCreateMode) {
-    page.miroCards.push({ id: uid(), type: 'text', text: 'Text', x: bx - 60, y: by - 15, w: 120, h: 30, fontSize: 24, fontFamily: 'Inter', color: '#ffffff' });
+    const newId = uid();
+    page.miroCards.push({ id: newId, type: 'text', text: '', x: bx - 60, y: by - 15, w: 120, h: 30, fontSize: 24, fontFamily: 'Inter', color: '#ffffff' });
+    setTimeout(() => {
+      const el = document.querySelector(`.miro-text[data-cid="${newId}"] .mt-text`);
+      if (el) el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    }, 50);
   } else if (_gridCreateMode) {
     const rows = 3, cols = 3;
     const cells = [];
