@@ -479,16 +479,16 @@
   display: none;
 }
 
-#miro-align-handle {
+#miro-align-handle,
+#miro-widget-handle {
   position: absolute;
   top: -18px;
-  right: -18px;
   width: 32px;
   height: 32px;
   border-radius: 50%;
   background: rgba(80, 85, 110, 0.92);
   border: 2px solid rgba(255, 255, 255, 0.18);
-  cursor: grab;
+  cursor: pointer;
   pointer-events: all;
   display: flex;
   align-items: center;
@@ -501,16 +501,31 @@
   z-index: 12;
 }
 
-#miro-align-handle:hover {
+#miro-align-handle {
+  right: -18px;
+  cursor: grab;
+}
+
+#miro-widget-handle {
+  right: -58px;
+  font-size: 14px;
+}
+
+#miro-align-handle:hover,
+#miro-widget-handle:hover {
   background: rgba(108, 143, 255, 0.85);
   transform: scale(1.12);
   box-shadow: 0 3px 16px rgba(108, 143, 255, 0.5);
 }
 
-#miro-align-handle:active {
-  cursor: grabbing;
+#miro-align-handle:active,
+#miro-widget-handle:active {
   background: var(--ac);
   transform: scale(1.05);
+}
+
+#miro-align-handle:active {
+  cursor: grabbing;
 }
 
 #miro-align-handle svg {

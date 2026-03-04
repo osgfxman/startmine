@@ -1435,3 +1435,60 @@ window.addEventListener('resize', () => {
     buildMiroCanvas();
   }
 });
+
+// =========== CONVERT SELECTION TO WIDGET ===========
+window.createWidgetFromSelection = function () {
+  const page = cp();
+  if (!page || !page.miroCards || _miroSelected.size < 2) return;
+
+  const selectedCards = [];
+  _miroSelected.forEach(cid => {
+    const card = page.miroCards.find(c => c.id === cid && c.type === 'card' && c.url);
+    if (card) selectedCards.push(card);
+  });
+
+  if (selectedCards.length === 0) {
+    if (typeof showToast === 'function') showToast("No web links selected.");
+    return;
+  }
+
+  // Extract items for the widget
+  const items = selectedCards.map(c => ({
+    url: c.url,
+    title: c.label || domainOf(c.url)
+  }));
+
+  // Calculate position (average center of selected cards)
+  let sumX = 0, sumY = 0;
+  selectedCards.forEach(c => {
+    sumX += (c.x || 0) + (c.w || 280) / 2;
+    sumY += (c.y || 0) + (c.h || 240) / 2;
+  });
+  const avgX = sumX / selectedCards.length;
+  const avgY = sumY / selectedCards.length;
+
+  const startX = avgX - 160; // 320 w / 2
+  const startY = avgY - 200; // 400 h / 2
+
+  // Create new widget
+  const newWidget = {
+    id: uid(),
+    type: 'bwidget',
+    title: 'New Bookmark Group',
+    items: items,
+    x: startX,
+    y: startY,
+    w: 380, // slightly wider for cards
+    h: 400,
+    display: 'card',
+    size: 'lg'
+  };
+
+  page.miroCards.push(newWidget);
+
+  // Clear selection and redraw
+  clearMiroSelection();
+  sv();
+  buildMiroCanvas();
+  if (typeof buildOutline === 'function') buildOutline();
+};

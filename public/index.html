@@ -12,8 +12,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=2.1">
-  <link rel="stylesheet" href="css/miro.css?v=2.1">
+  <link rel="stylesheet" href="css/base.css?v=2.3">
+  <link rel="stylesheet" href="css/miro.css?v=2.3">
   </style>
 </head>
 
@@ -102,12 +102,13 @@
       <div id="miro-board">
         <div id="miro-sel-box"></div>
         <div id="miro-sel-frame">
-          <div id="miro-align-handle"><svg viewBox="0 0 16 16">
+          <div id="miro-align-handle" title="Align as Grid"><svg viewBox="0 0 16 16">
               <rect x="1" y="1" width="6" height="6" rx="1" />
               <rect x="9" y="1" width="6" height="6" rx="1" />
               <rect x="1" y="9" width="6" height="6" rx="1" />
               <rect x="9" y="9" width="6" height="6" rx="1" />
             </svg></div>
+          <div id="miro-widget-handle" title="Convert to Widget" onclick="createWidgetFromSelection()">🗂️</div>
         </div>
       </div>
     </div>
@@ -534,11 +535,11 @@
       </div>
     </div>
 
-    <script src="js/app.js?v=2.1"></script>
-    <script src="js/outline.js?v=2.1"></script>
-    <script src="js/miro-engine.js?v=2.1"></script>
-    <script src="js/thumbnails.js?v=2.1"></script>
-    <script src="js/alignment.js?v=2.1"></script>
+    <script src="js/app.js?v=2.3"></script>
+    <script src="js/outline.js?v=2.3"></script>
+    <script src="js/miro-engine.js?v=2.3"></script>
+    <script src="js/thumbnails.js?v=2.3"></script>
+    <script src="js/alignment.js?v=2.3"></script>
 </body>
 
 </html>
