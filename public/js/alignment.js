@@ -150,50 +150,15 @@
   }
 })();
 
-// Click on empty canvas deselects
+// Click on empty canvas deselects (creation modes handled by miro-engine.js click handler)
 document.getElementById('miro-canvas').addEventListener('click', (e) => {
   if (
     (e.target === document.getElementById('miro-canvas') || e.target.id === 'miro-board') &&
     !_alignDragging &&
     !_justRubberBanded
   ) {
-    // If in sticky creation mode, create a note at click position
-    if (_stickyCreateMode) {
-      const page = cp();
-      const canvas = document.getElementById('miro-canvas');
-      const canvasRect = canvas.getBoundingClientRect();
-      const zoom = (page.zoom || 100) / 100;
-      const bx = (e.clientX - canvasRect.left - (page.panX || 0)) / zoom;
-      const by = (e.clientY - canvasRect.top - (page.panY || 0)) / zoom;
-      if (!page.miroCards) page.miroCards = [];
-      const w = 280,
-        h = 160;
-      const card = {
-        id: uid(),
-        type: 'sticky',
-        text: '',
-        color: 'yellow',
-        shape: 'rect',
-        x: bx - w / 2,
-        y: by - h / 2,
-        w,
-        h,
-      };
-      page.miroCards.push(card);
-      // Exit creation mode
-      _stickyCreateMode = false;
-      canvas.classList.remove('sn-create-mode');
-      document.getElementById('sn-create-hint').classList.remove('show');
-      sv();
-      buildMiroCanvas();
-      buildOutline();
-      // Focus the new note's text
-      requestAnimationFrame(() => {
-        const newEl = document.querySelector(`[data-cid="${card.id}"] .ms-text`);
-        if (newEl) newEl.focus();
-      });
-      return;
-    }
+    // If in a creation mode, let the miro-engine click handler deal with it
+    if (_stickyCreateMode || _textCreateMode) return;
     clearMiroSelection();
   }
 });

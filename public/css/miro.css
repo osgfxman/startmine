@@ -543,6 +543,40 @@
   background: #f5b971;
 }
 
+.miro-sticky.sn-red {
+  background: #ff6b6b;
+}
+
+.miro-sticky.sn-cyan {
+  background: #66d9e8;
+}
+
+.miro-sticky.sn-white {
+  background: #f1f3f5;
+}
+
+.miro-sticky.sn-gray {
+  background: #adb5bd;
+}
+
+.miro-sticky.sn-dark {
+  background: #495057;
+  color: #fff;
+}
+
+.miro-sticky.sn-dark .ms-text {
+  color: #fff;
+}
+
+.miro-sticky.sn-magenta {
+  background: #e64980;
+  color: #fff;
+}
+
+.miro-sticky.sn-magenta .ms-text {
+  color: #fff;
+}
+
 /* Fold corner */
 .miro-sticky::after {
   content: '';
@@ -1805,4 +1839,74 @@
   outline: 2px solid var(--ac);
   outline-offset: -2px;
   border-radius: 8px;
+}
+
+/* Grid edge + buttons */
+.mg-edge-btn {
+  position: absolute;
+  z-index: 4;
+  background: rgba(108, 143, 255, .85);
+  border: none;
+  border-radius: 12px;
+  color: #fff;
+  font-size: .55rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 8px;
+  opacity: 0;
+  transition: opacity .15s;
+  pointer-events: none;
+}
+
+.miro-grid:hover .mg-edge-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mg-edge-top {
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.mg-edge-bot {
+  bottom: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.mg-edge-left {
+  left: -30px;
+  top: 50%;
+  transform: translateY(-50%);
+  writing-mode: vertical-lr;
+}
+
+.mg-edge-right {
+  right: -30px;
+  top: 50%;
+  transform: translateY(-50%);
+  writing-mode: vertical-lr;
+}
+
+.mg-edge-btn:hover {
+  background: var(--ac);
+}
+
+/* Cell selection */
+td.mg-sel {
+  outline: 2px solid var(--ac) !important;
+  outline-offset: -1px;
+}
+
+/* Toggle button active state */
+.mg-toggle.active {
+  background: rgba(108, 143, 255, .3);
+  color: var(--ac);
+}
+
+/* Mind Map node selected */
+.mm-node.mm-selected {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
 }

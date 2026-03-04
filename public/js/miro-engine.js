@@ -314,6 +314,7 @@ function deleteMiroCard(cid) {
   let _rubberBanding = false;
   let _rbStartX = 0,
     _rbStartY = 0;
+  let _wheelSvTimer = null;
 
   canvas.addEventListener('mousedown', (e) => {
     if (e.target !== canvas && e.target.id !== 'miro-board') return;
@@ -332,6 +333,11 @@ function deleteMiroCard(cid) {
     }
 
     // Space held: pan mode (future enhancement)
+    // If in a creation/drawing mode, don't start rubber-band — let click handlers handle it
+    if (isMiro && (_stickyCreateMode || _textCreateMode || _penMode || _shapeMode)) {
+      return;
+    }
+
     // Left-click on empty space: start rubber-band selection if miro page
     if (isMiro) {
       _rubberBanding = true;
@@ -442,6 +448,9 @@ function deleteMiroCard(cid) {
 
       page.zoom = z;
       applyZoomPan(page);
+      // Debounced save so zoom state persists
+      clearTimeout(_wheelSvTimer);
+      _wheelSvTimer = setTimeout(() => sv(), 300);
     },
     { passive: false },
   );
@@ -917,31 +926,42 @@ function setActiveTool(tool) {
   if (btn) btn.classList.add('sel');
   _penMode = tool === 'pen';
   _shapeMode = tool === 'shape';
-  _stickyCreateMode = false;
-  document.getElementById('sn-create-hint').style.display = 'none';
+  _stickyCreateMode = tool === 'sticky';
+  _textCreateMode = tool === 'text';
+  const hint = document.getElementById('sn-create-hint');
+  if (_stickyCreateMode) { hint.textContent = '📝 Click anywhere to place a sticky note • Press Esc to cancel'; hint.style.display = 'block'; }
+  else if (_textCreateMode) { hint.textContent = '✏️ Click anywhere to place text • Press Esc to cancel'; hint.style.display = 'block'; }
+  else { hint.style.display = 'none'; }
   document.getElementById('miro-pen-toolbar').classList.toggle('show', _penMode);
-  const cursor = (_penMode || _shapeMode) ? 'crosshair' : 'grab';
+  const cursor = (_penMode || _shapeMode || _stickyCreateMode || _textCreateMode) ? 'crosshair' : 'grab';
   document.getElementById('miro-canvas').style.cursor = cursor;
   if (!_shapeMode) document.getElementById('miro-shape-panel').classList.remove('show');
 }
 
+let _textCreateMode = false;
+
 document.getElementById('mtb-select').onclick = () => setActiveTool('select');
-document.getElementById('mtb-sticky').onclick = () => {
-  // Direct create yellow rect sticky at center
+document.getElementById('mtb-sticky').onclick = () => setActiveTool('sticky');
+document.getElementById('mtb-text').onclick = () => setActiveTool('text');
+
+// Canvas click handler for click-to-place modes (sticky & text)
+document.getElementById('miro-canvas').addEventListener('click', (e) => {
+  if (!_stickyCreateMode && !_textCreateMode) return;
+  if (e.target.closest('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, #miro-toolbar, .mc-del')) return;
   const page = cp();
   if (!page.miroCards) page.miroCards = [];
-  const canvas = document.getElementById('miro-canvas');
   const zoom = (page.zoom || 100) / 100;
-  const cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
-  const cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
-  page.miroCards.push({ id: uid(), type: 'sticky', text: '', color: 'yellow', shape: 'rect', x: cx - 140, y: cy - 80, w: 280, h: 160 });
+  const rect = document.getElementById('miro-canvas').getBoundingClientRect();
+  const bx = (e.clientX - rect.left - (page.panX || 0)) / zoom;
+  const by = (e.clientY - rect.top - (page.panY || 0)) / zoom;
+  if (_stickyCreateMode) {
+    page.miroCards.push({ id: uid(), type: 'sticky', text: '', color: 'yellow', shape: 'rect', x: bx - 140, y: by - 80, w: 280, h: 160 });
+  } else if (_textCreateMode) {
+    page.miroCards.push({ id: uid(), type: 'text', text: 'Text', x: bx - 60, y: by - 15, w: 120, h: 30, fontSize: 24, fontFamily: 'Inter', color: '#ffffff' });
+  }
   sv(); buildMiroCanvas(); buildOutline();
   setActiveTool('select');
-};
-document.getElementById('mtb-text').onclick = () => {
-  document.getElementById('miro-opt-text').click();
-  setActiveTool('select');
-};
+});
 document.getElementById('mtb-shape').onclick = () => {
   setActiveTool('shape');
   document.getElementById('miro-shape-panel').classList.add('show');
