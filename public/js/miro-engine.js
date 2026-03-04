@@ -1030,7 +1030,10 @@ document.getElementById('mtb-mindmap').onclick = () => {
   setActiveTool('mindmap');
 };
 
-// ─── Keyboard Shortcuts ───
+// Track mouse to paste at cursor
+let _mouseX = 0, _mouseY = 0;
+document.addEventListener('mousemove', e => { _mouseX = e.clientX; _mouseY = e.clientY; });
+
 document.addEventListener('keydown', (e) => {
   // Don't trigger during text input
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.contentEditable === 'true') return;
@@ -1038,34 +1041,107 @@ document.addEventListener('keydown', (e) => {
   if (page.pageType !== 'miro') return;
 
   const key = e.key.toLowerCase();
+  const isCmd = e.ctrlKey || e.metaKey;
+
+  // Copy (Cmd/Ctrl + C) or Cmd/Ctrl + ؤ
+  if (isCmd && (key === 'c' || key === 'ؤ')) {
+    if (_miroSelected.size > 0 && page.miroCards) {
+      const copiedCards = [];
+      _miroSelected.forEach(cid => {
+        const card = page.miroCards.find(c => c.id === cid);
+        if (card) copiedCards.push(JSON.parse(JSON.stringify(card)));
+      });
+      localStorage.setItem('miro_clipboard', JSON.stringify(copiedCards));
+
+      // Also strictly write the JSON to the system clipboard so native paste works between browser tabs implicitly
+      navigator.clipboard.writeText('STARTMINE_MIRO:' + JSON.stringify(copiedCards)).catch(e => console.error(e));
+      console.log(`Copied ${copiedCards.length} items.`);
+    }
+  }
+
+  // Paste (Cmd/Ctrl + V) native event will handle everything now to prevent race conditions.
   // Blur any focused input to prevent typing in search box
   if (document.activeElement && document.activeElement.tagName === 'INPUT') document.activeElement.blur();
 
-  switch (key) {
-    case 'v': case 'ر': e.preventDefault(); setActiveTool('select'); break;
-    case 'n': case 'ى': e.preventDefault(); document.getElementById('mtb-sticky').click(); break;
-    case 't': case 'ف': e.preventDefault(); document.getElementById('mtb-text').click(); break;
-    case 's': case 'س': if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); document.getElementById('mtb-shape').click(); } break;
-    case 'p': case 'ح': e.preventDefault(); document.getElementById('mtb-pen').click(); break;
-    case 'g': case 'ل': e.preventDefault(); document.getElementById('mtb-grid').click(); break;
-    case 'm': case 'ة': e.preventDefault(); document.getElementById('mtb-mindmap').click(); break;
-    case 'i': case 'ه': e.preventDefault(); document.getElementById('mtb-image').click(); break;
-    case 'b': case 'لا': e.preventDefault(); document.getElementById('mtb-card').click(); break;
-    case 'escape':
-      setActiveTool('select');
-      document.getElementById('miro-shape-panel').classList.remove('show');
-      break;
-    case 'delete':
-    case 'backspace':
-      if (_miroSelected.size > 0) {
-        e.preventDefault();
-        _miroSelected.forEach(cid => {
-          page.miroCards = (page.miroCards || []).filter(c => c.id !== cid);
-        });
-        _miroSelected.clear();
+  // Explicit text-paste fallback for Arabic keyboard (Ctrl+ر) because it won't trigger native OS "paste" event.
+  if (isCmd && key === 'ر') {
+    navigator.clipboard.readText().then(text => {
+      if (text) {
+        // Mock a minimal clipboard event structure and pass it to our paste handler if needed,
+        // or just let the user use English for image pasting. We can re-use the parsing logic:
+        let clipData = localStorage.getItem('miro_clipboard');
+        if (text.startsWith('STARTMINE_MIRO:')) clipData = text.replace('STARTMINE_MIRO:', '');
+
+        if (clipData) {
+          try {
+            const cards = JSON.parse(clipData);
+            if (cards && cards.length > 0) {
+              e.preventDefault();
+              if (!page.miroCards) page.miroCards = [];
+              const zoom = (page.zoom || 100) / 100;
+              const px = (_mouseX - (page.panX || 0)) / zoom;
+              const py = (_mouseY - (page.panY || 0)) / zoom;
+              let minX = Infinity, minY = Infinity;
+              cards.forEach(c => { if (c.x < minX) minX = c.x; if (c.y < minY) minY = c.y; });
+              clearMiroSelection();
+              cards.forEach(c => {
+                const newId = uid(); c.id = newId;
+                c.x = px + (c.x - minX) - (c.w || 100) / 2;
+                c.y = py + (c.y - minY) - (c.h || 100) / 2;
+                page.miroCards.push(c); _miroSelected.add(c.id);
+              });
+              sv(); buildMiroCanvas(); buildOutline(); return;
+            }
+          } catch (e) { }
+        }
+
+        // Literal text fallback
+        if (!page.miroCards) page.miroCards = [];
+        const canvas = document.getElementById('miro-canvas');
+        const zoom = (page.zoom || 100) / 100;
+        const cx = _mouseX ? (_mouseX - (page.panX || 0)) / zoom : (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
+        const cy = _mouseY ? (_mouseY - (page.panY || 0)) / zoom : (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+
+        let url = text.trim();
+        if (/^(https?:\/\/[^\s]+)$/i.test(url) || /^(www\.[^\s]+)$/i.test(url)) {
+          if (!url.startsWith('http')) url = 'https://' + url;
+          page.miroCards.push({ id: uid(), type: 'card', url, label: domainOf(url), x: cx - 140, y: cy - 120, w: 280, h: 240 });
+        } else {
+          page.miroCards.push({ id: uid(), type: 'sticky', text: text, bg: '#ffe599', x: cx - 100, y: cy - 100, w: 200, h: 200 });
+        }
         sv(); buildMiroCanvas(); buildOutline();
       }
-      break;
+    }).catch(e => console.error(e));
+  }
+
+  // Tools Shortcuts
+  if (!isCmd) {
+    switch (key) {
+      case 'v': case 'ر': e.preventDefault(); setActiveTool('select'); break;
+      case 'n': case 'ى': e.preventDefault(); document.getElementById('mtb-sticky').click(); break;
+      case 't': case 'ف': e.preventDefault(); document.getElementById('mtb-text').click(); break;
+      case 's': case 'س': e.preventDefault(); document.getElementById('mtb-shape').click(); break;
+      case 'p': case 'ح': e.preventDefault(); document.getElementById('mtb-pen').click(); break;
+      case 'g': case 'ل': e.preventDefault(); document.getElementById('mtb-grid').click(); break;
+      case 'm': case 'ة': e.preventDefault(); document.getElementById('mtb-mindmap').click(); break;
+      case 'i': case 'ه': e.preventDefault(); document.getElementById('mtb-image').click(); break;
+      case 'b': case 'لا': e.preventDefault(); document.getElementById('mtb-card').click(); break;
+      case 'escape':
+        setActiveTool('select');
+        document.getElementById('miro-shape-panel').classList.remove('show');
+        break;
+      case 'delete':
+      case 'backspace':
+        if (_miroSelected.size > 0) {
+          e.preventDefault();
+          _miroSelected.forEach(cid => {
+            page.miroCards = (page.miroCards || []).filter(c => c.id !== cid);
+          });
+          _miroSelected.clear();
+          sv(); buildMiroCanvas(); buildOutline();
+        }
+        break;
+    }
   }
 });
 
@@ -1076,34 +1152,111 @@ document.addEventListener('paste', (e) => {
   const page = cp();
   if (page.pageType !== 'miro') return;
 
-  const text = (e.clipboardData || window.clipboardData).getData('text');
-  if (!text) return;
+  const handleMiroPasting = (cardsJSON) => {
+    try {
+      const cards = JSON.parse(cardsJSON);
+      if (cards && cards.length > 0) {
+        if (!page.miroCards) page.miroCards = [];
+        const zoom = (page.zoom || 100) / 100;
+        const px = (_mouseX - (page.panX || 0)) / zoom;
+        const py = (_mouseY - (page.panY || 0)) / zoom;
+        let minX = Infinity, minY = Infinity;
+        cards.forEach(c => {
+          if (c.x < minX) minX = c.x;
+          if (c.y < minY) minY = c.y;
+        });
+        clearMiroSelection();
+        cards.forEach(c => {
+          const newId = uid();
+          c.id = newId;
+          c.x = px + (c.x - minX) - (c.w || 100) / 2;
+          c.y = py + (c.y - minY) - (c.h || 100) / 2;
+          if (c.t === 'sticky') c.contentEditable = false;
+          page.miroCards.push(c);
+          _miroSelected.add(c.id);
+        });
+        sv(); buildMiroCanvas(); buildOutline();
+      }
+    } catch (err) { console.error('Miro Clipboard parse err', err); }
+  };
 
-  // Check if it's a valid URL roughly
+  let imagePasted = false;
+
+  // 1. Check for images first
+  if (e.clipboardData && e.clipboardData.items) {
+    for (let i = 0; i < e.clipboardData.items.length; i++) {
+      if (e.clipboardData.items[i].type.indexOf('image') !== -1) {
+        const blob = e.clipboardData.items[i].getAsFile();
+        imagePasted = true;
+
+        const reader = new FileReader();
+        reader.onload = function (event) {
+          const dataUrl = event.target.result;
+          const img = new Image();
+          img.onload = function () {
+            const canvas = document.getElementById('miro-canvas');
+            const zoom = (page.zoom || 100) / 100;
+            const cx = _mouseX ? (_mouseX - (page.panX || 0)) / zoom : (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
+            const cy = _mouseY ? (_mouseY - (page.panY || 0)) / zoom : (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+
+            if (!page.miroCards) page.miroCards = [];
+            let w = 300;
+            let h = Math.round(300 * (img.height / img.width));
+            if (img.width > 800) { w = 800; h = Math.round(800 * (img.height / img.width)); }
+
+            const card = { id: uid(), type: 'image', w, h, x: cx - w / 2, y: cy - h / 2, imageUrl: dataUrl };
+            page.miroCards.push(card);
+            sv(); buildMiroCanvas(); buildOutline();
+          };
+          img.src = dataUrl;
+        };
+        reader.readAsDataURL(blob);
+      }
+    }
+  }
+
+  // If an image was handled, don't try to process text fallback for this paste event.
+  if (imagePasted) return;
+
+  // 2. Fallback to Text Handling
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+
+  // If there's no text (and no image was pasted), check if we explicitly have an old localstorage clipboard as an absolute deepest fallback.
+  // Note: Usually Ctrl+C writes to OS clipboard, so this is rarely needed, but good for cross-tab if native clipboard fails.
+  if (!text) {
+    const ls = localStorage.getItem('miro_clipboard');
+    if (ls) handleMiroPasting(ls);
+    return;
+  }
+
+  // 3. Is it a STARTMINE internal paste string?
+  if (text.startsWith('STARTMINE_MIRO:')) {
+    handleMiroPasting(text.replace('STARTMINE_MIRO:', ''));
+    return;
+  }
+
+  // 4. It's external Text or URL
+  if (!page.miroCards) page.miroCards = [];
+  const canvas = document.getElementById('miro-canvas');
+  const zoom = (page.zoom || 100) / 100;
+  const cx = _mouseX ? (_mouseX - (page.panX || 0)) / zoom : (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
+  const cy = _mouseY ? (_mouseY - (page.panY || 0)) / zoom : (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+
   let url = text.trim();
   if (/^(https?:\/\/[^\s]+)$/i.test(url) || /^(www\.[^\s]+)$/i.test(url)) {
-    e.preventDefault();
     if (!url.startsWith('http')) url = 'https://' + url;
-
-    if (!page.miroCards) page.miroCards = [];
-    const canvas = document.getElementById('miro-canvas');
-    const zoom = (page.zoom || 100) / 100;
-
-    // Paste at center of the viewport
-    const cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
-    const cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
-
     const label = domainOf(url);
-    const card = { id: uid(), url, label, x: cx - 140, y: cy - 120, w: 280, h: 240 };
-
+    // Explicitly set type to 'card' (bookmark)
+    const card = { id: uid(), type: 'card', url, label, x: cx - 140, y: cy - 120, w: 280, h: 240 };
     page.miroCards.push(card);
-    sv();
-    buildMiroCanvas();
-    buildOutline();
-
-    if (typeof queueCardFetch !== 'undefined') {
-      queueCardFetch(card);
-    }
+    sv(); buildMiroCanvas(); buildOutline();
+    if (typeof queueCardFetch !== 'undefined') queueCardFetch(card.id, url);
+  } else {
+    // Normal text -> Sticky
+    const w = 200, h = 200;
+    const card = { id: uid(), type: 'sticky', text: text, bg: '#ffe599', x: cx - w / 2, y: cy - h / 2, w, h };
+    page.miroCards.push(card);
+    sv(); buildMiroCanvas(); buildOutline();
   }
 });
 
