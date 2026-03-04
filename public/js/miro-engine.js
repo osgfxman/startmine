@@ -141,7 +141,7 @@ function buildMiroCanvas() {
   if (!page.miroCards) page.miroCards = [];
   const board = document.getElementById('miro-board');
   // Remove only card elements, preserve selection overlays
-  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image').forEach((el) => el.remove());
+  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape').forEach((el) => el.remove());
   // Clear selection state
   _miroSelected.clear();
   document.getElementById('miro-sel-frame').style.display = 'none';
@@ -156,6 +156,8 @@ function buildMiroCanvas() {
   page.miroCards.forEach((card) => {
     if (card.type === 'sticky') board.appendChild(buildMiroSticky(card));
     else if (card.type === 'image') board.appendChild(buildMiroImage(card));
+    else if (card.type === 'text') board.appendChild(buildMiroText(card));
+    else if (card.type === 'shape') board.appendChild(buildMiroShape(card));
     else board.appendChild(buildMiroCard(card));
   });
   updateMiroGrid();
@@ -848,3 +850,57 @@ document.getElementById('ok-miro-image').onclick = () => {
   closeM('m-miro-image');
   _miroImgData = null;
 };
+
+// ─── Text Widget ───
+document.getElementById('miro-opt-text').onclick = () => {
+  document.getElementById('miro-add-menu').classList.remove('show');
+  const page = cp();
+  if (!page.miroCards) page.miroCards = [];
+  const canvas = document.getElementById('miro-canvas');
+  const zoom = (page.zoom || 100) / 100;
+  const cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
+  const cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+  const card = {
+    id: uid(), type: 'text', text: 'Text', x: cx - 100, y: cy - 20,
+    w: 200, h: 40, font: 'DM Sans', fontSize: 24, fontColor: '#333333',
+    bold: false, italic: false, align: 'left',
+  };
+  page.miroCards.push(card);
+  sv(); buildMiroCanvas(); buildOutline();
+};
+
+// ─── Shape Widget ───
+document.getElementById('miro-opt-shape').onclick = () => {
+  document.getElementById('miro-add-menu').classList.remove('show');
+  document.getElementById('miro-shape-panel').classList.toggle('show');
+};
+document.getElementById('msp-close').onclick = () => {
+  document.getElementById('miro-shape-panel').classList.remove('show');
+};
+
+// Shape panel: drag-and-drop onto canvas
+document.querySelectorAll('.msp-item').forEach(item => {
+  item.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('shape', item.dataset.shape);
+  });
+});
+document.getElementById('miro-canvas').addEventListener('dragover', (e) => { e.preventDefault(); });
+document.getElementById('miro-canvas').addEventListener('drop', (e) => {
+  const shapeType = e.dataTransfer.getData('shape');
+  if (!shapeType) return;
+  e.preventDefault();
+  const page = cp();
+  if (!page.miroCards) page.miroCards = [];
+  const zoom = (page.zoom || 100) / 100;
+  const rect = document.getElementById('miro-canvas').getBoundingClientRect();
+  const x = (e.clientX - rect.left - (page.panX || 0)) / zoom;
+  const y = (e.clientY - rect.top - (page.panY || 0)) / zoom;
+  const card = {
+    id: uid(), type: 'shape', shape: shapeType, x: x - 80, y: y - 60,
+    w: 160, h: 120, fillColor: '#6c8fff', strokeColor: '#333333',
+    strokeWidth: 2, opacity: 1,
+  };
+  page.miroCards.push(card);
+  sv(); buildMiroCanvas(); buildOutline();
+  document.getElementById('miro-shape-panel').classList.remove('show');
+});

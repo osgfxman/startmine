@@ -1055,3 +1055,423 @@
   background: linear-gradient(45deg, transparent 50%, rgba(255, 255, 255, 0.18) 50%);
   border-radius: 0 0 0 10px;
 }
+
+/* ─── Text Widget ─── */
+.miro-text {
+  position: absolute;
+  cursor: default;
+  min-width: 60px;
+  min-height: 30px;
+  overflow: visible;
+}
+
+.miro-text.miro-selected {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+}
+
+.miro-text.miro-hl {
+  animation: outlineHighlight 1.2s ease;
+}
+
+.miro-text .mt-text {
+  padding: 4px 6px;
+  outline: none;
+  word-break: break-word;
+  cursor: text;
+  line-height: 1.2;
+  border-radius: 4px;
+  transition: background 0.12s;
+}
+
+.miro-text:hover .mt-text {
+  background: rgba(108, 143, 255, 0.06);
+}
+
+.miro-text .mc-del {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  z-index: 3;
+  background: rgba(0, 0, 0, .55);
+  border: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mu);
+  cursor: pointer;
+  font-size: .65rem;
+  opacity: 0;
+  transition: opacity .12s;
+}
+
+.miro-text:hover .mc-del {
+  opacity: 1;
+}
+
+.miro-text .mc-del:hover {
+  color: var(--red);
+}
+
+/* Text resize handles */
+.miro-text .mc-resize-br,
+.miro-text .mc-resize-bl,
+.miro-text .mc-resize-tr,
+.miro-text .mc-resize-tl {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  z-index: 4;
+  opacity: 0;
+  transition: opacity .12s;
+}
+
+.miro-text:hover .mc-resize-br,
+.miro-text:hover .mc-resize-bl,
+.miro-text:hover .mc-resize-tr,
+.miro-text:hover .mc-resize-tl {
+  opacity: 1;
+}
+
+.miro-text .mc-resize-br {
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
+}
+
+.miro-text .mc-resize-tl {
+  left: 0;
+  top: 0;
+  cursor: nwse-resize;
+}
+
+.miro-text .mc-resize-tr {
+  right: 0;
+  top: 0;
+  cursor: nesw-resize;
+}
+
+.miro-text .mc-resize-bl {
+  left: 0;
+  bottom: 0;
+  cursor: nesw-resize;
+}
+
+/* Text toolbar */
+.mt-toolbar {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  padding: 5px 8px;
+  display: none;
+  align-items: center;
+  gap: 5px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+  backdrop-filter: blur(12px);
+  z-index: 10;
+  white-space: nowrap;
+}
+
+.mt-toolbar.show {
+  display: flex;
+}
+
+.mt-toolbar .mt-font {
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  color: var(--tx);
+  border-radius: 5px;
+  padding: 2px 4px;
+  font-size: .65rem;
+  font-family: var(--font);
+  max-width: 90px;
+}
+
+.mt-toolbar .mt-size {
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  color: var(--tx);
+  border-radius: 5px;
+  padding: 2px;
+  font-size: .65rem;
+  width: 42px;
+  text-align: center;
+}
+
+.mt-toolbar .mt-color {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.mt-toolbar .mt-btn {
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--bd);
+  background: none;
+  color: var(--tx);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: .65rem;
+  transition: all .1s;
+}
+
+.mt-toolbar .mt-btn:hover {
+  background: rgba(108, 143, 255, .15);
+  border-color: var(--ac);
+}
+
+.mt-toolbar .mt-btn.sel {
+  background: rgba(108, 143, 255, .18);
+  border-color: var(--ac);
+}
+
+/* ─── Shape Widget ─── */
+.miro-shape {
+  position: absolute;
+  cursor: default;
+  min-width: 40px;
+  min-height: 40px;
+  overflow: visible;
+}
+
+.miro-shape.miro-selected {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(108, 143, 255, .18);
+}
+
+.miro-shape.miro-hl {
+  animation: outlineHighlight 1.2s ease;
+}
+
+.miro-shape .msh-svg {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.miro-shape .mc-del {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  z-index: 3;
+  background: rgba(0, 0, 0, .55);
+  border: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mu);
+  cursor: pointer;
+  font-size: .65rem;
+  opacity: 0;
+  transition: opacity .12s;
+}
+
+.miro-shape:hover .mc-del {
+  opacity: 1;
+}
+
+.miro-shape .mc-del:hover {
+  color: var(--red);
+}
+
+/* Shape resize handles */
+.miro-shape .mc-resize-br,
+.miro-shape .mc-resize-bl,
+.miro-shape .mc-resize-tr,
+.miro-shape .mc-resize-tl {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  z-index: 4;
+  opacity: 0;
+  transition: opacity .12s;
+}
+
+.miro-shape:hover .mc-resize-br,
+.miro-shape:hover .mc-resize-bl,
+.miro-shape:hover .mc-resize-tr,
+.miro-shape:hover .mc-resize-tl {
+  opacity: 1;
+}
+
+.miro-shape .mc-resize-br {
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, rgba(108, 143, 255, .3) 50%);
+}
+
+.miro-shape .mc-resize-tl {
+  left: 0;
+  top: 0;
+  cursor: nwse-resize;
+  background: linear-gradient(315deg, transparent 50%, rgba(108, 143, 255, .3) 50%);
+}
+
+.miro-shape .mc-resize-tr {
+  right: 0;
+  top: 0;
+  cursor: nesw-resize;
+  background: linear-gradient(225deg, transparent 50%, rgba(108, 143, 255, .3) 50%);
+}
+
+.miro-shape .mc-resize-bl {
+  left: 0;
+  bottom: 0;
+  cursor: nesw-resize;
+  background: linear-gradient(45deg, transparent 50%, rgba(108, 143, 255, .3) 50%);
+}
+
+/* Shape toolbar */
+.msh-toolbar {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  padding: 5px 10px;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+  backdrop-filter: blur(12px);
+  z-index: 10;
+  white-space: nowrap;
+}
+
+.msh-toolbar.show {
+  display: flex;
+}
+
+.msh-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--mu);
+  font-family: var(--font);
+}
+
+.msh-toolbar input[type="color"] {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.msh-toolbar input[type="number"] {
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  color: var(--tx);
+  border-radius: 5px;
+  padding: 2px;
+  font-size: .65rem;
+  width: 36px;
+  text-align: center;
+}
+
+.msh-toolbar input[type="range"] {
+  width: 60px;
+  height: 3px;
+}
+
+/* ─── Shape Side Panel ─── */
+#miro-shape-panel {
+  position: fixed;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 14px;
+  padding: 14px 10px;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, .5);
+  backdrop-filter: blur(12px);
+  z-index: 601;
+  width: 140px;
+}
+
+#miro-shape-panel.show {
+  display: flex;
+}
+
+.msp-title {
+  font-size: .72rem;
+  font-weight: 600;
+  color: var(--tx);
+  text-align: center;
+  margin-bottom: 2px;
+}
+
+.msp-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.msp-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  cursor: grab;
+  color: var(--mu);
+  transition: all .12s;
+}
+
+.msp-item:hover {
+  background: rgba(108, 143, 255, .12);
+  border-color: var(--ac);
+  color: var(--tx);
+}
+
+.msp-item:active {
+  cursor: grabbing;
+}
+
+.msp-item svg {
+  width: 32px;
+  height: 24px;
+}
+
+.msp-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: none;
+  border: none;
+  color: var(--mu);
+  cursor: pointer;
+  font-size: .7rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color .12s;
+}
+
+.msp-close:hover {
+  color: var(--tx);
+}

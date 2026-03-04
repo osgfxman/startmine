@@ -71,6 +71,14 @@ function buildOutline() {
         item.title = c.text || 'Sticky Note';
         emoji.textContent = '📝';
         title.textContent = c.text || 'Sticky Note';
+      } else if (c.type === 'text') {
+        item.title = c.text || 'Text';
+        emoji.textContent = '✏️';
+        title.textContent = (c.text || 'Text').substring(0, 40);
+      } else if (c.type === 'shape') {
+        item.title = c.shape || 'Shape';
+        emoji.textContent = '⬡';
+        title.textContent = c.shape ? c.shape.charAt(0).toUpperCase() + c.shape.slice(1) : 'Shape';
       } else {
         item.title = c.label || c.url;
         emoji.textContent = '🔗';

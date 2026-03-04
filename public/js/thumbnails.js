@@ -663,3 +663,214 @@ function buildMiroImage(card) {
   if (labelEl) el.appendChild(labelEl);
   return el;
 }
+
+/* ─── Text Widget ─── */
+function buildMiroText(card) {
+  const el = document.createElement('div');
+  el.className = 'miro-text';
+  el.dataset.cid = card.id;
+  el.style.left = (card.x || 0) + 'px';
+  el.style.top = (card.y || 0) + 'px';
+  el.style.width = (card.w || 200) + 'px';
+  el.style.minHeight = (card.h || 40) + 'px';
+
+  // Delete button
+  const del = document.createElement('button');
+  del.className = 'mc-del';
+  del.textContent = '✕';
+  del.onclick = (e) => { e.stopPropagation(); deleteMiroCard(card.id); };
+
+  // Toolbar
+  const toolbar = document.createElement('div');
+  toolbar.className = 'mt-toolbar';
+  toolbar.innerHTML = `
+    <select class="mt-font" title="Font">
+      <option value="DM Sans">DM Sans</option>
+      <option value="Inter">Inter</option>
+      <option value="Georgia">Georgia</option>
+      <option value="Courier New">Courier New</option>
+      <option value="serif">Serif</option>
+    </select>
+    <input type="number" class="mt-size" value="${card.fontSize || 24}" min="8" max="200" title="Size">
+    <input type="color" class="mt-color" value="${card.fontColor || '#333333'}" title="Color">
+    <button class="mt-btn ${card.bold ? 'sel' : ''}" data-act="bold" title="Bold"><b>B</b></button>
+    <button class="mt-btn ${card.italic ? 'sel' : ''}" data-act="italic" title="Italic"><i>I</i></button>
+    <button class="mt-btn ${(card.align || 'left') === 'left' ? 'sel' : ''}" data-act="left" title="Left">≡</button>
+    <button class="mt-btn ${card.align === 'center' ? 'sel' : ''}" data-act="center" title="Center">≡</button>
+    <button class="mt-btn ${card.align === 'right' ? 'sel' : ''}" data-act="right" title="Right">≡</button>`;
+
+  // Set font select value
+  const fontSel = toolbar.querySelector('.mt-font');
+  fontSel.value = card.font || 'DM Sans';
+
+  // Text content
+  const text = document.createElement('div');
+  text.className = 'mt-text';
+  text.contentEditable = false;
+  text.textContent = card.text || 'Text';
+  text.style.fontFamily = card.font || 'DM Sans';
+  text.style.fontSize = (card.fontSize || 24) + 'px';
+  text.style.color = card.fontColor || '#333';
+  text.style.fontWeight = card.bold ? '700' : '400';
+  text.style.fontStyle = card.italic ? 'italic' : 'normal';
+  text.style.textAlign = card.align || 'left';
+
+  // Toolbar events
+  fontSel.onchange = () => { card.font = fontSel.value; text.style.fontFamily = card.font; sv(); };
+  toolbar.querySelector('.mt-size').onchange = function () { card.fontSize = +this.value; text.style.fontSize = card.fontSize + 'px'; sv(); };
+  toolbar.querySelector('.mt-color').oninput = function () { card.fontColor = this.value; text.style.color = card.fontColor; sv(); };
+  toolbar.querySelectorAll('.mt-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const act = btn.dataset.act;
+      if (act === 'bold') { card.bold = !card.bold; text.style.fontWeight = card.bold ? '700' : '400'; btn.classList.toggle('sel'); }
+      else if (act === 'italic') { card.italic = !card.italic; text.style.fontStyle = card.italic ? 'italic' : 'normal'; btn.classList.toggle('sel'); }
+      else if (['left', 'center', 'right'].includes(act)) {
+        card.align = act; text.style.textAlign = act;
+        toolbar.querySelectorAll('[data-act="left"],[data-act="center"],[data-act="right"]').forEach(b => b.classList.remove('sel'));
+        btn.classList.add('sel');
+      }
+      sv();
+    };
+  });
+
+  // Double-click to edit
+  text.addEventListener('dblclick', (e) => { e.stopPropagation(); text.contentEditable = true; text.focus(); });
+  text.addEventListener('blur', () => { text.contentEditable = false; card.text = text.textContent; card.h = el.offsetHeight; sv(); });
+  text.addEventListener('input', () => { card.text = text.textContent; sv(); });
+  text.addEventListener('mousedown', (e) => { if (text.contentEditable === 'true') e.stopPropagation(); });
+
+  // Show/hide toolbar on click
+  el.addEventListener('click', (e) => {
+    if (e.target.closest('.mc-del') || e.target.closest('.mt-toolbar')) return;
+    document.querySelectorAll('.mt-toolbar.show, .msh-toolbar.show').forEach(t => { if (t !== toolbar) t.classList.remove('show'); });
+    toolbar.classList.toggle('show');
+  });
+  document.addEventListener('click', (e) => { if (!el.contains(e.target)) toolbar.classList.remove('show'); });
+
+  // Drag (multi-select)
+  el.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.mc-del') || e.target.closest('.mc-resize-br') || e.target.closest('.mc-resize-bl') || e.target.closest('.mc-resize-tr') || e.target.closest('.mc-resize-tl') || e.target.closest('.mt-toolbar')) return;
+    if (text.contentEditable === 'true') return;
+    e.stopPropagation();
+    if (e.ctrlKey || e.metaKey) { toggleMiroSelect(card.id); return; }
+    if (!_miroSelected.has(card.id)) { clearMiroSelection(); addMiroSelect(card.id); }
+    const page = cp(); const zoom = (page.zoom || 100) / 100;
+    const startX = e.clientX, startY = e.clientY;
+    const origPositions = new Map();
+    _miroSelected.forEach(cid => { const c = (page.miroCards || []).find(x => x.id === cid); if (c) origPositions.set(cid, { x: c.x || 0, y: c.y || 0 }); });
+    let moved = false;
+    function onMove(ev) {
+      moved = true; const dx = (ev.clientX - startX) / zoom, dy = (ev.clientY - startY) / zoom;
+      origPositions.forEach((orig, cid) => {
+        const c = (page.miroCards || []).find(x => x.id === cid); if (!c) return; c.x = orig.x + dx; c.y = orig.y + dy;
+        const cardEl = document.querySelector(`[data-cid="${cid}"]`); if (cardEl) { cardEl.style.left = c.x + 'px'; cardEl.style.top = c.y + 'px'; }
+      }); updateMiroSelFrame();
+    }
+    function onUp() { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); if (moved) sv(); }
+    document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+  });
+
+  attachCornerResize(el, card, 60, 30);
+  el.appendChild(del);
+  el.appendChild(toolbar);
+  el.appendChild(text);
+  return el;
+}
+
+/* ─── Shape Widget ─── */
+function renderShapeSVG(card) {
+  const w = card.w || 160, h = card.h || 120;
+  const fill = card.fillColor || '#6c8fff';
+  const stroke = card.strokeColor || '#333';
+  const sw = card.strokeWidth ?? 2;
+  const op = card.opacity ?? 1;
+  let inner = '';
+  switch (card.shape) {
+    case 'rect': inner = `<rect x="${sw}" y="${sw}" width="${w - sw * 2}" height="${h - sw * 2}" rx="4" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`; break;
+    case 'ellipse': inner = `<ellipse cx="${w / 2}" cy="${h / 2}" rx="${w / 2 - sw}" ry="${h / 2 - sw}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`; break;
+    case 'triangle': inner = `<polygon points="${w / 2},${sw} ${w - sw},${h - sw} ${sw},${h - sw}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`; break;
+    case 'diamond': inner = `<polygon points="${w / 2},${sw} ${w - sw},${h / 2} ${w / 2},${h - sw} ${sw},${h / 2}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`; break;
+    case 'arrow': inner = `<line x1="${sw}" y1="${h / 2}" x2="${w - 14}" y2="${h / 2}" stroke="${stroke}" stroke-width="${sw}"/><polyline points="${w - 20},${h / 2 - 10} ${w - sw},${h / 2} ${w - 20},${h / 2 + 10}" fill="none" stroke="${stroke}" stroke-width="${sw}"/>`; break;
+    case 'line': inner = `<line x1="${sw}" y1="${h - sw}" x2="${w - sw}" y2="${sw}" stroke="${stroke}" stroke-width="${sw}"/>`; break;
+    default: inner = `<rect x="${sw}" y="${sw}" width="${w - sw * 2}" height="${h - sw * 2}" rx="4" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+  }
+  return `<svg width="100%" height="100%" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="opacity:${op}">${inner}</svg>`;
+}
+
+function buildMiroShape(card) {
+  const el = document.createElement('div');
+  el.className = 'miro-shape';
+  el.dataset.cid = card.id;
+  el.style.left = (card.x || 0) + 'px';
+  el.style.top = (card.y || 0) + 'px';
+  el.style.width = (card.w || 160) + 'px';
+  el.style.height = (card.h || 120) + 'px';
+
+  // SVG content
+  const svgWrap = document.createElement('div');
+  svgWrap.className = 'msh-svg';
+  svgWrap.innerHTML = renderShapeSVG(card);
+
+  // Delete button
+  const del = document.createElement('button');
+  del.className = 'mc-del';
+  del.textContent = '✕';
+  del.onclick = (e) => { e.stopPropagation(); deleteMiroCard(card.id); };
+
+  // Toolbar
+  const toolbar = document.createElement('div');
+  toolbar.className = 'msh-toolbar';
+  toolbar.innerHTML = `
+    <label title="Fill"><span style="font-size:.65rem">Fill</span><input type="color" class="msh-fill" value="${card.fillColor || '#6c8fff'}"></label>
+    <label title="Stroke"><span style="font-size:.65rem">Stroke</span><input type="color" class="msh-stroke" value="${card.strokeColor || '#333333'}"></label>
+    <label title="Width"><span style="font-size:.65rem">W</span><input type="number" class="msh-sw" value="${card.strokeWidth ?? 2}" min="0" max="20"></label>
+    <label title="Opacity"><span style="font-size:.65rem">Op</span><input type="range" class="msh-op" value="${Math.round((card.opacity ?? 1) * 100)}" min="0" max="100"></label>`;
+
+  function updateSVG() { svgWrap.innerHTML = renderShapeSVG(card); }
+  toolbar.querySelector('.msh-fill').oninput = function () { card.fillColor = this.value; updateSVG(); sv(); };
+  toolbar.querySelector('.msh-stroke').oninput = function () { card.strokeColor = this.value; updateSVG(); sv(); };
+  toolbar.querySelector('.msh-sw').onchange = function () { card.strokeWidth = +this.value; updateSVG(); sv(); };
+  toolbar.querySelector('.msh-op').oninput = function () { card.opacity = +this.value / 100; updateSVG(); sv(); };
+
+  // Show/hide toolbar on click
+  el.addEventListener('click', (e) => {
+    if (e.target.closest('.mc-del') || e.target.closest('.msh-toolbar')) return;
+    document.querySelectorAll('.mt-toolbar.show, .msh-toolbar.show').forEach(t => { if (t !== toolbar) t.classList.remove('show'); });
+    toolbar.classList.toggle('show');
+  });
+  document.addEventListener('click', (e) => { if (!el.contains(e.target)) toolbar.classList.remove('show'); });
+
+  // Drag (multi-select)
+  el.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.mc-del') || e.target.closest('.mc-resize-br') || e.target.closest('.mc-resize-bl') || e.target.closest('.mc-resize-tr') || e.target.closest('.mc-resize-tl') || e.target.closest('.msh-toolbar')) return;
+    e.stopPropagation();
+    if (e.ctrlKey || e.metaKey) { toggleMiroSelect(card.id); return; }
+    if (!_miroSelected.has(card.id)) { clearMiroSelection(); addMiroSelect(card.id); }
+    const page = cp(); const zoom = (page.zoom || 100) / 100;
+    const startX = e.clientX, startY = e.clientY;
+    const origPositions = new Map();
+    _miroSelected.forEach(cid => { const c = (page.miroCards || []).find(x => x.id === cid); if (c) origPositions.set(cid, { x: c.x || 0, y: c.y || 0 }); });
+    let moved = false;
+    function onMove(ev) {
+      moved = true; const dx = (ev.clientX - startX) / zoom, dy = (ev.clientY - startY) / zoom;
+      origPositions.forEach((orig, cid) => {
+        const c = (page.miroCards || []).find(x => x.id === cid); if (!c) return; c.x = orig.x + dx; c.y = orig.y + dy;
+        const cardEl = document.querySelector(`[data-cid="${cid}"]`); if (cardEl) { cardEl.style.left = c.x + 'px'; cardEl.style.top = c.y + 'px'; }
+      }); updateMiroSelFrame();
+    }
+    function onUp() { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); if (moved) sv(); }
+    document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+  });
+
+  // Resize needs to re-render SVG
+  const origAttach = attachCornerResize;
+  attachCornerResize(el, card, 40, 40);
+  // After resize, update SVG
+  el.addEventListener('mouseup', () => { updateSVG(); });
+
+  el.appendChild(del);
+  el.appendChild(toolbar);
+  el.appendChild(svgWrap);
+  return el;
+}
