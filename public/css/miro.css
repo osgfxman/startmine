@@ -1,11 +1,9 @@
-/* ─── Miro Page ─── */
 #miro-canvas {
   position: relative;
   flex: 1;
   overflow: hidden;
   cursor: grab;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-  background-size: 24px 24px;
+  background: var(--bg, #0d0f18);
   user-select: none;
   min-height: calc(100vh - 100px);
 }
@@ -908,4 +906,151 @@
 .sn-toolbar .sn-tb-size.sel {
   background: rgba(108, 143, 255, 0.18);
   border-color: var(--ac);
+}
+
+/* ─── Image Card ─── */
+.miro-image {
+  position: absolute;
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.15s;
+  min-width: 60px;
+  min-height: 60px;
+}
+
+.miro-image:hover {
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.6);
+}
+
+.miro-image.miro-selected {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+  box-shadow:
+    0 0 0 4px rgba(108, 143, 255, 0.18),
+    0 4px 20px rgba(0, 0, 0, 0.45);
+}
+
+.miro-image.miro-hl {
+  animation: outlineHighlight 1.2s ease;
+}
+
+.miro-image .mi-img {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+  background:
+    repeating-conic-gradient(rgba(255, 255, 255, 0.04) 0% 25%, transparent 0% 50%) 0 0 / 14px 14px;
+}
+
+.miro-image .mi-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.miro-image .mi-label {
+  padding: 4px 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--tx);
+  background: var(--s2);
+  border-top: 1px solid var(--bd);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Delete button */
+.miro-image .mc-del {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
+  background: rgba(0, 0, 0, 0.55);
+  border: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mu);
+  cursor: pointer;
+  font-size: 0.7rem;
+  opacity: 0;
+  transition:
+    opacity 0.12s,
+    color 0.12s;
+}
+
+.miro-image:hover .mc-del {
+  opacity: 1;
+}
+
+.miro-image .mc-del:hover {
+  color: var(--red);
+}
+
+/* 4-corner resize handles */
+.miro-image .mc-resize-br,
+.miro-image .mc-resize-bl,
+.miro-image .mc-resize-tr,
+.miro-image .mc-resize-tl {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  z-index: 4;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.miro-image:hover .mc-resize-br,
+.miro-image:hover .mc-resize-bl,
+.miro-image:hover .mc-resize-tr,
+.miro-image:hover .mc-resize-tl {
+  opacity: 1;
+}
+
+.miro-image .mc-resize-br {
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.18) 50%);
+  border-radius: 0 0 10px 0;
+}
+
+.miro-image .mc-resize-tl {
+  left: 0;
+  top: 0;
+  cursor: nwse-resize;
+  background: linear-gradient(315deg, transparent 50%, rgba(255, 255, 255, 0.18) 50%);
+  border-radius: 10px 0 0 0;
+}
+
+.miro-image .mc-resize-tr {
+  right: 0;
+  top: 0;
+  cursor: nesw-resize;
+  background: linear-gradient(225deg, transparent 50%, rgba(255, 255, 255, 0.18) 50%);
+  border-radius: 0 10px 0 0;
+}
+
+.miro-image .mc-resize-bl {
+  left: 0;
+  bottom: 0;
+  cursor: nesw-resize;
+  background: linear-gradient(45deg, transparent 50%, rgba(255, 255, 255, 0.18) 50%);
+  border-radius: 0 0 0 10px;
 }

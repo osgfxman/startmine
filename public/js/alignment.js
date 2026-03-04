@@ -81,7 +81,7 @@
           c.w = uniformW;
           c.h = uniformH;
         }
-        const el = document.querySelector(`.miro-card[data-cid="${oc.id}"]`);
+        const el = document.querySelector(`[data-cid="${oc.id}"]`);
         if (el) {
           el.style.left = newX + 'px';
           el.style.top = newY + 'px';
@@ -120,7 +120,7 @@
           c.x = newX;
           c.y = newY;
         } // keep original w/h
-        const el = document.querySelector(`.miro-card[data-cid="${oc.id}"]`);
+        const el = document.querySelector(`[data-cid="${oc.id}"]`);
         if (el) {
           el.style.left = newX + 'px';
           el.style.top = newY + 'px';

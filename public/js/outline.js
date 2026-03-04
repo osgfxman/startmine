@@ -59,13 +59,23 @@ function buildOutline() {
     cards.forEach((c) => {
       const item = document.createElement('div');
       item.className = 'outline-item';
-      item.title = c.label || c.url;
       const emoji = document.createElement('span');
       emoji.className = 'ol-emoji';
-      emoji.textContent = '🔗';
       const title = document.createElement('span');
       title.className = 'ol-title';
-      title.textContent = c.label || domainOf(c.url);
+      if (c.type === 'image') {
+        item.title = c.label || 'Image';
+        emoji.textContent = '🖼️';
+        title.textContent = c.label || 'Image';
+      } else if (c.type === 'sticky') {
+        item.title = c.text || 'Sticky Note';
+        emoji.textContent = '📝';
+        title.textContent = c.text || 'Sticky Note';
+      } else {
+        item.title = c.label || c.url;
+        emoji.textContent = '🔗';
+        title.textContent = c.label || domainOf(c.url);
+      }
       item.appendChild(emoji);
       item.appendChild(title);
       item.onclick = () => scrollToMiroCard(c.id);
@@ -123,7 +133,7 @@ function scrollToMiroCard(cid) {
     `translate(${page.panX}px,${page.panY}px) scale(${zoom})`;
   sv();
   // Highlight
-  const el = document.querySelector(`.miro-card[data-cid="${cid}"]`);
+  const el = document.querySelector(`[data-cid="${cid}"]`);
   if (el) {
     el.classList.remove('miro-hl');
     void el.offsetWidth;

@@ -256,6 +256,27 @@
     </div>
   </div>
 
+  <!-- Image Upload Modal -->
+  <div class="mo" id="m-miro-image">
+    <div class="mc">
+      <h3>🖼️ Add Image</h3>
+      <div class="fg"><label>Image</label>
+        <label class="add-i" style="cursor:pointer;margin-top:0">
+          📁 Choose image from device
+          <input type="file" id="miro-img-file" accept="image/*" style="display:none">
+        </label>
+      </div>
+      <div id="miro-img-preview"
+        style="display:none;margin-top:.5rem;border-radius:9px;overflow:hidden;height:140px;background:var(--s1);display:none">
+        <img id="miro-img-prev-el" style="width:100%;height:100%;object-fit:contain">
+      </div>
+      <div class="fg"><label>Label (optional)</label><input type="text" class="fi" id="miro-img-label"
+          placeholder="Image name"></div>
+      <div class="ma"><button class="btn bg-btn" onclick="closeM('m-miro-image')">Cancel</button><button class="btn ba"
+          id="ok-miro-image" disabled>Add Image</button></div>
+    </div>
+  </div>
+
   <!-- Zoom Controls -->
   <div id="miro-zoom">
     <button id="mz-out" title="Zoom Out">−</button>
@@ -271,6 +292,7 @@
   <div id="miro-add-menu">
     <button class="miro-add-opt" id="miro-opt-card">📋 Add Card</button>
     <button class="miro-add-opt" id="miro-opt-sticky">📝 Add Sticky Note</button>
+    <button class="miro-add-opt" id="miro-opt-image">🖼️ Upload Image</button>
   </div>
 
   <!-- Sticky create hint -->

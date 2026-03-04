@@ -75,12 +75,73 @@ function updateMiroSelFrame() {
   frame.style.height = bbox.h + pad * 2 + 'px';
 }
 
+/* ─── Miro Infinite Zoom Grid ─── */
+function updateMiroGrid() {
+  const page = cp();
+  const zoom = (page.zoom || 100) / 100;
+  const panX = page.panX || 0;
+  const panY = page.panY || 0;
+  const canvas = document.getElementById('miro-canvas');
+
+  // Base board-space grid unit
+  const BASE = 10;
+  const FACTOR = 5;
+
+  // Find the fine grid level: scale BASE until fine * zoom is in [8, 200) px range
+  let fine = BASE;
+  while (fine * zoom < 8) fine *= FACTOR;
+  while (fine * zoom > 200) fine /= FACTOR;
+
+  const medium = fine * FACTOR;
+  const coarse = medium * FACTOR;
+
+  // Screen-space pixel sizes
+  const fineScreen = fine * zoom;
+  const medScreen = medium * zoom;
+  const coarseScreen = coarse * zoom;
+
+  // Opacity: fade in based on screen pixel spacing — tuned to match Miro.com
+  const fineAlpha = clamp((fineScreen - 6) / 25, 0, 1) * 0.3;
+  const medAlpha = clamp((medScreen - 6) / 40, 0, 1) * 0.5;
+  const coarseAlpha = clamp((coarseScreen - 6) / 60, 0, 1) * 0.7;
+
+  // Build CSS background layers (horizontal + vertical lines per level)
+  const layers = [];
+  const sizes = [];
+  const positions = [];
+
+  function addLevel(screenSize, alpha) {
+    if (alpha < 0.002) return;
+    const c = `rgba(255,255,255,${alpha.toFixed(4)})`;
+    layers.push(
+      `linear-gradient(${c} 1px, transparent 1px)`,
+      `linear-gradient(90deg, ${c} 1px, transparent 1px)`,
+    );
+    const s = `${screenSize}px ${screenSize}px`;
+    sizes.push(s, s);
+    const ox = panX % screenSize;
+    const oy = panY % screenSize;
+    const p = `${ox}px ${oy}px`;
+    positions.push(p, p);
+  }
+
+  addLevel(fineScreen, fineAlpha);
+  addLevel(medScreen, medAlpha);
+  addLevel(coarseScreen, coarseAlpha);
+
+  if (layers.length) {
+    canvas.style.backgroundImage = layers.join(',');
+    canvas.style.backgroundSize = sizes.join(',');
+    canvas.style.backgroundPosition = positions.join(',');
+  }
+}
+
 function buildMiroCanvas() {
   const page = cp();
   if (!page.miroCards) page.miroCards = [];
   const board = document.getElementById('miro-board');
   // Remove only card elements, preserve selection overlays
-  board.querySelectorAll('.miro-card, .miro-sticky').forEach((el) => el.remove());
+  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image').forEach((el) => el.remove());
   // Clear selection state
   _miroSelected.clear();
   document.getElementById('miro-sel-frame').style.display = 'none';
@@ -94,8 +155,10 @@ function buildMiroCanvas() {
 
   page.miroCards.forEach((card) => {
     if (card.type === 'sticky') board.appendChild(buildMiroSticky(card));
+    else if (card.type === 'image') board.appendChild(buildMiroImage(card));
     else board.appendChild(buildMiroCard(card));
   });
+  updateMiroGrid();
 }
 
 function buildMiroCard(card) {
@@ -183,7 +246,7 @@ function buildMiroCard(card) {
         if (!c) return;
         c.x = orig.x + dx;
         c.y = orig.y + dy;
-        const cardEl = document.querySelector(`.miro-card[data-cid="${cid}"]`);
+        const cardEl = document.querySelector(`[data-cid="${cid}"]`);
         if (cardEl) {
           cardEl.style.left = c.x + 'px';
           cardEl.style.top = c.y + 'px';
@@ -329,6 +392,7 @@ function deleteMiroCard(cid) {
     const zoom = (page.zoom || 100) / 100;
     document.getElementById('miro-board').style.transform =
       `translate(${page.panX}px,${page.panY}px) scale(${zoom})`;
+    updateMiroGrid();
   });
 
   document.addEventListener('mouseup', (e) => {
@@ -365,6 +429,7 @@ function deleteMiroCard(cid) {
         `translate(${page.panX || 0}px,${page.panY || 0}px) scale(${zoom})`;
       document.getElementById('mz-slider').value = z;
       document.getElementById('mz-pct').textContent = z + '%';
+      updateMiroGrid();
       sv();
     },
     { passive: false },
@@ -379,6 +444,7 @@ document.getElementById('mz-slider').oninput = function () {
   document.getElementById('miro-board').style.transform =
     `translate(${page.panX || 0}px,${page.panY || 0}px) scale(${zoom})`;
   document.getElementById('mz-pct').textContent = page.zoom + '%';
+  updateMiroGrid();
   sv();
 };
 document.getElementById('mz-in').onclick = () => {
@@ -426,6 +492,7 @@ document.getElementById('mz-fit').onclick = () => {
   const z = page.zoom / 100;
   document.getElementById('miro-board').style.transform =
     `translate(${page.panX}px,${page.panY}px) scale(${z})`;
+  updateMiroGrid();
   sv();
 };
 
@@ -508,7 +575,7 @@ document.getElementById('miro-add-url').addEventListener('blur', () => {
       document.getElementById('miro-add-label').value = h
         .split('.')[0]
         .replace(/^./, (c) => c.toUpperCase());
-    } catch (e4) {}
+    } catch (e4) { }
   }
 });
 document.getElementById('ok-miro-add').onclick = () => {
@@ -528,4 +595,102 @@ document.getElementById('ok-miro-add').onclick = () => {
   buildMiroCanvas();
   buildOutline();
   closeM('m-miro-add');
+};
+
+// ─── Image Upload ───
+let _miroImgData = null; // { imgbbUrl, naturalW, naturalH }
+
+document.getElementById('miro-opt-image').onclick = () => {
+  document.getElementById('miro-add-menu').classList.remove('show');
+  document.getElementById('miro-img-file').value = '';
+  document.getElementById('miro-img-label').value = '';
+  document.getElementById('miro-img-preview').style.display = 'none';
+  document.getElementById('ok-miro-image').disabled = true;
+  _miroImgData = null;
+  openM('m-miro-image');
+};
+
+document.getElementById('miro-img-file').onchange = function (e) {
+  const f = e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const base64 = ev.target.result;
+    // Show preview
+    document.getElementById('miro-img-preview').style.display = 'block';
+    document.getElementById('miro-img-prev-el').src = base64;
+
+    // Get natural dimensions
+    const tempImg = new Image();
+    tempImg.onload = () => {
+      const natW = tempImg.naturalWidth;
+      const natH = tempImg.naturalHeight;
+
+      // Upload to ImgBB
+      const btn = document.getElementById('ok-miro-image');
+      btn.textContent = 'Uploading…';
+      btn.disabled = true;
+      const fd = new FormData();
+      fd.append('image', base64.split(',')[1]);
+      fetch('https://api.imgbb.com/1/upload?key=c2a058a30580ce5e21608e3ec431b9c0', {
+        method: 'POST',
+        body: fd,
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.success) {
+            _miroImgData = { imgbbUrl: data.data.url, naturalW: natW, naturalH: natH };
+          } else {
+            _miroImgData = { imgbbUrl: base64, naturalW: natW, naturalH: natH }; // fallback
+          }
+          btn.textContent = 'Add Image';
+          btn.disabled = false;
+        })
+        .catch(() => {
+          _miroImgData = { imgbbUrl: base64, naturalW: natW, naturalH: natH }; // fallback
+          btn.textContent = 'Add Image';
+          btn.disabled = false;
+        });
+    };
+    tempImg.src = base64;
+  };
+  reader.readAsDataURL(f);
+  this.value = '';
+};
+
+document.getElementById('ok-miro-image').onclick = () => {
+  if (!_miroImgData) return;
+  const label = document.getElementById('miro-img-label').value.trim();
+  const page = cp();
+  if (!page.miroCards) page.miroCards = [];
+  const canvas = document.getElementById('miro-canvas');
+  const zoom = (page.zoom || 100) / 100;
+  const cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
+  const cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+
+  // Scale to max 400px wide, preserving aspect ratio
+  const maxW = 400;
+  let w = _miroImgData.naturalW;
+  let h = _miroImgData.naturalH;
+  if (w > maxW) {
+    h = Math.round((h / w) * maxW);
+    w = maxW;
+  }
+
+  const card = {
+    id: uid(),
+    type: 'image',
+    imageUrl: _miroImgData.imgbbUrl,
+    label: label || '',
+    x: cx - w / 2,
+    y: cy - h / 2,
+    w,
+    h,
+  };
+  page.miroCards.push(card);
+  sv();
+  buildMiroCanvas();
+  buildOutline();
+  closeM('m-miro-image');
+  _miroImgData = null;
 };
