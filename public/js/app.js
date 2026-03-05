@@ -1941,12 +1941,24 @@ function buildCols() {
     colBuckets[ci].push(w);
   });
 
-  // Render widgets per column, applying grid-column for span
+  // Render columns
   for (let ci = 0; ci < numCols; ci++) {
+    const colDiv = document.createElement('div');
+    colDiv.className = 'col';
+
+    // It's a grid column, so a widget spanning multiple cols requires the colDiv itself to span.
+    // To handle colSpan properly: we check if the first widget in this column has a span.
+    // (A more robust masonry layout with varying spans would require complex JS packing,
+    // but the Startmine dashboard currently treats colSpan by expanding the wrapper).
+    let maxSpan = 1;
+    colBuckets[ci].forEach((w) => {
+      const span = Math.min(w.colSpan || 1, numCols - ci);
+      if (span > maxSpan) maxSpan = span;
+    });
+    colDiv.style.gridColumn = `span ${maxSpan}`;
+
     colBuckets[ci].forEach((w) => {
       const el = buildWidget(w);
-      const span = Math.min(w.colSpan || 1, numCols - ci);
-      el.style.gridColumn = `${ci + 1} / span ${span}`;
       // Drop zone on widget itself
       el.addEventListener('dragover', (e) => { e.preventDefault(); });
       el.addEventListener('drop', (e) => {
@@ -1956,16 +1968,13 @@ function buildCols() {
         if (dw) { dw.col = ci; sv(); buildCols(); }
         dragWid = null;
       });
-      wrap.appendChild(el);
+      colDiv.appendChild(el);
     });
-  }
 
-  // Add-widget buttons per column
-  for (let ci = 0; ci < numCols; ci++) {
+    // Add-widget button per column
     const ab = document.createElement('button');
     ab.className = 'add-w';
     ab.innerHTML = '＋ Add Widget';
-    ab.style.gridColumn = `${ci + 1}`;
     ab.onclick = () => { pColIdx = ci; openM('m-aw'); };
     // Drop zone on add button
     ab.addEventListener('dragover', (e) => { e.preventDefault(); ab.classList.add('dragover'); });
@@ -1977,8 +1986,11 @@ function buildCols() {
       if (dw) { dw.col = ci; sv(); buildCols(); }
       dragWid = null;
     });
-    wrap.appendChild(ab);
+    colDiv.appendChild(ab);
+
+    wrap.appendChild(colDiv);
   }
+
   buildOutline();
 }
 function luma(c) {
@@ -2863,6 +2875,7 @@ window.convertPageToMiro = function (pageId) {
         type: 'bwidget',
         title: w.title || 'Bookmarks',
         items: JSON.parse(JSON.stringify(w.items)), // Deep copy items
+        color: { r: 255, g: 255, b: 255, a: 1 }, // Default to pure white with no transparency
         x: cursX,
         y: cursY,
         w: cardW,
