@@ -919,7 +919,7 @@ document.getElementById('mtb-widget').onclick = () => setActiveTool('widget');
 // Canvas click handler for click-to-place modes
 document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
   if (e.button !== 0 && e.type !== 'touchstart') return; // Only trigger on left-click
-  console.log('Miro canvas click-to-place triggered!', { _stickyCreateMode, _textCreateMode, target: e.target });
+  console.log('Miro canvas click-to-place triggered!', { _stickyCreateMode, _textCreateMode, target: e.target, targetClass: e.target.className, targetId: e.target.id });
   if (!_stickyCreateMode && !_textCreateMode && !_gridCreateMode && !_mindmapCreateMode && !_widgetCreateMode) return;
   if (e.target.closest('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, #miro-toolbar, .mc-del')) {
     console.log('Click ignored due to target closest match:', e.target);
