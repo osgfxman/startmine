@@ -1467,8 +1467,16 @@ window.createWidgetFromSelection = function () {
   const avgX = sumX / selectedCards.length;
   const avgY = sumY / selectedCards.length;
 
-  const startX = avgX - 160; // 320 w / 2
-  const startY = avgY - 200; // 400 h / 2
+  const itemsLen = items.length;
+  const wCols = 6;
+  const itemPx = 94; // approx height/width of an lg grid item + gap
+  const reqRows = Math.ceil(itemsLen / wCols);
+
+  const cardW = 540;
+  const cardH = Math.max(200, 70 + (reqRows * itemPx));
+
+  const startX = avgX - (cardW / 2);
+  const startY = avgY - (cardH / 2);
 
   // Create new widget
   const newWidget = {
@@ -1478,9 +1486,9 @@ window.createWidgetFromSelection = function () {
     items: items,
     x: startX,
     y: startY,
-    w: 380, // slightly wider for cards
-    h: 400,
-    display: 'card',
+    w: cardW,
+    h: cardH,
+    display: 'spark',
     size: 'lg'
   };
 

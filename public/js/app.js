@@ -1763,6 +1763,7 @@ function buildTabs() {
     nm.onclick = (e) => {
       if (nm.contentEditable === 'true') e.stopPropagation();
     };
+
     tab.addEventListener('dblclick', (e) => {
       e.stopPropagation();
       nm.contentEditable = 'true';
@@ -2813,6 +2814,101 @@ function exportToMiro(widgetId) {
   D.cur = pageId;
   sv();
   renderAll();
+}
+
+// ─── Convert Dashboard Page to Miro Page ───
+window.convertPageToMiro = function (pageId) {
+  const pgIdx = D.pages.findIndex((p) => p.id === pageId);
+  if (pgIdx === -1) return;
+  const pg = D.pages[pgIdx];
+
+  const newId = uid();
+  const newPg = {
+    id: newId,
+    groupId: pg.groupId,
+    name: pg.name, // keep same name
+    pageType: 'miro',
+    miroCards: [],
+    zoom: 100,
+    panX: 0,
+    panY: 0,
+    bg: pg.bg || '',
+    bgType: pg.bgType || 'none',
+    tabColor: pg.tabColor || '' // keep same color
+  };
+
+  const oldWidgets = pg.widgets || [];
+  const startX = 100;
+  const startY = 100;
+  const gap = 40;
+
+  let cursX = startX;
+  let cursY = startY;
+  let rowMaxH = 0;
+  const colsPerRow = 4; // Miro widgets per row
+
+  oldWidgets.forEach((w, i) => {
+    // Ensure widget has items before migrating
+    if (w.items && w.items.length > 0) {
+      const itemsLen = w.items.length;
+      const wCols = 6;
+      const itemPx = 94;
+      const reqRows = Math.ceil(itemsLen / wCols);
+
+      const cardW = 540;
+      const cardH = Math.max(200, 70 + (reqRows * itemPx));
+
+      newPg.miroCards.push({
+        id: uid(),
+        type: 'bwidget',
+        title: w.title || 'Bookmarks',
+        items: JSON.parse(JSON.stringify(w.items)), // Deep copy items
+        x: cursX,
+        y: cursY,
+        w: cardW,
+        h: cardH,
+        display: 'spark',
+        size: 'lg'
+      });
+
+      cursX += cardW + gap;
+      rowMaxH = Math.max(rowMaxH, cardH);
+
+      // wrap row
+      if (newPg.miroCards.length % colsPerRow === 0) {
+        cursX = startX;
+        cursY += rowMaxH + gap;
+        rowMaxH = 0;
+      }
+    }
+  });
+
+  // Insert immediately after original page
+  D.pages.splice(pgIdx + 1, 0, newPg);
+
+  // Switch to new page
+  D.cur = newId;
+  sv();
+  renderAll();
+
+  if (typeof showToast === 'function') {
+    showToast(`Page converted and exported to Miro.`);
+  }
+};
+
+// ─── Convert Dashboard Page to Miro via Toolbar Button ───
+const btn2m = document.getElementById('btn-2m');
+if (btn2m) {
+  btn2m.onclick = () => {
+    if (D.cur) {
+      const pg = D.pages.find(p => p.id === D.cur);
+      if (pg && pg.pageType === 'miro') {
+        if (typeof showToast === 'function') showToast("Already a Miro Page.");
+        return;
+      }
+      convertPageToMiro(D.cur);
+    }
+  };
 }
 
 // ─── Local Cache: instant load from localStorage on startup ───
