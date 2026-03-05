@@ -1554,6 +1554,54 @@ function buildMiroBookmarkWidget(card) {
     miroSetupCardDrag(el, card, ignoreSelectors);
   }
 
+  // Handle dropping bookmarks into this Miro widget
+  el.addEventListener('dragover', (e) => {
+    if ((typeof _dragInboxId !== 'undefined' && _dragInboxId) ||
+      (typeof _dragBmId !== 'undefined' && _dragBmId)) {
+      e.preventDefault();
+      el.style.outline = '2px solid var(--ac)';
+    }
+  });
+  el.addEventListener('dragleave', () => {
+    el.style.outline = '';
+  });
+  el.addEventListener('drop', (e) => {
+    if (typeof _dragInboxId !== 'undefined' && _dragInboxId) {
+      e.preventDefault();
+      el.style.outline = '';
+      const inboxItem = (typeof D !== 'undefined' && D.inbox || []).find((x) => x.id === _dragInboxId);
+      if (inboxItem) {
+        if (!card.items) card.items = [];
+        card.items.push({ id: (typeof uid === 'function' ? uid() : Date.now().toString()), label: inboxItem.label, url: inboxItem.url, emoji: '' });
+        D.inbox = D.inbox.filter((x) => x.id !== _dragInboxId);
+        _dragInboxId = null;
+        if (typeof sv === 'function') sv();
+        if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+        if (typeof buildInbox === 'function') buildInbox();
+      }
+    } else if (typeof _dragBmId !== 'undefined' && _dragBmId && typeof _dragBmSrcWid !== 'undefined') {
+      e.preventDefault();
+      el.style.outline = '';
+      const page = typeof cp === 'function' ? cp() : null;
+      if (!page) return;
+      let srcW = (page.widgets || []).find(x => x.id === _dragBmSrcWid);
+      if (!srcW && page.miroCards) srcW = page.miroCards.find(x => x.id === _dragBmSrcWid);
+      if (!srcW) return;
+
+      const bmItemIdx = (srcW.items || []).findIndex(x => x.id === _dragBmId);
+      if (bmItemIdx >= 0) {
+        const bmItem = srcW.items.splice(bmItemIdx, 1)[0];
+        if (!card.items) card.items = [];
+        card.items.push(bmItem);
+        _dragBmId = null;
+        _dragBmSrcWid = null;
+        if (typeof sv === 'function') sv();
+        if (typeof buildCols === 'function' && typeof _miroMode !== 'undefined' && !_miroMode) buildCols();
+        if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+      }
+    }
+  });
+
   // Dynamically determine the absolute minimum we allow the user to manually squish the widget.
   // In 'spark' (grid) mode, we rigidly lock it to the exact icons wrapper height.
   // In 'stream' (list) mode, we let them shrink it to 80px and the overflow scrollbar kicks in.

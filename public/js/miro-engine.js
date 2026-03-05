@@ -269,13 +269,9 @@ function deleteMiroCard(cid) {
 
   canvas.addEventListener('mousedown', (e) => {
     if (e.target !== canvas && e.target.id !== 'miro-board') return;
-    e.preventDefault();
-
-    const page = cp();
-    const isMiro = page.pageType === 'miro';
-
     // Right-click or middle-click: always pan
     if (e.button !== 0) {
+      e.preventDefault();
       _miroPanning = true;
       _miroPanStartX = e.clientX - (page.panX || 0);
       _miroPanStartY = e.clientY - (page.panY || 0);
@@ -285,9 +281,11 @@ function deleteMiroCard(cid) {
 
     // Space held: pan mode (future enhancement)
     // If in a creation/drawing mode, don't start rubber-band — let click handlers handle it
-    if (isMiro && (_stickyCreateMode || _textCreateMode || _penMode || _shapeMode)) {
-      return;
+    if (isMiro && (_stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _penMode || _shapeMode)) {
+      return; // Do NOT preventDefault here, so the click event can continue
     }
+
+    e.preventDefault();
 
     // Left-click on empty space: start rubber-band selection if miro page
     if (isMiro) {

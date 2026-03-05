@@ -1429,6 +1429,9 @@ function addToInbox() {
   buildInbox();
 }
 let _dragInboxId = null;
+let _dragBmId = null;
+let _dragBmSrcWid = null;
+
 function buildInbox() {
   const list = document.getElementById('inbox-list');
   list.innerHTML = '';
@@ -2016,7 +2019,7 @@ function buildWidget(w) {
     dragWid = null;
   });
   el.addEventListener('dragover', (e) => {
-    if (_dragInboxId) {
+    if (_dragInboxId || (_dragBmId && w.type !== 'note' && w.type !== 'todo')) {
       e.preventDefault();
       el.style.outline = '2px solid var(--ac)';
     }
@@ -2037,6 +2040,26 @@ function buildWidget(w) {
         sv();
         buildCols();
         buildInbox();
+      }
+    } else if (_dragBmId) {
+      e.preventDefault();
+      el.style.outline = '';
+      if (w.type !== 'note' && w.type !== 'todo') {
+        const page = cp();
+        let srcW = (page.widgets || []).find(x => x.id === _dragBmSrcWid);
+        if (!srcW && page.miroCards) srcW = page.miroCards.find(x => x.id === _dragBmSrcWid);
+        if (!srcW) return;
+        const bmItemIdx = (srcW.items || []).findIndex(x => x.id === _dragBmId);
+        if (bmItemIdx >= 0) {
+          const bmItem = srcW.items.splice(bmItemIdx, 1)[0];
+          if (!w.items) w.items = [];
+          w.items.push(bmItem);
+          _dragBmId = null;
+          _dragBmSrcWid = null;
+          sv();
+          if (typeof buildCols === 'function') buildCols();
+          if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+        }
       }
     }
   });
@@ -2227,6 +2250,7 @@ function buildBmBody(body, w) {
       const rm = mkRm(bm.id, w.id, 'cr');
       a.appendChild(rm);
       setupPv(a, bm);
+      makeBmDraggable(a, bm, w);
       wrap.appendChild(a);
     });
   } else if (mode === 'card') {
@@ -2238,6 +2262,92 @@ function buildBmBody(body, w) {
   }
   wrap.appendChild(mkAddBtn(w.id));
   body.appendChild(wrap);
+}
+function makeBmDraggable(a, bm, w) {
+  a.draggable = true;
+  a.addEventListener('dragstart', (e) => {
+    _dragBmId = bm.id;
+    _dragBmSrcWid = w.id;
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => a.classList.add('dragging'), 0);
+  });
+  a.addEventListener('dragend', () => {
+    a.classList.remove('dragging');
+    _dragBmId = null;
+    _dragBmSrcWid = null;
+  });
+  a.addEventListener('dragover', (e) => {
+    if ((_dragBmId && _dragBmId !== bm.id) || _dragInboxId) {
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = a.getBoundingClientRect();
+      const isCard = w.display === 'card';
+      const isStream = w.display === 'stream';
+      const isVertical = isCard || isStream;
+
+      a.classList.remove('bm-drop-top', 'bm-drop-bottom', 'bm-drop-left', 'bm-drop-right');
+
+      if (isVertical) {
+        if (e.clientY < rect.top + rect.height / 2) a.classList.add('bm-drop-top');
+        else a.classList.add('bm-drop-bottom');
+      } else {
+        if (e.clientX < rect.left + rect.width / 2) a.classList.add('bm-drop-left');
+        else a.classList.add('bm-drop-right');
+      }
+    }
+  });
+  a.addEventListener('dragleave', () => {
+    a.classList.remove('bm-drop-top', 'bm-drop-bottom', 'bm-drop-left', 'bm-drop-right');
+  });
+  a.addEventListener('drop', (e) => {
+    if ((_dragBmId && _dragBmId !== bm.id) || _dragInboxId) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const insertAfter = a.classList.contains('bm-drop-bottom') || a.classList.contains('bm-drop-right');
+      a.classList.remove('bm-drop-top', 'bm-drop-bottom', 'bm-drop-left', 'bm-drop-right');
+
+      if (!w.items) w.items = [];
+      const targetIdx = w.items.findIndex(x => x.id === bm.id);
+      const insertIdx = insertAfter ? targetIdx + 1 : Math.max(0, targetIdx);
+
+      if (_dragInboxId) {
+        const inboxItem = (D.inbox || []).find((x) => x.id === _dragInboxId);
+        if (inboxItem) {
+          w.items.splice(insertIdx, 0, { id: uid(), label: inboxItem.label, url: inboxItem.url, emoji: '' });
+          D.inbox = D.inbox.filter((x) => x.id !== _dragInboxId);
+          _dragInboxId = null;
+          sv();
+          if (typeof buildCols === 'function' && !_miroMode) buildCols();
+          if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+          if (typeof buildInbox === 'function') buildInbox();
+        }
+      } else if (_dragBmId) {
+        const page = cp();
+        let srcW = (page.widgets || []).find(x => x.id === _dragBmSrcWid);
+        if (!srcW && page.miroCards) srcW = page.miroCards.find(x => x.id === _dragBmSrcWid);
+        if (!srcW) return;
+
+        const bmItemIdx = (srcW.items || []).findIndex(x => x.id === _dragBmId);
+        if (bmItemIdx < 0) return;
+
+        let finalInsertIdx = insertIdx;
+        // If sorting within the same widget and moving downwards, adjust index
+        if (srcW.id === w.id && bmItemIdx < insertIdx) {
+          finalInsertIdx--;
+        }
+
+        const bmItem = srcW.items.splice(bmItemIdx, 1)[0];
+        w.items.splice(finalInsertIdx, 0, bmItem);
+
+        _dragBmId = null;
+        _dragBmSrcWid = null;
+        sv();
+        if (typeof buildCols === 'function' && typeof _miroMode !== 'undefined' && !_miroMode) buildCols();
+        if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+      }
+    }
+  });
 }
 function mkSparkItem(bm, w, sz) {
   const DIM = { sm: { w: 30, r: 8 }, md: { w: 38, r: 9 }, lg: { w: 82, r: 19 } };
@@ -2256,6 +2366,7 @@ function mkSparkItem(bm, w, sz) {
   a.appendChild(lbl);
   a.appendChild(rm);
   setupPv(a, bm);
+  makeBmDraggable(a, bm, w);
   return a;
 }
 function mkStreamItem(bm, w, sz) {
@@ -2276,6 +2387,7 @@ function mkStreamItem(bm, w, sz) {
   a.appendChild(lbl);
   a.appendChild(rm);
   setupPv(a, bm);
+  makeBmDraggable(a, bm, w);
   return a;
 }
 function mkCardItem(bm, w, sz) {
@@ -2302,6 +2414,7 @@ function mkCardItem(bm, w, sz) {
   a.appendChild(info);
   a.appendChild(rm);
   setupPv(a, bm);
+  makeBmDraggable(a, bm, w);
   return a;
 }
 function mkRm(itemId, wid, pos) {

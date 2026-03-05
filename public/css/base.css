@@ -2287,3 +2287,20 @@ body:not(.outline-open) #root {
 .widget.outline-hl {
   animation: outlineHighlight 1.2s ease;
 }
+
+/* Bookmark Drop Indicators */
+.bm-drop-top {
+  border-top: 2px solid var(--ac) !important;
+}
+
+.bm-drop-bottom {
+  border-bottom: 2px solid var(--ac) !important;
+}
+
+.bm-drop-left {
+  border-left: 2px solid var(--ac) !important;
+}
+
+.bm-drop-right {
+  border-right: 2px solid var(--ac) !important;
+}
