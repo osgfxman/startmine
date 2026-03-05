@@ -588,7 +588,7 @@ function buildMiroSticky(card) {
   miroSetupCardDrag(el, card, ['.mc-del', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.ms-shape-toggle', '.sn-toolbar']);
 
   // 4-corner resize
-  attachCornerResize(el, card, 100, 80);
+  attach8WayResize(el, card, 100, 80);
 
   el.appendChild(del);
   el.appendChild(toolbar);
@@ -678,7 +678,7 @@ function buildMiroImage(card) {
   miroSetupCardDrag(el, card, ['.mc-del', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl']);
 
   // 4-corner resize
-  attachCornerResize(el, card, 60, 60);
+  attach8WayResize(el, card, 60, 60);
 
   el.appendChild(del);
   el.appendChild(img);
@@ -773,7 +773,7 @@ function buildMiroText(card) {
   // Drag (via global helper)
   miroSetupCardDrag(el, card, ['.mc-del', '.mt-toolbar']);
 
-  attachCornerResize(el, card, 60, 30);
+  attach8WayResize(el, card, 60, 30);
   el.appendChild(del);
   el.appendChild(toolbar);
   el.appendChild(text);
@@ -851,8 +851,8 @@ function buildMiroShape(card) {
   miroSetupCardDrag(el, card, ['.mc-del', '.ms-shape-toggle', '.sn-toolbar', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl']);
 
   // Resize needs to re-render SVG
-  const origAttach = attachCornerResize;
-  attachCornerResize(el, card, 40, 40);
+  const origAttach = attach8WayResize;
+  attach8WayResize(el, card, 40, 40);
   // After resize, update SVG
   el.addEventListener('mouseup', () => { updateSVG(); });
 

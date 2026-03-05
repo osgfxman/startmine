@@ -241,7 +241,7 @@ function buildMiroCard(card) {
   meta.appendChild(info);
 
   // 4-corner resize handles
-  attachCornerResize(el, card, 160, 100);
+  attach8WayResize(el, card, 160, 100);
 
   el.appendChild(del);
   el.appendChild(openBtn);
@@ -269,6 +269,10 @@ function deleteMiroCard(cid) {
 
   canvas.addEventListener('mousedown', (e) => {
     if (e.target !== canvas && e.target.id !== 'miro-board') return;
+
+    const page = cp();
+    const isMiro = page.pageType === 'miro';
+
     // Right-click or middle-click: always pan
     if (e.button !== 0) {
       e.preventDefault();
@@ -913,9 +917,18 @@ document.getElementById('mtb-text').onclick = () => setActiveTool('text');
 document.getElementById('mtb-widget').onclick = () => setActiveTool('widget');
 
 // Canvas click handler for click-to-place modes
-document.getElementById('miro-canvas').addEventListener('click', (e) => {
+document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
+  if (e.button !== 0 && e.type !== 'touchstart') return; // Only trigger on left-click
+  console.log('Miro canvas click-to-place triggered!', { _stickyCreateMode, _textCreateMode, target: e.target });
   if (!_stickyCreateMode && !_textCreateMode && !_gridCreateMode && !_mindmapCreateMode && !_widgetCreateMode) return;
-  if (e.target.closest('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, #miro-toolbar, .mc-del')) return;
+  if (e.target.closest('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, #miro-toolbar, .mc-del')) {
+    console.log('Click ignored due to target closest match:', e.target);
+    return;
+  }
+
+  e.preventDefault();
+  e.stopPropagation();
+
   const page = cp();
   if (!page.miroCards) page.miroCards = [];
   const zoom = (page.zoom || 100) / 100;
@@ -924,6 +937,7 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
   const by = (e.clientY - rect.top - (page.panY || 0)) / zoom;
 
   if (_stickyCreateMode) {
+    console.log('Creating sticky note');
     const newId = uid();
     page.miroCards.push({ id: newId, type: 'sticky', text: '', color: 'yellow', shape: 'rect', x: bx - 140, y: by - 80, w: 280, h: 160 });
     setTimeout(() => {

@@ -163,22 +163,3 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
   }
 });
 
-// N key = enter sticky note creation mode
-document.addEventListener('keydown', (e) => {
-  // Don't trigger if user is typing in an input/textarea/contenteditable
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)
-    return;
-  const page = cp();
-  if (page.pageType !== 'miro') return;
-
-  if (e.key === 'n' || e.key === 'N' || e.key === 'ى') {
-    _stickyCreateMode = true;
-    document.getElementById('miro-canvas').classList.add('sn-create-mode');
-    document.getElementById('sn-create-hint').classList.add('show');
-  }
-  if (e.key === 'Escape' && _stickyCreateMode) {
-    _stickyCreateMode = false;
-    document.getElementById('miro-canvas').classList.remove('sn-create-mode');
-    document.getElementById('sn-create-hint').classList.remove('show');
-  }
-});
