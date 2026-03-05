@@ -2228,7 +2228,7 @@ function buildBmBody(body, w) {
   body.appendChild(wrap);
 }
 function mkSparkItem(bm, w, sz) {
-  const DIM = { sm: { w: 30, r: 8 }, md: { w: 38, r: 9 }, lg: { w: 48, r: 11 } };
+  const DIM = { sm: { w: 30, r: 8 }, md: { w: 38, r: 9 }, lg: { w: 82, r: 19 } };
   const d = DIM[sz] || DIM.md;
   const a = document.createElement('a');
   a.className = 'sp-it';

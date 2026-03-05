@@ -1228,7 +1228,7 @@ body {
 }
 
 .spark.lg {
-  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
 }
 
 .sp-it {

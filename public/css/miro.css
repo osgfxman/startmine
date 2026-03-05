@@ -242,23 +242,50 @@
 .miro-card .mc-resize-br,
 .miro-card .mc-resize-bl,
 .miro-card .mc-resize-tr,
-.miro-card .mc-resize-tl {
+.miro-card .mc-resize-tl,
+.miro-widget .mc-resize-br,
+.miro-widget .mc-resize-bl,
+.miro-widget .mc-resize-tr,
+.miro-widget .mc-resize-tl,
+.miro-widget .mc-resize-t,
+.miro-widget .mc-resize-b,
+.miro-widget .mc-resize-l,
+.miro-widget .mc-resize-r {
   position: absolute;
-  width: 14px;
-  height: 14px;
   z-index: 4;
   opacity: 0;
   transition: opacity 0.12s;
 }
 
+.miro-card .mc-resize-br,
+.miro-card .mc-resize-bl,
+.miro-card .mc-resize-tr,
+.miro-card .mc-resize-tl,
+.miro-widget .mc-resize-br,
+.miro-widget .mc-resize-bl,
+.miro-widget .mc-resize-tr,
+.miro-widget .mc-resize-tl {
+  width: 14px;
+  height: 14px;
+}
+
 .miro-card:hover .mc-resize-br,
 .miro-card:hover .mc-resize-bl,
 .miro-card:hover .mc-resize-tr,
-.miro-card:hover .mc-resize-tl {
+.miro-card:hover .mc-resize-tl,
+.miro-widget:hover .mc-resize-br,
+.miro-widget:hover .mc-resize-bl,
+.miro-widget:hover .mc-resize-tr,
+.miro-widget:hover .mc-resize-tl,
+.miro-widget:hover .mc-resize-t,
+.miro-widget:hover .mc-resize-b,
+.miro-widget:hover .mc-resize-l,
+.miro-widget:hover .mc-resize-r {
   opacity: 1;
 }
 
-.miro-card .mc-resize-br {
+.miro-card .mc-resize-br,
+.miro-widget .mc-resize-br {
   right: 0;
   bottom: 0;
   cursor: nwse-resize;
@@ -266,7 +293,8 @@
   border-radius: 0 0 12px 0;
 }
 
-.miro-card .mc-resize-tl {
+.miro-card .mc-resize-tl,
+.miro-widget .mc-resize-tl {
   left: 0;
   top: 0;
   cursor: nwse-resize;
@@ -274,7 +302,8 @@
   border-radius: 12px 0 0 0;
 }
 
-.miro-card .mc-resize-tr {
+.miro-card .mc-resize-tr,
+.miro-widget .mc-resize-tr {
   right: 0;
   top: 0;
   cursor: nesw-resize;
@@ -282,12 +311,53 @@
   border-radius: 0 12px 0 0;
 }
 
-.miro-card .mc-resize-bl {
+.miro-card .mc-resize-bl,
+.miro-widget .mc-resize-bl {
   left: 0;
   bottom: 0;
   cursor: nesw-resize;
   background: linear-gradient(45deg, transparent 50%, rgba(255, 255, 255, 0.18) 50%);
   border-radius: 0 0 0 12px;
+}
+
+.miro-widget .mc-resize-t {
+  top: -4px;
+  left: 12px;
+  right: 12px;
+  height: 8px;
+  width: auto;
+  cursor: ns-resize;
+  background: transparent;
+}
+
+.miro-widget .mc-resize-b {
+  bottom: -4px;
+  left: 12px;
+  right: 12px;
+  height: 8px;
+  width: auto;
+  cursor: ns-resize;
+  background: transparent;
+}
+
+.miro-widget .mc-resize-l {
+  left: -4px;
+  top: 12px;
+  bottom: 12px;
+  width: 8px;
+  height: auto;
+  cursor: ew-resize;
+  background: transparent;
+}
+
+.miro-widget .mc-resize-r {
+  right: -4px;
+  top: 12px;
+  bottom: 12px;
+  width: 8px;
+  height: auto;
+  cursor: ew-resize;
+  background: transparent;
 }
 
 .miro-card .mc-open {

@@ -1,4 +1,5 @@
 /* ─── Fast Thumbnail Cache Engine ─── */
+/* ─── Fast Thumbnail Cache Engine ─── */
 const THUMB_GRADIENTS = [
   'linear-gradient(135deg,#667eea,#764ba2)',
   'linear-gradient(135deg,#f093fb,#f5576c)',
@@ -351,10 +352,10 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
 
 /* ─── 4-Corner Resize + Sticky Notes ─── */
 
-function attachCornerResize(el, card, minW, minH) {
-  ['br', 'bl', 'tr', 'tl'].forEach((corner) => {
+function attach8WayResize(el, card, minW, minH) {
+  ['br', 'bl', 'tr', 'tl', 't', 'b', 'l', 'r'].forEach((handleType) => {
     const handle = document.createElement('div');
-    handle.className = 'mc-resize-' + corner;
+    handle.className = 'mc-resize-' + handleType;
     handle.addEventListener('mousedown', (e) => {
       e.stopPropagation();
       const page = cp();
@@ -372,40 +373,62 @@ function attachCornerResize(el, card, minW, minH) {
           nh = oH,
           nx = oX,
           ny = oY;
-        if (corner === 'br') {
+
+        // Corners
+        if (handleType === 'br') {
           nw = oW + dx;
           nh = oH + dy;
-        } else if (corner === 'bl') {
+        } else if (handleType === 'bl') {
           nw = oW - dx;
           nx = oX + dx;
           nh = oH + dy;
-        } else if (corner === 'tr') {
+        } else if (handleType === 'tr') {
           nw = oW + dx;
           nh = oH - dy;
           ny = oY + dy;
-        } else if (corner === 'tl') {
+        } else if (handleType === 'tl') {
           nw = oW - dx;
           nx = oX + dx;
           nh = oH - dy;
           ny = oY + dy;
         }
+        // Edges
+        else if (handleType === 'r') {
+          nw = oW + dx;
+        } else if (handleType === 'l') {
+          nw = oW - dx;
+          nx = oX + dx;
+        } else if (handleType === 'b') {
+          nh = oH + dy;
+        } else if (handleType === 't') {
+          nh = oH - dy;
+          ny = oY + dy;
+        }
+
         // Enforce min size
-        if (nw < minW) {
-          if (corner === 'bl' || corner === 'tl') nx = oX + oW - minW;
-          nw = minW;
+        const cMinW = typeof minW === 'function' ? minW() : minW;
+        if (nw < cMinW) {
+          if (handleType === 'bl' || handleType === 'tl' || handleType === 'l') nx = oX + oW - cMinW;
+          nw = cMinW;
         }
-        if (nh < minH) {
-          if (corner === 'tr' || corner === 'tl') ny = oY + oH - minH;
-          nh = minH;
+
+        // Apply width first so that minH() can compute the wrapped height correctly
+        el.style.width = nw + 'px';
+        card.w = nw;
+
+        const cMinH = typeof minH === 'function' ? minH() : minH;
+        if (nh < cMinH) {
+          if (handleType === 'tr' || handleType === 'tl' || handleType === 't') ny = oY + oH - cMinH;
+          nh = cMinH;
         }
+
         card.x = nx;
         card.y = ny;
-        card.w = nw;
         card.h = nh;
         el.style.left = nx + 'px';
         el.style.top = ny + 'px';
-        el.style.width = nw + 'px';
         el.style.height = nh + 'px';
+
         // Auto-size text for sticky notes
         const textEl = el.querySelector('.ms-text');
         if (textEl) autoSizeText(textEl, el);
@@ -1394,15 +1417,102 @@ function buildMiroBookmarkWidget(card) {
   hdr.className = 'wh';
   hdr.style.borderBottomColor = bdCol;
 
+  // Widget Body wrapper
+  const body = document.createElement('div');
+  body.className = 'wb';
+  body.style.height = 'calc(100% - 32px)';
+  body.style.overflowY = card.display === 'stream' ? 'auto' : 'hidden';
+
+  // Calculate minimum height dynamically to fit all links
+  const getMinH = () => {
+    // Make sure we have enough scroll room or height room
+    // Use the inner wrapper to get the TRUE un-stretched content height
+    const contentH = body.firstElementChild ? body.firstElementChild.scrollHeight : 60;
+    return contentH + (hdr.offsetHeight || 32) + 2;
+  };
+
   // Header Actions
   hdr.innerHTML = `
-    <div class="wt" style="color:${muCol}"><span>${card.emoji || '📌'}</span>${card.title || 'Bookmarks'}</div>
+    <div class="wt" style="color:${muCol}">
+      <span class="bm-emoji" title="Double click to edit" style="cursor:text">${card.emoji || '📌'}</span>
+      <span class="bm-title" title="Double click to edit" style="cursor:text;flex:1">${card.title || 'Bookmarks'}</span>
+    </div>
     <div class="wa">
+      <button class="wab" data-cl="${card.id}" title="Change Color">🎨</button>
+      <button class="wab" data-grid="${card.id}" title="Grid View">🔲</button>
+      <button class="wab" data-list="${card.id}" title="List View">📄</button>
       <button class="wab" data-explode="${card.id}" title="Extract all links to canvas">🗃️</button>
       <button class="wab" data-dp="${card.id}" title="Display Settings">🖥️</button>
       <button class="wab d mc-del" title="Delete">🗑️</button>
     </div>
   `;
+
+  // Grid/List toggle behavior
+  hdr.querySelector('[data-grid]').onclick = (e) => {
+    e.stopPropagation();
+    card.display = 'spark';
+    card.size = 'lg';
+    body.style.overflowY = 'hidden';
+    body.innerHTML = '';
+    buildBmBody(body, card);
+    // Explicitly shrink bounds to new content
+    const bestH = getMinH();
+    card.h = bestH;
+    el.style.height = bestH + 'px';
+    if (typeof sv === 'function') sv();
+  };
+  hdr.querySelector('[data-list]').onclick = (e) => {
+    e.stopPropagation();
+    card.display = 'stream';
+    body.style.overflowY = 'auto';
+    body.innerHTML = '';
+    buildBmBody(body, card);
+    // Explicitly shrink bounds to new content
+    const bestH = getMinH();
+    card.h = bestH;
+    el.style.height = bestH + 'px';
+    if (typeof sv === 'function') sv();
+  };
+
+  // Color picker
+  const clBtn = hdr.querySelector('[data-cl]');
+  if (clBtn) {
+    clBtn.onclick = (e) => {
+      e.stopPropagation();
+      openColModal(card.id);
+    };
+  }
+
+  // Inline Editing
+  const emojiSpan = hdr.querySelector('.bm-emoji');
+  if (emojiSpan) {
+    emojiSpan.ondblclick = (e) => {
+      e.stopPropagation();
+      emojiSpan.contentEditable = true;
+      emojiSpan.focus();
+    };
+    emojiSpan.onblur = () => {
+      emojiSpan.contentEditable = false;
+      card.emoji = emojiSpan.textContent;
+      if (typeof sv === 'function') sv();
+    };
+    emojiSpan.onkeydown = (e) => { if (e.key === 'Enter') emojiSpan.blur(); };
+  }
+
+  const titleSpan = hdr.querySelector('.bm-title');
+  if (titleSpan) {
+    titleSpan.ondblclick = (e) => {
+      e.stopPropagation();
+      titleSpan.contentEditable = true;
+      titleSpan.focus();
+    };
+    titleSpan.onblur = () => {
+      titleSpan.contentEditable = false;
+      card.title = titleSpan.textContent;
+      if (typeof sv === 'function') sv();
+    };
+    titleSpan.onkeydown = (e) => { if (e.key === 'Enter') titleSpan.blur(); };
+  }
 
   // Explode behavior
   const expBtn = hdr.querySelector('[data-explode]');
@@ -1433,25 +1543,38 @@ function buildMiroBookmarkWidget(card) {
 
   el.appendChild(hdr);
 
-  // Widget Body wrapper
-  const body = document.createElement('div');
-  body.className = 'wb';
-  body.style.height = 'calc(100% - 32px)';
-  body.style.overflowY = 'auto';
-
   // Use the existing dashboard buildBmBody to populate items!
   buildBmBody(body, card);
 
   el.appendChild(body);
 
   // Drag logic (bypass drag on links, delete buttons, add buttons, settings, options)
-  const ignoreSelectors = ['.mc-del', '.rmb', '.add-i', '.wab', '.sp-it', '.st-it', '.cd-it', '.cl-it', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.mg-toolbar', '.sn-toolbar', '.msh-toolbar', '.mt-toolbar'];
+  const ignoreSelectors = ['.mc-del', '.rmb', '.add-i', '.wab', '.sp-it', '.st-it', '.cd-it', '.cl-it', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.mc-resize-t', '.mc-resize-b', '.mc-resize-l', '.mc-resize-r', '.mg-toolbar', '.sn-toolbar', '.msh-toolbar', '.mt-toolbar'];
   if (typeof miroSetupCardDrag === 'function') {
     miroSetupCardDrag(el, card, ignoreSelectors);
   }
 
+  // Dynamically determine the absolute minimum we allow the user to manually squish the widget.
+  // In 'spark' (grid) mode, we rigidly lock it to the exact icons wrapper height.
+  // In 'stream' (list) mode, we let them shrink it to 80px and the overflow scrollbar kicks in.
+  const getManualMinH = () => card.display === 'stream' ? 80 : getMinH();
+
   // Sizing anchors
-  attachCornerResize(el, card, 130, 80);
+  attach8WayResize(el, card, 130, getManualMinH);
+
+  // Ensure minimum height on load or when content might have changed
+  setTimeout(() => {
+    if (el.isConnected) {
+      const bestH = getMinH();
+      // Only force expand the widget if it is totally new (!card.h) 
+      // OR if it's the rigid spark grid where we ignore how small the user tried to make it
+      if (!card.h || (card.display !== 'stream' && card.h < bestH)) {
+        card.h = bestH;
+        el.style.height = bestH + 'px';
+        if (typeof sv === 'function') sv();
+      }
+    }
+  }, 10);
 
   return el;
 }
