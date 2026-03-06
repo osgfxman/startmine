@@ -390,7 +390,6 @@ function switchActivePage(pageId) {
   db.ref(pageDataRef).on('value', (snap) => {
     if (_ownWrite) {
       _ownWrite = false;
-      buildColBtns();
       buildCols();
       return;
     }
@@ -403,7 +402,6 @@ function switchActivePage(pageId) {
       const fakeD = { pages: [pg] };
       sanitizeData(fakeD);
     }
-    buildColBtns();
     buildCols();
   });
 }
@@ -1332,29 +1330,7 @@ document.getElementById('reset-btn').onclick = () => {
   renderAll();
   document.getElementById('io-pop').classList.remove('open');
 };
-function buildColBtns() {
-  const c = document.getElementById('col-btns');
-  c.innerHTML = '';
-  for (let i = 1; i <= 7; i++) {
-    const b = document.createElement('button');
-    b.className = 'ib col-btn' + (cp().cols === i ? ' on' : '');
-    b.textContent = i;
-    b.onclick = () => {
-      const page = cp();
-      const oldCols = page.cols;
-      page.cols = i;
-      if (i < oldCols) {
-        (page.widgets || []).forEach((w) => {
-          if (w.col >= i) w.col = i - 1;
-        });
-      }
-      sv();
-      buildColBtns();
-      buildCols();
-    };
-    c.appendChild(b);
-  }
-}
+
 
 let _dragGrpId = null;
 function buildGroups() {
@@ -2033,31 +2009,19 @@ document.getElementById('add-grp').onclick = () => {
   const id = uid();
   D.groups.push({ id, name: 'Group ' + (D.groups.length + 1) });
   const pid = uid();
-  if (_miroMode) {
-    D.pages.push({
-      id: pid,
-      groupId: id,
-      name: 'Miro 1',
-      pageType: 'miro',
-      miroCards: [],
-      zoom: 100,
-      panX: 0,
-      panY: 0,
-      bg: '',
-      bgType: 'none',
-      widgets: [],
-    });
-  } else {
-    D.pages.push({
-      id: pid,
-      groupId: id,
-      name: 'Page 1',
-      cols: 3,
-      bg: '',
-      bgType: 'none',
-      widgets: [],
-    });
-  }
+  D.pages.push({
+    id: pid,
+    groupId: id,
+    name: 'Miro 1',
+    pageType: 'miro',
+    miroCards: [],
+    zoom: 100,
+    panX: 0,
+    panY: 0,
+    bg: '',
+    bgType: 'none',
+    widgets: [],
+  });
   D.curGroup = id;
   sv();
   switchActivePage(pid);
@@ -2067,31 +2031,19 @@ document.getElementById('add-pg').onclick = () => {
   const id = uid();
   const targetGroup = D.curGroup === '__all__' ? D.groups[0].id : D.curGroup;
   const groupPages = D.pages.filter((p) => p.groupId === targetGroup);
-  if (_miroMode) {
-    D.pages.push({
-      id,
-      groupId: targetGroup,
-      name: 'Miro ' + (groupPages.length + 1),
-      pageType: 'miro',
-      miroCards: [],
-      zoom: 100,
-      panX: 0,
-      panY: 0,
-      bg: '',
-      bgType: 'none',
-      widgets: [],
-    });
-  } else {
-    D.pages.push({
-      id,
-      groupId: targetGroup,
-      name: 'Page ' + (groupPages.length + 1),
-      cols: 3,
-      bg: '',
-      bgType: 'none',
-      widgets: [],
-    });
-  }
+  D.pages.push({
+    id,
+    groupId: targetGroup,
+    name: 'Miro ' + (groupPages.length + 1),
+    pageType: 'miro',
+    miroCards: [],
+    zoom: 100,
+    panX: 0,
+    panY: 0,
+    bg: '',
+    bgType: 'none',
+    widgets: [],
+  });
   sv();
   switchActivePage(id);
 };
@@ -2168,83 +2120,16 @@ function setTabColor(pid, color) {
   buildTabs();
 }
 function buildCols() {
-  const page = cp();
-  const isMiro = page.pageType === 'miro';
-  document.getElementById('cw').style.display = isMiro ? 'none' : '';
-  document.getElementById('miro-canvas').classList.toggle('hidden', !isMiro);
-  document.getElementById('miro-zoom').classList.toggle('show', isMiro);
-  document.getElementById('miro-add-float').classList.toggle('show', isMiro);
-  document.getElementById('miro-toolbar').classList.toggle('show', isMiro);
-  document.getElementById('cols-wrap').style.display = isMiro ? 'none' : 'flex';
-  if (isMiro) {
-    buildMiroCanvas();
-    buildOutline();
-    return;
-  }
-  const wrap = document.getElementById('cw');
-  wrap.innerHTML = '';
-  const numCols = page.cols || 3;
-  wrap.style.gridTemplateColumns = `repeat(${numCols},minmax(0,1fr))`;
-
-  // Group widgets by column
-  const colBuckets = [];
-  for (let ci = 0; ci < numCols; ci++) colBuckets.push([]);
-  (page.widgets || []).forEach((w) => {
-    const ci = Math.min(w.col || 0, numCols - 1);
-    colBuckets[ci].push(w);
-  });
-
-  // Render columns
-  for (let ci = 0; ci < numCols; ci++) {
-    const colDiv = document.createElement('div');
-    colDiv.className = 'col';
-
-    // It's a grid column, so a widget spanning multiple cols requires the colDiv itself to span.
-    // To handle colSpan properly: we check if the first widget in this column has a span.
-    // (A more robust masonry layout with varying spans would require complex JS packing,
-    // but the Startmine dashboard currently treats colSpan by expanding the wrapper).
-    let maxSpan = 1;
-    colBuckets[ci].forEach((w) => {
-      const span = Math.min(w.colSpan || 1, numCols - ci);
-      if (span > maxSpan) maxSpan = span;
-    });
-    colDiv.style.gridColumn = `span ${maxSpan}`;
-
-    colBuckets[ci].forEach((w) => {
-      const el = buildWidget(w);
-      // Drop zone on widget itself
-      el.addEventListener('dragover', (e) => { e.preventDefault(); });
-      el.addEventListener('drop', (e) => {
-        e.preventDefault();
-        if (!dragWid) return;
-        const dw = (page.widgets || []).find((x) => x.id === dragWid);
-        if (dw) { dw.col = ci; sv(); buildCols(); }
-        dragWid = null;
-      });
-      colDiv.appendChild(el);
-    });
-
-    // Add-widget button per column
-    const ab = document.createElement('button');
-    ab.className = 'add-w';
-    ab.innerHTML = '＋ Add Widget';
-    ab.onclick = () => { pColIdx = ci; openM('m-aw'); };
-    // Drop zone on add button
-    ab.addEventListener('dragover', (e) => { e.preventDefault(); ab.classList.add('dragover'); });
-    ab.addEventListener('dragleave', () => ab.classList.remove('dragover'));
-    ab.addEventListener('drop', (e) => {
-      e.preventDefault(); ab.classList.remove('dragover');
-      if (!dragWid) return;
-      const dw = (page.widgets || []).find((x) => x.id === dragWid);
-      if (dw) { dw.col = ci; sv(); buildCols(); }
-      dragWid = null;
-    });
-    colDiv.appendChild(ab);
-
-    wrap.appendChild(colDiv);
-  }
-
-  buildOutline();
+  document.getElementById('cw').style.display = 'none';
+  document.getElementById('miro-canvas').classList.remove('hidden');
+  const mz = document.getElementById('miro-zoom');
+  if (mz) mz.classList.add('show');
+  const maf = document.getElementById('miro-add-float');
+  if (maf) maf.classList.add('show');
+  const mtb = document.getElementById('miro-toolbar');
+  if (mtb) mtb.classList.add('show');
+  if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+  if (typeof buildOutline === 'function') buildOutline();
 }
 function luma(c) {
   return (c.r * 299 + c.g * 587 + c.b * 114) / 1000;
@@ -3094,7 +2979,6 @@ document.addEventListener('keydown', (e) => {
 function renderAll() {
   buildGroups();
   buildTabs();
-  buildColBtns();
   buildCols();
   applyBG();
   applyContrast();
@@ -3275,20 +3159,6 @@ window.convertPageToMiro = function (pageId) {
   }
 };
 
-// ─── Convert Dashboard Page to Miro via Toolbar Button ───
-const btn2m = document.getElementById('btn-2m');
-if (btn2m) {
-  btn2m.onclick = () => {
-    if (D.cur) {
-      const pg = D.pages.find(p => p.id === D.cur);
-      if (pg && pg.pageType === 'miro') {
-        if (typeof showToast === 'function') showToast("Already a Miro Page.");
-        return;
-      }
-      convertPageToMiro(D.cur);
-    }
-  };
-}
 
 // ─── Local Cache: instant load from localStorage on startup ───
 (function initLocalCache() {

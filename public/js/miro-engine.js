@@ -10,10 +10,7 @@ let _alignDragging = false;
 let _justRubberBanded = false;
 let _stickyCreateMode = false;
 
-document.getElementById('miro-toggle').onclick = () => {
-  _miroMode = !_miroMode;
-  document.getElementById('miro-toggle').classList.toggle('miro-on', !_miroMode);
-};
+
 
 function addMiroSelect(cid) {
   if (_miroSelected.has(cid)) return;
