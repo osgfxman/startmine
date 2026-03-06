@@ -454,6 +454,9 @@ function buildMiroSticky(card) {
   el.style.top = (card.y || 0) + 'px';
   el.style.width = (card.w || 280) + 'px';
   el.style.height = (card.h || 160) + 'px';
+  if (card.bgHex) {
+    el.style.backgroundColor = card.bgHex;
+  }
 
   // Delete button
   const del = document.createElement('button');

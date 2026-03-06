@@ -1171,6 +1171,295 @@ document.addEventListener('paste', (e) => {
     return;
   }
 
+  // Check for HTML from Miro or other rich text sources
+  const html = (e.clipboardData || window.clipboardData).getData('text/html');
+  if (html) {
+    console.log('--- RAW CLIPBOARD HTML ---');
+    console.log(html);
+    console.log('--------------------------');
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+
+    let extracted = [];
+    const miroSpans = doc.querySelectorAll('span[data-meta*="miro"]');
+    const isMiroData = miroSpans.length > 0;
+
+    if (isMiroData) {
+      const miroColors = [
+        'yellow', 'green', 'blue', 'pink', 'orange', 'purple', 'cyan', 'red', 'white', 'gray', 'dark'
+      ];
+      const exactColorMap = {
+        '#f5f6f8': 'gray', '#fff9b1': 'yellow', '#f5d128': 'yellow', '#f09b55': 'orange',
+        '#d5f692': 'green', '#c9df56': 'green', '#93d275': 'green', '#68cef8': 'cyan',
+        '#fdb8dc': 'pink', '#ff73bd': 'pink', '#c39ce6': 'purple', '#ff6d6d': 'red',
+        '#cde3fa': 'blue', '#8fd14f': 'green', '#568fdb': 'blue', '#000000': 'dark',
+        '#ffffff': 'white', 'transparent': 'white'
+      };
+      let colorIdx = 0;
+
+      miroSpans.forEach(span => {
+        let miroJson = null;
+        try {
+          const rawMeta = span.getAttribute('data-meta') || '';
+          const match = rawMeta.match(/<--\(miro-data-v1\)([\s\S]*?)\(\/miro-data-v1\)-->/);
+          if (match && match[1]) {
+            let b64 = match[1].replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
+            while (b64.length % 4) b64 += '=';
+            const raw = atob(b64);
+            const firstByte = raw.charCodeAt(0);
+            const key = (123 - firstByte + 256) % 256;
+            let decoded = '';
+            for (let i = 0; i < raw.length; i++) {
+              decoded += String.fromCharCode((raw.charCodeAt(i) + key) % 256);
+            }
+            miroJson = JSON.parse(decoded);
+          }
+        } catch (e) {
+          console.error('Failed to decode Miro JSON coordinates:', e);
+        }
+
+        if (miroJson && miroJson.data && miroJson.data.objects) {
+          miroJson.data.objects.forEach(obj => {
+            if (obj && obj.widgetData && obj.widgetData.json) {
+              const jd = obj.widgetData.json;
+              const type = (obj.widgetData.type || '').toLowerCase();
+
+              if (type === 'sticker' || type === 'shape' || type === 'text') {
+                let textHTML = jd.text || jd.content || '';
+                textHTML = textHTML.replace(/^<p[^>]*>/i, '').replace(/<\/p>$/i, '');
+
+                // Fix Garbled Arabic UTF-8 (when decoded via String.fromCharCode)
+                try {
+                  textHTML = decodeURIComponent(escape(textHTML));
+                } catch (err) {
+                  // Fallback if already valid or not escapeable
+                }
+
+                let startmineType = type === 'text' ? 'text' : 'sticky';
+                let bgColorString = 'yellow';
+                let exactBgHex = null;
+
+                let styleObj = jd.style;
+                if (typeof styleObj === 'string') {
+                  try { styleObj = JSON.parse(styleObj); } catch (e) { }
+                }
+
+                if (styleObj) {
+                  let hex = styleObj.backgroundColor || styleObj.bc;
+                  if (!hex && styleObj.sbc) {
+                    hex = '#' + parseInt(styleObj.sbc).toString(16).padStart(6, '0');
+                  }
+                  if (hex) {
+                    exactBgHex = hex.toLowerCase();
+                    if (!exactBgHex.startsWith('#')) exactBgHex = '#' + exactBgHex;
+                    bgColorString = exactColorMap[exactBgHex] || 'yellow';
+                  }
+                }
+
+                if (!exactBgHex) {
+                  bgColorString = miroColors[colorIdx % miroColors.length];
+                  colorIdx++;
+                }
+
+                let cardOpts = {
+                  type: startmineType,
+                  text: textHTML,
+                  color: bgColorString,
+                  fontSize: styleObj && styleObj.fs ? parseInt(styleObj.fs) : (styleObj && styleObj.fontSize ? parseInt(styleObj.fontSize) : 24)
+                };
+                if (exactBgHex) cardOpts.bgHex = exactBgHex;
+
+                if (jd._position && jd._position.offsetPx) {
+                  cardOpts._ox = jd._position.offsetPx.x;
+                  cardOpts._oy = jd._position.offsetPx.y;
+                } else if (jd._position && typeof jd._position.x === 'number') {
+                  cardOpts._ox = jd._position.x;
+                  cardOpts._oy = jd._position.y;
+                }
+
+                if (jd.size) {
+                  if (jd.size.width) cardOpts.w = jd.size.width;
+                  if (jd.size.height) cardOpts.h = jd.size.height;
+                }
+
+                extracted.push(cardOpts);
+              }
+            }
+          });
+        }
+      });
+
+      // 100% BULLETPROOF FALLBACK: If JSON completely failed due to new Miro encryption,
+      // manually extract the DIVs natively from the HTML layout to avoid a "giant card"
+      if (extracted.length === 0) {
+        Array.from(doc.body.children).forEach(node => {
+          if (node.tagName === 'DIV' && node.textContent.trim()) {
+            extracted.push({
+              type: 'sticky',
+              text: node.innerHTML,
+              color: miroColors[colorIdx % miroColors.length],
+              w: 280,
+              h: 160
+            });
+            colorIdx++;
+          }
+        });
+      }
+
+      if (extracted.length > 0) {
+        if (!page.miroCards) page.miroCards = [];
+        const canvas = document.getElementById('miro-canvas');
+        const zoom = (page.zoom || 100) / 100;
+        const panX = page.panX || 0;
+        const panY = page.panY || 0;
+
+        let px = _mouseX ? (_mouseX - panX) / zoom : (canvas.clientWidth / 2 - panX) / zoom;
+        let py = _mouseY ? (_mouseY - panY) / zoom : (canvas.clientHeight / 2 - panY) / zoom;
+
+        let curX = px;
+        let curY = py;
+
+        clearMiroSelection();
+        let minOX = Infinity;
+        let minOY = Infinity;
+        extracted.forEach(item => {
+          if (item._ox !== undefined) {
+            if (item._ox < minOX) minOX = item._ox;
+            if (item._oy < minOY) minOY = item._oy;
+          }
+        });
+
+        extracted.forEach(item => {
+          const newId = uid();
+          const card = { id: newId, ...item };
+
+          if (item.type === 'sticky') {
+            card.w = item.w || 280;
+            card.h = item.h || 160;
+          } else if (item.type === 'text') {
+            card.w = Math.max(100, item.text.length * (card.fontSize / 2));
+            card.h = card.fontSize * 1.5;
+            card.fontFamily = 'Inter';
+          }
+
+          if (item._ox !== undefined && minOX !== Infinity) {
+            card.x = px + (item._ox - minOX);
+            card.y = py + (item._oy - minOY);
+          } else {
+            card.x = curX - 100;
+            card.y = curY - 100;
+            curX += (card.w || 280) + 40;
+            if (curX > px + 950) {
+              curX = px;
+              curY += (card.h || 160) + 40;
+            }
+          }
+
+          page.miroCards.push(card);
+          _miroSelected.add(newId);
+        });
+        sv(); buildMiroCanvas(); buildOutline();
+        return;
+      }
+
+      // Explicitly return here to completely prevent Miro items from collapsing into the Step 4 Generic Text handler if something went wrong!
+      return;
+
+    } else {
+      // Generic HTML extraction from non-Miro sources
+      const extractGenericElements = (node, result = []) => {
+        if (node.nodeType === 1) {
+          const style = window.getComputedStyle(node);
+          const bgColor = node.style.backgroundColor || node.getAttribute('bgcolor');
+          const color = node.style.color;
+          const fontSizeStr = node.style.fontSize;
+          let fontSize = fontSizeStr ? parseInt(fontSizeStr) : 24;
+
+          if ((node.tagName === 'P' || node.tagName === 'DIV' || node.tagName === 'SPAN') && node.textContent.trim()) {
+            let bgIsColor = bgColor && bgColor !== 'transparent' && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== '#ffffff' && bgColor !== 'white';
+            if (bgIsColor) {
+              result.push({ type: 'sticky', text: node.innerHTML, bg: bgColor, color: color || '#333', fontSize: fontSize });
+              return result;
+            } else if (node.tagName === 'P' || node.tagName === 'SPAN') {
+              result.push({ type: 'text', text: node.textContent, color: color || '#ffffff', fontSize: fontSize });
+              return result;
+            }
+          }
+          for (let i = 0; i < node.childNodes.length; i++) {
+            extractGenericElements(node.childNodes[i], result);
+          }
+        }
+        return result;
+      };
+
+      extracted = extractGenericElements(doc.body);
+
+      if (extracted.length === 0 && doc.body.textContent.trim()) {
+        extracted.push({
+          type: 'sticky',
+          text: doc.body.innerHTML,
+          bg: '#ffe599'
+        });
+      }
+    }
+
+    if (extracted.length > 0) {
+      if (!page.miroCards) page.miroCards = [];
+      const canvas = document.getElementById('miro-canvas');
+      const zoom = (page.zoom || 100) / 100;
+      const px = _mouseX ? (_mouseX - (page.panX || 0)) / zoom : (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
+      const py = _mouseY ? (_mouseY - (page.panY || 0)) / zoom : (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+
+      let curX = px;
+      let curY = py;
+
+      clearMiroSelection();
+      let minOX = Infinity;
+      let minOY = Infinity;
+      extracted.forEach(item => {
+        if (item._ox !== undefined) {
+          if (item._ox < minOX) minOX = item._ox;
+          if (item._oy < minOY) minOY = item._oy;
+        }
+      });
+
+      extracted.forEach(item => {
+        const newId = uid();
+        const card = { id: newId, ...item };
+
+        if (item.type === 'sticky') {
+          card.w = item.w || 280; // Native startmine sticky dimensions
+          card.h = item.h || 160;
+        } else if (item.type === 'text') {
+          card.w = Math.max(100, item.text.length * (card.fontSize / 2));
+          card.h = card.fontSize * 1.5;
+          card.fontFamily = 'Inter';
+        }
+
+        // Apply spatial positioning
+        if (item._ox !== undefined && minOX !== Infinity) {
+          card.x = px + (item._ox - minOX);
+          card.y = py + (item._oy - minOY);
+        } else {
+          // Fallback sequential formatting
+          card.x = curX - 100;
+          card.y = curY - 100;
+          curX += (card.w || 280) + 40;
+          if (curX > px + 950) {
+            curX = px;
+            curY += (card.h || 160) + 40;
+          }
+        }
+
+        page.miroCards.push(card);
+        _miroSelected.add(newId);
+      });
+      sv(); buildMiroCanvas(); buildOutline();
+      return;
+    }
+  }
+
   let imagePasted = false;
 
   // 3. Check for images natively copied (Lower Priority than Widgets)

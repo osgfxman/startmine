@@ -466,7 +466,7 @@ function sv(saveAll = false, immediate = false) {
       panY: p.panY,
       bg: p.bg,
       bgType: p.bgType,
-      tabColor: p.tabColor
+      tabColor: p.tabColor || ''
     }));
 
     const updates = {};
