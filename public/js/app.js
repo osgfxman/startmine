@@ -113,67 +113,14 @@ const DEF = {
       id: 'p0',
       groupId: 'g0',
       name: 'Home',
-      cols: 3,
+      pageType: 'miro',
+      miroCards: [],
+      zoom: 100,
+      panX: 0,
+      panY: 0,
       bg: '',
       bgType: 'none',
-      widgets: [
-        {
-          id: 'w1',
-          col: 0,
-          title: 'Quick Links',
-          emoji: '⚡',
-          type: 'bookmarks',
-          display: 'auto',
-          size: 'md',
-          vis: 'all',
-          color: { ...DEF_COLOR },
-          items: [
-            { id: 'i1', label: 'Google', url: 'https://google.com', emoji: '' },
-            { id: 'i2', label: 'GitHub', url: 'https://github.com', emoji: '' },
-            { id: 'i3', label: 'YouTube', url: 'https://youtube.com', emoji: '' },
-            { id: 'i4', label: 'Reddit', url: 'https://reddit.com', emoji: '' },
-          ],
-        },
-        {
-          id: 'w2',
-          col: 1,
-          title: 'Work',
-          emoji: '💼',
-          type: 'list',
-          display: 'stream',
-          size: 'md',
-          vis: 'all',
-          color: { ...DEF_COLOR },
-          items: [
-            { id: 'i5', label: 'Notion', url: 'https://notion.so', emoji: '' },
-            { id: 'i6', label: 'Figma', url: 'https://figma.com', emoji: '' },
-          ],
-        },
-        {
-          id: 'w3',
-          col: 1,
-          title: 'Notes',
-          emoji: '📝',
-          type: 'note',
-          display: 'auto',
-          size: 'md',
-          vis: 'all',
-          color: { ...DEF_COLOR },
-          content: 'Your notes here…',
-        },
-        {
-          id: 'w4',
-          col: 2,
-          title: 'Tasks',
-          emoji: '✅',
-          type: 'todo',
-          display: 'auto',
-          size: 'md',
-          vis: 'all',
-          color: { ...DEF_COLOR },
-          items: [{ id: 'td1', text: 'Add your bookmarks', done: false }],
-        },
-      ],
+      widgets: [],
     },
   ],
 };
@@ -232,6 +179,62 @@ function sanitizeData(d) {
   if (!d.pages) d.pages = JSON.parse(JSON.stringify(DEF.pages));
   d.pages.forEach((p) => {
     if (!p.groupId) p.groupId = d.groups[0].id;
+    if (p.pageType !== 'miro') {
+      p.pageType = 'miro';
+      if (!p.miroCards) p.miroCards = [];
+      p.zoom = 100;
+      p.panX = 0;
+      p.panY = 0;
+    }
+    if (p.pageType === 'miro' && p.widgets && p.widgets.length > 0) {
+      const startX = 100;
+      const startY = 100;
+      const gap = 40;
+      let cursX = startX;
+      let cursY = startY;
+      let rowMaxH = 0;
+      const colsPerRow = 4;
+      let addedCount = 0;
+      p.widgets.forEach((w) => {
+        let cardW = 320; let cardH = 400;
+        if (w.items && w.items.length > 0) {
+          const wCols = 6; const itemPx = 94;
+          const reqRows = Math.ceil(w.items.length / wCols);
+          cardW = 540; cardH = Math.max(200, 70 + (reqRows * itemPx));
+        } else if (w.type === 'note') {
+          cardW = 280; cardH = 280;
+        } else if (w.type === 'todo') {
+          const items = w.items || [];
+          cardW = 300; cardH = Math.max(200, 70 + (items.length * 40));
+        }
+        p.miroCards.push({
+          id: (typeof uid === 'function' ? uid() : Math.random().toString(36).substr(2, 9)),
+          type: 'bwidget',
+          wType: w.type,
+          title: w.title || 'Widget',
+          emoji: w.emoji || '',
+          content: w.content || '',
+          items: w.items ? JSON.parse(JSON.stringify(w.items)) : [],
+          color: w.color || { r: 255, g: 255, b: 255, a: 1 },
+          x: cursX,
+          y: cursY,
+          w: cardW,
+          h: cardH,
+          display: w.display || 'spark',
+          size: w.size || 'md'
+        });
+        cursX += cardW + gap;
+        rowMaxH = Math.max(rowMaxH, cardH);
+        addedCount++;
+        if (addedCount % colsPerRow === 0) {
+          cursX = startX;
+          cursY += rowMaxH + gap;
+          rowMaxH = 0;
+        }
+      });
+      p.widgets = [];
+      p.cols = undefined;
+    }
     if (!p.widgets) p.widgets = [];
     p.widgets.forEach((w) => {
       if (w.type !== 'note' && !w.items) w.items = [];
@@ -246,53 +249,228 @@ function sanitizeData(d) {
 
 function initDB() {
   isFirstLoad = true;
-  db.ref(DB_REF).on('value', (snap) => {
-    if (_ownWrite) {
-      _ownWrite = false;
-      setSyncStatus('ok', 'Realtime Sync Active \u2713');
-      return;
+
+  // Backwards compatibility migration logic: if the user still has monolithic data, migrate it first
+  db.ref(DB_REF).once('value', (snap) => {
+    const rawData = snap.val();
+    if (rawData && rawData.pages && Array.isArray(rawData.pages)) {
+      // It's a monolith. Let's shard it.
+      const meta = {
+        settings: rawData.settings || { engine: 'bm', accent: '#6c8fff' },
+        curGroup: rawData.curGroup || (rawData.groups && rawData.groups[0] ? rawData.groups[0].id : 'g0'),
+        groups: rawData.groups || [{ id: 'g0', name: 'Main Group' }],
+        inbox: rawData.inbox || []
+      };
+
+      const pagesMeta = [];
+      const updates = {};
+
+      rawData.pages.forEach(p => {
+        pagesMeta.push({
+          id: p.id,
+          groupId: p.groupId || meta.curGroup,
+          name: p.name || 'Page',
+          pageType: p.pageType || 'miro',
+          zoom: p.zoom || 100,
+          panX: p.panX || 0,
+          panY: p.panY || 0,
+          bg: p.bg || '',
+          bgType: p.bgType || 'none',
+          tabColor: p.tabColor || ''
+        });
+
+        updates[`users/${USER_ID}/startmine_pages/${p.id}`] = {
+          widgets: p.widgets || [],
+          miroCards: p.miroCards || []
+        };
+      });
+
+      updates[`users/${USER_ID}/startmine_meta`] = meta;
+      updates[`users/${USER_ID}/startmine_pages_meta`] = pagesMeta;
+
+      // Clear the old monolith
+      updates[`users/${USER_ID}/startmine_data`] = null;
+
+      db.ref().update(updates).then(() => {
+        setupShardedListeners();
+      });
+    } else {
+      setupShardedListeners();
     }
-    const data = snap.val();
-    if (data) {
-      D = sanitizeData(data);
-      if (isFirstLoad) {
-        const dg = D.settings.defaultGroup || '__last__';
-        const dp = D.settings.defaultPage || '__last__';
-        if (dg !== '__last__' && D.groups.some((g) => g.id === dg)) {
-          D.curGroup = dg;
-        }
-        if (dp !== '__last__' && D.pages.some((p) => p.id === dp)) {
-          D.cur = dp;
-        }
+  });
+}
+
+let _activePageListener = null;
+
+function setupShardedListeners() {
+  const metaRef = `users/${USER_ID}/startmine_meta`;
+  const pagesMetaRef = `users/${USER_ID}/startmine_pages_meta`;
+
+  // Listen to Metadata (settings, groups, inbox, active group)
+  db.ref(metaRef).on('value', (snap) => {
+    if (_ownWrite) return;
+    const meta = snap.val() || {
+      settings: { engine: 'bm', accent: '#6c8fff' },
+      curGroup: 'g0',
+      groups: [{ id: 'g0', name: 'Main Group' }],
+      inbox: []
+    };
+    D.settings = meta.settings || { engine: 'bm', accent: '#6c8fff' };
+    D.curGroup = meta.curGroup || 'g0';
+    D.groups = meta.groups || [{ id: 'g0', name: 'Main Group' }];
+    D.inbox = meta.inbox || [];
+    renderMeta();
+  });
+
+  // Listen to Pages Directory (names, ids, group associations)
+  db.ref(pagesMetaRef).on('value', (snap) => {
+    if (_ownWrite) return;
+    const pagesMeta = snap.val() || [{ id: 'p0', groupId: 'g0', name: 'Home', pageType: 'miro', zoom: 100, panX: 0, panY: 0, bg: '', bgType: 'none' }];
+
+    // We update D.pages but we MUST PRESERVE the currently loaded active page's heavy data so it doesn't vanish
+    const oldWidgets = cp() ? cp().widgets : [];
+    const oldMiroCards = cp() ? cp().miroCards : [];
+
+    D.pages = pagesMeta;
+
+    if (isFirstLoad) {
+      const dg = D.settings.defaultGroup || '__last__';
+      const dp = D.settings.defaultPage || '__last__';
+      if (dg !== '__last__' && D.groups.some((g) => g.id === dg)) D.curGroup = dg;
+      if (dp !== '__last__' && D.pages.some((p) => p.id === dp)) D.cur = dp;
+      if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
+      isFirstLoad = false;
+      switchActivePage(D.cur); // This will render All
+    } else {
+      // Re-inject the heavy data into the newly refreshed metadata page structure
+      const activePg = cp();
+      if (activePg) {
+        activePg.widgets = oldWidgets || [];
+        activePg.miroCards = oldMiroCards || [];
       }
-      renderAll();
-    } else if (isFirstLoad) {
-      sv();
-      renderAll();
+      renderMeta();
     }
+
     setSyncStatus('ok', 'Realtime Sync Active \u2713');
-    isFirstLoad = false;
   });
 
   db.ref('.info/connected').on('value', (snap) => {
-    if (!snap.val() && !isFirstLoad)
-      setSyncStatus('err', 'Offline \u2014 changes will sync when reconnected');
+    if (!snap.val() && !isFirstLoad) setSyncStatus('err', 'Offline \u2014 changes will sync when reconnected');
     else if (snap.val() && !isFirstLoad) setSyncStatus('ok', 'Realtime Sync Active \u2713');
   });
 }
 
-function sv() {
-  if (!DB_REF) return;
-  clearTimeout(_svTimer);
-  _svTimer = setTimeout(() => {
+function renderMeta() {
+  buildGroups();
+  buildTabs();
+  applyBG();
+  applyContrast();
+  buildEP();
+  buildAcPop();
+  buildBgSwatches();
+  buildInbox();
+  document.documentElement.style.setProperty('--ac', D.settings.accent || '#6c8fff');
+  document.getElementById('ac-dot').style.background = D.settings.accent || '#6c8fff';
+}
+
+// Switch the active synchronized payload
+function switchActivePage(pageId) {
+  D.cur = pageId;
+  renderMeta();
+
+  if (_activePageListener) {
+    db.ref(_activePageListener).off();
+  }
+
+  const pageDataRef = `users/${USER_ID}/startmine_pages/${pageId}`;
+  _activePageListener = pageDataRef;
+
+  document.getElementById('cw').innerHTML = '<div style="padding: 2rem; color: var(--mu); text-align: center;">Loading page data...</div>';
+
+  db.ref(pageDataRef).on('value', (snap) => {
+    if (_ownWrite) {
+      _ownWrite = false;
+      buildColBtns();
+      buildCols();
+      return;
+    }
+    const pData = snap.val() || { widgets: [], miroCards: [] };
+    const pg = cp();
+    if (pg) {
+      pg.widgets = pData.widgets || [];
+      pg.miroCards = pData.miroCards || [];
+      // Clean loaded data using original logic wrapper
+      const fakeD = { pages: [pg] };
+      sanitizeData(fakeD);
+    }
+    buildColBtns();
+    buildCols();
+  });
+}
+
+
+function sv(saveAll = false, immediate = false) {
+  if (!USER_ID) return;
+
+  const doSave = () => {
     _ownWrite = true;
-    db.ref(DB_REF)
-      .set(D)
+
+    const metaRef = `users/${USER_ID}/startmine_meta`;
+    const pagesMetaRef = `users/${USER_ID}/startmine_pages_meta`;
+
+    // Extract metadata without payloads
+    const meta = {
+      settings: D.settings,
+      curGroup: D.curGroup,
+      groups: D.groups,
+      inbox: D.inbox
+    };
+
+    const pagesMeta = D.pages.map(p => ({
+      id: p.id,
+      groupId: p.groupId,
+      name: p.name,
+      pageType: p.pageType,
+      zoom: p.zoom,
+      panX: p.panX,
+      panY: p.panY,
+      bg: p.bg,
+      bgType: p.bgType,
+      tabColor: p.tabColor
+    }));
+
+    const updates = {};
+    updates[metaRef] = meta;
+    updates[pagesMetaRef] = pagesMeta;
+
+    if (saveAll) {
+      D.pages.forEach(p => {
+        updates[`users/${USER_ID}/startmine_pages/${p.id}`] = {
+          widgets: p.widgets || [],
+          miroCards: p.miroCards || []
+        };
+      });
+    } else {
+      // Only upload the heavy data for the active page
+      const activePg = cp();
+      if (activePg) {
+        updates[`users/${USER_ID}/startmine_pages/${activePg.id}`] = {
+          widgets: activePg.widgets || [],
+          miroCards: activePg.miroCards || []
+        };
+      }
+    }
+
+    db.ref().update(updates)
       .catch((err) => {
         _ownWrite = false;
         setSyncStatus('err', 'Sync error: ' + (err.code || err.message));
       });
-  }, 500);
+  };
+
+  clearTimeout(_svTimer);
+  if (immediate) doSave();
+  else _svTimer = setTimeout(doSave, 800);
 }
 
 function uid() {
@@ -755,8 +933,9 @@ document.getElementById('imp-json').onchange = function (e) {
         return;
       }
       D = imported;
-      sv();
-      renderAll();
+      sanitizeData(D); // Force sanitize on imported JSON before saving
+      sv(true, true); // Immediate Save All
+      switchActivePage(D.cur);
       alert('Imported successfully!');
     } catch (err) {
       alert('Parse error: ' + err.message);
@@ -962,6 +1141,7 @@ document.getElementById('imp-startme').onchange = function (e) {
         cur: '',
         curGroup: 'g0',
         groups: [{ id: 'g0', name: 'Start.me Import' }],
+        inbox: [],
         pages: [],
       };
       const topDL = doc.querySelector('body > DL') || doc.querySelector('DL');
@@ -981,21 +1161,33 @@ document.getElementById('imp-startme').onchange = function (e) {
         if (!isPage) continue;
 
         const pageName = h3.textContent.trim();
-        const cols = parseInt(h3.getAttribute('COLUMNS')) || 3;
         const page = {
           id: uid(),
           groupId: 'g0',
           name: pageName,
-          cols: Math.min(cols, 7),
+          pageType: 'miro',
+          miroCards: [],
+          zoom: 100,
+          panX: 0,
+          panY: 0,
           bg: '',
           bgType: 'none',
+          tabColor: '',
           widgets: [],
         };
 
         // Find the DL sibling that contains widgets
         const pageDL = dt.querySelector(':scope > DL');
         if (pageDL) {
-          let widgetIdx = 0;
+          const startX = 100;
+          const startY = 100;
+          const gap = 40;
+          let cursX = startX;
+          let cursY = startY;
+          let rowMaxH = 0;
+          const colsPerRow = 4;
+          let addedCount = 0;
+
           const pageDTs = pageDL.children;
           for (let j = 0; j < pageDTs.length; j++) {
             const wdt = pageDTs[j];
@@ -1004,28 +1196,69 @@ document.getElementById('imp-startme').onchange = function (e) {
             if (!wh3) continue;
 
             const widgetName = wh3.textContent.trim();
-            const widget = {
-              id: uid(),
-              col: widgetIdx % page.cols,
-              title: widgetName,
-              emoji: '📌',
-              type: 'bookmarks',
-              display: 'auto',
-              size: 'md',
-              vis: 'all',
-              color: { ...DEF_COLOR },
-              items: [],
-            };
+            const widgetItems = [];
 
-            // Parse bookmarks inside widget
+            // Parse bookmarks inside widget into temporary array
             const wDL = wdt.querySelector(':scope > DL');
             if (wDL) {
-              parseBookmarks(wDL, widget);
+              const itemsList = wDL.children;
+              for (let k = 0; k < itemsList.length; k++) {
+                const bdt = itemsList[k];
+                if (bdt.tagName !== 'DT') continue;
+                const a = bdt.querySelector(':scope > A');
+                if (a) {
+                  const href = a.getAttribute('HREF') || '';
+                  if (href && href.startsWith('http')) {
+                    widgetItems.push({
+                      id: uid(),
+                      label: a.textContent.trim().slice(0, 80),
+                      url: href,
+                      emoji: '',
+                    });
+                  }
+                }
+                const subH3 = bdt.querySelector(':scope > H3');
+                if (subH3) {
+                  const subDL = bdt.querySelector(':scope > DL');
+                  if (subDL) {
+                    const tempWidget = { items: widgetItems };
+                    parseBookmarks(subDL, tempWidget);
+                  }
+                }
+              }
             }
 
-            if (widget.items.length > 0) {
-              page.widgets.push(widget);
-              widgetIdx++;
+            if (widgetItems.length > 0) {
+              let cardW = 320; let cardH = 400;
+              const wCols = 6; const itemPx = 94;
+              const reqRows = Math.ceil(widgetItems.length / wCols);
+              cardW = 540; cardH = Math.max(200, 70 + (reqRows * itemPx));
+
+              page.miroCards.push({
+                id: uid(),
+                type: 'bwidget',
+                wType: 'bookmarks',
+                title: widgetName,
+                emoji: '📌',
+                content: '',
+                items: widgetItems,
+                color: { ...DEF_COLOR },
+                x: cursX,
+                y: cursY,
+                w: cardW,
+                h: cardH,
+                display: 'spark',
+                size: 'md'
+              });
+
+              cursX += cardW + gap;
+              rowMaxH = Math.max(rowMaxH, cardH);
+              addedCount++;
+              if (addedCount % colsPerRow === 0) {
+                cursX = startX;
+                cursY += rowMaxH + gap;
+                rowMaxH = 0;
+              }
             }
           }
         }
@@ -1042,22 +1275,22 @@ document.getElementById('imp-startme').onchange = function (e) {
         !confirm(
           'Import ' +
           result.pages.length +
-          ' pages with ' +
-          result.pages.reduce((s, p) => s + (p.widgets || []).length, 0) +
-          ' widgets?\nThis will REPLACE all current data.',
+          ' folders containing ' +
+          result.pages.reduce((s, p) => s + (p.miroCards || []).length, 0) +
+          ' clusters?\nThis will REPLACE all current data.',
         )
       )
         return;
 
       D = result;
-      sv();
-      renderAll();
+      sv(true, true);
+      switchActivePage(D.cur);
       document.getElementById('io-pop').classList.remove('open');
       const totalBm = result.pages.reduce(
-        (s, p) => s + (p.widgets || []).reduce((ss, w) => ss + (w.items || []).length, 0),
+        (s, p) => s + (p.miroCards || []).reduce((ss, w) => ss + (w.items || []).length, 0),
         0,
       );
-      alert('✅ Imported! ' + result.pages.length + ' pages, ' + totalBm + ' bookmarks.');
+      alert('✅ Imported successfully! ' + result.pages.length + ' boards created with ' + totalBm + ' bookmarks.');
     } catch (err) {
       alert('Import error: ' + err.message);
     }
@@ -1779,9 +2012,7 @@ function buildTabs() {
     });
     tab.onclick = () => {
       if (nm.contentEditable === 'true') return;
-      D.cur = pg.id;
-      sv();
-      renderAll();
+      if (D.cur !== pg.id) switchActivePage(pg.id);
     };
     const x = document.createElement('button');
     x.className = 'ptx';
@@ -1802,19 +2033,34 @@ document.getElementById('add-grp').onclick = () => {
   const id = uid();
   D.groups.push({ id, name: 'Group ' + (D.groups.length + 1) });
   const pid = uid();
-  D.pages.push({
-    id: pid,
-    groupId: id,
-    name: 'Page 1',
-    cols: 3,
-    bg: '',
-    bgType: 'none',
-    widgets: [],
-  });
+  if (_miroMode) {
+    D.pages.push({
+      id: pid,
+      groupId: id,
+      name: 'Miro 1',
+      pageType: 'miro',
+      miroCards: [],
+      zoom: 100,
+      panX: 0,
+      panY: 0,
+      bg: '',
+      bgType: 'none',
+      widgets: [],
+    });
+  } else {
+    D.pages.push({
+      id: pid,
+      groupId: id,
+      name: 'Page 1',
+      cols: 3,
+      bg: '',
+      bgType: 'none',
+      widgets: [],
+    });
+  }
   D.curGroup = id;
-  D.cur = pid;
   sv();
-  renderAll();
+  switchActivePage(pid);
 };
 
 document.getElementById('add-pg').onclick = () => {
@@ -1846,9 +2092,8 @@ document.getElementById('add-pg').onclick = () => {
       widgets: [],
     });
   }
-  D.cur = id;
   sv();
-  renderAll();
+  switchActivePage(id);
 };
 
 function delGroup(gid) {
@@ -1861,10 +2106,13 @@ function delGroup(gid) {
   D.groups = D.groups.filter((g) => g.id !== gid);
   if (D.curGroup === gid) {
     D.curGroup = D.groups[0].id;
-    D.cur = D.pages.find((p) => p.groupId === D.curGroup).id;
+    const newPage = D.pages.find((p) => p.groupId === D.curGroup);
+    sv();
+    switchActivePage(newPage ? newPage.id : D.pages[0].id);
+  } else {
+    sv();
+    renderMeta();
   }
-  sv();
-  renderAll();
 }
 
 function delPage(pid) {
@@ -1880,10 +2128,12 @@ function delPage(pid) {
   if (D.cur === pid) {
     const remaining =
       D.curGroup === '__all__' ? D.pages : D.pages.filter((p) => p.groupId === pg.groupId);
-    D.cur = remaining[0]?.id || D.pages[0]?.id;
+    sv();
+    switchActivePage(remaining[0]?.id || D.pages[0]?.id);
+  } else {
+    sv();
+    renderMeta();
   }
-  sv();
-  renderAll();
 }
 
 function openTcPop(ev, pid) {
@@ -2972,40 +3222,43 @@ window.convertPageToMiro = function (pageId) {
   let rowMaxH = 0;
   const colsPerRow = 4; // Miro widgets per row
 
-  oldWidgets.forEach((w, i) => {
-    // Ensure widget has items before migrating
+  oldWidgets.forEach((w) => {
+    let cardW = 320; let cardH = 400;
     if (w.items && w.items.length > 0) {
-      const itemsLen = w.items.length;
-      const wCols = 6;
-      const itemPx = 94;
-      const reqRows = Math.ceil(itemsLen / wCols);
+      const wCols = 6; const itemPx = 94;
+      const reqRows = Math.ceil(w.items.length / wCols);
+      cardW = 540; cardH = Math.max(200, 70 + (reqRows * itemPx));
+    } else if (w.type === 'note') {
+      cardW = 280; cardH = 280;
+    } else if (w.type === 'todo') {
+      const items = w.items || [];
+      cardW = 300; cardH = Math.max(200, 70 + (items.length * 40));
+    }
+    newPg.miroCards.push({
+      id: uid(),
+      type: 'bwidget',
+      wType: w.type,
+      title: w.title || 'Widget',
+      emoji: w.emoji || '',
+      content: w.content || '',
+      items: w.items ? JSON.parse(JSON.stringify(w.items)) : [],
+      color: w.color || { r: 255, g: 255, b: 255, a: 1 },
+      x: cursX,
+      y: cursY,
+      w: cardW,
+      h: cardH,
+      display: w.display || 'spark',
+      size: w.size || 'md'
+    });
 
-      const cardW = 540;
-      const cardH = Math.max(200, 70 + (reqRows * itemPx));
+    cursX += cardW + gap;
+    rowMaxH = Math.max(rowMaxH, cardH);
 
-      newPg.miroCards.push({
-        id: uid(),
-        type: 'bwidget',
-        title: w.title || 'Bookmarks',
-        items: JSON.parse(JSON.stringify(w.items)), // Deep copy items
-        color: { r: 255, g: 255, b: 255, a: 1 }, // Default to pure white with no transparency
-        x: cursX,
-        y: cursY,
-        w: cardW,
-        h: cardH,
-        display: 'spark',
-        size: 'lg'
-      });
-
-      cursX += cardW + gap;
-      rowMaxH = Math.max(rowMaxH, cardH);
-
-      // wrap row
-      if (newPg.miroCards.length % colsPerRow === 0) {
-        cursX = startX;
-        cursY += rowMaxH + gap;
-        rowMaxH = 0;
-      }
+    // wrap row
+    if (newPg.miroCards.length % colsPerRow === 0) {
+      cursX = startX;
+      cursY += rowMaxH + gap;
+      rowMaxH = 0;
     }
   });
 

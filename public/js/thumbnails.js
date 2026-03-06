@@ -1439,9 +1439,7 @@ function buildMiroBookmarkWidget(card) {
     </div>
     <div class="wa">
       <button class="wab" data-cl="${card.id}" title="Change Color">🎨</button>
-      <button class="wab" data-grid="${card.id}" title="Grid View">🔲</button>
-      <button class="wab" data-list="${card.id}" title="List View">📄</button>
-      <button class="wab" data-explode="${card.id}" title="Extract all links to canvas">🗃️</button>
+      ${card.wType === 'note' || card.wType === 'todo' ? '' : '<button class="wab" data-grid="' + card.id + '" title="Grid View">🔲</button><button class="wab" data-list="' + card.id + '" title="List View">📄</button><button class="wab" data-explode="' + card.id + '" title="Extract all links to canvas">🗃️</button>'}
       <button class="wab" data-dp="${card.id}" title="Display Settings">🖥️</button>
       <button class="wab d mc-del" title="Delete">🗑️</button>
     </div>
@@ -1543,8 +1541,31 @@ function buildMiroBookmarkWidget(card) {
 
   el.appendChild(hdr);
 
-  // Use the existing dashboard buildBmBody to populate items!
-  buildBmBody(body, card);
+  // Use the existing dashboard bodies to populate items!
+  if (card.wType === 'note') {
+    const ta = document.createElement('textarea');
+    ta.className = 'note-ta';
+    ta.placeholder = 'Write notes…';
+    ta.value = card.content || '';
+    ta.style.color = txtCol;
+    ta.style.width = '100%';
+    ta.style.height = '100%';
+    ta.style.resize = 'none';
+    ta.style.background = 'transparent';
+    ta.style.border = 'none';
+    ta.style.outline = 'none';
+    ta.style.fontFamily = 'inherit';
+    ta.style.padding = '8px';
+    ta.oninput = () => {
+      card.content = ta.value;
+      if (typeof sv === 'function') sv();
+    };
+    body.appendChild(ta);
+  } else if (card.wType === 'todo') {
+    if (typeof buildTodoBody === 'function') buildTodoBody(body, card);
+  } else {
+    if (typeof buildBmBody === 'function') buildBmBody(body, card);
+  }
 
   el.appendChild(body);
 

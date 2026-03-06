@@ -1,5 +1,5 @@
 /* ─── Miro Page Engine ─── */
-let _miroMode = false;
+let _miroMode = true;
 let _miroPanning = false,
   _miroPanStartX = 0,
   _miroPanStartY = 0;
@@ -12,7 +12,7 @@ let _stickyCreateMode = false;
 
 document.getElementById('miro-toggle').onclick = () => {
   _miroMode = !_miroMode;
-  document.getElementById('miro-toggle').classList.toggle('miro-on', _miroMode);
+  document.getElementById('miro-toggle').classList.toggle('miro-on', !_miroMode);
 };
 
 function addMiroSelect(cid) {
