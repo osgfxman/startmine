@@ -1174,7 +1174,12 @@ document.addEventListener('keydown', (e) => {
 
   // Explicit text-paste fallback for Arabic keyboard (Ctrl+ر) because it won't trigger native OS "paste" event.
   if (isCmd && key === 'ر') {
+    if (window._lastMiroPasteTime && Date.now() - window._lastMiroPasteTime < 1000) return;
+
     navigator.clipboard.readText().then(text => {
+      // Check again after async clipboard read just in case
+      if (window._lastMiroPasteTime && Date.now() - window._lastMiroPasteTime < 1000) return;
+
       if (text) {
         // Mock a minimal clipboard event structure and pass it to our paste handler if needed,
         // or just let the user use English for image pasting. We can re-use the parsing logic:
@@ -1219,6 +1224,7 @@ document.addEventListener('keydown', (e) => {
           page.miroCards.push({ id: uid(), type: 'sticky', text: text, bg: '#ffe599', x: cx - 100, y: cy - 100, w: 200, h: 200 });
         }
         sv(); buildMiroCanvas(); buildOutline();
+        window._lastMiroPasteTime = Date.now();
       }
     }).catch(e => console.error(e));
   }
@@ -1320,6 +1326,8 @@ document.addEventListener('paste', (e) => {
     let extracted = [];
     const miroSpans = doc.querySelectorAll('span[data-meta*="miro"]');
     const isMiroData = miroSpans.length > 0;
+
+    let miroHandled = false;
 
     if (isMiroData) {
       const miroColors = [
@@ -1426,22 +1434,7 @@ document.addEventListener('paste', (e) => {
         }
       });
 
-      // 100% BULLETPROOF FALLBACK: If JSON completely failed due to new Miro encryption,
-      // manually extract the DIVs natively from the HTML layout to avoid a "giant card"
-      if (extracted.length === 0) {
-        Array.from(doc.body.children).forEach(node => {
-          if (node.tagName === 'DIV' && node.textContent.trim()) {
-            extracted.push({
-              type: 'sticky',
-              text: node.innerHTML,
-              color: miroColors[colorIdx % miroColors.length],
-              w: 280,
-              h: 160
-            });
-            colorIdx++;
-          }
-        });
-      }
+      // (Removed legacy bulletproof fallback here as it was causing duplicate/merged root DIV stickies if JSON parsing failed slightly, but actually JSON parsing in startmine is reliable now)
 
       if (extracted.length > 0) {
         if (!page.miroCards) page.miroCards = [];
@@ -1542,64 +1535,72 @@ document.addEventListener('paste', (e) => {
           bg: '#ffe599'
         });
       }
-    }
 
-    if (extracted.length > 0) {
-      if (!page.miroCards) page.miroCards = [];
-      const canvas = document.getElementById('miro-canvas');
-      const zoom = (page.zoom || 100) / 100;
-      const px = _mouseX ? (_mouseX - (page.panX || 0)) / zoom : (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
-      const py = _mouseY ? (_mouseY - (page.panY || 0)) / zoom : (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+      if (extracted.length > 0) {
+        if (!page.miroCards) page.miroCards = [];
+        const canvas = document.getElementById('miro-canvas');
+        const zoom = (page.zoom || 100) / 100;
+        const px = _mouseX ? (_mouseX - (page.panX || 0)) / zoom : (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
+        const py = _mouseY ? (_mouseY - (page.panY || 0)) / zoom : (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
 
-      let curX = px;
-      let curY = py;
+        let curX = px;
+        let curY = py;
 
-      clearMiroSelection();
-      let minOX = Infinity;
-      let minOY = Infinity;
-      extracted.forEach(item => {
-        if (item._ox !== undefined) {
-          if (item._ox < minOX) minOX = item._ox;
-          if (item._oy < minOY) minOY = item._oy;
-        }
-      });
-
-      extracted.forEach(item => {
-        const newId = uid();
-        const card = { id: newId, ...item };
-
-        if (item.type === 'sticky') {
-          card.w = item.w || 280; // Native startmine sticky dimensions
-          card.h = item.h || 160;
-        } else if (item.type === 'text') {
-          card.w = Math.max(100, item.text.length * (card.fontSize / 2));
-          card.h = card.fontSize * 1.5;
-          card.fontFamily = 'Inter';
-        }
-
-        // Apply spatial positioning
-        if (item._ox !== undefined && minOX !== Infinity) {
-          card.x = px + (item._ox - minOX);
-          card.y = py + (item._oy - minOY);
-        } else {
-          // Fallback sequential formatting
-          card.x = curX - 100;
-          card.y = curY - 100;
-          curX += (card.w || 280) + 40;
-          if (curX > px + 950) {
-            curX = px;
-            curY += (card.h || 160) + 40;
+        clearMiroSelection();
+        let minOX = Infinity;
+        let minOY = Infinity;
+        extracted.forEach(item => {
+          if (item._ox !== undefined) {
+            if (item._ox < minOX) minOX = item._ox;
+            if (item._oy < minOY) minOY = item._oy;
           }
-        }
+        });
 
-        page.miroCards.push(card);
-        _miroSelected.add(newId);
-      });
-      sv(); buildMiroCanvas(); buildOutline();
+        extracted.forEach(item => {
+          const newId = uid();
+          const card = { id: newId, ...item };
+
+          if (item.type === 'sticky') {
+            card.w = item.w || 280; // Native startmine sticky dimensions
+            card.h = item.h || 160;
+          } else if (item.type === 'text') {
+            card.w = Math.max(100, item.text.length * (card.fontSize / 2));
+            card.h = card.fontSize * 1.5;
+            card.fontFamily = 'Inter';
+          }
+
+          // Apply spatial positioning
+          if (item._ox !== undefined && minOX !== Infinity) {
+            card.x = px + (item._ox - minOX);
+            card.y = py + (item._oy - minOY);
+          } else {
+            // Fallback sequential formatting
+            card.x = curX - 100;
+            card.y = curY - 100;
+            curX += (card.w || 280) + 40;
+            if (curX > px + 950) {
+              curX = px;
+              curY += (card.h || 160) + 40;
+            }
+          }
+
+          page.miroCards.push(card);
+          _miroSelected.add(newId);
+        });
+        sv(); buildMiroCanvas(); buildOutline();
+        console.log('[PASTE DEBUG] Generic HTML parsed cards rendered, returning!');
+        return;
+      }
+    }
+    // Explicitly return here to completely prevent Miro items from collapsing into the Step 4 Generic Text handler if something went wrong!
+    if (isMiroData) {
+      window._lastMiroPasteTime = Date.now();
+      console.log('[PASTE DEBUG] isMiroData was true but extracted was empty! Returning early.');
       return;
     }
   }
 
+  console.log('[PASTE DEBUG] Reached Image/Text checking block');
   let imagePasted = false;
 
   // 3. Check for images natively copied (Lower Priority than Widgets)
@@ -1639,8 +1640,27 @@ document.addEventListener('paste', (e) => {
   }
 
   // If an image was handled, don't try to process text fallback.
-  if (imagePasted) return;
-  if (!text) return;
+  if (imagePasted) { console.log('[PASTE DEBUG] Image handled, returning.'); return; }
+
+  // If Miro data was handled, don't create a fallback text sticky
+  // (We check this just in case the early return above didn't catch something complex)
+  // Note: we can't easily check `miroHandled` here if it's block-scoped to `if (html)`, 
+  // so let's check `isMiroData` instead... wait, `isMiroData` is scoped inside `if (html)`.
+  // Let's rely on checking if `text` is populated and if we just did a Miro paste. 
+  // Actually, the `if (isMiroData) return;` inside the HTML block *should* stop execution before we even get here.
+  // WHY did it reach here? 
+  // Ah! `const isMiroData = miroSpans.length > 0;` is only defined INSIDE `if (html)`. 
+  // If we `return` inside `if (html)`, we NEVER reach `if (!text) return;`.
+  // Therefore, the extra sticky MUST be coming from somewhere else, OR `isMiroData` was false?
+  // Let's add a global-ish flag to ensure we aren't double pasting.
+  if (window._lastMiroPasteTime && Date.now() - window._lastMiroPasteTime < 1000) {
+    console.log('[PASTE DEBUG] Aborting text paste because window._lastMiroPasteTime < 1000!!');
+    return;
+  }
+
+  if (!text) { console.log('[PASTE DEBUG] No text data, returning.'); return; }
+
+  console.log('[PASTE DEBUG] Reached External Text/URL fallback with text:', text.substring(0, 50));
 
   // 4. It's external Text or URL
   if (!page.miroCards) page.miroCards = [];
@@ -1658,12 +1678,14 @@ document.addEventListener('paste', (e) => {
     page.miroCards.push(card);
     sv(); buildMiroCanvas(); buildOutline();
     if (typeof queueCardFetch !== 'undefined') queueCardFetch(card.id, url);
+    console.log('[PASTE DEBUG] Created URL Bookmark card!');
   } else {
     // Normal text -> Sticky
     const w = 200, h = 200;
     const card = { id: uid(), type: 'sticky', text: text, bg: '#ffe599', x: cx - w / 2, y: cy - h / 2, w, h };
     page.miroCards.push(card);
     sv(); buildMiroCanvas(); buildOutline();
+    console.log('[PASTE DEBUG] Created Plain Text Sticky card!');
   }
 });
 
