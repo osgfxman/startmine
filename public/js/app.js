@@ -142,6 +142,7 @@ let _bgTempType = 'solid',
 let isFirstLoad = true;
 let _ownWrite = false;
 let _svTimer = null;
+let _lastSyncedPageData = null;
 
 document.getElementById('login-btn').onclick = () =>
   auth.signInWithPopup(provider).catch((e) => alert(e.message));
@@ -425,6 +426,11 @@ function switchActivePage(pageId) {
       // Clean loaded data using original logic wrapper
       const fakeD = { pages: [pg] };
       sanitizeData(fakeD);
+      // Store baseline for delta diffing
+      _lastSyncedPageData = {
+        widgets: JSON.stringify(pg.widgets),
+        miroCards: JSON.stringify(pg.miroCards)
+      };
     }
     buildCols();
   });
@@ -478,10 +484,60 @@ function sv(saveAll = false, immediate = false) {
       // Only upload the heavy data for the active page
       const activePg = cp();
       if (activePg) {
-        updates[`users/${USER_ID}/startmine_pages/${activePg.id}`] = {
-          widgets: activePg.widgets || [],
-          miroCards: activePg.miroCards || []
-        };
+        if (_lastSyncedPageData) {
+          const curWidgetsStr = JSON.stringify(activePg.widgets || []);
+          const curCardsStr = JSON.stringify(activePg.miroCards || []);
+
+          const oldWidgets = JSON.parse(_lastSyncedPageData.widgets || '[]');
+          const oldCards = JSON.parse(_lastSyncedPageData.miroCards || '[]');
+          const curWidgets = activePg.widgets || [];
+          const curCards = activePg.miroCards || [];
+
+          let widgetsChanged = false;
+          if (oldWidgets.length !== curWidgets.length) widgetsChanged = true;
+          else {
+            for (let i = 0; i < curWidgets.length; i++) {
+              if (curWidgets[i].id !== oldWidgets[i].id) { widgetsChanged = true; break; }
+            }
+          }
+
+          if (widgetsChanged) {
+            updates[`users/${USER_ID}/startmine_pages/${activePg.id}/widgets`] = curWidgets;
+          } else {
+            for (let i = 0; i < curWidgets.length; i++) {
+              if (JSON.stringify(curWidgets[i]) !== JSON.stringify(oldWidgets[i])) {
+                updates[`users/${USER_ID}/startmine_pages/${activePg.id}/widgets/${i}`] = curWidgets[i];
+              }
+            }
+          }
+
+          let cardsChanged = false;
+          if (oldCards.length !== curCards.length) cardsChanged = true;
+          else {
+            for (let i = 0; i < curCards.length; i++) {
+              if (curCards[i].id !== oldCards[i].id) { cardsChanged = true; break; }
+            }
+          }
+
+          if (cardsChanged) {
+            updates[`users/${USER_ID}/startmine_pages/${activePg.id}/miroCards`] = curCards;
+          } else {
+            for (let i = 0; i < curCards.length; i++) {
+              if (JSON.stringify(curCards[i]) !== JSON.stringify(oldCards[i])) {
+                updates[`users/${USER_ID}/startmine_pages/${activePg.id}/miroCards/${i}`] = curCards[i];
+              }
+            }
+          }
+
+          // Update baseline payload
+          _lastSyncedPageData.widgets = curWidgetsStr;
+          _lastSyncedPageData.miroCards = curCardsStr;
+        } else {
+          updates[`users/${USER_ID}/startmine_pages/${activePg.id}`] = {
+            widgets: activePg.widgets || [],
+            miroCards: activePg.miroCards || []
+          };
+        }
       }
     }
 
