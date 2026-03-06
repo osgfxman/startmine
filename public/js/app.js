@@ -105,8 +105,10 @@ const BG_GRADIENTS = [
 const DEF = {
   settings: { engine: 'bm', accent: '#6c8fff' },
   cur: 'p0',
+  curEnv: 'e0',
   curGroup: 'g0',
-  groups: [{ id: 'g0', name: 'Main Group' }],
+  environments: [{ id: 'e0', name: 'Main Env' }],
+  groups: [{ id: 'g0', name: 'Main Group', envId: 'e0' }],
   inbox: [],
   pages: [
     {
@@ -172,9 +174,19 @@ function setSyncStatus(state, msg) {
 function sanitizeData(d) {
   if (!d) return d;
   if (!d.settings) d.settings = { engine: 'bm', accent: '#6c8fff' };
-  if (!d.groups || !Array.isArray(d.groups) || d.groups.length === 0) {
-    d.groups = [{ id: 'g0', name: 'Main Group' }];
+  if (!d.environments || !Array.isArray(d.environments) || d.environments.length === 0) {
+    d.environments = [{ id: 'e0', name: 'Main Env' }];
   }
+  if (!d.curEnv) d.curEnv = d.environments[0].id;
+
+  if (!d.groups || !Array.isArray(d.groups) || d.groups.length === 0) {
+    d.groups = [{ id: 'g0', name: 'Main Group', envId: d.environments[0].id }];
+  }
+  // Backwards compatibility: ensure all groups have an envId
+  d.groups.forEach(g => {
+    if (!g.envId) g.envId = d.environments[0].id;
+  });
+
   if (!d.curGroup) d.curGroup = d.groups[0].id;
   if (!d.pages) d.pages = JSON.parse(JSON.stringify(DEF.pages));
   d.pages.forEach((p) => {
@@ -257,10 +269,17 @@ function initDB() {
       // It's a monolith. Let's shard it.
       const meta = {
         settings: rawData.settings || { engine: 'bm', accent: '#6c8fff' },
+        curEnv: rawData.curEnv || 'e0',
         curGroup: rawData.curGroup || (rawData.groups && rawData.groups[0] ? rawData.groups[0].id : 'g0'),
-        groups: rawData.groups || [{ id: 'g0', name: 'Main Group' }],
+        environments: rawData.environments || [{ id: 'e0', name: 'Main Env' }],
+        groups: rawData.groups || [{ id: 'g0', name: 'Main Group', envId: 'e0' }],
         inbox: rawData.inbox || []
       };
+
+      // Legacy group mapping
+      meta.groups.forEach(g => {
+        if (!g.envId) g.envId = meta.environments[0].id;
+      });
 
       const pagesMeta = [];
       const updates = {};
@@ -306,18 +325,22 @@ function setupShardedListeners() {
   const metaRef = `users/${USER_ID}/startmine_meta`;
   const pagesMetaRef = `users/${USER_ID}/startmine_pages_meta`;
 
-  // Listen to Metadata (settings, groups, inbox, active group)
+  // Listen to Metadata (settings, environments, groups, inbox, active selections)
   db.ref(metaRef).on('value', (snap) => {
     if (_ownWrite) return;
     const meta = snap.val() || {
       settings: { engine: 'bm', accent: '#6c8fff' },
+      curEnv: 'e0',
       curGroup: 'g0',
-      groups: [{ id: 'g0', name: 'Main Group' }],
+      environments: [{ id: 'e0', name: 'Main Env' }],
+      groups: [{ id: 'g0', name: 'Main Group', envId: 'e0' }],
       inbox: []
     };
     D.settings = meta.settings || { engine: 'bm', accent: '#6c8fff' };
+    D.curEnv = meta.curEnv || 'e0';
     D.curGroup = meta.curGroup || 'g0';
-    D.groups = meta.groups || [{ id: 'g0', name: 'Main Group' }];
+    D.environments = meta.environments || [{ id: 'e0', name: 'Main Env' }];
+    D.groups = meta.groups || [{ id: 'g0', name: 'Main Group', envId: 'e0' }];
     D.inbox = meta.inbox || [];
     renderMeta();
   });
@@ -361,6 +384,7 @@ function setupShardedListeners() {
 }
 
 function renderMeta() {
+  buildEnvs();
   buildGroups();
   buildTabs();
   applyBG();
@@ -419,7 +443,9 @@ function sv(saveAll = false, immediate = false) {
     // Extract metadata without payloads
     const meta = {
       settings: D.settings,
+      curEnv: D.curEnv,
       curGroup: D.curGroup,
+      environments: D.environments,
       groups: D.groups,
       inbox: D.inbox
     };
@@ -1013,7 +1039,7 @@ function _parseImport(raw) {
   }
   if (Array.isArray(raw)) {
     const result = JSON.parse(JSON.stringify(DEF));
-    result.groups = [{ id: 'g0', name: 'Imported Group' }];
+    result.groups = [{ id: 'g0', name: 'Imported Group', envId: result.environments[0].id }];
     result.curGroup = 'g0';
     result.pages[0].groupId = 'g0';
     const w = {
@@ -1068,7 +1094,7 @@ function _importCSV(text) {
   const lines = text.trim().split(/\r?\n/);
   const result = JSON.parse(JSON.stringify(DEF));
   result.pages = [];
-  result.groups = [{ id: 'g0', name: 'Imported CSV' }];
+  result.groups = [{ id: 'g0', name: 'Imported CSV', envId: result.environments[0].id }];
   result.curGroup = 'g0';
   const pagesMap = {},
     widgetsMap = {};
@@ -1137,8 +1163,10 @@ document.getElementById('imp-startme').onchange = function (e) {
       const result = {
         settings: { ...D.settings },
         cur: '',
+        curEnv: 'e0',
         curGroup: 'g0',
-        groups: [{ id: 'g0', name: 'Start.me Import' }],
+        environments: [{ id: 'e0', name: 'Main Env' }],
+        groups: [{ id: 'g0', name: 'Start.me Import', envId: 'e0' }],
         inbox: [],
         pages: [],
       };
@@ -1332,13 +1360,128 @@ document.getElementById('reset-btn').onclick = () => {
 };
 
 
+let _dragEnvId = null;
+function buildEnvs() {
+  const bar = document.getElementById('etabs');
+  if (!bar) return;
+  bar.querySelectorAll('.gtab').forEach((t) => t.remove());
+  const addBtn = document.getElementById('add-env');
+
+  D.environments.forEach((env) => {
+    const tab = document.createElement('div');
+    tab.className = 'gtab' + (env.id === D.curEnv ? ' active' : '');
+    if (env.tabColor) {
+      tab.style.borderBottomColor = env.id === D.curEnv ? env.tabColor : 'transparent';
+    }
+    tab.draggable = true;
+    tab.addEventListener('dragstart', (e) => {
+      _dragEnvId = env.id;
+      tab.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    tab.addEventListener('dragend', () => {
+      _dragEnvId = null;
+      tab.classList.remove('dragging');
+    });
+    tab.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if ((_dragEnvId && _dragEnvId !== env.id) || (_dragGrpId)) tab.classList.add('tab-dragover');
+    });
+    tab.addEventListener('dragleave', () => tab.classList.remove('tab-dragover'));
+    tab.addEventListener('drop', (e) => {
+      e.preventDefault();
+      tab.classList.remove('tab-dragover');
+      if (_dragGrpId) {
+        const grp = D.groups.find((g) => g.id === _dragGrpId);
+        if (grp && grp.envId !== env.id) {
+          grp.envId = env.id;
+          D.curEnv = env.id;
+          D.curGroup = grp.id;
+          const firstPage = D.pages.find(p => p.groupId === grp.id);
+          if (firstPage) D.cur = firstPage.id;
+          _dragGrpId = null;
+          sv();
+          renderAll();
+        }
+        return;
+      }
+      if (!_dragEnvId || _dragEnvId === env.id) return;
+      const fromIdx = D.environments.findIndex((e) => e.id === _dragEnvId);
+      const toIdx = D.environments.findIndex((e) => e.id === env.id);
+      if (fromIdx < 0 || toIdx < 0) return;
+      const [moved] = D.environments.splice(fromIdx, 1);
+      D.environments.splice(toIdx, 0, moved);
+      _dragEnvId = null;
+      sv();
+      buildEnvs();
+    });
+
+    const nm = document.createElement('span');
+    nm.className = 'ptnm';
+    nm.textContent = env.name;
+    nm.contentEditable = 'false';
+    nm.onblur = () => {
+      nm.contentEditable = 'false';
+      env.name = nm.textContent.trim() || 'Env';
+      sv();
+    };
+    nm.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        nm.blur();
+      }
+      e.stopPropagation();
+    };
+    nm.onclick = (e) => {
+      if (nm.contentEditable === 'true') e.stopPropagation();
+    };
+    tab.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      nm.contentEditable = 'true';
+      nm.focus();
+      const range = document.createRange();
+      range.selectNodeContents(nm);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    });
+    tab.onclick = () => {
+      if (nm.contentEditable === 'true') return;
+      D.curEnv = env.id;
+      const firstGroupInEnv = D.groups.find((g) => g.envId === env.id);
+      if (firstGroupInEnv) {
+        D.curGroup = firstGroupInEnv.id;
+        const firstPageInGroup = D.pages.find((p) => p.groupId === firstGroupInEnv.id);
+        if (firstPageInGroup) D.cur = firstPageInGroup.id;
+      }
+      sv();
+      renderAll();
+    };
+    const x = document.createElement('button');
+    x.className = 'ptx';
+    x.textContent = '✕';
+    x.title = 'Delete environment';
+    x.onclick = (e) => {
+      e.stopPropagation();
+      delEnv(env.id);
+    };
+    tab.appendChild(nm);
+    if (D.environments.length > 1) tab.appendChild(x);
+    bar.insertBefore(tab, addBtn);
+  });
+}
+
 let _dragGrpId = null;
 function buildGroups() {
   const bar = document.getElementById('gtabs');
   bar.querySelectorAll('.gtab').forEach((t) => t.remove());
   const addBtn = document.getElementById('add-grp');
 
-  D.groups.forEach((g) => {
+  if (D.curEnv === '__all__') return; // Hide groups in "All" view if implemented
+
+  const envGroups = D.groups.filter(g => g.envId === D.curEnv);
+
+  envGroups.forEach((g) => {
     const tab = document.createElement('div');
     tab.className = 'gtab' + (g.id === D.curGroup ? ' active' : '');
     if (g.tabColor) {
@@ -1441,7 +1584,7 @@ function buildGroups() {
     };
     tab.appendChild(cd);
     tab.appendChild(nm);
-    if (D.groups.length > 1) tab.appendChild(x);
+    if (envGroups.length > 1) tab.appendChild(x);
     bar.insertBefore(tab, addBtn);
   });
   // Update ALL button style
@@ -2005,9 +2148,36 @@ function buildTabs() {
   });
 }
 
+document.getElementById('add-env').onclick = () => {
+  const id = uid();
+  D.environments.push({ id, name: 'Env ' + (D.environments.length + 1) });
+  const gid = uid();
+  D.groups.push({ id: gid, name: 'Group 1', envId: id });
+  const pid = uid();
+  D.pages.push({
+    id: pid,
+    groupId: gid,
+    name: 'Miro 1',
+    pageType: 'miro',
+    miroCards: [],
+    zoom: 100,
+    panX: 0,
+    panY: 0,
+    bg: '',
+    bgType: 'none',
+    widgets: [],
+  });
+  D.curEnv = id;
+  D.curGroup = gid;
+  sv();
+  switchActivePage(pid);
+};
+
 document.getElementById('add-grp').onclick = () => {
   const id = uid();
-  D.groups.push({ id, name: 'Group ' + (D.groups.length + 1) });
+  const targetEnv = D.curEnv === '__all__' ? D.environments[0].id : D.curEnv;
+  const envGroups = D.groups.filter((g) => g.envId === targetEnv);
+  D.groups.push({ id, name: 'Group ' + (envGroups.length + 1), envId: targetEnv });
   const pid = uid();
   D.pages.push({
     id: pid,
@@ -2048,23 +2218,56 @@ document.getElementById('add-pg').onclick = () => {
   switchActivePage(id);
 };
 
+function delEnv(eid) {
+  if (D.environments.length <= 1) {
+    alert('Cannot delete the only environment.');
+    return;
+  }
+  if (!confirm('Delete this environment and ALL its groups and pages?')) return;
+  const envIdx = D.environments.findIndex((e) => e.id === eid);
+  if (envIdx < 0) return;
+
+  const groupsToDel = D.groups.filter(g => g.envId === eid);
+  const groupIds = groupsToDel.map(g => g.id);
+
+  D.pages = D.pages.filter((p) => !groupIds.includes(p.groupId));
+  D.groups = D.groups.filter((g) => g.envId !== eid);
+  D.environments.splice(envIdx, 1);
+
+  if (D.curEnv === eid || !D.environments.some(e => e.id === D.curEnv)) {
+    D.curEnv = D.environments[0].id;
+    const firstGroupInEnv = D.groups.find(g => g.envId === D.curEnv);
+    if (firstGroupInEnv) {
+      D.curGroup = firstGroupInEnv.id;
+      const firstPageInGroup = D.pages.find(p => p.groupId === firstGroupInEnv.id);
+      if (firstPageInGroup) D.cur = firstPageInGroup.id;
+    }
+  }
+  sv();
+  renderAll();
+}
+
 function delGroup(gid) {
-  if (D.groups.length <= 1) {
-    alert('Cannot delete the only group.');
+  const envGroups = D.groups.filter(g => g.envId === D.curEnv);
+  if (envGroups.length <= 1) {
+    alert('Cannot delete the only group in this environment.');
     return;
   }
   if (!confirm('Delete this group and ALL its pages?')) return;
+  const gidx = D.groups.findIndex((g) => g.id === gid);
+  if (gidx < 0) return;
   D.pages = D.pages.filter((p) => p.groupId !== gid);
-  D.groups = D.groups.filter((g) => g.id !== gid);
-  if (D.curGroup === gid) {
-    D.curGroup = D.groups[0].id;
-    const newPage = D.pages.find((p) => p.groupId === D.curGroup);
-    sv();
-    switchActivePage(newPage ? newPage.id : D.pages[0].id);
-  } else {
-    sv();
-    renderMeta();
+  D.groups.splice(gidx, 1);
+  if (D.curGroup === gid || !D.groups.some(g => g.id === D.curGroup)) {
+    const fallbackGroup = D.groups.find(g => g.envId === D.curEnv);
+    if (fallbackGroup) {
+      D.curGroup = fallbackGroup.id;
+      const firstPageInGroup = D.pages.find((p) => p.groupId === fallbackGroup.id);
+      if (firstPageInGroup) D.cur = firstPageInGroup.id;
+    }
   }
+  sv();
+  renderAll();
 }
 
 function delPage(pid) {
@@ -2977,6 +3180,7 @@ document.addEventListener('keydown', (e) => {
   }
 });
 function renderAll() {
+  buildEnvs();
   buildGroups();
   buildTabs();
   buildCols();

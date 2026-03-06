@@ -483,6 +483,7 @@ body {
   flex-direction: column;
 }
 
+#etabs,
 #gtabs {
   display: flex;
   flex-wrap: nowrap;
@@ -561,6 +562,7 @@ body {
   color: var(--red);
 }
 
+#etabs,
 #gtabs {
   display: flex;
   flex-wrap: nowrap;
@@ -895,6 +897,7 @@ body {
 }
 
 /* Contrast helper */
+.contrast-light #etabs,
 .contrast-light #gtabs,
 .contrast-light #ptabs {
   color: #1a1a2e;
