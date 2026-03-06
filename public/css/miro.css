@@ -626,6 +626,44 @@
   display: block;
 }
 
+/* ─── Virtual Scrollbars ─── */
+.miro-sb {
+  position: absolute;
+  z-index: 500;
+  border-radius: 4px;
+}
+
+.miro-sb-x {
+  bottom: 4px;
+  left: 4px;
+  right: 4px;
+  height: 8px;
+}
+
+.miro-sb-y {
+  right: 4px;
+  top: 4px;
+  bottom: 4px;
+  width: 8px;
+}
+
+.miro-sb-thumb {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+}
+
+.miro-sb-thumb:hover,
+.miro-sb-thumb:active {
+  background: rgba(255, 255, 255, 0.5);
+}
+
 /* ─── Sticky Notes ─── */
 .miro-sticky {
   position: absolute;
