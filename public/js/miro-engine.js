@@ -1513,17 +1513,29 @@ document.addEventListener('paste', (e) => {
         clearMiroSelection();
         let minOX = Infinity;
         let minOY = Infinity;
-        // Find scale factor from Miro objects to normalize coordinates
-        let miroScale = 1;
+        // Normalize positions using bounding-box approach:
+        // Find the spread of all raw offsets, then scale to fit a ~900px target area.
+        // This works regardless of mixed object types with different scale factors.
+        let rawMinOX = Infinity, rawMinOY = Infinity;
+        let rawMaxOX = -Infinity, rawMaxOY = -Infinity;
         extracted.forEach(item => {
-          if (item._scale && miroScale === 1) miroScale = item._scale;
+          if (item._ox !== undefined) {
+            if (item._ox < rawMinOX) rawMinOX = item._ox;
+            if (item._oy < rawMinOY) rawMinOY = item._oy;
+            if (item._ox > rawMaxOX) rawMaxOX = item._ox;
+            if (item._oy > rawMaxOY) rawMaxOY = item._oy;
+          }
         });
+        const spreadX = rawMaxOX - rawMinOX;
+        const spreadY = rawMaxOY - rawMinOY;
+        const maxSpread = Math.max(spreadX, spreadY, 1);
+        // Target: fit the widest dimension into ~900px
+        const bbScale = maxSpread > 900 ? maxSpread / 900 : 1;
 
         extracted.forEach(item => {
           if (item._ox !== undefined) {
-            // Divide by scale to convert Miro internal coords to screen-relative pixels
-            item._ox = item._ox / miroScale;
-            item._oy = item._oy / miroScale;
+            item._ox = (item._ox - rawMinOX) / bbScale;
+            item._oy = (item._oy - rawMinOY) / bbScale;
             if (item._ox < minOX) minOX = item._ox;
             if (item._oy < minOY) minOY = item._oy;
           }
