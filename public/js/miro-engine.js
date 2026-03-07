@@ -1149,6 +1149,8 @@ document.addEventListener('keydown', (e) => {
 
       // Also strictly write the JSON to the system clipboard so native paste works between browser tabs implicitly
       navigator.clipboard.writeText('STARTMINE_MIRO:' + JSON.stringify(copiedCards)).catch(e => console.error(e));
+      // Mark copy time so Arabic paste fallback (Ctrl+ر) won't double-process
+      window._lastMiroCopyTime = Date.now();
       console.log(`Copied ${copiedCards.length} items.`);
     }
   }
@@ -1268,6 +1270,10 @@ document.addEventListener('paste', (e) => {
   const page = cp();
   if (page.pageType !== 'miro') return;
 
+  // Mark paste time IMMEDIATELY to debounce the Ctrl+ر async fallback
+  // (On Arabic keyboards, Ctrl+V fires BOTH native paste AND Ctrl+ر keydown)
+  window._lastMiroPasteTime = Date.now();
+
   const handleMiroPasting = (cardsJSON) => {
     try {
       const cards = JSON.parse(cardsJSON);
@@ -1369,6 +1375,25 @@ document.addEventListener('paste', (e) => {
               const jd = obj.widgetData.json;
               const type = (obj.widgetData.type || '').toLowerCase();
 
+              // Helper: extract position from Miro JSON data
+              const extractPosition = (jd, opts) => {
+                if (jd._position && jd._position.offsetPx) {
+                  opts._ox = jd._position.offsetPx.x;
+                  opts._oy = jd._position.offsetPx.y;
+                } else if (jd._position && typeof jd._position.x === 'number') {
+                  opts._ox = jd._position.x;
+                  opts._oy = jd._position.y;
+                }
+                // Capture scale factor for coordinate normalization
+                if (jd.scale && jd.scale.scale) {
+                  opts._scale = jd.scale.scale;
+                }
+                if (jd.size) {
+                  if (jd.size.width) opts.w = jd.size.width;
+                  if (jd.size.height) opts.h = jd.size.height;
+                }
+              };
+
               if (type === 'sticker' || type === 'shape' || type === 'text') {
                 let textHTML = jd.text || jd.content || '';
                 textHTML = textHTML.replace(/^<p[^>]*>/i, '').replace(/<\/p>$/i, '');
@@ -1413,21 +1438,56 @@ document.addEventListener('paste', (e) => {
                   fontSize: styleObj && styleObj.fs ? parseInt(styleObj.fs) : (styleObj && styleObj.fontSize ? parseInt(styleObj.fontSize) : 24)
                 };
                 if (exactBgHex) cardOpts.bgHex = exactBgHex;
-
-                if (jd._position && jd._position.offsetPx) {
-                  cardOpts._ox = jd._position.offsetPx.x;
-                  cardOpts._oy = jd._position.offsetPx.y;
-                } else if (jd._position && typeof jd._position.x === 'number') {
-                  cardOpts._ox = jd._position.x;
-                  cardOpts._oy = jd._position.y;
-                }
-
-                if (jd.size) {
-                  if (jd.size.width) cardOpts.w = jd.size.width;
-                  if (jd.size.height) cardOpts.h = jd.size.height;
-                }
+                extractPosition(jd, cardOpts);
 
                 extracted.push(cardOpts);
+              } else if (type === 'image') {
+                // Miro images: construct API URL from resource.id + boardId, then try to download
+                const res = jd.resource;
+                const boardId = (res && res.boardId) || miroJson.boardId || '';
+                const resourceId = res && res.id;
+                const imgW = (res && res.width) || (jd.crop && jd.crop.width) || 300;
+                const imgH = (res && res.height) || (jd.crop && jd.crop.height) || 200;
+                const imgName = (res && res.name) || 'image';
+
+                // Create a placeholder card immediately (will be upgraded to real image if fetch succeeds)
+                let cardOpts = {
+                  type: 'sticky',
+                  text: `⏳ Loading ${imgName}...`,
+                  color: 'light_gray',
+                  w: Math.min(imgW, 350),
+                  h: Math.min(imgH, 228),
+                  _miroResourceId: resourceId,
+                  _miroBoardId: boardId,
+                  _miroImgName: imgName
+                };
+                extractPosition(jd, cardOpts);
+                extracted.push(cardOpts);
+                console.log('[PASTE] Miro image queued for download. Resource:', imgName, 'board:', boardId, 'id:', resourceId);
+              } else if (type === 'embed') {
+                // Miro embed = bookmark/link card with metadata
+                const cd = jd.custom_data;
+                const embedUrl = (cd && cd.url) || jd.url || (jd.html && jd.html.match(/src="([^"]+)"/)?.[1]) || '';
+                const embedTitle = (cd && cd.title) || jd.title || jd.name || embedUrl;
+                if (embedUrl) {
+                  let cardOpts = { type: 'card', url: embedUrl, label: embedTitle };
+                  extractPosition(jd, cardOpts);
+                  cardOpts.w = cardOpts.w || 280;
+                  cardOpts.h = cardOpts.h || 240;
+                  extracted.push(cardOpts);
+                  console.log('[PASTE] Miro embed → card:', embedUrl.substring(0, 60));
+                }
+              } else if (type === 'link' || type === 'line') {
+                // Skip connectors/lines - they don't translate to cards
+              } else if (type === 'imagewidget') {
+                // Alternative image type
+                let cardOpts = { type: 'sticky', text: '🖼️ Image', color: 'gray' };
+                extractPosition(jd, cardOpts);
+                cardOpts.w = cardOpts.w || 280;
+                cardOpts.h = cardOpts.h || 160;
+                extracted.push(cardOpts);
+              } else {
+                console.log('[PASTE] Skipped Miro object type:', type);
               }
             }
           });
@@ -1452,12 +1512,17 @@ document.addEventListener('paste', (e) => {
         clearMiroSelection();
         let minOX = Infinity;
         let minOY = Infinity;
+        // Find scale factor from Miro objects to normalize coordinates
+        let miroScale = 1;
+        extracted.forEach(item => {
+          if (item._scale && miroScale === 1) miroScale = item._scale;
+        });
+
         extracted.forEach(item => {
           if (item._ox !== undefined) {
-            // Scale down Miro's massive coordinate system to our viewport
-            item._ox = item._ox / 10;
-            item._oy = item._oy / 10;
-
+            // Divide by scale to convert Miro internal coords to screen-relative pixels
+            item._ox = item._ox / miroScale;
+            item._oy = item._oy / miroScale;
             if (item._ox < minOX) minOX = item._ox;
             if (item._oy < minOY) minOY = item._oy;
           }
@@ -1474,6 +1539,9 @@ document.addEventListener('paste', (e) => {
             card.w = Math.max(100, item.text.length * (card.fontSize / 2));
             card.h = card.fontSize * 1.5;
             card.fontFamily = 'Inter';
+          } else if (item.type === 'image') {
+            card.w = item.w || 300;
+            card.h = item.h || 200;
           }
 
           if (item._ox !== undefined && minOX !== Infinity) {
@@ -1493,10 +1561,79 @@ document.addEventListener('paste', (e) => {
           _miroSelected.add(newId);
         });
         sv(); buildMiroCanvas(); buildOutline();
+
+        // Upgrade Miro image placeholders: set API URL as imageUrl
+        // The <img> tag in buildMiroCanvas will load directly (no CORS for display)
+        // as long as user is logged into Miro in the same browser.
+        page.miroCards.forEach(card => {
+          if (card._miroResourceId && card._miroBoardId) {
+            const apiUrl = `https://miro.com/api/v1/boards/${card._miroBoardId}/resources/${card._miroResourceId}/files/original`;
+            console.log('[PASTE] Miro image URL:', apiUrl);
+            // Upgrade from placeholder sticky to real image card
+            card.type = 'image';
+            card.imageUrl = apiUrl;
+            delete card.text;
+            delete card.color;
+            const tmpImg = new Image();
+            tmpImg.onload = function () {
+              // Image loaded successfully — update dimensions and re-render
+              card.w = Math.min(tmpImg.width, 800);
+              card.h = Math.round(card.w * (tmpImg.height / tmpImg.width));
+              delete card._miroResourceId;
+              delete card._miroBoardId;
+              delete card._miroImgName;
+              sv(); buildMiroCanvas();
+              console.log('[PASTE] Miro image loaded!', card.w, 'x', card.h);
+            };
+            tmpImg.onerror = function () {
+              console.warn('[PASTE] Miro image failed to load via img tag. Will show broken image.');
+              // Keep it as image type — user will see broken img indicator but can right-click → Open in Miro
+              delete card._miroResourceId;
+              delete card._miroBoardId;
+            };
+            tmpImg.src = apiUrl;
+          }
+        });
+        sv(); buildMiroCanvas();
         return;
       }
 
-      // Explicitly return here to completely prevent Miro items from collapsing into the Step 4 Generic Text handler if something went wrong!
+      // Miro JSON decode failed or produced no extractable items — fallback to HTML div parsing
+      // Miro clipboard includes <div> elements with text content after the <span data-meta=...>
+      console.log('[PASTE] Miro JSON extracted 0 items, trying HTML div fallback...');
+      const divElements = doc.querySelectorAll('body > div');
+      if (divElements.length > 0) {
+        divElements.forEach(div => {
+          const txt = div.textContent.trim();
+          if (txt) {
+            extracted.push({ type: 'sticky', text: txt, color: 'yellow' });
+          }
+        });
+        console.log('[PASTE] HTML div fallback extracted', extracted.length, 'items');
+      }
+
+      if (extracted.length > 0) {
+        if (!page.miroCards) page.miroCards = [];
+        const canvas = document.getElementById('miro-canvas');
+        const zoom = (page.zoom || 100) / 100;
+        const panX = page.panX || 0;
+        const panY = page.panY || 0;
+        let px = _mouseX ? (_mouseX - panX) / zoom : (canvas.clientWidth / 2 - panX) / zoom;
+        let py = _mouseY ? (_mouseY - panY) / zoom : (canvas.clientHeight / 2 - panY) / zoom;
+        let curX = px, curY = py;
+        clearMiroSelection();
+        extracted.forEach(item => {
+          const newId = uid();
+          const card = { id: newId, ...item, w: item.w || 280, h: item.h || 160 };
+          card.x = curX - 100;
+          card.y = curY - 100;
+          curX += (card.w || 280) + 40;
+          if (curX > px + 950) { curX = px; curY += (card.h || 160) + 40; }
+          page.miroCards.push(card);
+          _miroSelected.add(newId);
+        });
+        sv(); buildMiroCanvas(); buildOutline();
+      }
       return;
 
     } else {
