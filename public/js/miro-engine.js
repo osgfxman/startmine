@@ -1662,7 +1662,38 @@ document.addEventListener('paste', (e) => {
 
   console.log('[PASTE DEBUG] Reached External Text/URL fallback with text:', text.substring(0, 50));
 
-  // 4. It's external Text or URL
+  // 4. Check for Internal Startmine Copied Data (copied between tabs or via keyboard shortcuts)
+  if (text.startsWith('STARTMINE_MIRO:')) {
+    const clipData = text.replace('STARTMINE_MIRO:', '');
+    try {
+      const cards = JSON.parse(clipData);
+      if (cards && cards.length > 0) {
+        if (!page.miroCards) page.miroCards = [];
+        const canvas = document.getElementById('miro-canvas');
+        const zoom = (page.zoom || 100) / 100;
+        const cx = _mouseX ? (_mouseX - (page.panX || 0)) / zoom : (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
+        const cy = _mouseY ? (_mouseY - (page.panY || 0)) / zoom : (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+
+        let minX = Infinity, minY = Infinity;
+        cards.forEach(c => { if (c.x < minX) minX = c.x; if (c.y < minY) minY = c.y; });
+        clearMiroSelection();
+        cards.forEach(c => {
+          const newId = uid(); c.id = newId;
+          c.x = cx + (c.x - minX) - (c.w || 100) / 2;
+          c.y = cy + (c.y - minY) - (c.h || 100) / 2;
+          page.miroCards.push(c); _miroSelected.add(c.id);
+        });
+        sv(); buildMiroCanvas(); buildOutline();
+        window._lastMiroPasteTime = Date.now();
+        console.log('[PASTE DEBUG] Handled STARTMINE_MIRO internal paste!');
+        return;
+      }
+    } catch (e) {
+      console.error('Failed to parse internal Startmine paste:', e);
+    }
+  }
+
+  // 5. It's external Text or URL
   if (!page.miroCards) page.miroCards = [];
   const canvas = document.getElementById('miro-canvas');
   const zoom = (page.zoom || 100) / 100;
