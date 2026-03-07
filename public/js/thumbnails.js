@@ -49,7 +49,14 @@ function processFetchQueue() {
   }
 }
 
+const _fetchedThisSession = new Set();
+
 async function fetchCardMeta(card) {
+  // Skip if already fetched this session or already has a thumbnail
+  if (_fetchedThisSession.has(card.id)) return;
+  if (card.thumbUrl) { _fetchedThisSession.add(card.id); return; }
+  _fetchedThisSession.add(card.id);
+
   // Step 1: Try jsonlink.io for OG metadata + image
   let ogImage = null;
   try {
@@ -1051,9 +1058,15 @@ function buildMiroGridCard(card) {
       const page = cp(); const zoom = (page.zoom || 100) / 100;
       function onMove(ev) {
         card.colWidths[c] = Math.max(30, startW + (ev.clientX - startX) / zoom);
-        sv(); buildMiroCanvas();
+        // Update DOM directly without saving or full rebuild
+        colgroup.children[c].style.width = card.colWidths[c] + 'px';
+        card.w = card.colWidths.reduce((a, b) => a + b, 0);
+        el.style.width = card.w + 'px';
+        table.style.width = card.w + 'px';
+        let cx2 = 0;
+        el.querySelectorAll('.mg-col-resizer').forEach((r, i) => { cx2 += card.colWidths[i]; r.style.left = cx2 + 'px'; });
       }
-      function onUp() { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }
+      function onUp() { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); sv(); buildMiroCanvas(); }
       document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
     };
     el.appendChild(resizer);
@@ -1072,9 +1085,15 @@ function buildMiroGridCard(card) {
       const page = cp(); const zoom = (page.zoom || 100) / 100;
       function onMove(ev) {
         card.rowHeights[r] = Math.max(20, startH + (ev.clientY - startY) / zoom);
-        sv(); buildMiroCanvas();
+        // Update DOM directly without saving or full rebuild
+        if (table.rows[r]) table.rows[r].style.height = card.rowHeights[r] + 'px';
+        card.h = card.rowHeights.reduce((a, b) => a + b, 0);
+        el.style.height = card.h + 'px';
+        table.style.height = card.h + 'px';
+        let cy2 = 0;
+        el.querySelectorAll('.mg-row-resizer').forEach((r2, i) => { cy2 += card.rowHeights[i]; r2.style.top = cy2 + 'px'; });
       }
-      function onUp() { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }
+      function onUp() { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); sv(); buildMiroCanvas(); }
       document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
     };
     el.appendChild(resizer);

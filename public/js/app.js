@@ -144,6 +144,17 @@ let _ownWrite = false;
 let _svTimer = null;
 let _lastSyncedPageData = null;
 
+/* ─── LocalStorage Cache ─── */
+const LS_META = 'sm_meta';
+const LS_PAGES_META = 'sm_pages_meta';
+function lsPageKey(pid) { return 'sm_page_' + pid; }
+function cacheMeta(meta) { try { localStorage.setItem(LS_META, JSON.stringify(meta)); } catch (e) { } }
+function cachePagesMeta(pm) { try { localStorage.setItem(LS_PAGES_META, JSON.stringify(pm)); } catch (e) { } }
+function cachePageData(pid, data) { try { localStorage.setItem(lsPageKey(pid), JSON.stringify(data)); } catch (e) { } }
+function getCachedMeta() { try { return JSON.parse(localStorage.getItem(LS_META)); } catch (e) { return null; } }
+function getCachedPagesMeta() { try { return JSON.parse(localStorage.getItem(LS_PAGES_META)); } catch (e) { return null; } }
+function getCachedPageData(pid) { try { return JSON.parse(localStorage.getItem(lsPageKey(pid))); } catch (e) { return null; } }
+
 document.getElementById('login-btn').onclick = () =>
   auth.signInWithPopup(provider).catch((e) => alert(e.message));
 document.getElementById('logout-btn').onclick = () => auth.signOut();
@@ -326,6 +337,40 @@ function setupShardedListeners() {
   const metaRef = `users/${USER_ID}/startmine_meta`;
   const pagesMetaRef = `users/${USER_ID}/startmine_pages_meta`;
 
+  // ─── Instant load from localStorage cache ───
+  if (isFirstLoad) {
+    const cachedMeta = getCachedMeta();
+    const cachedPagesMeta = getCachedPagesMeta();
+    if (cachedMeta && cachedPagesMeta) {
+      D.settings = cachedMeta.settings || D.settings;
+      D.curEnv = cachedMeta.curEnv || D.curEnv;
+      D.curGroup = cachedMeta.curGroup || D.curGroup;
+      D.environments = cachedMeta.environments || D.environments;
+      D.groups = cachedMeta.groups || D.groups;
+      D.inbox = cachedMeta.inbox || D.inbox;
+      D.pages = cachedPagesMeta;
+      const dg = D.settings.defaultGroup || '__last__';
+      const dp = D.settings.defaultPage || '__last__';
+      if (dg !== '__last__' && D.groups.some((g) => g.id === dg)) D.curGroup = dg;
+      if (dp !== '__last__' && D.pages.some((p) => p.id === dp)) D.cur = dp;
+      if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
+      // Load cached page data for instant render
+      const cachedPage = getCachedPageData(D.cur);
+      const pg = cp();
+      if (pg && cachedPage) {
+        pg.widgets = cachedPage.widgets || [];
+        pg.miroCards = cachedPage.miroCards || [];
+        _lastSyncedPageData = {
+          widgets: JSON.stringify(pg.widgets),
+          miroCards: JSON.stringify(pg.miroCards)
+        };
+      }
+      renderMeta();
+      buildCols();
+      setSyncStatus('ok', 'Loaded from cache — syncing…');
+    }
+  }
+
   // Listen to Metadata (settings, environments, groups, inbox, active selections)
   db.ref(metaRef).on('value', (snap) => {
     if (_ownWrite) return;
@@ -343,6 +388,7 @@ function setupShardedListeners() {
     D.environments = meta.environments || [{ id: 'e0', name: 'Main Env' }];
     D.groups = meta.groups || [{ id: 'g0', name: 'Main Group', envId: 'e0' }];
     D.inbox = meta.inbox || [];
+    cacheMeta(meta); // Cache to localStorage
     renderMeta();
   });
 
@@ -356,6 +402,7 @@ function setupShardedListeners() {
     const oldMiroCards = cp() ? cp().miroCards : [];
 
     D.pages = pagesMeta;
+    cachePagesMeta(pagesMeta); // Cache to localStorage
 
     if (isFirstLoad) {
       const dg = D.settings.defaultGroup || '__last__';
@@ -410,14 +457,27 @@ function switchActivePage(pageId) {
   const pageDataRef = `users/${USER_ID}/startmine_pages/${pageId}`;
   _activePageListener = pageDataRef;
 
-  document.getElementById('cw').innerHTML = '<div style="padding: 2rem; color: var(--mu); text-align: center;">Loading page data...</div>';
+  // ─── Instant render from localStorage cache ───
+  const cachedPage = getCachedPageData(pageId);
+  if (cachedPage) {
+    const pg = cp();
+    if (pg) {
+      pg.widgets = cachedPage.widgets || [];
+      pg.miroCards = cachedPage.miroCards || [];
+      const fakeD = { pages: [pg] };
+      sanitizeData(fakeD);
+      _lastSyncedPageData = {
+        widgets: JSON.stringify(pg.widgets),
+        miroCards: JSON.stringify(pg.miroCards)
+      };
+    }
+    buildCols();
+  } else {
+    document.getElementById('cw').innerHTML = '<div style="padding: 2rem; color: var(--mu); text-align: center;">Loading page data...</div>';
+  }
 
   db.ref(pageDataRef).on('value', (snap) => {
-    if (_ownWrite) {
-      _ownWrite = false;
-      buildCols();
-      return;
-    }
+    if (_ownWrite) { _ownWrite = false; return; }
     const pData = snap.val() || { widgets: [], miroCards: [] };
     const pg = cp();
     if (pg) {
@@ -431,6 +491,8 @@ function switchActivePage(pageId) {
         widgets: JSON.stringify(pg.widgets),
         miroCards: JSON.stringify(pg.miroCards)
       };
+      // Cache to localStorage
+      cachePageData(pageId, { widgets: pg.widgets, miroCards: pg.miroCards });
     }
     buildCols();
   });
@@ -542,6 +604,14 @@ function sv(saveAll = false, immediate = false) {
     }
 
     db.ref().update(updates)
+      .then(() => {
+        _ownWrite = false;
+        // Cache active page data to localStorage after successful save
+        const activePg = cp();
+        if (activePg) {
+          cachePageData(activePg.id, { widgets: activePg.widgets || [], miroCards: activePg.miroCards || [] });
+        }
+      })
       .catch((err) => {
         _ownWrite = false;
         setSyncStatus('err', 'Sync error: ' + (err.code || err.message));
@@ -552,6 +622,14 @@ function sv(saveAll = false, immediate = false) {
   if (immediate) doSave();
   else _svTimer = setTimeout(doSave, 800);
 }
+
+// ─── Save Guards: prevent data loss on tab close ───
+window.addEventListener('beforeunload', () => {
+  if (_svTimer) { clearTimeout(_svTimer); sv(false, true); }
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && _svTimer) { clearTimeout(_svTimer); sv(false, true); }
+});
 
 function uid() {
   return 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);

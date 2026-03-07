@@ -1,1 +1,0 @@
-// Merged into thumbnails.js
