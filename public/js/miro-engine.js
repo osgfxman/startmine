@@ -1416,10 +1416,11 @@ document.addEventListener('paste', (e) => {
 
                 if (styleObj) {
                   let hex = styleObj.backgroundColor || styleObj.bc;
-                  if (!hex && styleObj.sbc) {
+                  if (!hex && styleObj.sbc !== undefined) {
                     hex = '#' + parseInt(styleObj.sbc).toString(16).padStart(6, '0');
                   }
                   if (hex) {
+                    hex = String(hex); // Ensure hex is a string (could be a number)
                     exactBgHex = hex.toLowerCase();
                     if (!exactBgHex.startsWith('#')) exactBgHex = '#' + exactBgHex;
                     bgColorString = exactColorMap[exactBgHex] || 'yellow';
