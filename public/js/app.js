@@ -1550,6 +1550,15 @@ function buildEnvs() {
       buildEnvs();
     });
 
+    const cd = document.createElement('div');
+    cd.className = 'etab-cd';
+    cd.style.background = env.tabColor || 'rgba(255,255,255,.15)';
+    cd.title = 'Environment color';
+    cd.onclick = (ev) => {
+      ev.stopPropagation();
+      openEnvColorPop(ev, env.id);
+    };
+
     const nm = document.createElement('span');
     nm.className = 'ptnm';
     nm.textContent = env.name;
@@ -1581,6 +1590,7 @@ function buildEnvs() {
     });
     tab.onclick = () => {
       if (nm.contentEditable === 'true') return;
+      if (D.curEnv === env.id) return;
       D.curEnv = env.id;
       const firstGroupInEnv = D.groups.find((g) => g.envId === env.id);
       if (firstGroupInEnv) {
@@ -1599,6 +1609,7 @@ function buildEnvs() {
       e.stopPropagation();
       delEnv(env.id);
     };
+    tab.appendChild(cd);
     tab.appendChild(nm);
     if (D.environments.length > 1) tab.appendChild(x);
     bar.insertBefore(tab, addBtn);
@@ -1702,6 +1713,7 @@ function buildGroups() {
     });
     tab.onclick = () => {
       if (nm.contentEditable === 'true') return;
+      if (D.curGroup === g.id) return;
       D.curGroup = g.id;
       const firstPageInGroup = D.pages.find((p) => p.groupId === g.id);
       if (firstPageInGroup) D.cur = firstPageInGroup.id;
@@ -1723,6 +1735,40 @@ function buildGroups() {
   });
   // Update ALL button style
   document.getElementById('all-btn').classList.toggle('active-toggle', D.curGroup === '__all__');
+}
+
+function openEnvColorPop(ev, eid) {
+  tcPid = null;
+  const pop = document.getElementById('tc-pop');
+  pop.querySelectorAll('.tc-sw').forEach((s) => s.remove());
+  TAB_COLORS.forEach((hex) => {
+    const s = document.createElement('div');
+    s.className = 'tc-sw';
+    s.style.background = hex;
+    const env = D.environments.find((e) => e.id === eid);
+    s.style.borderColor = env && env.tabColor === hex ? '#fff' : 'transparent';
+    s.onclick = () => {
+      if (env) {
+        env.tabColor = hex;
+        sv();
+        buildEnvs();
+      }
+      pop.classList.remove('open');
+    };
+    pop.insertBefore(s, document.getElementById('tc-none'));
+  });
+  document.getElementById('tc-none').onclick = () => {
+    const env = D.environments.find((e) => e.id === eid);
+    if (env) {
+      env.tabColor = '';
+      sv();
+      buildEnvs();
+    }
+    pop.classList.remove('open');
+  };
+  pop.classList.add('open');
+  pop.style.left = Math.min(ev.clientX, window.innerWidth - 150) + 'px';
+  pop.style.top = ev.clientY + 12 + 'px';
 }
 
 function openGrpColorPop(ev, gid) {
