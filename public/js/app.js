@@ -143,6 +143,7 @@ let isFirstLoad = true;
 let _ownWrite = false;
 let _svTimer = null;
 let _lastSyncedPageData = null;
+let _lastSyncedPagesMetaStr = null;
 
 /* ─── LocalStorage Cache ─── */
 const LS_META = 'sm_meta';
@@ -403,6 +404,12 @@ function setupShardedListeners() {
 
     D.pages = pagesMeta;
     cachePagesMeta(pagesMeta); // Cache to localStorage
+    // Establish baseline for smart pagesMeta diffing in sv()
+    _lastSyncedPagesMetaStr = JSON.stringify(pagesMeta.map(p => ({
+      id: p.id, groupId: p.groupId, name: p.name, pageType: p.pageType,
+      zoom: p.zoom, panX: p.panX, panY: p.panY, bg: p.bg, bgType: p.bgType,
+      tabColor: p.tabColor || ''
+    })));
 
     if (isFirstLoad) {
       const dg = D.settings.defaultGroup || '__last__';
@@ -533,7 +540,46 @@ function sv(saveAll = false, immediate = false) {
 
     const updates = {};
     updates[metaRef] = meta;
-    updates[pagesMetaRef] = pagesMeta;
+
+    // Smart pagesMeta sync: only upload what changed
+    const curPagesMetaStr = JSON.stringify(pagesMeta);
+    if (curPagesMetaStr !== _lastSyncedPagesMetaStr) {
+      // Check if only zoom/pan changed on the active page (most common case)
+      let onlyZoomPanChanged = false;
+      if (_lastSyncedPagesMetaStr) {
+        try {
+          const oldPM = JSON.parse(_lastSyncedPagesMetaStr);
+          if (oldPM.length === pagesMeta.length) {
+            let diffIdx = -1;
+            let multiDiff = false;
+            for (let i = 0; i < pagesMeta.length; i++) {
+              const o = oldPM[i], n = pagesMeta[i];
+              if (o.id === n.id && o.groupId === n.groupId && o.name === n.name &&
+                o.pageType === n.pageType && o.bg === n.bg && o.bgType === n.bgType &&
+                (o.tabColor || '') === (n.tabColor || '')) {
+                if (o.zoom !== n.zoom || o.panX !== n.panX || o.panY !== n.panY) {
+                  if (diffIdx >= 0) { multiDiff = true; break; }
+                  diffIdx = i;
+                }
+              } else {
+                diffIdx = -2; break; // structural change
+              }
+            }
+            if (diffIdx >= 0 && !multiDiff) {
+              // Only one page's zoom/pan changed — write just that page's meta entry
+              onlyZoomPanChanged = true;
+              updates[`${pagesMetaRef}/${diffIdx}/zoom`] = pagesMeta[diffIdx].zoom;
+              updates[`${pagesMetaRef}/${diffIdx}/panX`] = pagesMeta[diffIdx].panX;
+              updates[`${pagesMetaRef}/${diffIdx}/panY`] = pagesMeta[diffIdx].panY;
+            }
+          }
+        } catch (e) { /* fallback to full write */ }
+      }
+      if (!onlyZoomPanChanged) {
+        updates[pagesMetaRef] = pagesMeta;
+      }
+      _lastSyncedPagesMetaStr = curPagesMetaStr;
+    }
 
     if (saveAll) {
       D.pages.forEach(p => {
