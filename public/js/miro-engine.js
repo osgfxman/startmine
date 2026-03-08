@@ -334,7 +334,7 @@ function buildMiroCard(card) {
   // Drag logic — drag from thumbnail area (supports multi-select group drag)
   // We use the new global Alt-Drag duplication helper from thumbnails.js
   if (typeof miroSetupCardDrag === 'function') {
-    miroSetupCardDrag(thumb, card, ['.mc-del', '.mc-open', '.mc-resize']);
+    miroSetupCardDrag(thumb, card, ['.mc-del', '.mc-open', '.mc-resize', '.mc-lock']);
   }
 
   // Metadata footer
@@ -360,6 +360,11 @@ function buildMiroCard(card) {
 
   // 4-corner resize handles
   attach8WayResize(el, card, 160, 100);
+
+  // Lock UI (using the function from thumbnails.js)
+  if (typeof attachLockUI === 'function') {
+    attachLockUI(el, card);
+  }
 
   el.appendChild(del);
   el.appendChild(openBtn);

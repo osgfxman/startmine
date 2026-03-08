@@ -136,6 +136,64 @@
   color: var(--red);
 }
 
+.miro-card .mc-lock {
+  position: absolute;
+  top: 6px;
+  right: 32px;
+  z-index: 3;
+  background: rgba(0, 0, 0, 0.55);
+  border: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mu);
+  cursor: pointer;
+  font-size: 0.7rem;
+  opacity: 0;
+  transition:
+    opacity 0.12s,
+    color 0.12s;
+  overflow: hidden;
+}
+
+.miro-card:hover .mc-lock {
+  opacity: 1;
+}
+
+.miro-card .mc-lock:hover {
+  color: var(--tx);
+  background: rgba(0, 0, 0, 0.75);
+}
+
+.miro-card .mc-lock .lock-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--ac);
+  width: 0%;
+  transition: width 0.1s linear;
+}
+
+/* Locked state styles */
+.miro-card.is-locked .mc-lock {
+  opacity: 1;
+  color: var(--tx);
+  background: rgba(108, 143, 255, 0.2);
+}
+
+.miro-card.is-locked .mc-del,
+.miro-card.is-locked [class^="mc-resize-"],
+.miro-card.is-locked [class^="sn-toolbar"],
+.miro-card.is-locked .ms-shape-toggle,
+.miro-card.is-locked .mt-toolbar,
+.miro-card.is-locked .mc-open {
+  display: none !important;
+}
+
 .miro-card .mc-thumb {
   flex: 1;
   overflow: hidden;
@@ -798,30 +856,82 @@
   position: absolute;
   top: 4px;
   right: 4px;
-  z-index: 3;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.45);
   border: none;
   width: 20px;
   height: 20px;
-  border-radius: 5px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--mu);
   cursor: pointer;
   font-size: 0.65rem;
   opacity: 0;
   transition:
     opacity 0.12s,
     color 0.12s;
+  z-index: 5;
 }
 
-.miro-sticky:hover .mc-del {
+.miro-sticky .mc-lock {
+  position: absolute;
+  top: 4px;
+  right: 28px;
+  background: rgba(0, 0, 0, 0.45);
+  border: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mu);
+  cursor: pointer;
+  font-size: 0.65rem;
+  opacity: 0;
+  transition:
+    opacity 0.12s,
+    color 0.12s;
+  z-index: 5;
+  overflow: hidden;
+}
+
+.miro-sticky:hover .mc-del,
+.miro-sticky:hover .mc-lock {
   opacity: 1;
 }
 
 .miro-sticky .mc-del:hover {
   color: var(--red);
+}
+
+.miro-sticky .mc-lock:hover {
+  color: var(--tx);
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.miro-sticky .mc-lock .lock-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--ac);
+  width: 0%;
+  transition: width 0.1s linear;
+}
+
+.miro-sticky.is-locked .mc-lock {
+  opacity: 1;
+  color: var(--tx);
+  background: rgba(108, 143, 255, 0.3);
+}
+
+.miro-sticky.is-locked .mc-del,
+.miro-sticky.is-locked [class^="mc-resize-"],
+.miro-sticky.is-locked [class^="sn-toolbar"],
+.miro-sticky.is-locked .ms-shape-toggle {
+  display: none !important;
 }
 
 /* Shape toggle handle */
@@ -1210,11 +1320,49 @@
     color 0.12s;
 }
 
-.miro-image:hover .mc-del {
+.miro-image .mc-lock {
+  position: absolute;
+  top: 6px;
+  right: 32px;
+  z-index: 3;
+  background: rgba(0, 0, 0, 0.55);
+  border: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mu);
+  cursor: pointer;
+  font-size: 0.7rem;
+  opacity: 0;
+  transition:
+    opacity 0.12s,
+    color 0.12s;
+  overflow: hidden;
+}
+
+.miro-image:hover .mc-del,
+.miro-image:hover .mc-lock {
   opacity: 1;
 }
 
-.miro-image .mc-del:hover {
+.miro-image.is-locked .mc-lock {
+  opacity: 1 !important;
+  background: rgba(108, 143, 255, 0.8) !important;
+  color: #fff !important;
+  right: 6px;
+  /* Move to corner when locked and del is hidden */
+}
+
+.miro-image.is-locked .mc-del,
+.miro-image.is-locked [class^="mc-resize-"] {
+  display: none !important;
+}
+
+.miro-image .mc-del:hover,
+.miro-image .mc-lock:hover {
   color: var(--red);
 }
 
@@ -1304,30 +1452,79 @@
 
 .miro-text .mc-del {
   position: absolute;
-  top: -8px;
-  right: -8px;
-  z-index: 3;
-  background: rgba(0, 0, 0, .55);
+  top: -12px;
+  right: -24px;
+  background: rgba(0, 0, 0, 0.5);
   border: none;
   width: 20px;
   height: 20px;
-  border-radius: 5px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--mu);
   cursor: pointer;
-  font-size: .65rem;
+  font-size: 0.65rem;
   opacity: 0;
-  transition: opacity .12s;
+  transition: opacity 0.12s, color 0.12s;
+  z-index: 5;
 }
 
-.miro-text:hover .mc-del {
+.miro-text .mc-lock {
+  position: absolute;
+  top: -12px;
+  right: 0px;
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mu);
+  cursor: pointer;
+  font-size: 0.65rem;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s;
+  z-index: 5;
+  overflow: hidden;
+}
+
+.miro-text:hover .mc-del,
+.miro-text:hover .mc-lock {
   opacity: 1;
 }
 
 .miro-text .mc-del:hover {
   color: var(--red);
+}
+
+.miro-text .mc-lock:hover {
+  color: var(--tx);
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.miro-text .mc-lock .lock-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--ac);
+  width: 0%;
+  transition: width 0.1s linear;
+}
+
+.miro-text.is-locked .mc-lock {
+  opacity: 1;
+  color: var(--tx);
+  background: rgba(108, 143, 255, 0.3);
+}
+
+.miro-text.is-locked .mc-del,
+.miro-text.is-locked [class^="mc-resize-"],
+.miro-text.is-locked .mt-toolbar {
+  display: none !important;
 }
 
 /* Text resize handles */
@@ -1477,30 +1674,79 @@
 
 .miro-shape .mc-del {
   position: absolute;
-  top: -8px;
-  right: -8px;
-  z-index: 3;
-  background: rgba(0, 0, 0, .55);
+  top: 4px;
+  right: 4px;
+  background: rgba(0, 0, 0, 0.45);
   border: none;
   width: 20px;
   height: 20px;
-  border-radius: 5px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--mu);
   cursor: pointer;
-  font-size: .65rem;
+  font-size: 0.65rem;
   opacity: 0;
-  transition: opacity .12s;
+  transition: opacity 0.12s, color 0.12s;
+  z-index: 5;
 }
 
-.miro-shape:hover .mc-del {
+.miro-shape .mc-lock {
+  position: absolute;
+  top: 4px;
+  right: 28px;
+  background: rgba(0, 0, 0, 0.45);
+  border: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mu);
+  cursor: pointer;
+  font-size: 0.65rem;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s;
+  z-index: 5;
+  overflow: hidden;
+}
+
+.miro-shape:hover .mc-del,
+.miro-shape:hover .mc-lock {
   opacity: 1;
 }
 
 .miro-shape .mc-del:hover {
   color: var(--red);
+}
+
+.miro-shape .mc-lock:hover {
+  color: var(--tx);
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.miro-shape .mc-lock .lock-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--ac);
+  width: 0%;
+  transition: width 0.1s linear;
+}
+
+.miro-shape.is-locked .mc-lock {
+  opacity: 1;
+  color: var(--tx);
+  background: rgba(108, 143, 255, 0.3);
+}
+
+.miro-shape.is-locked .mc-del,
+.miro-shape.is-locked [class^="mc-resize-"],
+.miro-shape.is-locked .msh-toolbar {
+  display: none !important;
 }
 
 /* Shape resize handles */
@@ -1867,28 +2113,76 @@
   position: absolute;
   top: -8px;
   right: -8px;
-  z-index: 3;
-  background: rgba(0, 0, 0, .55);
+  background: rgba(0, 0, 0, 0.6);
   border: none;
   width: 20px;
   height: 20px;
-  border-radius: 5px;
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.65rem;
+  opacity: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--mu);
-  cursor: pointer;
-  font-size: .65rem;
-  opacity: 0;
-  transition: opacity .12s;
+  transition: opacity 0.15s, background 0.15s;
 }
 
-.miro-grid:hover .mc-del {
+.miro-grid .mc-lock {
+  position: absolute;
+  top: -8px;
+  right: 16px;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.65rem;
+  opacity: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s, background 0.15s;
+  overflow: hidden;
+}
+
+.miro-grid:hover .mc-del,
+.miro-grid:hover .mc-lock {
   opacity: 1;
 }
 
 .miro-grid .mc-del:hover {
-  color: var(--red);
+  background: var(--red);
+}
+
+.miro-grid .mc-lock:hover {
+  color: var(--tx);
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.miro-grid .mc-lock .lock-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--ac);
+  width: 0%;
+  transition: width 0.1s linear;
+}
+
+.miro-grid.is-locked .mc-lock {
+  opacity: 1;
+  color: var(--tx);
+  background: rgba(108, 143, 255, 0.5);
+}
+
+.miro-grid.is-locked .mc-del,
+.miro-grid.is-locked [class^="mc-resize-"] {
+  display: none !important;
 }
 
 /* Grid resize handles */
@@ -2061,30 +2355,80 @@
 
 .miro-mindmap .mc-del {
   position: absolute;
-  top: -8px;
-  right: -8px;
-  z-index: 3;
-  background: rgba(0, 0, 0, .55);
+  top: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.5);
   border: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.7rem;
+  opacity: 0;
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--mu);
-  cursor: pointer;
-  font-size: .65rem;
-  opacity: 0;
-  transition: opacity .12s;
+  transition: opacity 0.15s, background 0.15s;
 }
 
-.miro-mindmap:hover .mc-del {
+.miro-mindmap .mc-lock {
+  position: absolute;
+  top: -24px;
+  left: calc(50% + 28px);
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.7rem;
+  opacity: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s, background 0.15s;
+  overflow: hidden;
+}
+
+.miro-mindmap:hover .mc-del,
+.miro-mindmap:hover .mc-lock {
   opacity: 1;
 }
 
 .miro-mindmap .mc-del:hover {
-  color: var(--red);
+  background: var(--red);
+}
+
+.miro-mindmap .mc-lock:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.miro-mindmap .mc-lock .lock-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--ac);
+  width: 0%;
+  transition: width 0.1s linear;
+}
+
+.miro-mindmap.is-locked .mc-lock {
+  opacity: 1;
+  color: var(--tx);
+  background: rgba(108, 143, 255, 0.5);
+}
+
+.miro-mindmap.is-locked .mc-del,
+.miro-mindmap.is-locked [class^="mc-resize-"],
+.miro-mindmap.is-locked .mm-add {
+  display: none !important;
 }
 
 .mm-node {

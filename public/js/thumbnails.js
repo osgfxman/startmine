@@ -251,6 +251,7 @@ function updateCardThumb(card) {
 /* ─── Global Card DragHelper ─── */
 function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
   el.addEventListener('mousedown', (e) => {
+    if (card.locked) return; // Prevent drag if locked
     if (e.target.contentEditable === 'true') return;
     for (const sel of ignoreSelectors) {
       if (e.target.closest(sel)) return;
@@ -364,6 +365,7 @@ function attach8WayResize(el, card, minW, minH) {
     const handle = document.createElement('div');
     handle.className = 'mc-resize-' + handleType;
     handle.addEventListener('mousedown', (e) => {
+      if (card.locked) return; // Prevent resize if locked
       e.stopPropagation();
       const page = cp();
       const zoom = (page.zoom || 100) / 100;
@@ -451,6 +453,114 @@ function attach8WayResize(el, card, minW, minH) {
     });
     el.appendChild(handle);
   });
+}
+
+/* ─── Lock Feature UI ─── */
+function attachLockUI(el, card) {
+  const btn = document.createElement('button');
+  btn.className = 'mc-lock';
+  btn.title = card.locked ? 'Hold to unlock' : 'Lock element';
+
+  // Progress bar for long press
+  const progress = document.createElement('div');
+  progress.className = 'lock-progress';
+  btn.appendChild(progress);
+
+  // Lock Icon (using text for simplicity, or SVG could be used if preferred)
+  const icon = document.createElement('span');
+  icon.textContent = '🔒';
+  btn.appendChild(icon);
+
+  // Apply initial state
+  if (card.locked) {
+    el.classList.add('is-locked');
+  } else {
+    el.classList.remove('is-locked');
+  }
+
+  let pressTimer = null;
+  let animFrame = null;
+  let startTime = 0;
+  let justUnlocked = false;
+  const HOLD_DURATION = 500; // 0.5 seconds
+
+  const startHold = (e) => {
+    e.stopPropagation();
+    if (e.button !== undefined && e.button !== 0) return; // Only left click
+
+    if (!card.locked) {
+      // If unlocked, a simple mousedown is enough to lock it (handled in click/mouseup, or here for instant feedback)
+      return;
+    }
+
+    // If locked, start the timer
+    startTime = performance.now();
+    btn.classList.add('active');
+
+    const updateProgress = (currentTime) => {
+      const elapsed = currentTime - startTime;
+      let pct = Math.min((elapsed / HOLD_DURATION) * 100, 100);
+      progress.style.width = `${pct}%`;
+
+      if (elapsed < HOLD_DURATION) {
+        animFrame = requestAnimationFrame(updateProgress);
+      }
+    };
+    animFrame = requestAnimationFrame(updateProgress);
+
+    pressTimer = setTimeout(() => {
+      // Completed hold
+      progress.style.width = '0%';
+      card.locked = false;
+      el.classList.remove('is-locked');
+      btn.title = 'Lock element';
+      justUnlocked = true; // Prevent the subsequent click event from relocking
+      sv();
+    }, HOLD_DURATION);
+  };
+
+  const cancelHold = (e) => {
+    if (e) e.stopPropagation();
+    if (pressTimer) {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+    }
+    if (animFrame) {
+      cancelAnimationFrame(animFrame);
+      animFrame = null;
+    }
+    progress.style.width = '0%';
+    btn.classList.remove('active');
+  };
+
+  const onClick = (e) => {
+    e.stopPropagation();
+    if (justUnlocked) {
+      // It was just unlocked by a long press, ignore this click
+      justUnlocked = false;
+      return;
+    }
+    if (!card.locked) {
+      // Lock it
+      card.locked = true;
+      el.classList.add('is-locked');
+      btn.title = 'Hold to unlock';
+      clearMiroSelection();
+      sv();
+    }
+  };
+
+  // Prevent drag helper from firing when interacting with lock button
+  btn.addEventListener('mousedown', startHold);
+  btn.addEventListener('touchstart', startHold, { passive: false });
+
+  btn.addEventListener('mouseup', cancelHold);
+  btn.addEventListener('mouseleave', cancelHold);
+  btn.addEventListener('touchend', cancelHold);
+
+  btn.addEventListener('click', onClick);
+
+  el.appendChild(btn);
 }
 
 function buildMiroSticky(card) {
@@ -579,6 +689,7 @@ function buildMiroSticky(card) {
   el.addEventListener('click', (e) => {
     if (
       e.target.closest('.mc-del') ||
+      e.target.closest('.mc-lock') ||
       e.target.closest('.ms-shape-toggle') ||
       e.target.closest('.sn-toolbar')
     )
@@ -595,10 +706,13 @@ function buildMiroSticky(card) {
   });
 
   // Drag (via global helper)
-  miroSetupCardDrag(el, card, ['.mc-del', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.ms-shape-toggle', '.sn-toolbar']);
+  miroSetupCardDrag(el, card, ['.mc-del', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.ms-shape-toggle', '.sn-toolbar', '.mc-lock']);
 
   // 4-corner resize
   attach8WayResize(el, card, 100, 80);
+
+  // Lock UI
+  attachLockUI(el, card);
 
   el.appendChild(del);
   el.appendChild(toolbar);
@@ -685,10 +799,13 @@ function buildMiroImage(card) {
   }
 
   // Drag (via global helper)
-  miroSetupCardDrag(el, card, ['.mc-del', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl']);
+  miroSetupCardDrag(el, card, ['.mc-del', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.mc-lock']);
 
   // 4-corner resize
   attach8WayResize(el, card, 60, 60);
+
+  // Lock UI
+  attachLockUI(el, card);
 
   el.appendChild(del);
   el.appendChild(img);
@@ -774,16 +891,20 @@ function buildMiroText(card) {
 
   // Show/hide toolbar on click
   el.addEventListener('click', (e) => {
-    if (e.target.closest('.mc-del') || e.target.closest('.mt-toolbar')) return;
+    if (e.target.closest('.mc-del') || e.target.closest('.mc-lock') || e.target.closest('.mt-toolbar')) return;
     document.querySelectorAll('.mt-toolbar.show, .msh-toolbar.show').forEach(t => { if (t !== toolbar) t.classList.remove('show'); });
     toolbar.classList.toggle('show');
   });
   document.addEventListener('click', (e) => { if (!el.contains(e.target)) toolbar.classList.remove('show'); });
 
   // Drag (via global helper)
-  miroSetupCardDrag(el, card, ['.mc-del', '.mt-toolbar']);
+  miroSetupCardDrag(el, card, ['.mc-del', '.mt-toolbar', '.mc-lock']);
 
   attach8WayResize(el, card, 60, 30);
+
+  // Lock UI
+  attachLockUI(el, card);
+
   el.appendChild(del);
   el.appendChild(toolbar);
   el.appendChild(text);
@@ -851,20 +972,23 @@ function buildMiroShape(card) {
 
   // Show/hide toolbar on click
   el.addEventListener('click', (e) => {
-    if (e.target.closest('.mc-del') || e.target.closest('.msh-toolbar')) return;
+    if (e.target.closest('.mc-del') || e.target.closest('.mc-lock') || e.target.closest('.msh-toolbar')) return;
     document.querySelectorAll('.mt-toolbar.show, .msh-toolbar.show').forEach(t => { if (t !== toolbar) t.classList.remove('show'); });
     toolbar.classList.toggle('show');
   });
   document.addEventListener('click', (e) => { if (!el.contains(e.target)) toolbar.classList.remove('show'); });
 
   // Drag (via global helper)
-  miroSetupCardDrag(el, card, ['.mc-del', '.ms-shape-toggle', '.sn-toolbar', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl']);
+  miroSetupCardDrag(el, card, ['.mc-del', '.msh-toolbar', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl']);
 
   // Resize needs to re-render SVG
   const origAttach = attach8WayResize;
   attach8WayResize(el, card, 40, 40);
   // After resize, update SVG
   el.addEventListener('mouseup', () => { updateSVG(); });
+
+  // Lock UI
+  attachLockUI(el, card);
 
   el.appendChild(del);
   el.appendChild(toolbar);
@@ -1207,7 +1331,14 @@ function buildMiroGridCard(card) {
     document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
   });
 
+  // Update table cells dimensions after render
+  requestAnimationFrame(() => updateTableDimensions(table, card));
+
+  miroSetupCardDrag(el, card, ['.mg-col-handle', '.mg-row-handle', '.mc-del']);
   attachCornerResize(el, card, 120, 80);
+
+  // Lock UI
+  attachLockUI(el, card);
 
   el.appendChild(del);
   el.appendChild(toolbar);
@@ -1592,7 +1723,7 @@ function buildMiroBookmarkWidget(card) {
   el.appendChild(body);
 
   // Drag logic (bypass drag on links, delete buttons, add buttons, settings, options)
-  const ignoreSelectors = ['.mc-del', '.rmb', '.add-i', '.wab', '.sp-it', '.st-it', '.cd-it', '.cl-it', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.mc-resize-t', '.mc-resize-b', '.mc-resize-l', '.mc-resize-r', '.mg-toolbar', '.sn-toolbar', '.msh-toolbar', '.mt-toolbar'];
+  const ignoreSelectors = ['.mc-del', '.mc-lock', '.rmb', '.add-i', '.wab', '.sp-it', '.st-it', '.cd-it', '.cl-it', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.mc-resize-t', '.mc-resize-b', '.mc-resize-l', '.mc-resize-r', '.mg-toolbar', '.sn-toolbar', '.msh-toolbar', '.mt-toolbar'];
   if (typeof miroSetupCardDrag === 'function') {
     miroSetupCardDrag(el, card, ignoreSelectors);
   }
@@ -1666,6 +1797,9 @@ function buildMiroBookmarkWidget(card) {
       }
     }
   }, 10);
+
+  // Lock UI
+  attachLockUI(el, card);
 
   return el;
 }
