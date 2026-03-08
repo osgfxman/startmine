@@ -515,7 +515,7 @@ function deleteMiroCard(cid) {
 
       // Both trackpad pinch and regular scroll → zoom at cursor
       const delta = e.ctrlKey ? (-e.deltaY * 0.8) : (e.deltaY > 0 ? -5 : 5);
-      let newZoomNum = Math.max(10, Math.min(400, (page.zoom || 100) + delta));
+      let newZoomNum = Math.max(1, Math.min(400, (page.zoom || 100) + delta));
       page.zoom = newZoomNum;
 
       const newZoom = newZoomNum / 100;
@@ -579,7 +579,7 @@ function deleteMiroCard(cid) {
 
       // Zoom
       const scale = dist / _touchStartDist;
-      const newZoom = Math.max(10, Math.min(400, Math.round(_touchStartZoom * scale)));
+      const newZoom = Math.max(1, Math.min(400, Math.round(_touchStartZoom * scale)));
       const oldZoomFrac = _touchStartZoom / 100;
       const newZoomFrac = newZoom / 100;
 
@@ -651,7 +651,7 @@ function deleteMiroCard(cid) {
     e.preventDefault();
     const page = cp();
     const dragDelta = _dblDragStartY - e.clientY; // drag up = zoom in
-    const newZoom = Math.max(10, Math.min(400, _dblDragStartZoom + dragDelta * 0.8));
+    const newZoom = Math.max(1, Math.min(400, _dblDragStartZoom + dragDelta * 0.8));
     page.zoom = Math.round(newZoom);
     applyZoomPan(page);
   });
@@ -694,7 +694,7 @@ document.getElementById('mz-in').onclick = () => {
 };
 document.getElementById('mz-out').onclick = () => {
   const page = cp();
-  page.zoom = Math.max(10, (page.zoom || 100) - 10);
+  page.zoom = Math.max(1, (page.zoom || 100) - 10);
   document.getElementById('mz-slider').value = page.zoom;
   document.getElementById('mz-slider').oninput();
 };
@@ -723,7 +723,7 @@ document.getElementById('mz-fit').onclick = () => {
   const contentW = maxX - minX + 60,
     contentH = maxY - minY + 60;
   const zoom = Math.min(cw / contentW, ch / contentH, 4) * 100;
-  page.zoom = Math.max(10, Math.min(400, Math.round(zoom)));
+  page.zoom = Math.max(1, Math.min(400, Math.round(zoom)));
   page.panX = cw / 2 - ((minX + maxX) / 2) * (page.zoom / 100);
   page.panY = ch / 2 - ((minY + maxY) / 2) * (page.zoom / 100);
   document.getElementById('mz-slider').value = page.zoom;
