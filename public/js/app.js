@@ -325,10 +325,19 @@ function initDB() {
 
       db.ref().update(updates).then(() => {
         setupShardedListeners();
+      }).catch((err) => {
+        console.warn('Migration failed, proceeding with sharded listeners:', err);
+        setSyncStatus('err', 'Migration error — retrying…');
+        setupShardedListeners();
       });
     } else {
       setupShardedListeners();
     }
+  }, (err) => {
+    // Error reading legacy data — skip migration, go straight to sharded listeners
+    console.warn('initDB read error, proceeding with sharded listeners:', err);
+    setSyncStatus('err', 'Connection error — retrying…');
+    setupShardedListeners();
   });
 }
 
