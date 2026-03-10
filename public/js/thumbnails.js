@@ -955,9 +955,9 @@ function buildMiroShape(card) {
   const toolbar = document.createElement('div');
   toolbar.className = 'msh-toolbar';
   toolbar.innerHTML = `
-    <label title="Fill"><span style="font-size:.65rem">Fill</span><input type="color" class="msh-fill" value="${card.fillColor === 'none' ? '#6c8fff' : (card.fillColor || '#6c8fff')}"></label>
+    <label title="Fill"><span style="font-size:.65rem">Fill</span><input type="color" class="msh-fill" value="${card.fillColor === 'none' ? '#6c8fff' : (String(card.fillColor).startsWith('#') ? '#' + String(card.fillColor).replace('#','').padStart(6,'0').slice(0,6) : '#6c8fff')}"></label>
     <button class="mt-btn msh-nofill ${card.fillColor === 'none' ? 'sel' : ''}" title="No Fill">⊘</button>
-    <label title="Stroke"><span style="font-size:.65rem">Stroke</span><input type="color" class="msh-stroke" value="${card.strokeColor === 'none' ? '#333333' : (card.strokeColor || '#333333')}"></label>
+    <label title="Stroke"><span style="font-size:.65rem">Stroke</span><input type="color" class="msh-stroke" value="${card.strokeColor === 'none' ? '#333333' : (String(card.strokeColor).startsWith('#') ? '#' + String(card.strokeColor).replace('#','').padStart(6,'0').slice(0,6) : '#333333')}"></label>
     <button class="mt-btn msh-nostroke ${card.strokeColor === 'none' ? 'sel' : ''}" title="No Stroke">⊘</button>
     <label title="Width"><span style="font-size:.65rem">W</span><input type="number" class="msh-sw" value="${card.strokeWidth ?? 2}" min="0" max="20"></label>
     <label title="Opacity"><span style="font-size:.65rem">Op</span><input type="range" class="msh-op" value="${Math.round((card.opacity ?? 1) * 100)}" min="0" max="100"></label>`;

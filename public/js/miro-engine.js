@@ -1380,8 +1380,19 @@ document.addEventListener('paste', (e) => {
               const jd = obj.widgetData.json;
               const type = (obj.widgetData.type || '').toLowerCase();
 
-              // Helper: extract position from Miro JSON data
-              const extractPosition = (jd, opts) => {
+              // Debug: dump raw Miro object data for analysis
+              console.log('[PASTE] Miro object:', type, JSON.stringify({
+                x: jd.x, y: jd.y, width: jd.width, height: jd.height,
+                size: jd.size, scale: jd.scale, _position: jd._position,
+                shape: jd.shape, shapeType: jd.shapeType,
+                wdX: obj.widgetData.x, wdY: obj.widgetData.y,
+                wdW: obj.widgetData.width, wdH: obj.widgetData.height
+              }));
+
+              // Helper: extract position and size from Miro JSON data
+              // Miro stores coords as CENTER of the widget, and uses multiple formats
+              const extractPosition = (jd, opts, widgetData) => {
+                // 1. Try _position.offsetPx (internal scaled coords)
                 if (jd._position && jd._position.offsetPx) {
                   opts._ox = jd._position.offsetPx.x;
                   opts._oy = jd._position.offsetPx.y;
@@ -1389,14 +1400,36 @@ document.addEventListener('paste', (e) => {
                   opts._ox = jd._position.x;
                   opts._oy = jd._position.y;
                 }
-                // Capture scale factor for coordinate normalization
-                if (jd.scale && jd.scale.scale) {
-                  opts._scale = jd.scale.scale;
+                // 2. Try direct x/y on jd (Miro center-origin coordinates)
+                if (opts._ox === undefined && typeof jd.x === 'number') {
+                  opts._ox = jd.x;
+                  opts._oy = jd.y;
                 }
+                // 3. Fallback to widgetData-level x/y
+                if (opts._ox === undefined && widgetData && typeof widgetData.x === 'number') {
+                  opts._ox = widgetData.x;
+                  opts._oy = widgetData.y;
+                }
+                // Capture scale factor for coordinate normalization
+                if (jd.scale && typeof jd.scale === 'object' && jd.scale.scale) {
+                  opts._scale = jd.scale.scale;
+                } else if (typeof jd.scale === 'number') {
+                  opts._scale = jd.scale;
+                }
+                // Size: try multiple sources
                 if (jd.size) {
                   if (jd.size.width) opts.w = jd.size.width;
                   if (jd.size.height) opts.h = jd.size.height;
                 }
+                if (!opts.w && typeof jd.width === 'number') opts.w = jd.width;
+                if (!opts.h && typeof jd.height === 'number') opts.h = jd.height;
+                // Also check widgetData-level width/height
+                if (!opts.w && widgetData && typeof widgetData.width === 'number') opts.w = widgetData.width;
+                if (!opts.h && widgetData && typeof widgetData.height === 'number') opts.h = widgetData.height;
+                // Mark that positions are center-origin (Miro standard)
+                opts._centerOrigin = true;
+
+                console.log('[PASTE] extractPosition:', { type: opts.type, _ox: opts._ox, _oy: opts._oy, w: opts.w, h: opts.h, _scale: opts._scale });
               };
 
               if (type === 'sticker' || type === 'shape' || type === 'text') {
@@ -1410,43 +1443,108 @@ document.addEventListener('paste', (e) => {
                   // Fallback if already valid or not escapeable
                 }
 
-                let startmineType = type === 'text' ? 'text' : 'sticky';
-                let bgColorString = 'yellow';
-                let exactBgHex = null;
-
                 let styleObj = jd.style;
                 if (typeof styleObj === 'string') {
                   try { styleObj = JSON.parse(styleObj); } catch (e) { }
                 }
 
-                if (styleObj) {
-                  let hex = styleObj.backgroundColor || styleObj.bc;
-                  if (!hex && styleObj.sbc !== undefined) {
-                    hex = '#' + parseInt(styleObj.sbc).toString(16).padStart(6, '0');
+                // --- Handle Miro SHAPE → Startmine shape ---
+                if (type === 'shape') {
+                  // Map Miro shape types to Startmine shape types
+                  const miroShapeType = (jd.shape || jd.shapeType || 'rectangle').toLowerCase();
+                  let smShape = 'rect';
+                  if (miroShapeType.includes('circle') || miroShapeType.includes('ellipse') || miroShapeType.includes('oval')) smShape = 'ellipse';
+                  else if (miroShapeType.includes('triangle') || miroShapeType.includes('wedge_round_rectangle_callout')) smShape = 'triangle';
+                  else if (miroShapeType.includes('diamond') || miroShapeType.includes('rhombus')) smShape = 'diamond';
+                  else if (miroShapeType.includes('round') || miroShapeType.includes('pill') || miroShapeType.includes('flowchart_decision')) smShape = 'diamond';
+                  else smShape = 'rect';
+
+                  // Extract colors from style
+                  let fillColor = '#6c8fff'; // Default fill
+                  let strokeColor = '#333';  // Default stroke
+                  let strokeWidth = 2;
+                  if (styleObj) {
+                    // Helper to convert Miro's numeric color to 6-char hex
+                    const parseMiroColor = (val) => {
+                      if (val === undefined || val === null) return null;
+                      const numStr = parseInt(val).toString(16);
+                      // Miro's decimal sometimes creates >6 char hex (e.g. 15877926 -> f24526)
+                      // We pad and take the last 6 chars for standard CSS hex
+                      return '#' + numStr.padStart(6, '0').slice(-6);
+                    };
+
+                    // Fill: sbc (shape background color) or bc/backgroundColor
+                    let fillHex = parseMiroColor(styleObj.sbc) ||
+                                  (styleObj.backgroundColor || styleObj.bc || null);
+                    if (fillHex) {
+                      fillHex = String(fillHex);
+                      if (!fillHex.startsWith('#')) fillHex = '#' + fillHex;
+                      fillColor = fillHex;
+                    }
+
+                    // Stroke: lc (line color) or borderColor
+                    let strokeHex = parseMiroColor(styleObj.lc) ||
+                                   (styleObj.borderColor || null);
+                    if (strokeHex) {
+                      strokeHex = String(strokeHex);
+                      if (!strokeHex.startsWith('#')) strokeHex = '#' + strokeHex;
+                      strokeColor = strokeHex;
+                    }
+
+                    if (styleObj.lw !== undefined) strokeWidth = parseInt(styleObj.lw);
+                    else if (styleObj.borderWidth !== undefined) strokeWidth = parseInt(styleObj.borderWidth);
                   }
-                  if (hex) {
-                    hex = String(hex); // Ensure hex is a string (could be a number)
-                    exactBgHex = hex.toLowerCase();
-                    if (!exactBgHex.startsWith('#')) exactBgHex = '#' + exactBgHex;
-                    bgColorString = exactColorMap[exactBgHex] || 'yellow';
+
+                  let cardOpts = {
+                    type: 'shape',
+                    shape: smShape,
+                    fillColor: fillColor,
+                    strokeColor: strokeColor,
+                    strokeWidth: strokeWidth,
+                    text: textHTML || '',
+                    fontSize: styleObj && styleObj.fs ? parseInt(styleObj.fs) : (styleObj && styleObj.fontSize ? parseInt(styleObj.fontSize) : 14)
+                  };
+                  extractPosition(jd, cardOpts, obj.widgetData);
+                  // Default size for shapes if not extracted
+                  if (!cardOpts.w) cardOpts.w = 160;
+                  if (!cardOpts.h) cardOpts.h = 120;
+                  extracted.push(cardOpts);
+                  console.log('[PASTE] Miro shape →', smShape, 'fill:', fillColor, 'size:', cardOpts.w, 'x', cardOpts.h);
+                } else {
+                  // --- Normal sticker or text handling ---
+                  let startmineType = type === 'text' ? 'text' : 'sticky';
+                  let bgColorString = 'yellow';
+                  let exactBgHex = null;
+
+                  if (styleObj) {
+                    let hex = styleObj.backgroundColor || styleObj.bc;
+                    if (!hex && styleObj.sbc !== undefined) {
+                      hex = '#' + parseInt(styleObj.sbc).toString(16).padStart(6, '0');
+                    }
+                    if (hex) {
+                      hex = String(hex); // Ensure hex is a string (could be a number)
+                      exactBgHex = hex.toLowerCase();
+                      if (!exactBgHex.startsWith('#')) exactBgHex = '#' + exactBgHex;
+                      bgColorString = exactColorMap[exactBgHex] || 'yellow';
+                    }
                   }
+
+                  if (!exactBgHex) {
+                    bgColorString = miroColors[colorIdx % miroColors.length];
+                    colorIdx++;
+                  }
+
+                  let cardOpts = {
+                    type: startmineType,
+                    text: textHTML,
+                    color: bgColorString,
+                    fontSize: styleObj && styleObj.fs ? parseInt(styleObj.fs) : (styleObj && styleObj.fontSize ? parseInt(styleObj.fontSize) : 24)
+                  };
+                  if (exactBgHex) cardOpts.bgHex = exactBgHex;
+                  extractPosition(jd, cardOpts, obj.widgetData);
+
+                  extracted.push(cardOpts);
                 }
-
-                if (!exactBgHex) {
-                  bgColorString = miroColors[colorIdx % miroColors.length];
-                  colorIdx++;
-                }
-
-                let cardOpts = {
-                  type: startmineType,
-                  text: textHTML,
-                  color: bgColorString,
-                  fontSize: styleObj && styleObj.fs ? parseInt(styleObj.fs) : (styleObj && styleObj.fontSize ? parseInt(styleObj.fontSize) : 24)
-                };
-                if (exactBgHex) cardOpts.bgHex = exactBgHex;
-                extractPosition(jd, cardOpts);
-
-                extracted.push(cardOpts);
               } else if (type === 'image') {
                 // Miro images: construct API URL from resource.id + boardId, then try to download
                 const res = jd.resource;
@@ -1467,7 +1565,7 @@ document.addEventListener('paste', (e) => {
                   _miroBoardId: boardId,
                   _miroImgName: imgName
                 };
-                extractPosition(jd, cardOpts);
+                extractPosition(jd, cardOpts, obj.widgetData);
                 extracted.push(cardOpts);
                 console.log('[PASTE] Miro image queued for download. Resource:', imgName, 'board:', boardId, 'id:', resourceId);
               } else if (type === 'embed') {
@@ -1477,7 +1575,7 @@ document.addEventListener('paste', (e) => {
                 const embedTitle = (cd && cd.title) || jd.title || jd.name || embedUrl;
                 if (embedUrl) {
                   let cardOpts = { type: 'card', url: embedUrl, label: embedTitle };
-                  extractPosition(jd, cardOpts);
+                  extractPosition(jd, cardOpts, obj.widgetData);
                   cardOpts.w = cardOpts.w || 280;
                   cardOpts.h = cardOpts.h || 240;
                   extracted.push(cardOpts);
@@ -1488,7 +1586,7 @@ document.addEventListener('paste', (e) => {
               } else if (type === 'imagewidget') {
                 // Alternative image type
                 let cardOpts = { type: 'sticky', text: '🖼️ Image', color: 'gray' };
-                extractPosition(jd, cardOpts);
+                extractPosition(jd, cardOpts, obj.widgetData);
                 cardOpts.w = cardOpts.w || 280;
                 cardOpts.h = cardOpts.h || 160;
                 extracted.push(cardOpts);
@@ -1516,53 +1614,94 @@ document.addEventListener('paste', (e) => {
         let curY = py;
 
         clearMiroSelection();
-        let minOX = Infinity;
-        let minOY = Infinity;
-        // Miro offsetPx coordinates are in an internal scaled space.
-        // Divide by scale.scale to get real screen-pixel positions, then zero-base.
+
+        // ═══════════════════════════════════════════════════════════════
+        // POSITION, SIZE & FONT NORMALIZATION
+        // Miro clipboard coordinates (offsetPx) are CENTER-ORIGIN and 
+        // in a unified internal coordinate space. Visual sizes in this 
+        // space are (width * scale). We find a Global Normalization 
+        // Factor mapping the median item width to 280px to guarantee 
+        // perfect proportional pasted layouts regardless of selection size.
+        // ═══════════════════════════════════════════════════════════════
+
+        // Step 1: Calculate visual sizes and convert center to top-left
         extracted.forEach(item => {
-          if (item._ox !== undefined && item._scale) {
-            item._ox = item._ox / item._scale;
-            item._oy = item._oy / item._scale;
+          const sc = item._scale || 1;
+          item._vw = (item.w || 200) * sc;  // visual width in Miro space
+          item._vh = (item.h || 200) * sc;  // visual height in Miro space
+          
+          // Track visual font size if available
+          if (item.fontSize) item._vfs = item.fontSize * sc;
+
+          if (item._ox !== undefined) {
+            item._miroLeft = item._ox - (item._vw / 2);
+            item._miroTop = item._oy - (item._vh / 2);
           }
         });
-        let rawMinOX = Infinity, rawMinOY = Infinity;
+
+        // Step 2: Zero-base the top-left coordinates
+        let minX = Infinity, minY = Infinity;
         extracted.forEach(item => {
-          if (item._ox !== undefined) {
-            if (item._ox < rawMinOX) rawMinOX = item._ox;
-            if (item._oy < rawMinOY) rawMinOY = item._oy;
+          if (item._miroLeft !== undefined) {
+            minX = Math.min(minX, item._miroLeft);
+            minY = Math.min(minY, item._miroTop);
           }
         });
 
         extracted.forEach(item => {
-          if (item._ox !== undefined) {
-            item._ox = item._ox - rawMinOX;
-            item._oy = item._oy - rawMinOY;
-            if (item._ox < minOX) minOX = item._ox;
-            if (item._oy < minOY) minOY = item._oy;
+          if (item._miroLeft !== undefined) {
+            item._miroLeft -= minX;
+            item._miroTop -= minY;
           }
         });
 
+        // Step 3: Calculate global normalization factor based on median width
+        let globalFactor = 33.125; // Good default for exact Miro mapping
+        const vWidths = extracted.map(i => i._vw || 0).filter(w => w > 0).sort((a,b) => a - b);
+        if (vWidths.length > 0) {
+          // Map the median visual width to Startmine's default 280px
+          const medianVW = vWidths[Math.floor(vWidths.length / 2)];
+          if (medianVW > 10) globalFactor = medianVW / 280;
+        }
+
+        console.log('[PASTE] Normalization Factor:', globalFactor, 'Items:', extracted.length);
+
+        // Step 4: Create cards with normalized positions, sizes, and fonts
         extracted.forEach(item => {
           const newId = uid();
           const card = { id: newId, ...item };
 
+          // Normalized dimensions (from Miro internal space to screen pixels)
+          const screenW = item._vw / globalFactor;
+          const screenH = item._vh / globalFactor;
+          const screenFS = item._vfs ? (item._vfs / globalFactor) : 14;
+
+          // Apply type-specific minimums so text isn't microscopic
+          card.fontSize = Math.max(screenFS, 8);
+
           if (item.type === 'sticky') {
-            card.w = item.w || 280;
-            card.h = item.h || 160;
+            card.w = Math.max(screenW, 60);
+            card.h = Math.max(screenH, 40);
           } else if (item.type === 'text') {
-            card.w = Math.max(100, item.text.length * (card.fontSize / 2));
-            card.h = card.fontSize * 1.5;
+            card.w = Math.max(screenW, 60);
+            card.h = Math.max(screenH, card.fontSize * 1.5);
             card.fontFamily = 'Inter';
           } else if (item.type === 'image') {
-            card.w = item.w || 300;
-            card.h = item.h || 200;
+            card.w = Math.max(screenW, 60);
+            card.h = Math.max(screenH, 40);
+          } else if (item.type === 'shape') {
+            card.w = Math.max(screenW, 30);
+            card.h = Math.max(screenH, 20);
+          } else {
+            card.w = Math.max(screenW, 60);
+            card.h = Math.max(screenH, 40);
           }
 
-          if (item._ox !== undefined && minOX !== Infinity) {
-            card.x = px + (item._ox - minOX);
-            card.y = py + (item._oy - minOY);
+          if (item._miroLeft !== undefined) {
+            card.x = px + (item._miroLeft / globalFactor);
+            card.y = py + (item._miroTop / globalFactor);
           } else {
+            // Fallback: sequential layout for items without valid position data
             card.x = curX - 100;
             card.y = curY - 100;
             curX += (card.w || 280) + 40;
@@ -1571,6 +1710,14 @@ document.addEventListener('paste', (e) => {
               curY += (card.h || 160) + 40;
             }
           }
+
+          // Clean up internal temp properties
+          delete card._ox;
+          delete card._oy;
+          delete card._scale;
+          delete card._centerOrigin;
+          delete card._vw;
+          delete card._vh;
 
           page.miroCards.push(card);
           _miroSelected.add(newId);
