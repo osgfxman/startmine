@@ -1280,7 +1280,12 @@ function buildMiroGridCard(card) {
     document.querySelectorAll('.mg-toolbar.show').forEach(t => { if (t !== toolbar) t.classList.remove('show'); });
     toolbar.classList.toggle('show');
   });
-  document.addEventListener('click', (e) => { if (!el.contains(e.target)) toolbar.classList.remove('show'); });
+  // Use a self-cleaning listener to avoid orphaned listeners when grid is rebuilt
+  const docClickHandler = (e) => {
+    if (!document.body.contains(el)) { document.removeEventListener('click', docClickHandler); return; }
+    if (!el.contains(e.target)) toolbar.classList.remove('show');
+  };
+  document.addEventListener('click', docClickHandler);
 
   // Drag
   el.addEventListener('mousedown', (e) => {
@@ -1331,11 +1336,10 @@ function buildMiroGridCard(card) {
     document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
   });
 
-  // Update table cells dimensions after render
-  requestAnimationFrame(() => updateTableDimensions(table, card));
+  // Grid layout is complete — no post-render update needed
 
   miroSetupCardDrag(el, card, ['.mg-col-handle', '.mg-row-handle', '.mc-del']);
-  attachCornerResize(el, card, 120, 80);
+  // Grid already has its own drag handling above; corner resize removed (function was undefined)
 
   // Lock UI
   attachLockUI(el, card);

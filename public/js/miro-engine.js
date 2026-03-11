@@ -151,6 +151,7 @@ function buildMiroCanvas() {
   document.getElementById('mz-pct').textContent = (page.zoom || 100) + '%';
 
   page.miroCards.forEach((card) => {
+    try {
     if (card.type === 'sticky') board.appendChild(buildMiroSticky(card));
     else if (card.type === 'image') board.appendChild(buildMiroImage(card));
     else if (card.type === 'text') board.appendChild(buildMiroText(card));
@@ -160,6 +161,7 @@ function buildMiroCanvas() {
     else if (card.type === 'mindmap') board.appendChild(buildMiroMindMap(card));
     else if (card.type === 'bwidget') board.appendChild(buildMiroBookmarkWidget(card));
     else board.appendChild(buildMiroCard(card));
+    } catch (err) { console.error('[RENDER ERROR]', card.type, card.id, err); }
   });
   updateMiroGrid();
   updateMiroScrollbars();
