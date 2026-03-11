@@ -1330,6 +1330,104 @@
   transform: scale(1.1);
 }
 
+/* ─── Alignment Popup ─── */
+.sn-align-popup {
+  min-width: 120px;
+}
+
+.sn-align-popup .sn-cpop-row {
+  gap: 2px;
+}
+
+/* ─── Tag Popup ─── */
+.sn-tag-popup {
+  min-width: 220px;
+}
+
+.sn-tag-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.sn-tag-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #fff;
+  font-family: var(--font);
+  font-size: 0.72rem;
+  padding: 5px 8px;
+  outline: none;
+}
+
+.sn-tag-input:focus {
+  border-color: var(--ac);
+}
+
+.sn-tag-input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.sn-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.sn-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 10px;
+  border-radius: 10px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: default;
+  line-height: 1.4;
+}
+
+.sn-tag-del {
+  cursor: pointer;
+  opacity: 0.7;
+  display: inline-flex;
+  align-items: center;
+  transition: opacity 0.1s;
+}
+
+.sn-tag-del:hover {
+  opacity: 1;
+}
+
+/* ─── Tag Strip (under sticky note) ─── */
+.sn-tag-strip {
+  position: absolute;
+  bottom: -22px;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 2px 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.sn-tag-strip-chip {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-size: 0.55rem;
+  font-weight: 600;
+  font-family: var(--font);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
 /* ─── Rich Text Toolbar (legacy fallback) ─── */
 .sn-rich-toolbar {
   display: none;

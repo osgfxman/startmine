@@ -763,26 +763,96 @@ function buildMiroSticky(card) {
   sepC.className = 'sn-tb-sep';
   toolbar.appendChild(sepC);
 
-  // ── Alignment buttons ──
-  function mkAlignBtn(icon, title, cmd) {
+  // ── Alignment dropdown button ──
+  const alignWrap = document.createElement('div');
+  alignWrap.className = 'sn-color-dropdown';
+  const alignBtn = document.createElement('button');
+  alignBtn.className = 'sn-rb-btn';
+  alignBtn.title = 'Alignment';
+  alignBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14"><line x1="1" y1="2" x2="13" y2="2" stroke="currentColor" stroke-width="1.5"/><line x1="1" y1="7" x2="9" y2="7" stroke="currentColor" stroke-width="1.5"/><line x1="1" y1="12" x2="11" y2="12" stroke="currentColor" stroke-width="1.5"/></svg>';
+  alignBtn.onmousedown = (e) => { e.preventDefault(); saveSelection(); };
+  alignBtn.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    alignPopup.classList.toggle('show');
+  };
+  const alignPopup = document.createElement('div');
+  alignPopup.className = 'sn-color-popup sn-align-popup';
+
+  // Horizontal alignment row
+  const hLabel = document.createElement('div');
+  hLabel.className = 'sn-cpop-label';
+  hLabel.textContent = 'Horizontal';
+  alignPopup.appendChild(hLabel);
+  const hRow = document.createElement('div');
+  hRow.className = 'sn-cpop-row';
+  const hAligns = [
+    { icon: '<svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="3" x2="14" y2="3" stroke="currentColor" stroke-width="1.5"/><line x1="2" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5"/><line x1="2" y1="13" x2="12" y2="13" stroke="currentColor" stroke-width="1.5"/></svg>', title: 'Align Left', cmd: 'justifyLeft' },
+    { icon: '<svg width="16" height="16" viewBox="0 0 16 16"><line x1="1" y1="3" x2="15" y2="3" stroke="currentColor" stroke-width="1.5"/><line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="1.5"/><line x1="2" y1="13" x2="14" y2="13" stroke="currentColor" stroke-width="1.5"/></svg>', title: 'Align Center', cmd: 'justifyCenter' },
+    { icon: '<svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="3" x2="14" y2="3" stroke="currentColor" stroke-width="1.5"/><line x1="6" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="1.5"/><line x1="4" y1="13" x2="14" y2="13" stroke="currentColor" stroke-width="1.5"/></svg>', title: 'Align Right', cmd: 'justifyRight' },
+  ];
+  hAligns.forEach(a => {
     const b = document.createElement('button');
-    b.className = 'sn-rb-btn sn-rb-align';
-    b.innerHTML = icon;
-    b.title = title;
+    b.className = 'sn-rb-btn';
+    b.innerHTML = a.icon;
+    b.title = a.title;
     b.onmousedown = (e) => { e.preventDefault(); saveSelection(); };
     b.onclick = (e) => {
       e.preventDefault();
       e.stopPropagation();
       restoreSelection();
-      document.execCommand(cmd, false, null);
+      document.execCommand(a.cmd, false, null);
       card.text = text.innerHTML;
       sv();
     };
-    return b;
-  }
-  toolbar.appendChild(mkAlignBtn('≡', 'Align Left', 'justifyLeft'));
-  toolbar.appendChild(mkAlignBtn('≡', 'Align Center', 'justifyCenter'));
-  toolbar.appendChild(mkAlignBtn('≡', 'Align Right', 'justifyRight'));
+    hRow.appendChild(b);
+  });
+  alignPopup.appendChild(hRow);
+
+  // Vertical alignment row
+  const vLabel = document.createElement('div');
+  vLabel.className = 'sn-cpop-label';
+  vLabel.textContent = 'Vertical';
+  alignPopup.appendChild(vLabel);
+  const vRow = document.createElement('div');
+  vRow.className = 'sn-cpop-row';
+  const vAligns = [
+    { icon: '<svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="2" x2="14" y2="2" stroke="currentColor" stroke-width="2"/><rect x="5" y="4" width="6" height="5" rx="1" fill="currentColor" opacity=".5"/></svg>', title: 'Align Top', value: 'flex-start' },
+    { icon: '<svg width="16" height="16" viewBox="0 0 16 16"><rect x="5" y="5" width="6" height="6" rx="1" fill="currentColor" opacity=".5"/><line x1="2" y1="8" x2="4" y2="8" stroke="currentColor" stroke-width="1"/><line x1="12" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="1"/></svg>', title: 'Align Middle', value: 'center' },
+    { icon: '<svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="14" x2="14" y2="14" stroke="currentColor" stroke-width="2"/><rect x="5" y="7" width="6" height="5" rx="1" fill="currentColor" opacity=".5"/></svg>', title: 'Align Bottom', value: 'flex-end' },
+  ];
+  vAligns.forEach(a => {
+    const b = document.createElement('button');
+    b.className = 'sn-rb-btn';
+    b.innerHTML = a.icon;
+    b.title = a.title;
+    b.onmousedown = (e) => { e.preventDefault(); };
+    b.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      card.valign = a.value;
+      text.style.justifyContent = a.value;
+      el.style.display = 'flex';
+      el.style.flexDirection = 'column';
+      text.style.display = 'flex';
+      text.style.flexDirection = 'column';
+      text.style.justifyContent = a.value;
+      sv();
+    };
+    vRow.appendChild(b);
+  });
+  alignPopup.appendChild(vRow);
+
+  alignWrap.appendChild(alignBtn);
+  alignWrap.appendChild(alignPopup);
+  toolbar.appendChild(alignWrap);
+
+  // Close align popup when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!alignWrap.contains(e.target)) {
+      alignPopup.classList.remove('show');
+    }
+  });
 
   // ── Separator ──
   const sepD = document.createElement('div');
@@ -792,7 +862,7 @@ function buildMiroSticky(card) {
   // ── Link button ──
   const linkBtn = document.createElement('button');
   linkBtn.className = 'sn-rb-btn';
-  linkBtn.innerHTML = '🔗';
+  linkBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M6 8a3 3 0 004 .5l2-2a3 3 0 00-4.24-4.24L6.5 3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8 6a3 3 0 00-4-.5l-2 2a3 3 0 004.24 4.24L7.5 10.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
   linkBtn.title = 'Insert Link';
   linkBtn.onmousedown = (e) => { e.preventDefault(); saveSelection(); };
   linkBtn.onclick = (e) => {
@@ -889,6 +959,226 @@ function buildMiroSticky(card) {
   tcLabel.appendChild(tcIcon);
   tcLabel.appendChild(tcInput);
   toolbar.appendChild(tcLabel);
+
+  // ── Separator ──
+  const sepG = document.createElement('div');
+  sepG.className = 'sn-tb-sep';
+  toolbar.appendChild(sepG);
+
+  // ── Copy Style button ──
+  const copyStyleBtn = document.createElement('button');
+  copyStyleBtn.className = 'sn-rb-btn';
+  copyStyleBtn.title = 'Copy Style';
+  copyStyleBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14"><rect x="1" y="1" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5 5h7a1 1 0 011 1v6a1 1 0 01-1 1H6a1 1 0 01-1-1V5z" fill="none" stroke="currentColor" stroke-width="1.3"/><line x1="7" y1="8" x2="11" y2="8" stroke="currentColor" stroke-width="1"/><line x1="7" y1="10" x2="10" y2="10" stroke="currentColor" stroke-width="1"/></svg>';
+  copyStyleBtn.onmousedown = (e) => { e.preventDefault(); };
+  copyStyleBtn.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    window._stickyStyleClipboard = {
+      color: card.color,
+      bgHex: card.bgHex,
+      fontSizeMode: card.fontSizeMode,
+      valign: card.valign,
+    };
+    copyStyleBtn.innerHTML = '✓';
+    setTimeout(() => {
+      copyStyleBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14"><rect x="1" y="1" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5 5h7a1 1 0 011 1v6a1 1 0 01-1 1H6a1 1 0 01-1-1V5z" fill="none" stroke="currentColor" stroke-width="1.3"/><line x1="7" y1="8" x2="11" y2="8" stroke="currentColor" stroke-width="1"/><line x1="7" y1="10" x2="10" y2="10" stroke="currentColor" stroke-width="1"/></svg>';
+    }, 800);
+  };
+  toolbar.appendChild(copyStyleBtn);
+
+  // ── Paste Style button ──
+  const pasteStyleBtn = document.createElement('button');
+  pasteStyleBtn.className = 'sn-rb-btn';
+  pasteStyleBtn.title = 'Paste Style';
+  pasteStyleBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14"><rect x="3" y="1" width="8" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="5" y="0" width="4" height="2" rx="0.5" fill="currentColor" opacity=".6"/><line x1="5" y1="5" x2="9" y2="5" stroke="currentColor" stroke-width="1"/><line x1="5" y1="7.5" x2="9" y2="7.5" stroke="currentColor" stroke-width="1"/><line x1="5" y1="10" x2="8" y2="10" stroke="currentColor" stroke-width="1"/></svg>';
+  pasteStyleBtn.onmousedown = (e) => { e.preventDefault(); };
+  pasteStyleBtn.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const st = window._stickyStyleClipboard;
+    if (!st) return;
+    if (st.bgHex) {
+      card.color = null;
+      card.bgHex = st.bgHex;
+      el.style.backgroundColor = st.bgHex;
+      el.className = 'miro-sticky' + (el.classList.contains('miro-selected') ? ' miro-selected' : '');
+      colorDot.style.background = st.bgHex;
+    } else if (st.color) {
+      card.color = st.color;
+      card.bgHex = null;
+      el.style.backgroundColor = '';
+      el.className = 'miro-sticky sn-' + st.color + (el.classList.contains('miro-selected') ? ' miro-selected' : '');
+      colorDot.style.background = snColorHex[st.color] || snColorHex.yellow;
+    }
+    if (st.fontSizeMode !== undefined) card.fontSizeMode = st.fontSizeMode;
+    if (st.valign) {
+      card.valign = st.valign;
+      text.style.display = 'flex';
+      text.style.flexDirection = 'column';
+      text.style.justifyContent = st.valign;
+    }
+    sv(); buildMiroCanvas(); buildOutline();
+  };
+  toolbar.appendChild(pasteStyleBtn);
+
+  // ── Separator ──
+  const sepH = document.createElement('div');
+  sepH.className = 'sn-tb-sep';
+  toolbar.appendChild(sepH);
+
+  // ── Duplicate button ──
+  const dupBtn = document.createElement('button');
+  dupBtn.className = 'sn-rb-btn';
+  dupBtn.title = 'Duplicate';
+  dupBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14"><rect x="1" y="3" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="5" y="1" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
+  dupBtn.onmousedown = (e) => { e.preventDefault(); };
+  dupBtn.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const page = cp();
+    if (!page.miroCards) page.miroCards = [];
+    const clone = JSON.parse(JSON.stringify(card));
+    clone.id = uid();
+    clone.x = (card.x || 0) + 30;
+    clone.y = (card.y || 0) + 30;
+    page.miroCards.push(clone);
+    sv(); buildMiroCanvas(); buildOutline();
+  };
+  toolbar.appendChild(dupBtn);
+
+  // ── Separator ──
+  const sepI = document.createElement('div');
+  sepI.className = 'sn-tb-sep';
+  toolbar.appendChild(sepI);
+
+  // ── Tag button ──
+  const tagBtnWrap = document.createElement('div');
+  tagBtnWrap.className = 'sn-color-dropdown';
+  const tagBtn = document.createElement('button');
+  tagBtn.className = 'sn-rb-btn';
+  tagBtn.title = 'Tags';
+  tagBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M1 1h5.5L13 7.5 7.5 13 1 6.5V1z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="4" cy="4" r="1.2" fill="currentColor"/></svg>';
+  tagBtn.onmousedown = (e) => { e.preventDefault(); };
+  tagBtn.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    tagPopup.classList.toggle('show');
+  };
+  
+  // Tag popup
+  const tagPopup = document.createElement('div');
+  tagPopup.className = 'sn-color-popup sn-tag-popup';
+  
+  // Tag color selector
+  const tagColorRow = document.createElement('div');
+  tagColorRow.className = 'sn-cpop-row';
+  const tagColors = [
+    { name: 'Red', hex: '#ff6b6b' }, { name: 'Green', hex: '#51cf66' },
+    { name: 'Blue', hex: '#339af0' }, { name: 'Yellow', hex: '#fcc419' },
+    { name: 'Purple', hex: '#cc5de8' }, { name: 'Orange', hex: '#ff922b' },
+    { name: 'Cyan', hex: '#22b8cf' }, { name: 'Pink', hex: '#f06595' },
+  ];
+  let _selectedTagColor = tagColors[0].hex;
+  tagColors.forEach((tc, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'sn-cpop-color' + (i === 0 ? ' sel' : '');
+    dot.style.background = tc.hex;
+    dot.title = tc.name;
+    dot.onclick = (ev) => {
+      ev.stopPropagation();
+      _selectedTagColor = tc.hex;
+      tagColorRow.querySelectorAll('.sn-cpop-color').forEach(d => d.classList.remove('sel'));
+      dot.classList.add('sel');
+    };
+    tagColorRow.appendChild(dot);
+  });
+  tagPopup.appendChild(tagColorRow);
+
+  // Tag input
+  const tagInputRow = document.createElement('div');
+  tagInputRow.className = 'sn-tag-input-row';
+  const tagInput = document.createElement('input');
+  tagInput.type = 'text';
+  tagInput.className = 'sn-tag-input';
+  tagInput.placeholder = 'Enter tag...';
+  tagInput.onkeydown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addTag();
+    }
+    e.stopPropagation();
+  };
+  tagInput.onclick = (e) => e.stopPropagation();
+
+  function addTag() {
+    const val = tagInput.value.trim();
+    if (!val) return;
+    if (!card.tags) card.tags = [];
+    card.tags.push({ text: val, color: _selectedTagColor });
+    tagInput.value = '';
+    renderTags();
+    renderTagStrip();
+    sv();
+  }
+
+  tagInputRow.appendChild(tagInput);
+  tagPopup.appendChild(tagInputRow);
+
+  // Tag list
+  const tagList = document.createElement('div');
+  tagList.className = 'sn-tag-list';
+  function renderTags() {
+    tagList.innerHTML = '';
+    (card.tags || []).forEach((t, i) => {
+      const tag = document.createElement('span');
+      tag.className = 'sn-tag-chip';
+      tag.style.background = t.color;
+      tag.style.color = '#fff';
+      tag.textContent = t.text;
+      const delTag = document.createElement('span');
+      delTag.className = 'sn-tag-del';
+      delTag.innerHTML = '<svg width="10" height="10" viewBox="0 0 10 10"><line x1="2" y1="2" x2="8" y2="8" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="2" x2="2" y2="8" stroke="currentColor" stroke-width="1.5"/></svg>';
+      delTag.onclick = (ev) => {
+        ev.stopPropagation();
+        card.tags.splice(i, 1);
+        renderTags();
+        renderTagStrip();
+        sv();
+      };
+      tag.appendChild(delTag);
+      tagList.appendChild(tag);
+    });
+  }
+  renderTags();
+  tagPopup.appendChild(tagList);
+
+  tagBtnWrap.appendChild(tagBtn);
+  tagBtnWrap.appendChild(tagPopup);
+  toolbar.appendChild(tagBtnWrap);
+
+  // Close tag popup when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!tagBtnWrap.contains(e.target)) {
+      tagPopup.classList.remove('show');
+    }
+  });
+
+  // ── Tag strip under sticky note ──
+  const tagStrip = document.createElement('div');
+  tagStrip.className = 'sn-tag-strip';
+  function renderTagStrip() {
+    tagStrip.innerHTML = '';
+    (card.tags || []).forEach(t => {
+      const chip = document.createElement('span');
+      chip.className = 'sn-tag-strip-chip';
+      chip.style.background = t.color;
+      chip.style.color = '#fff';
+      chip.textContent = t.text;
+      tagStrip.appendChild(chip);
+    });
+  }
+  renderTagStrip();
 
   // Text area — starts non-editable so click+drag moves the note
   const text = document.createElement('div');
@@ -988,7 +1278,14 @@ function buildMiroSticky(card) {
   el.appendChild(toolbar);
   el.appendChild(toggle);
   el.appendChild(text);
+  el.appendChild(tagStrip);
 
+  // Apply saved vertical alignment
+  if (card.valign) {
+    text.style.display = 'flex';
+    text.style.flexDirection = 'column';
+    text.style.justifyContent = card.valign;
+  }
 
   // Auto-size text after render (only if in auto mode)
   if (card.fontSizeMode === 'auto') {
