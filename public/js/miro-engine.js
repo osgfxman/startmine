@@ -1183,6 +1183,14 @@ document.addEventListener('keydown', (e) => {
   }
   // Don't trigger shortcuts during text input
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.contentEditable === 'true') return;
+
+  // Ctrl+S / Ctrl+س — Save Snapshot (works on ALL page types)
+  if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 's' || e.key === 'س')) {
+    e.preventDefault();
+    if (typeof saveSnapshot === 'function') saveSnapshot();
+    return;
+  }
+
   const page = cp();
   if (page.pageType !== 'miro') return;
 

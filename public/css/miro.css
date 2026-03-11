@@ -2525,3 +2525,121 @@ td.mg-sel {
   outline: 2px solid #fff;
   outline-offset: 2px;
 }
+
+/* ─── Snapshot Restore Modal ─── */
+#snapshot-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  align-items: center;
+  justify-content: center;
+}
+
+.snap-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.6);
+  backdrop-filter: blur(6px);
+}
+
+.snap-dialog {
+  position: relative;
+  background: rgba(22,24,38,.96);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 16px;
+  width: 480px;
+  max-width: 92vw;
+  max-height: 75vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,.6);
+  overflow: hidden;
+}
+
+.snap-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  font-size: .95rem;
+  font-weight: 600;
+  color: #eee;
+}
+
+.snap-close {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,.5);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all .15s;
+}
+
+.snap-close:hover {
+  background: rgba(255,255,255,.1);
+  color: #fff;
+}
+
+.snap-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.snap-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 10px;
+  transition: background .12s;
+  gap: 12px;
+}
+
+.snap-row:hover {
+  background: rgba(255,255,255,.05);
+}
+
+.snap-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.snap-time {
+  font-size: .8rem;
+  font-weight: 600;
+  color: #ccc;
+}
+
+.snap-pages {
+  font-size: .68rem;
+  color: rgba(255,255,255,.4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.snap-restore-btn {
+  background: rgba(108,143,255,.15);
+  border: 1px solid rgba(108,143,255,.3);
+  color: #6c8fff;
+  font-size: .72rem;
+  font-weight: 600;
+  padding: 5px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.snap-restore-btn:hover {
+  background: rgba(108,143,255,.3);
+  color: #fff;
+  border-color: rgba(108,143,255,.6);
+}

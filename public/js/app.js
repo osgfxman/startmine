@@ -683,10 +683,261 @@ function sv(saveAll = false, immediate = false) {
 // ─── Save Guards: prevent data loss on tab close ───
 window.addEventListener('beforeunload', () => {
   if (_svTimer) { clearTimeout(_svTimer); sv(false, true); }
+  // Auto-snapshot on browser close
+  saveSnapshotBeacon();
 });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && _svTimer) { clearTimeout(_svTimer); sv(false, true); }
+  if (document.hidden) saveSnapshotBeacon();
 });
+
+// ─── Versioned Snapshot Backup System ───
+const SNAPSHOT_MAX = 30;
+let _snapshotSaving = false;
+let _lastSnapshotTs = 0;
+
+// Toast notification helper
+function showToast(msg, duration = 2000) {
+  let toast = document.getElementById('sm-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'sm-toast';
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(60px);background:rgba(20,20,30,.92);color:#fff;padding:10px 24px;border-radius:12px;font-size:.85rem;z-index:999999;pointer-events:none;opacity:0;transition:all .3s ease;backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.1);';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = '1';
+  toast.style.transform = 'translateX(-50%) translateY(0)';
+  clearTimeout(toast._tmr);
+  toast._tmr = setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(-50%) translateY(60px)';
+  }, duration);
+}
+
+// Full snapshot save to Firebase
+function saveSnapshot(silent = false) {
+  if (!USER_ID || _snapshotSaving) return Promise.resolve();
+  // Don't snapshot more than once per 10 seconds
+  const now = Date.now();
+  if (now - _lastSnapshotTs < 10000) return Promise.resolve();
+  _snapshotSaving = true;
+  _lastSnapshotTs = now;
+
+  const snapshot = {
+    ts: now,
+    meta: {
+      settings: D.settings,
+      curEnv: D.curEnv,
+      curGroup: D.curGroup,
+      environments: D.environments,
+      groups: D.groups,
+      inbox: D.inbox
+    },
+    pagesMeta: D.pages.map(p => ({
+      id: p.id, groupId: p.groupId, name: p.name,
+      pageType: p.pageType, zoom: p.zoom, panX: p.panX, panY: p.panY,
+      bg: p.bg, bgType: p.bgType, tabColor: p.tabColor || ''
+    })),
+    pages: {}
+  };
+  D.pages.forEach(p => {
+    snapshot.pages[p.id] = {
+      widgets: p.widgets || [],
+      miroCards: p.miroCards || []
+    };
+  });
+
+  const snapRef = `users/${USER_ID}/startmine_snapshots/${now}`;
+  return db.ref(snapRef).set(snapshot)
+    .then(() => {
+      _snapshotSaving = false;
+      if (!silent) showToast('✅ Snapshot saved');
+      // Cleanup: remove oldest if over limit
+      return db.ref(`users/${USER_ID}/startmine_snapshots`).orderByKey().once('value');
+    })
+    .then(snap => {
+      if (!snap) return;
+      const keys = [];
+      snap.forEach(child => { keys.push(child.key); });
+      if (keys.length > SNAPSHOT_MAX) {
+        const toDelete = keys.slice(0, keys.length - SNAPSHOT_MAX);
+        const updates = {};
+        toDelete.forEach(k => { updates[`users/${USER_ID}/startmine_snapshots/${k}`] = null; });
+        return db.ref().update(updates);
+      }
+    })
+    .catch(err => {
+      _snapshotSaving = false;
+      console.error('[SNAPSHOT ERROR]', err);
+    });
+}
+
+// Beacon-based snapshot for beforeunload (fire-and-forget)
+function saveSnapshotBeacon() {
+  if (!USER_ID) return;
+  const now = Date.now();
+  if (now - _lastSnapshotTs < 30000) return; // Don't beacon if snapshotted recently
+  _lastSnapshotTs = now;
+  try {
+    const snapshot = {
+      ts: now,
+      meta: {
+        settings: D.settings,
+        curEnv: D.curEnv,
+        curGroup: D.curGroup,
+        environments: D.environments,
+        groups: D.groups,
+        inbox: D.inbox
+      },
+      pagesMeta: D.pages.map(p => ({
+        id: p.id, groupId: p.groupId, name: p.name,
+        pageType: p.pageType, zoom: p.zoom, panX: p.panX, panY: p.panY,
+        bg: p.bg, bgType: p.bgType, tabColor: p.tabColor || ''
+      })),
+      pages: {}
+    };
+    D.pages.forEach(p => {
+      snapshot.pages[p.id] = {
+        widgets: p.widgets || [],
+        miroCards: p.miroCards || []
+      };
+    });
+    // Use fetch with keepalive + PUT for Firebase REST API (sendBeacon only does POST)
+    const url = `${firebaseConfig.databaseURL}/users/${USER_ID}/startmine_snapshots/${now}.json`;
+    fetch(url, { method: 'PUT', body: JSON.stringify(snapshot), keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(() => {});
+  } catch (e) { console.error('[BEACON SNAPSHOT ERROR]', e); }
+}
+
+// Load all snapshots for restore UI
+function loadSnapshots() {
+  if (!USER_ID) return Promise.resolve([]);
+  return db.ref(`users/${USER_ID}/startmine_snapshots`)
+    .orderByKey().once('value')
+    .then(snap => {
+      const list = [];
+      snap.forEach(child => {
+        const v = child.val();
+        const pageNames = (v.pagesMeta || []).map(p => p.name || 'Untitled');
+        list.push({
+          key: child.key,
+          ts: v.ts || parseInt(child.key),
+          pageCount: (v.pagesMeta || []).length,
+          pageNames: pageNames
+        });
+      });
+      return list.reverse(); // newest first
+    });
+}
+
+// Restore a specific snapshot
+function restoreSnapshot(key) {
+  if (!USER_ID || !key) return;
+  // Safety: save current state first
+  showToast('💾 Saving current state before restore...');
+  saveSnapshot(true).then(() => {
+    return db.ref(`users/${USER_ID}/startmine_snapshots/${key}`).once('value');
+  }).then(snap => {
+    const data = snap.val();
+    if (!data) { showToast('❌ Snapshot not found'); return; }
+
+    // Restore meta
+    if (data.meta) {
+      D.settings = data.meta.settings || D.settings;
+      D.curEnv = data.meta.curEnv || D.curEnv;
+      D.curGroup = data.meta.curGroup || D.curGroup;
+      D.environments = data.meta.environments || D.environments;
+      D.groups = data.meta.groups || D.groups;
+      D.inbox = data.meta.inbox || D.inbox;
+    }
+
+    // Restore pages
+    if (data.pagesMeta && data.pages) {
+      D.pages = data.pagesMeta.map(pm => {
+        const pageData = data.pages[pm.id] || {};
+        return {
+          ...pm,
+          widgets: pageData.widgets || [],
+          miroCards: pageData.miroCards || []
+        };
+      });
+      // Ensure cur points to a valid page
+      if (!D.pages.find(p => p.id === D.cur)) {
+        D.cur = D.pages[0]?.id || D.cur;
+      }
+    }
+
+    // Save restored state to Firebase and rebuild UI
+    sv(true, true);
+    if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+    if (typeof buildOutline === 'function') buildOutline();
+    if (typeof buildCols === 'function') buildCols();
+    if (typeof buildTabs === 'function') buildTabs();
+
+    showToast('✅ Restored successfully!');
+    closeSnapshotModal();
+  }).catch(err => {
+    console.error('[RESTORE ERROR]', err);
+    showToast('❌ Restore failed');
+  });
+}
+
+// Snapshot Modal UI
+function openSnapshotModal() {
+  let modal = document.getElementById('snapshot-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'snapshot-modal';
+    modal.innerHTML = `
+      <div class="snap-overlay"></div>
+      <div class="snap-dialog">
+        <div class="snap-header">
+          <span>📸 Saved Snapshots</span>
+          <button class="snap-close" onclick="closeSnapshotModal()">✕</button>
+        </div>
+        <div class="snap-body" id="snap-list">
+          <div style="text-align:center;padding:20px;color:rgba(255,255,255,.5)">Loading...</div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+
+  // Load snapshots
+  const listEl = document.getElementById('snap-list');
+  listEl.innerHTML = '<div style="text-align:center;padding:20px;color:rgba(255,255,255,.5)">Loading...</div>';
+  loadSnapshots().then(snapshots => {
+    if (snapshots.length === 0) {
+      listEl.innerHTML = '<div style="text-align:center;padding:30px;color:rgba(255,255,255,.5)">No snapshots yet.<br>Press <b>Ctrl+S</b> or close the browser to create one.</div>';
+      return;
+    }
+    listEl.innerHTML = '';
+    snapshots.forEach(s => {
+      const date = new Date(s.ts);
+      const timeStr = date.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) + ' ' +
+                      date.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+      const row = document.createElement('div');
+      row.className = 'snap-row';
+      row.innerHTML = `
+        <div class="snap-info">
+          <div class="snap-time">${timeStr}</div>
+          <div class="snap-pages">${s.pageCount} page${s.pageCount !== 1 ? 's' : ''}: ${s.pageNames.slice(0, 5).join(', ')}${s.pageNames.length > 5 ? '...' : ''}</div>
+        </div>
+        <button class="snap-restore-btn" title="Restore this version">Restore</button>`;
+      row.querySelector('.snap-restore-btn').onclick = () => {
+        if (confirm('Are you sure you want to restore this snapshot?\\nCurrent state will be saved first as a safety backup.')) {
+          restoreSnapshot(s.key);
+        }
+      };
+      listEl.appendChild(row);
+    });
+  });
+}
+
+function closeSnapshotModal() {
+  const modal = document.getElementById('snapshot-modal');
+  if (modal) modal.style.display = 'none';
+}
 
 function uid() {
   return 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
