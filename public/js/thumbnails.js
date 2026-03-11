@@ -1,4 +1,4 @@
-﻿/* ─── Fast Thumbnail Cache Engine ─── */
+/* ─── Fast Thumbnail Cache Engine ─── */
 /* ─── Fast Thumbnail Cache Engine ─── */
 const THUMB_GRADIENTS = [
   'linear-gradient(135deg,#667eea,#764ba2)',
@@ -574,6 +574,8 @@ function buildMiroSticky(card) {
   if (card.bgHex) {
     el.style.backgroundColor = card.bgHex;
   }
+  // Initialize fontSizeMode if not set
+  if (card.fontSizeMode === undefined) card.fontSizeMode = 'auto';
 
   // Delete button
   const del = document.createElement('button');
@@ -601,7 +603,6 @@ function buildMiroSticky(card) {
     dot.onclick = (ev) => {
       ev.stopPropagation();
       card.color = c;
-      // Update class
       el.className =
         'miro-sticky sn-' + c + (el.classList.contains('miro-selected') ? ' miro-selected' : '');
       toolbar.querySelectorAll('.sn-tb-color').forEach((d) => d.classList.remove('sel'));
@@ -610,17 +611,14 @@ function buildMiroSticky(card) {
     };
     toolbar.appendChild(dot);
   });
-  // Separator
   const sep = document.createElement('div');
   sep.className = 'sn-tb-sep';
   toolbar.appendChild(sep);
-  // S / M / L size buttons
   const sizes = { S: { w: 140, h: 80 }, M: { w: 280, h: 160 }, L: { w: 420, h: 240 } };
   Object.entries(sizes).forEach(([label, sz]) => {
     const btn = document.createElement('button');
     btn.className = 'sn-tb-size';
     btn.textContent = label;
-    // Highlight current size
     if (Math.abs((card.w || 280) - sz.w) < 30 && Math.abs((card.h || 160) - sz.h) < 30)
       btn.classList.add('sel');
     btn.onclick = (ev) => {
@@ -631,37 +629,231 @@ function buildMiroSticky(card) {
       el.style.height = sz.h + 'px';
       toolbar.querySelectorAll('.sn-tb-size').forEach((b) => b.classList.remove('sel'));
       btn.classList.add('sel');
-      autoSizeText(text, el);
+      if (card.fontSizeMode === 'auto') autoSizeText(text, el);
       updateMiroSelFrame();
       sv();
     };
     toolbar.appendChild(btn);
   });
 
+  // ─── Rich Text Toolbar (shown in edit mode) ───
+  const richBar = document.createElement('div');
+  richBar.className = 'sn-rich-toolbar';
+
+  // Helper to restore selection inside contentEditable after clicking toolbar buttons
+  let _savedRange = null;
+  function saveSelection() {
+    const sel = window.getSelection();
+    if (sel.rangeCount > 0 && text.contains(sel.anchorNode)) {
+      _savedRange = sel.getRangeAt(0).cloneRange();
+    }
+  }
+  function restoreSelection() {
+    if (_savedRange) {
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(_savedRange);
+    }
+  }
+
+  // Format button helper
+  function mkFmtBtn(label, title, cmd, cssClass) {
+    const b = document.createElement('button');
+    b.className = 'sn-rb-btn' + (cssClass ? ' ' + cssClass : '');
+    b.innerHTML = label;
+    b.title = title;
+    b.onmousedown = (e) => { e.preventDefault(); saveSelection(); };
+    b.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      restoreSelection();
+      document.execCommand(cmd, false, null);
+      card.text = text.innerHTML;
+      sv();
+    };
+    return b;
+  }
+
+  // Bold, Italic, Underline, Strikethrough
+  richBar.appendChild(mkFmtBtn('<b>B</b>', 'Bold (Ctrl+B)', 'bold'));
+  richBar.appendChild(mkFmtBtn('<i>I</i>', 'Italic (Ctrl+I)', 'italic'));
+  richBar.appendChild(mkFmtBtn('<u>U</u>', 'Underline (Ctrl+U)', 'underline'));
+  richBar.appendChild(mkFmtBtn('<s>S</s>', 'Strikethrough', 'strikeThrough'));
+
+  // Separator
+  const sep2 = document.createElement('div');
+  sep2.className = 'sn-rb-sep';
+  richBar.appendChild(sep2);
+
+  // Alignment buttons
+  function mkAlignBtn(icon, title, cmd) {
+    const b = document.createElement('button');
+    b.className = 'sn-rb-btn sn-rb-align';
+    b.innerHTML = icon;
+    b.title = title;
+    b.onmousedown = (e) => { e.preventDefault(); saveSelection(); };
+    b.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      restoreSelection();
+      document.execCommand(cmd, false, null);
+      card.text = text.innerHTML;
+      sv();
+    };
+    return b;
+  }
+  richBar.appendChild(mkAlignBtn('≡', 'Align Left', 'justifyLeft'));
+  richBar.appendChild(mkAlignBtn('≡', 'Align Center', 'justifyCenter'));
+  richBar.appendChild(mkAlignBtn('≡', 'Align Right', 'justifyRight'));
+
+  // Separator
+  const sep3 = document.createElement('div');
+  sep3.className = 'sn-rb-sep';
+  richBar.appendChild(sep3);
+
+  // Link button
+  const linkBtn = document.createElement('button');
+  linkBtn.className = 'sn-rb-btn';
+  linkBtn.innerHTML = '🔗';
+  linkBtn.title = 'Insert Link';
+  linkBtn.onmousedown = (e) => { e.preventDefault(); saveSelection(); };
+  linkBtn.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    restoreSelection();
+    const url = prompt('Enter URL:');
+    if (url) {
+      document.execCommand('createLink', false, url);
+      // Make links open in new tab
+      text.querySelectorAll('a').forEach(a => {
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+      });
+      card.text = text.innerHTML;
+      sv();
+    }
+  };
+  richBar.appendChild(linkBtn);
+
+  // Separator
+  const sep4 = document.createElement('div');
+  sep4.className = 'sn-rb-sep';
+  richBar.appendChild(sep4);
+
+  // Font size control
+  const fsWrap = document.createElement('div');
+  fsWrap.className = 'sn-rb-fs-wrap';
+  const fsSelect = document.createElement('select');
+  fsSelect.className = 'sn-rb-fs';
+  fsSelect.title = 'Font Size';
+  const fsSizes = ['Auto', '8', '10', '12', '14', '18', '24', '32', '48', '64', '72'];
+  fsSizes.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s === 'Auto' ? 'auto' : s;
+    opt.textContent = s;
+    if (s === 'Auto' && card.fontSizeMode === 'auto') opt.selected = true;
+    else if (s !== 'Auto' && card.fontSizeMode !== 'auto' && +s === +card.fontSizeMode) opt.selected = true;
+    fsSelect.appendChild(opt);
+  });
+  fsSelect.onmousedown = (e) => { saveSelection(); };
+  fsSelect.onchange = (e) => {
+    e.stopPropagation();
+    const val = fsSelect.value;
+    if (val === 'auto') {
+      card.fontSizeMode = 'auto';
+      autoSizeText(text, el);
+    } else {
+      card.fontSizeMode = +val;
+      // Apply to selection or whole text
+      restoreSelection();
+      const sel = window.getSelection();
+      if (sel.rangeCount > 0 && !sel.isCollapsed && text.contains(sel.anchorNode)) {
+        document.execCommand('fontSize', false, '7'); // Use size 7 as placeholder
+        // Replace the browser's font size with our actual px value
+        text.querySelectorAll('font[size="7"]').forEach(f => {
+          const span = document.createElement('span');
+          span.style.fontSize = val + 'px';
+          span.innerHTML = f.innerHTML;
+          f.replaceWith(span);
+        });
+      } else {
+        text.style.fontSize = val + 'px';
+      }
+    }
+    card.text = text.innerHTML;
+    sv();
+  };
+  fsWrap.appendChild(fsSelect);
+  richBar.appendChild(fsWrap);
+
+  // Separator
+  const sep5 = document.createElement('div');
+  sep5.className = 'sn-rb-sep';
+  richBar.appendChild(sep5);
+
+  // Text color picker
+  const tcLabel = document.createElement('label');
+  tcLabel.className = 'sn-rb-color-wrap';
+  tcLabel.title = 'Text Color';
+  const tcIcon = document.createElement('span');
+  tcIcon.className = 'sn-rb-color-icon';
+  tcIcon.textContent = 'A';
+  const tcInput = document.createElement('input');
+  tcInput.type = 'color';
+  tcInput.className = 'sn-rb-color-input';
+  tcInput.value = '#000000';
+  tcInput.onmousedown = (e) => { saveSelection(); };
+  tcInput.oninput = (e) => {
+    e.stopPropagation();
+    restoreSelection();
+    document.execCommand('foreColor', false, tcInput.value);
+    tcIcon.style.borderBottomColor = tcInput.value;
+    card.text = text.innerHTML;
+    sv();
+  };
+  tcLabel.appendChild(tcIcon);
+  tcLabel.appendChild(tcInput);
+  richBar.appendChild(tcLabel);
+
   // Text area — starts non-editable so click+drag moves the note
   const text = document.createElement('div');
   text.className = 'ms-text';
   text.contentEditable = false;
-  text.textContent = card.text || '';
+  // Use innerHTML to support rich text
+  text.innerHTML = card.text || '';
   text.addEventListener('input', () => {
-    card.text = text.textContent;
-    autoSizeText(text, el);
+    card.text = text.innerHTML;
+    if (card.fontSizeMode === 'auto') autoSizeText(text, el);
     sv();
   });
-  // Double-click enters edit mode
+  // Double-click enters edit mode and shows rich toolbar
   text.addEventListener('dblclick', (e) => {
     e.stopPropagation();
     text.contentEditable = true;
     text.focus();
+    richBar.classList.add('show');
   });
-  text.addEventListener('blur', () => {
+  text.addEventListener('blur', (e) => {
+    // Don't exit edit mode if clicking inside rich toolbar
+    if (richBar.contains(e.relatedTarget)) return;
     text.contentEditable = false;
-    card.text = text.textContent;
+    richBar.classList.remove('show');
+    card.text = text.innerHTML;
     sv();
   });
   // Prevent drag when editing
   text.addEventListener('mousedown', (e) => {
     if (text.contentEditable === 'true') e.stopPropagation();
+  });
+  // Handle Escape to exit edit mode
+  text.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      text.contentEditable = false;
+      richBar.classList.remove('show');
+      card.text = text.innerHTML;
+      text.blur();
+      sv();
+    }
   });
 
   // Shape toggle handle
@@ -672,12 +864,10 @@ function buildMiroSticky(card) {
   toggle.onclick = (e) => {
     e.stopPropagation();
     if ((card.w || 280) >= (card.h || 160)) {
-      // Currently landscape → make square
       const side = Math.max(card.w || 280, card.h || 160);
       card.w = side;
       card.h = side;
     } else {
-      // Currently square/portrait → make landscape
       card.w = Math.max(card.w || 280, 280);
       card.h = Math.round(card.w / 1.75);
     }
@@ -685,28 +875,36 @@ function buildMiroSticky(card) {
     buildMiroCanvas();
   };
 
-  // Show/hide toolbar on click
+  // Show/hide color toolbar on click
   el.addEventListener('click', (e) => {
     if (
       e.target.closest('.mc-del') ||
       e.target.closest('.mc-lock') ||
       e.target.closest('.ms-shape-toggle') ||
-      e.target.closest('.sn-toolbar')
+      e.target.closest('.sn-toolbar') ||
+      e.target.closest('.sn-rich-toolbar')
     )
       return;
-    // Close other toolbars
     document.querySelectorAll('.sn-toolbar.show').forEach((t) => {
       if (t !== toolbar) t.classList.remove('show');
     });
     toolbar.classList.toggle('show');
   });
-  // Close toolbar when clicking elsewhere
   document.addEventListener('click', (e) => {
-    if (!el.contains(e.target)) toolbar.classList.remove('show');
+    if (!el.contains(e.target)) {
+      toolbar.classList.remove('show');
+      // Also close rich toolbar and exit edit mode if clicking outside
+      if (text.contentEditable === 'true' && !richBar.contains(e.target)) {
+        text.contentEditable = false;
+        richBar.classList.remove('show');
+        card.text = text.innerHTML;
+        sv();
+      }
+    }
   });
 
   // Drag (via global helper)
-  miroSetupCardDrag(el, card, ['.mc-del', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.ms-shape-toggle', '.sn-toolbar', '.mc-lock']);
+  miroSetupCardDrag(el, card, ['.mc-del', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.ms-shape-toggle', '.sn-toolbar', '.sn-rich-toolbar', '.mc-lock']);
 
   // 4-corner resize
   attach8WayResize(el, card, 100, 80);
@@ -716,11 +914,16 @@ function buildMiroSticky(card) {
 
   el.appendChild(del);
   el.appendChild(toolbar);
+  el.appendChild(richBar);
   el.appendChild(toggle);
   el.appendChild(text);
 
-  // Auto-size text after render
-  requestAnimationFrame(() => autoSizeText(text, el));
+  // Auto-size text after render (only if in auto mode)
+  if (card.fontSizeMode === 'auto') {
+    requestAnimationFrame(() => autoSizeText(text, el));
+  } else {
+    text.style.fontSize = card.fontSizeMode + 'px';
+  }
   return el;
 }
 
@@ -736,7 +939,6 @@ function autoSizeText(textEl, containerEl) {
   while (lo <= hi) {
     const mid = Math.floor((lo + hi) / 2);
     textEl.style.fontSize = mid + 'px';
-    // Check if text overflows the element's flex-allocated area
     if (textEl.scrollHeight <= textEl.clientHeight + 2) {
       best = mid;
       lo = mid + 1;

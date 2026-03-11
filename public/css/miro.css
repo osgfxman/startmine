@@ -1233,6 +1233,158 @@
   border-color: var(--ac);
 }
 
+/* ─── Rich Text Toolbar (edit mode) ─── */
+.sn-rich-toolbar {
+  position: absolute;
+  bottom: calc(100% + 38px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(22, 24, 38, 0.95);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  padding: 4px 8px;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  z-index: 12;
+  white-space: nowrap;
+}
+
+.sn-rich-toolbar.show {
+  display: flex;
+}
+
+.sn-rb-btn {
+  background: none;
+  border: 1px solid transparent;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 0.72rem;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.1s;
+  padding: 0;
+}
+
+.sn-rb-btn:hover {
+  background: rgba(108, 143, 255, 0.18);
+  border-color: rgba(108, 143, 255, 0.3);
+  color: #fff;
+}
+
+.sn-rb-btn:active,
+.sn-rb-btn.active {
+  background: rgba(108, 143, 255, 0.3);
+  border-color: var(--ac);
+  color: #fff;
+}
+
+.sn-rb-sep {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 0 3px;
+  flex-shrink: 0;
+}
+
+/* Alignment button icons - make them distinct */
+.sn-rb-align:nth-of-type(1) { text-align: left; }
+.sn-rb-align:nth-of-type(2) { font-size: 0.85rem; }
+.sn-rb-align:nth-of-type(3) { text-align: right; }
+
+/* Font size dropdown */
+.sn-rb-fs-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.sn-rb-fs {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.85);
+  font-family: var(--font);
+  font-size: 0.65rem;
+  padding: 3px 4px;
+  cursor: pointer;
+  outline: none;
+  min-width: 50px;
+  height: 26px;
+}
+
+.sn-rb-fs:hover {
+  border-color: rgba(108, 143, 255, 0.4);
+}
+
+.sn-rb-fs option {
+  background: #1a1c2e;
+  color: #eee;
+}
+
+/* Text color picker */
+.sn-rb-color-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  transition: background 0.1s;
+}
+
+.sn-rb-color-wrap:hover {
+  background: rgba(108, 143, 255, 0.18);
+}
+
+.sn-rb-color-icon {
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.85);
+  border-bottom: 3px solid #ff4444;
+  line-height: 1;
+  padding-bottom: 1px;
+  pointer-events: none;
+}
+
+.sn-rb-color-input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+
+/* Rich text links inside sticky notes */
+.ms-text a {
+  color: #1a6fbf;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.miro-sticky.sn-dark .ms-text a,
+.miro-sticky.sn-magenta .ms-text a {
+  color: #7cc4ff;
+}
+
+/* Hide rich toolbar when locked */
+.miro-sticky.is-locked .sn-rich-toolbar {
+  display: none !important;
+}
+
 /* ─── Image Card ─── */
 .miro-image {
   position: absolute;
