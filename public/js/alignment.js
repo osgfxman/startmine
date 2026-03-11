@@ -158,7 +158,7 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
     !_justRubberBanded
   ) {
     // If in a creation mode, let the miro-engine click handler deal with it
-    if (_stickyCreateMode || _textCreateMode) return;
+    if (_stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode) return;
     clearMiroSelection();
   }
 });

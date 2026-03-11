@@ -391,10 +391,18 @@ function deleteMiroCard(cid) {
   let _wheelSvTimer = null;
 
   canvas.addEventListener('mousedown', (e) => {
-    if (e.target !== canvas && e.target.id !== 'miro-board') return;
-
     const page = cp();
     const isMiro = page.pageType === 'miro';
+
+    // FIRST: if in a creation/drawing mode, pass through immediately
+    // so the click-to-place handler can handle it.
+    // This MUST be checked BEFORE the target guard to avoid swallowing clicks.
+    if (isMiro && (_stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _penMode || _shapeMode)) {
+      return; // Let the click-to-place handler handle it
+    }
+
+    // Only handle pan/rubberband if clicking on empty canvas or board
+    if (e.target !== canvas && e.target.id !== 'miro-board') return;
 
     // Right-click or middle-click: always pan
     if (e.button !== 0) {
@@ -404,12 +412,6 @@ function deleteMiroCard(cid) {
       _miroPanStartY = e.clientY - (page.panY || 0);
       canvas.style.cursor = 'grabbing';
       return;
-    }
-
-    // Space held: pan mode (future enhancement)
-    // If in a creation/drawing mode, don't start rubber-band — let click handlers handle it
-    if (isMiro && (_stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _penMode || _shapeMode)) {
-      return; // Do NOT preventDefault here, so the click event can continue
     }
 
     e.preventDefault();
@@ -1044,8 +1046,8 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
   if (e.button !== 0 && e.type !== 'touchstart') return; // Only trigger on left-click
   console.log('Miro canvas click-to-place triggered!', { _stickyCreateMode, _textCreateMode, target: e.target, targetClass: e.target.className, targetId: e.target.id });
   if (!_stickyCreateMode && !_textCreateMode && !_gridCreateMode && !_mindmapCreateMode && !_widgetCreateMode) return;
-  if (e.target.closest('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, #miro-toolbar, .mc-del')) {
-    console.log('Click ignored due to target closest match:', e.target);
+  // Only block clicks directly on toolbar controls — allow clicks on/near cards
+  if (e.target.closest('#miro-toolbar, .mc-del, .msh-toolbar, .ms-toolbar, .mt-toolbar')) {
     return;
   }
 
