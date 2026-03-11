@@ -1043,63 +1043,72 @@ document.getElementById('mtb-widget').onclick = () => setActiveTool('widget');
 
 // Canvas click handler for click-to-place modes
 document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
-  if (e.button !== 0 && e.type !== 'touchstart') return; // Only trigger on left-click
-  console.log('Miro canvas click-to-place triggered!', { _stickyCreateMode, _textCreateMode, target: e.target, targetClass: e.target.className, targetId: e.target.id });
-  if (!_stickyCreateMode && !_textCreateMode && !_gridCreateMode && !_mindmapCreateMode && !_widgetCreateMode) return;
-  // Only block clicks directly on toolbar controls — allow clicks on/near cards
-  if (e.target.closest('#miro-toolbar, .mc-del, .msh-toolbar, .ms-toolbar, .mt-toolbar')) {
-    return;
-  }
+  if (e.button !== 0 && e.type !== 'touchstart') return;
+
+  // Check if ANY creation mode is active
+  const anyCreateMode = _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode;
+  if (!anyCreateMode) return;
+
+  // Only block clicks on toolbar controls themselves
+  if (e.target.closest('#miro-toolbar, .mc-del')) return;
 
   e.preventDefault();
   e.stopPropagation();
 
-  const page = cp();
-  if (!page.miroCards) page.miroCards = [];
-  const zoom = (page.zoom || 100) / 100;
-  const rect = document.getElementById('miro-canvas').getBoundingClientRect();
-  const bx = (e.clientX - rect.left - (page.panX || 0)) / zoom;
-  const by = (e.clientY - rect.top - (page.panY || 0)) / zoom;
+  try {
+    const page = cp();
+    if (!page.miroCards) page.miroCards = [];
+    const zoom = (page.zoom || 100) / 100;
+    const rect = document.getElementById('miro-canvas').getBoundingClientRect();
+    const bx = (e.clientX - rect.left - (page.panX || 0)) / zoom;
+    const by = (e.clientY - rect.top - (page.panY || 0)) / zoom;
 
-  if (_stickyCreateMode) {
-    console.log('Creating sticky note');
-    const newId = uid();
-    page.miroCards.push({ id: newId, type: 'sticky', text: '', color: 'yellow', shape: 'rect', x: bx - 140, y: by - 80, w: 280, h: 160 });
-    setTimeout(() => {
-      const el = document.querySelector(`.miro-sticky[data-cid="${newId}"] .ms-text`);
-      if (el) el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
-    }, 50);
-  } else if (_textCreateMode) {
-    const newId = uid();
-    page.miroCards.push({ id: newId, type: 'text', text: '', x: bx - 60, y: by - 15, w: 120, h: 30, fontSize: 24, fontFamily: 'Inter', color: '#ffffff' });
-    setTimeout(() => {
-      const el = document.querySelector(`.miro-text[data-cid="${newId}"] .mt-text`);
-      if (el) el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
-    }, 50);
-  } else if (_gridCreateMode) {
-    const rows = 3, cols = 3;
-    const cells = [];
-    for (let r = 0; r < rows; r++) { const row = []; for (let c = 0; c < cols; c++) row.push(''); cells.push(row); }
-    const w = cols * 120, h = rows * 40;
-    page.miroCards.push({ id: uid(), type: 'grid', rows, cols, cells, x: bx - w / 2, y: by - h / 2, w, h, headerColor: 'none', borderColor: '#555' });
-  } else if (_mindmapCreateMode) {
-    const rootId = uid(), child1 = uid(), child2 = uid(), child3 = uid();
-    page.miroCards.push({
-      id: uid(), type: 'mindmap', x: bx - 300, y: by - 200, w: 600, h: 400,
-      root: {
-        id: rootId, text: 'Main Topic', color: '#6c8fff',
-        children: [
-          { id: child1, text: 'Branch 1', color: '#ff6b6b', children: [] },
-          { id: child2, text: 'Branch 2', color: '#51cf66', children: [] },
-          { id: child3, text: 'Branch 3', color: '#ffd43b', children: [] },
-        ],
-      },
-    });
-  } else if (_widgetCreateMode) {
-    page.miroCards.push({ id: uid(), type: 'bwidget', title: 'Bookmarks', emoji: '🗂️', items: [], x: bx - 160, y: by - 200, w: 320, h: 400, color: { r: 50, g: 50, b: 50, a: 0.8 } });
+    if (_stickyCreateMode) {
+      const newId = uid();
+      page.miroCards.push({ id: newId, type: 'sticky', text: '', color: 'yellow', shape: 'rect', x: bx - 140, y: by - 80, w: 280, h: 160 });
+      sv(); buildMiroCanvas(); buildOutline();
+      setTimeout(() => {
+        const el = document.querySelector(`.miro-sticky[data-cid="${newId}"] .ms-text`);
+        if (el) el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      }, 50);
+    } else if (_textCreateMode) {
+      const newId = uid();
+      page.miroCards.push({ id: newId, type: 'text', text: '', x: bx - 60, y: by - 15, w: 120, h: 30, fontSize: 24, fontFamily: 'Inter', color: '#ffffff' });
+      sv(); buildMiroCanvas(); buildOutline();
+      setTimeout(() => {
+        const el = document.querySelector(`.miro-text[data-cid="${newId}"] .mt-text`);
+        if (el) el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      }, 50);
+    } else if (_gridCreateMode) {
+      const rows = 3, cols = 3;
+      const cells = [];
+      for (let r = 0; r < rows; r++) { const row = []; for (let c = 0; c < cols; c++) row.push(''); cells.push(row); }
+      const w = cols * 120, h = rows * 40;
+      page.miroCards.push({ id: uid(), type: 'grid', rows, cols, cells, x: bx - w / 2, y: by - h / 2, w, h, headerColor: 'none', borderColor: '#555' });
+      sv(); buildMiroCanvas(); buildOutline();
+    } else if (_mindmapCreateMode) {
+      const rootId = uid(), child1 = uid(), child2 = uid(), child3 = uid();
+      page.miroCards.push({
+        id: uid(), type: 'mindmap', x: bx - 300, y: by - 200, w: 600, h: 400,
+        root: {
+          id: rootId, text: 'Main Topic', color: '#6c8fff',
+          children: [
+            { id: child1, text: 'Branch 1', color: '#ff6b6b', children: [] },
+            { id: child2, text: 'Branch 2', color: '#51cf66', children: [] },
+            { id: child3, text: 'Branch 3', color: '#ffd43b', children: [] },
+          ],
+        },
+      });
+      sv(); buildMiroCanvas(); buildOutline();
+    } else if (_widgetCreateMode) {
+      page.miroCards.push({ id: uid(), type: 'bwidget', title: 'Bookmarks', emoji: '🗂️', items: [], x: bx - 160, y: by - 200, w: 320, h: 400, color: { r: 50, g: 50, b: 50, a: 0.8 } });
+      sv(); buildMiroCanvas(); buildOutline();
+    }
+  } catch (err) {
+    console.error('[TOOL CREATE ERROR]', err);
   }
 
-  sv(); buildMiroCanvas(); buildOutline();
+  // Always reset to select mode, even on error
   setActiveTool('select');
 });
 document.getElementById('mtb-shape').onclick = () => {

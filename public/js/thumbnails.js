@@ -856,7 +856,7 @@ function buildMiroText(card) {
   const text = document.createElement('div');
   text.className = 'mt-text';
   text.contentEditable = false;
-  text.textContent = card.text || 'Text';
+  text.textContent = card.text ?? '';
   text.style.fontFamily = card.font || 'DM Sans';
   text.style.fontSize = (card.fontSize || 24) + 'px';
   text.style.color = card.fontColor || '#333';
