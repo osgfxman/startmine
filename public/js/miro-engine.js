@@ -10,6 +10,33 @@ let _alignDragging = false;
 let _justRubberBanded = false;
 let _stickyCreateMode = false;
 
+/* ─── Multi-Step Undo System ─── */
+const _undoStack = [];
+const UNDO_MAX = 50;
+let _undoInProgress = false;
+function pushUndo() {
+  if (_undoInProgress) return;
+  const page = cp();
+  if (!page || !page.miroCards) return;
+  const snapshot = JSON.stringify(page.miroCards);
+  // Don't push if identical to last snapshot
+  if (_undoStack.length > 0 && _undoStack[_undoStack.length - 1] === snapshot) return;
+  _undoStack.push(snapshot);
+  if (_undoStack.length > UNDO_MAX) _undoStack.shift();
+}
+function performUndo() {
+  if (_undoStack.length === 0) return;
+  const page = cp();
+  if (!page) return;
+  const snapshot = _undoStack.pop();
+  try {
+    _undoInProgress = true;
+    page.miroCards = JSON.parse(snapshot);
+    sv(); buildMiroCanvas(); buildOutline();
+    _undoInProgress = false;
+  } catch (e) { _undoInProgress = false; console.error('[UNDO ERROR]', e); }
+}
+
 
 
 function addMiroSelect(cid) {
@@ -1103,7 +1130,7 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
       });
       sv(); buildMiroCanvas(); buildOutline();
     } else if (_widgetCreateMode) {
-      page.miroCards.push({ id: uid(), type: 'bwidget', title: 'Bookmarks', emoji: '🗂️', items: [], x: bx - 160, y: by - 200, w: 320, h: 400, color: { r: 50, g: 50, b: 50, a: 0.8 } });
+      page.miroCards.push({ id: uid(), type: 'bwidget', title: 'Bookmarks', emoji: '🗂️', items: [], x: bx - 160, y: by - 200, w: 320, h: 400, color: { r: 255, g: 255, b: 255, a: 1 } });
       sv(); buildMiroCanvas(); buildOutline();
     }
   } catch (err) {
@@ -1147,13 +1174,27 @@ let _mouseX = 0, _mouseY = 0;
 document.addEventListener('mousemove', e => { _mouseX = e.clientX; _mouseY = e.clientY; });
 
 document.addEventListener('keydown', (e) => {
-  // Don't trigger during text input
+  // ESC during contentEditable editing: blur the element and exit edit mode
+  if (e.key === 'Escape' && (e.target.contentEditable === 'true' || e.target.tagName === 'TEXTAREA')) {
+    e.preventDefault();
+    e.target.blur();
+    setActiveTool('select');
+    return;
+  }
+  // Don't trigger shortcuts during text input
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.contentEditable === 'true') return;
   const page = cp();
   if (page.pageType !== 'miro') return;
 
   const key = e.key.toLowerCase();
   const isCmd = e.ctrlKey || e.metaKey;
+
+  // Undo: Ctrl+Z / Ctrl+ض
+  if (isCmd && (key === 'z' || key === 'ض')) {
+    e.preventDefault();
+    performUndo();
+    return;
+  }
 
   // Copy (Cmd/Ctrl + C) or Cmd/Ctrl + ؤ
   if (isCmd && (key === 'c' || key === 'ؤ')) {

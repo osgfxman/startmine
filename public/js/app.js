@@ -517,6 +517,8 @@ function switchActivePage(pageId) {
 
 function sv(saveAll = false, immediate = false) {
   if (!USER_ID) return;
+  // Capture undo snapshot before saving (for Miro pages)
+  if (typeof pushUndo === 'function') { try { pushUndo(); } catch(e) {} }
 
   const doSave = () => {
     _ownWrite = true;
