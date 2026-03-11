@@ -586,34 +586,127 @@ function buildMiroSticky(card) {
     deleteMiroCard(card.id);
   };
 
-  // On-click toolbar (color + S/M/L)
+  // ─── Unified Toolbar (merged color + size + rich text) ───
   const toolbar = document.createElement('div');
   toolbar.className = 'sn-toolbar';
-  const snColors = ['yellow', 'pink', 'green', 'blue', 'purple', 'orange', 'red', 'cyan', 'white', 'gray', 'dark', 'magenta'];
+
+  // Helper to restore selection inside contentEditable after clicking toolbar buttons
+  let _savedRange = null;
+  function saveSelection() {
+    const sel = window.getSelection();
+    if (sel.rangeCount > 0 && text.contains(sel.anchorNode)) {
+      _savedRange = sel.getRangeAt(0).cloneRange();
+    }
+  }
+  function restoreSelection() {
+    if (_savedRange) {
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(_savedRange);
+    }
+  }
+
+  // ── Color dropdown button ──
+  const colorBtnWrap = document.createElement('div');
+  colorBtnWrap.className = 'sn-color-dropdown';
+  const colorBtn = document.createElement('button');
+  colorBtn.className = 'sn-tb-color-btn';
+  colorBtn.title = 'Note Color';
   const snColorHex = {
     yellow: '#f9e96b', pink: '#f4a4c0', green: '#a6d89b', blue: '#84c6e8',
     purple: '#c9a6e8', orange: '#f5b971', red: '#ff6b6b', cyan: '#66d9e8',
     white: '#f1f3f5', gray: '#adb5bd', dark: '#495057', magenta: '#e64980',
   };
-  snColors.forEach((c) => {
+  const colorDot = document.createElement('span');
+  colorDot.className = 'sn-color-dot';
+  colorDot.style.background = snColorHex[card.color] || snColorHex.yellow;
+  colorBtn.appendChild(colorDot);
+  colorBtn.onmousedown = (e) => { e.preventDefault(); };
+  colorBtn.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    colorPopup.classList.toggle('show');
+  };
+  // Color popup
+  const colorPopup = document.createElement('div');
+  colorPopup.className = 'sn-color-popup';
+
+  // Row 1: RGB & CMYK
+  const row1Label = document.createElement('div');
+  row1Label.className = 'sn-cpop-label';
+  row1Label.textContent = 'RGB / CMYK';
+  colorPopup.appendChild(row1Label);
+  const row1 = document.createElement('div');
+  row1.className = 'sn-cpop-row';
+  const rgbCmykColors = [
+    { name: 'Red', hex: '#ff0000' }, { name: 'Green', hex: '#00ff00' }, { name: 'Blue', hex: '#0000ff' },
+    { name: 'Cyan', hex: '#00ffff' }, { name: 'Magenta', hex: '#ff00ff' }, { name: 'Yellow', hex: '#ffff00' },
+  ];
+  rgbCmykColors.forEach(c => {
     const dot = document.createElement('div');
-    dot.className = 'sn-tb-color' + (c === card.color ? ' sel' : '');
+    dot.className = 'sn-cpop-color';
+    dot.style.background = c.hex;
+    dot.title = c.name;
+    dot.onclick = (ev) => {
+      ev.stopPropagation();
+      card.color = null;
+      card.bgHex = c.hex;
+      el.className = 'miro-sticky' + (el.classList.contains('miro-selected') ? ' miro-selected' : '');
+      el.style.backgroundColor = c.hex;
+      colorDot.style.background = c.hex;
+      colorPopup.classList.remove('show');
+      sv();
+    };
+    row1.appendChild(dot);
+  });
+  colorPopup.appendChild(row1);
+
+  // Row 2: Miro preset colors
+  const row2Label = document.createElement('div');
+  row2Label.className = 'sn-cpop-label';
+  row2Label.textContent = 'Miro Colors';
+  colorPopup.appendChild(row2Label);
+  const row2 = document.createElement('div');
+  row2.className = 'sn-cpop-row';
+  const miroColors = ['yellow', 'pink', 'green', 'blue', 'purple', 'orange', 'red', 'cyan', 'white', 'gray', 'dark', 'magenta'];
+  miroColors.forEach(c => {
+    const dot = document.createElement('div');
+    dot.className = 'sn-cpop-color' + (c === card.color ? ' sel' : '');
     dot.style.background = snColorHex[c];
-    dot.dataset.color = c;
+    dot.title = c.charAt(0).toUpperCase() + c.slice(1);
     dot.onclick = (ev) => {
       ev.stopPropagation();
       card.color = c;
-      el.className =
-        'miro-sticky sn-' + c + (el.classList.contains('miro-selected') ? ' miro-selected' : '');
-      toolbar.querySelectorAll('.sn-tb-color').forEach((d) => d.classList.remove('sel'));
+      card.bgHex = null;
+      el.style.backgroundColor = '';
+      el.className = 'miro-sticky sn-' + c + (el.classList.contains('miro-selected') ? ' miro-selected' : '');
+      colorDot.style.background = snColorHex[c];
+      colorPopup.querySelectorAll('.sn-cpop-color').forEach(d => d.classList.remove('sel'));
       dot.classList.add('sel');
+      colorPopup.classList.remove('show');
       sv();
     };
-    toolbar.appendChild(dot);
+    row2.appendChild(dot);
   });
-  const sep = document.createElement('div');
-  sep.className = 'sn-tb-sep';
-  toolbar.appendChild(sep);
+  colorPopup.appendChild(row2);
+
+  colorBtnWrap.appendChild(colorBtn);
+  colorBtnWrap.appendChild(colorPopup);
+  toolbar.appendChild(colorBtnWrap);
+
+  // Close color popup when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!colorBtnWrap.contains(e.target)) {
+      colorPopup.classList.remove('show');
+    }
+  });
+
+  // ── Separator ──
+  const sepA = document.createElement('div');
+  sepA.className = 'sn-tb-sep';
+  toolbar.appendChild(sepA);
+
+  // ── Size buttons (S, M, L) ──
   const sizes = { S: { w: 140, h: 80 }, M: { w: 280, h: 160 }, L: { w: 420, h: 240 } };
   Object.entries(sizes).forEach(([label, sz]) => {
     const btn = document.createElement('button');
@@ -636,27 +729,12 @@ function buildMiroSticky(card) {
     toolbar.appendChild(btn);
   });
 
-  // ─── Rich Text Toolbar (shown in edit mode) ───
-  const richBar = document.createElement('div');
-  richBar.className = 'sn-rich-toolbar';
+  // ── Separator ──
+  const sepB = document.createElement('div');
+  sepB.className = 'sn-tb-sep';
+  toolbar.appendChild(sepB);
 
-  // Helper to restore selection inside contentEditable after clicking toolbar buttons
-  let _savedRange = null;
-  function saveSelection() {
-    const sel = window.getSelection();
-    if (sel.rangeCount > 0 && text.contains(sel.anchorNode)) {
-      _savedRange = sel.getRangeAt(0).cloneRange();
-    }
-  }
-  function restoreSelection() {
-    if (_savedRange) {
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(_savedRange);
-    }
-  }
-
-  // Format button helper
+  // ── Format button helper ──
   function mkFmtBtn(label, title, cmd, cssClass) {
     const b = document.createElement('button');
     b.className = 'sn-rb-btn' + (cssClass ? ' ' + cssClass : '');
@@ -675,17 +753,17 @@ function buildMiroSticky(card) {
   }
 
   // Bold, Italic, Underline, Strikethrough
-  richBar.appendChild(mkFmtBtn('<b>B</b>', 'Bold (Ctrl+B)', 'bold'));
-  richBar.appendChild(mkFmtBtn('<i>I</i>', 'Italic (Ctrl+I)', 'italic'));
-  richBar.appendChild(mkFmtBtn('<u>U</u>', 'Underline (Ctrl+U)', 'underline'));
-  richBar.appendChild(mkFmtBtn('<s>S</s>', 'Strikethrough', 'strikeThrough'));
+  toolbar.appendChild(mkFmtBtn('<b>B</b>', 'Bold (Ctrl+B)', 'bold'));
+  toolbar.appendChild(mkFmtBtn('<i>I</i>', 'Italic (Ctrl+I)', 'italic'));
+  toolbar.appendChild(mkFmtBtn('<u>U</u>', 'Underline (Ctrl+U)', 'underline'));
+  toolbar.appendChild(mkFmtBtn('<s>S</s>', 'Strikethrough', 'strikeThrough'));
 
-  // Separator
-  const sep2 = document.createElement('div');
-  sep2.className = 'sn-rb-sep';
-  richBar.appendChild(sep2);
+  // ── Separator ──
+  const sepC = document.createElement('div');
+  sepC.className = 'sn-tb-sep';
+  toolbar.appendChild(sepC);
 
-  // Alignment buttons
+  // ── Alignment buttons ──
   function mkAlignBtn(icon, title, cmd) {
     const b = document.createElement('button');
     b.className = 'sn-rb-btn sn-rb-align';
@@ -702,16 +780,16 @@ function buildMiroSticky(card) {
     };
     return b;
   }
-  richBar.appendChild(mkAlignBtn('≡', 'Align Left', 'justifyLeft'));
-  richBar.appendChild(mkAlignBtn('≡', 'Align Center', 'justifyCenter'));
-  richBar.appendChild(mkAlignBtn('≡', 'Align Right', 'justifyRight'));
+  toolbar.appendChild(mkAlignBtn('≡', 'Align Left', 'justifyLeft'));
+  toolbar.appendChild(mkAlignBtn('≡', 'Align Center', 'justifyCenter'));
+  toolbar.appendChild(mkAlignBtn('≡', 'Align Right', 'justifyRight'));
 
-  // Separator
-  const sep3 = document.createElement('div');
-  sep3.className = 'sn-rb-sep';
-  richBar.appendChild(sep3);
+  // ── Separator ──
+  const sepD = document.createElement('div');
+  sepD.className = 'sn-tb-sep';
+  toolbar.appendChild(sepD);
 
-  // Link button
+  // ── Link button ──
   const linkBtn = document.createElement('button');
   linkBtn.className = 'sn-rb-btn';
   linkBtn.innerHTML = '🔗';
@@ -724,7 +802,6 @@ function buildMiroSticky(card) {
     const url = prompt('Enter URL:');
     if (url) {
       document.execCommand('createLink', false, url);
-      // Make links open in new tab
       text.querySelectorAll('a').forEach(a => {
         a.target = '_blank';
         a.rel = 'noopener noreferrer';
@@ -733,14 +810,14 @@ function buildMiroSticky(card) {
       sv();
     }
   };
-  richBar.appendChild(linkBtn);
+  toolbar.appendChild(linkBtn);
 
-  // Separator
-  const sep4 = document.createElement('div');
-  sep4.className = 'sn-rb-sep';
-  richBar.appendChild(sep4);
+  // ── Separator ──
+  const sepE = document.createElement('div');
+  sepE.className = 'sn-tb-sep';
+  toolbar.appendChild(sepE);
 
-  // Font size control
+  // ── Font size control ──
   const fsWrap = document.createElement('div');
   fsWrap.className = 'sn-rb-fs-wrap';
   const fsSelect = document.createElement('select');
@@ -764,12 +841,10 @@ function buildMiroSticky(card) {
       autoSizeText(text, el);
     } else {
       card.fontSizeMode = +val;
-      // Apply to selection or whole text
       restoreSelection();
       const sel = window.getSelection();
       if (sel.rangeCount > 0 && !sel.isCollapsed && text.contains(sel.anchorNode)) {
-        document.execCommand('fontSize', false, '7'); // Use size 7 as placeholder
-        // Replace the browser's font size with our actual px value
+        document.execCommand('fontSize', false, '7');
         text.querySelectorAll('font[size="7"]').forEach(f => {
           const span = document.createElement('span');
           span.style.fontSize = val + 'px';
@@ -784,14 +859,14 @@ function buildMiroSticky(card) {
     sv();
   };
   fsWrap.appendChild(fsSelect);
-  richBar.appendChild(fsWrap);
+  toolbar.appendChild(fsWrap);
 
-  // Separator
-  const sep5 = document.createElement('div');
-  sep5.className = 'sn-rb-sep';
-  richBar.appendChild(sep5);
+  // ── Separator ──
+  const sepF = document.createElement('div');
+  sepF.className = 'sn-tb-sep';
+  toolbar.appendChild(sepF);
 
-  // Text color picker
+  // ── Text color picker ──
   const tcLabel = document.createElement('label');
   tcLabel.className = 'sn-rb-color-wrap';
   tcLabel.title = 'Text Color';
@@ -813,7 +888,7 @@ function buildMiroSticky(card) {
   };
   tcLabel.appendChild(tcIcon);
   tcLabel.appendChild(tcInput);
-  richBar.appendChild(tcLabel);
+  toolbar.appendChild(tcLabel);
 
   // Text area — starts non-editable so click+drag moves the note
   const text = document.createElement('div');
@@ -826,18 +901,17 @@ function buildMiroSticky(card) {
     if (card.fontSizeMode === 'auto') autoSizeText(text, el);
     sv();
   });
-  // Double-click enters edit mode and shows rich toolbar
+  // Double-click enters edit mode
   text.addEventListener('dblclick', (e) => {
     e.stopPropagation();
     text.contentEditable = true;
     text.focus();
-    richBar.classList.add('show');
+    toolbar.classList.add('show');
   });
   text.addEventListener('blur', (e) => {
-    // Don't exit edit mode if clicking inside rich toolbar
-    if (richBar.contains(e.relatedTarget)) return;
+    // Don't exit edit mode if clicking inside toolbar
+    if (toolbar.contains(e.relatedTarget)) return;
     text.contentEditable = false;
-    richBar.classList.remove('show');
     card.text = text.innerHTML;
     sv();
   });
@@ -849,7 +923,7 @@ function buildMiroSticky(card) {
   text.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       text.contentEditable = false;
-      richBar.classList.remove('show');
+      toolbar.classList.remove('show');
       card.text = text.innerHTML;
       text.blur();
       sv();
@@ -875,14 +949,13 @@ function buildMiroSticky(card) {
     buildMiroCanvas();
   };
 
-  // Show/hide color toolbar on click
+  // Show/hide toolbar on click
   el.addEventListener('click', (e) => {
     if (
       e.target.closest('.mc-del') ||
       e.target.closest('.mc-lock') ||
       e.target.closest('.ms-shape-toggle') ||
-      e.target.closest('.sn-toolbar') ||
-      e.target.closest('.sn-rich-toolbar')
+      e.target.closest('.sn-toolbar')
     )
       return;
     document.querySelectorAll('.sn-toolbar.show').forEach((t) => {
@@ -893,10 +966,9 @@ function buildMiroSticky(card) {
   document.addEventListener('click', (e) => {
     if (!el.contains(e.target)) {
       toolbar.classList.remove('show');
-      // Also close rich toolbar and exit edit mode if clicking outside
-      if (text.contentEditable === 'true' && !richBar.contains(e.target)) {
+      // Also exit edit mode if clicking outside
+      if (text.contentEditable === 'true' && !toolbar.contains(e.target)) {
         text.contentEditable = false;
-        richBar.classList.remove('show');
         card.text = text.innerHTML;
         sv();
       }
@@ -904,7 +976,7 @@ function buildMiroSticky(card) {
   });
 
   // Drag (via global helper)
-  miroSetupCardDrag(el, card, ['.mc-del', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.ms-shape-toggle', '.sn-toolbar', '.sn-rich-toolbar', '.mc-lock']);
+  miroSetupCardDrag(el, card, ['.mc-del', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.ms-shape-toggle', '.sn-toolbar', '.mc-lock']);
 
   // 4-corner resize
   attach8WayResize(el, card, 100, 80);
@@ -914,9 +986,9 @@ function buildMiroSticky(card) {
 
   el.appendChild(del);
   el.appendChild(toolbar);
-  el.appendChild(richBar);
   el.appendChild(toggle);
   el.appendChild(text);
+
 
   // Auto-size text after render (only if in auto mode)
   if (card.fontSizeMode === 'auto') {

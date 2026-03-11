@@ -1302,7 +1302,22 @@ document.addEventListener('keydown', (e) => {
   if (!isCmd) {
     switch (key) {
       case 'v': case 'ر': e.preventDefault(); setActiveTool('select'); break;
-      case 'n': case 'ى': e.preventDefault(); document.getElementById('mtb-sticky').click(); break;
+      case 'n': case 'ى': {
+        e.preventDefault();
+        if (!page.miroCards) page.miroCards = [];
+        const _nId = uid();
+        const _canvas = document.getElementById('miro-canvas');
+        const _zoom = (page.zoom || 100) / 100;
+        const _cx = (_canvas.clientWidth / 2 - (page.panX || 0)) / _zoom;
+        const _cy = (_canvas.clientHeight / 2 - (page.panY || 0)) / _zoom;
+        page.miroCards.push({ id: _nId, type: 'sticky', text: '', color: 'yellow', shape: 'rect', x: _cx - 140, y: _cy - 80, w: 280, h: 160 });
+        sv(); buildMiroCanvas(); buildOutline();
+        setTimeout(() => {
+          const _el = document.querySelector(`.miro-sticky[data-cid="${_nId}"] .ms-text`);
+          if (_el) _el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+        }, 50);
+        break;
+      }
       case 't': case 'ف': e.preventDefault(); document.getElementById('mtb-text').click(); break;
       case 's': case 'س': e.preventDefault(); document.getElementById('mtb-shape').click(); break;
       case 'p': case 'ح': e.preventDefault(); document.getElementById('mtb-pen').click(); break;

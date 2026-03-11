@@ -1166,16 +1166,17 @@
   bottom: calc(100% + 8px);
   left: 50%;
   transform: translateX(-50%);
-  background: var(--s2);
+  background: rgba(22, 24, 38, 0.95);
   border: 1px solid var(--bd);
   border-radius: 10px;
-  padding: 6px 10px;
+  padding: 4px 8px;
   display: none;
   align-items: center;
-  gap: 6px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(12px);
-  z-index: 10;
+  gap: 3px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  z-index: 12;
   white-space: nowrap;
 }
 
@@ -1233,29 +1234,111 @@
   border-color: var(--ac);
 }
 
-/* ─── Rich Text Toolbar (edit mode) ─── */
-.sn-rich-toolbar {
+/* ─── Color Dropdown Button ─── */
+.sn-color-dropdown {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.sn-tb-color-btn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.12s;
+}
+
+.sn-tb-color-btn:hover {
+  border-color: var(--ac);
+  background: rgba(108, 143, 255, 0.12);
+}
+
+.sn-color-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+}
+
+/* Color Popup */
+.sn-color-popup {
+  display: none;
   position: absolute;
-  bottom: calc(100% + 38px);
+  top: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(22, 24, 38, 0.95);
+  background: rgba(22, 24, 38, 0.97);
   border: 1px solid var(--bd);
   border-radius: 10px;
-  padding: 4px 8px;
-  display: none;
-  align-items: center;
-  gap: 2px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  padding: 8px 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
-  z-index: 12;
-  white-space: nowrap;
+  z-index: 20;
+  min-width: 200px;
+}
+
+.sn-color-popup.show {
+  display: block;
+}
+
+.sn-cpop-label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 4px 0 4px 2px;
+}
+
+.sn-cpop-label:first-child {
+  margin-top: 0;
+}
+
+.sn-cpop-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+
+.sn-cpop-color {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.1s, border-color 0.1s;
+  flex-shrink: 0;
+}
+
+.sn-cpop-color:hover {
+  transform: scale(1.2);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.sn-cpop-color.sel {
+  border-color: #fff;
+  transform: scale(1.1);
+}
+
+/* ─── Rich Text Toolbar (legacy fallback) ─── */
+.sn-rich-toolbar {
+  display: none;
 }
 
 .sn-rich-toolbar.show {
-  display: flex;
+  display: none;
 }
+
 
 .sn-rb-btn {
   background: none;
