@@ -1184,8 +1184,8 @@ document.addEventListener('keydown', (e) => {
   // Don't trigger shortcuts during text input
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.contentEditable === 'true') return;
 
-  // Ctrl+Shift+S / Ctrl+Shift+س — Export to Google Drive
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key.toLowerCase() === 's' || e.key === 'س')) {
+  // Ctrl+Alt+S / Ctrl+Alt+س — Export to Google Drive
+  if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key.toLowerCase() === 's' || e.key === 'س')) {
     e.preventDefault();
     if (typeof exportToGoogleDrive === 'function') exportToGoogleDrive();
     return;
