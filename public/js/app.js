@@ -11,9 +11,11 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
+provider.addScope('https://www.googleapis.com/auth/drive.file');
 
 let USER_ID = null;
 let DB_REF = null;
+let _googleAccessToken = null;
 
 const ENGINES = [
   { k: 'bm', ic: '🔖', name: 'Bookmarks (local)', url: '' },
@@ -141,9 +143,26 @@ let _bgTempType = 'solid',
   _bgTempValue = '';
 let isFirstLoad = true;
 let _ownWrite = false;
+let _ownWriteTs = 0;
+const OWN_WRITE_TIMEOUT = 5000; // Safety: auto-reset _ownWrite after 5 seconds
+function setOwnWrite(val) {
+  _ownWrite = val;
+  if (val) _ownWriteTs = Date.now();
+}
+function isOwnWrite() {
+  if (!_ownWrite) return false;
+  // Safety timeout: if _ownWrite has been true for too long, auto-reset
+  if (Date.now() - _ownWriteTs > OWN_WRITE_TIMEOUT) {
+    console.warn('[DATA GUARD] _ownWrite was stuck for >5s — auto-resetting');
+    _ownWrite = false;
+    return false;
+  }
+  return true;
+}
 let _svTimer = null;
 let _lastSyncedPageData = null;
 let _lastSyncedPagesMetaStr = null;
+let _pendingDeletePageIds = []; // Track page IDs that need Firebase cleanup
 
 /* ─── LocalStorage Cache ─── */
 const LS_META = 'sm_meta';
@@ -157,7 +176,12 @@ function getCachedPagesMeta() { try { return JSON.parse(localStorage.getItem(LS_
 function getCachedPageData(pid) { try { return JSON.parse(localStorage.getItem(lsPageKey(pid))); } catch (e) { return null; } }
 
 document.getElementById('login-btn').onclick = () =>
-  auth.signInWithPopup(provider).catch((e) => alert(e.message));
+  auth.signInWithPopup(provider).then((result) => {
+    // Store Google access token for Drive API
+    if (result.credential) {
+      _googleAccessToken = result.credential.accessToken;
+    }
+  }).catch((e) => alert(e.message));
 document.getElementById('logout-btn').onclick = () => auth.signOut();
 
 auth.onAuthStateChanged((user) => {
@@ -167,6 +191,14 @@ auth.onAuthStateChanged((user) => {
     document.getElementById('user-email').textContent = '👤 ' + user.email;
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('root').style.display = 'flex';
+    // Re-authenticate silently to get a fresh access token for Drive API
+    user.getIdToken(true).catch(() => {});
+    // Try to get the access token from the credential if available
+    if (!_googleAccessToken) {
+      auth.currentUser.getIdToken().then(() => {
+        // Access token will be refreshed via re-auth when needed
+      }).catch(() => {});
+    }
     initDB();
   } else {
     USER_ID = null;
@@ -383,7 +415,7 @@ function setupShardedListeners() {
 
   // Listen to Metadata (settings, environments, groups, inbox, active selections)
   db.ref(metaRef).on('value', (snap) => {
-    if (_ownWrite) return;
+    if (isOwnWrite()) return;
     const meta = snap.val() || {
       settings: { engine: 'bm', accent: '#6c8fff' },
       curEnv: 'e0',
@@ -404,15 +436,28 @@ function setupShardedListeners() {
 
   // Listen to Pages Directory (names, ids, group associations)
   db.ref(pagesMetaRef).on('value', (snap) => {
-    if (_ownWrite) return;
+    if (isOwnWrite()) return;
     const pagesMeta = snap.val() || [{ id: 'p0', groupId: 'g0', name: 'Home', pageType: 'miro', zoom: 100, panX: 0, panY: 0, bg: '', bgType: 'none' }];
 
-    // We update D.pages but we MUST PRESERVE the currently loaded active page's heavy data so it doesn't vanish
-    const oldWidgets = cp() ? cp().widgets : [];
-    const oldMiroCards = cp() ? cp().miroCards : [];
+    // FIX: Preserve heavy data (widgets/miroCards) for ALL loaded pages, not just active
+    const heavyDataMap = {};
+    D.pages.forEach(p => {
+      if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0)) {
+        heavyDataMap[p.id] = { widgets: p.widgets || [], miroCards: p.miroCards || [] };
+      }
+    });
 
     D.pages = pagesMeta;
     cachePagesMeta(pagesMeta); // Cache to localStorage
+
+    // Re-inject heavy data into ALL pages that had it loaded
+    D.pages.forEach(p => {
+      if (heavyDataMap[p.id]) {
+        p.widgets = heavyDataMap[p.id].widgets;
+        p.miroCards = heavyDataMap[p.id].miroCards;
+      }
+    });
+
     // Establish baseline for smart pagesMeta diffing in sv()
     _lastSyncedPagesMetaStr = JSON.stringify(pagesMeta.map(p => ({
       id: p.id, groupId: p.groupId, name: p.name, pageType: p.pageType,
@@ -429,12 +474,6 @@ function setupShardedListeners() {
       isFirstLoad = false;
       switchActivePage(D.cur); // This will render All
     } else {
-      // Re-inject the heavy data into the newly refreshed metadata page structure
-      const activePg = cp();
-      if (activePg) {
-        activePg.widgets = oldWidgets || [];
-        activePg.miroCards = oldMiroCards || [];
-      }
       renderMeta();
     }
 
@@ -493,7 +532,7 @@ function switchActivePage(pageId) {
   }
 
   db.ref(pageDataRef).on('value', (snap) => {
-    if (_ownWrite) { _ownWrite = false; return; }
+    if (isOwnWrite()) return;
     const pData = snap.val() || { widgets: [], miroCards: [] };
     const pg = cp();
     if (pg) {
@@ -521,7 +560,7 @@ function sv(saveAll = false, immediate = false) {
   if (typeof pushUndo === 'function') { try { pushUndo(); } catch(e) {} }
 
   const doSave = () => {
-    _ownWrite = true;
+    setOwnWrite(true);
 
     const metaRef = `users/${USER_ID}/startmine_meta`;
     const pagesMetaRef = `users/${USER_ID}/startmine_pages_meta`;
@@ -662,15 +701,26 @@ function sv(saveAll = false, immediate = false) {
 
     db.ref().update(updates)
       .then(() => {
-        _ownWrite = false;
+        setOwnWrite(false);
         // Cache active page data to localStorage after successful save
         const activePg = cp();
         if (activePg) {
           cachePageData(activePg.id, { widgets: activePg.widgets || [], miroCards: activePg.miroCards || [] });
         }
+        // Clean up any pending deleted page nodes from Firebase
+        if (_pendingDeletePageIds.length > 0) {
+          const delUpdates = {};
+          _pendingDeletePageIds.forEach(pid => {
+            delUpdates[`users/${USER_ID}/startmine_pages/${pid}`] = null;
+            // Also remove from localStorage cache
+            try { localStorage.removeItem(lsPageKey(pid)); } catch(e) {}
+          });
+          _pendingDeletePageIds = [];
+          db.ref().update(delUpdates).catch(e => console.warn('[DELETE CLEANUP]', e));
+        }
       })
       .catch((err) => {
-        _ownWrite = false;
+        setOwnWrite(false);
         setSyncStatus('err', 'Sync error: ' + (err.code || err.message));
       });
   };
@@ -742,10 +792,17 @@ function saveSnapshot(silent = false) {
     pages: {}
   };
   D.pages.forEach(p => {
-    snapshot.pages[p.id] = {
-      widgets: p.widgets || [],
-      miroCards: p.miroCards || []
-    };
+    // FIX: Use localStorage cache for pages that don't have heavy data in memory
+    let widgets = p.widgets || [];
+    let miroCards = p.miroCards || [];
+    if (widgets.length === 0 && miroCards.length === 0) {
+      const cached = getCachedPageData(p.id);
+      if (cached) {
+        widgets = cached.widgets || [];
+        miroCards = cached.miroCards || [];
+      }
+    }
+    snapshot.pages[p.id] = { widgets, miroCards };
   });
 
   const snapRef = `users/${USER_ID}/startmine_snapshots/${now}`;
@@ -798,10 +855,17 @@ function saveSnapshotBeacon() {
       pages: {}
     };
     D.pages.forEach(p => {
-      snapshot.pages[p.id] = {
-        widgets: p.widgets || [],
-        miroCards: p.miroCards || []
-      };
+      // FIX: Use localStorage cache for pages without loaded data
+      let widgets = p.widgets || [];
+      let miroCards = p.miroCards || [];
+      if (widgets.length === 0 && miroCards.length === 0) {
+        const cached = getCachedPageData(p.id);
+        if (cached) {
+          widgets = cached.widgets || [];
+          miroCards = cached.miroCards || [];
+        }
+      }
+      snapshot.pages[p.id] = { widgets, miroCards };
     });
     // Use fetch with keepalive + PUT for Firebase REST API (sendBeacon only does POST)
     const url = `${firebaseConfig.databaseURL}/users/${USER_ID}/startmine_snapshots/${now}.json`;
@@ -937,6 +1001,242 @@ function openSnapshotModal() {
 function closeSnapshotModal() {
   const modal = document.getElementById('snapshot-modal');
   if (modal) modal.style.display = 'none';
+}
+
+// ─── Google Drive Backup System ───
+const GDRIVE_FOLDER_NAME = 'Startmine Backups';
+const GDRIVE_BACKUP_PREFIX = 'startmine_backup_';
+
+// Ensure we have a valid Google access token (re-auth if needed)
+async function ensureGoogleToken() {
+  if (_googleAccessToken) {
+    // Test if token is still valid
+    try {
+      const resp = await fetch('https://www.googleapis.com/drive/v3/about?fields=user', {
+        headers: { 'Authorization': 'Bearer ' + _googleAccessToken }
+      });
+      if (resp.ok) return _googleAccessToken;
+    } catch (e) { /* token expired */ }
+  }
+  // Re-authenticate to get a fresh token
+  showToast('🔑 Signing in to Google Drive…');
+  try {
+    const result = await auth.signInWithPopup(provider);
+    if (result.credential) {
+      _googleAccessToken = result.credential.accessToken;
+      return _googleAccessToken;
+    }
+  } catch (e) {
+    showToast('❌ Google Drive auth failed: ' + e.message, 4000);
+    throw e;
+  }
+  throw new Error('Could not get Google access token');
+}
+
+// Find or create the Startmine Backups folder on Google Drive
+async function getOrCreateDriveFolder(token) {
+  // Search for existing folder
+  const searchResp = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent("name='" + GDRIVE_FOLDER_NAME + "' and mimeType='application/vnd.google-apps.folder' and trashed=false")}&fields=files(id,name)`,
+    { headers: { 'Authorization': 'Bearer ' + token } }
+  );
+  const searchData = await searchResp.json();
+  if (searchData.files && searchData.files.length > 0) {
+    return searchData.files[0].id;
+  }
+
+  // Create folder
+  const createResp = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + token,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      name: GDRIVE_FOLDER_NAME,
+      mimeType: 'application/vnd.google-apps.folder'
+    })
+  });
+  const folder = await createResp.json();
+  return folder.id;
+}
+
+// Build full export data including cached page data for non-active pages
+function buildFullExportData() {
+  const exportData = JSON.parse(JSON.stringify({
+    settings: D.settings,
+    curEnv: D.curEnv,
+    curGroup: D.curGroup,
+    cur: D.cur,
+    environments: D.environments,
+    groups: D.groups,
+    inbox: D.inbox,
+    pages: D.pages.map(p => {
+      let widgets = p.widgets || [];
+      let miroCards = p.miroCards || [];
+      // Use localStorage cache for pages without loaded data
+      if (widgets.length === 0 && miroCards.length === 0) {
+        const cached = getCachedPageData(p.id);
+        if (cached) {
+          widgets = cached.widgets || [];
+          miroCards = cached.miroCards || [];
+        }
+      }
+      return {
+        id: p.id, groupId: p.groupId, name: p.name,
+        pageType: p.pageType, zoom: p.zoom, panX: p.panX, panY: p.panY,
+        bg: p.bg, bgType: p.bgType, tabColor: p.tabColor || '',
+        widgets, miroCards
+      };
+    })
+  }));
+  return exportData;
+}
+
+// Export to Google Drive
+async function exportToGoogleDrive() {
+  try {
+    showToast('☁️ Exporting to Google Drive…');
+    const token = await ensureGoogleToken();
+    const folderId = await getOrCreateDriveFolder(token);
+
+    const exportData = buildFullExportData();
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 19).replace(/[T:]/g, '-');
+    const fileName = GDRIVE_BACKUP_PREFIX + dateStr + '.json';
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+
+    // Multipart upload to Google Drive
+    const metadata = {
+      name: fileName,
+      parents: [folderId],
+      mimeType: 'application/json'
+    };
+
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', blob);
+
+    const uploadResp = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token },
+      body: form
+    });
+
+    if (!uploadResp.ok) {
+      const errText = await uploadResp.text();
+      throw new Error('Upload failed: ' + errText);
+    }
+
+    const uploadResult = await uploadResp.json();
+    showToast('✅ Saved to Google Drive: ' + fileName, 3000);
+    console.log('[GDRIVE] Backup uploaded:', uploadResult);
+    return uploadResult;
+  } catch (err) {
+    console.error('[GDRIVE EXPORT ERROR]', err);
+    showToast('❌ Drive export failed: ' + err.message, 4000);
+  }
+}
+
+// Restore from Google Drive — shows list of available backups
+async function restoreFromGoogleDrive() {
+  try {
+    showToast('☁️ Loading backups from Google Drive…');
+    const token = await ensureGoogleToken();
+    const folderId = await getOrCreateDriveFolder(token);
+
+    // List backup files in folder
+    const listResp = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent("'" + folderId + "' in parents and trashed=false")}&orderBy=createdTime desc&fields=files(id,name,createdTime,size)&pageSize=50`,
+      { headers: { 'Authorization': 'Bearer ' + token } }
+    );
+    const listData = await listResp.json();
+    const files = (listData.files || []).filter(f => f.name.endsWith('.json'));
+
+    // Build modal UI
+    let modal = document.getElementById('gdrive-restore-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'gdrive-restore-modal';
+      document.body.appendChild(modal);
+    }
+
+    if (files.length === 0) {
+      modal.innerHTML = `
+        <div class="snap-overlay" onclick="document.getElementById('gdrive-restore-modal').style.display='none'"></div>
+        <div class="snap-dialog">
+          <div class="snap-header"><span>☁️ Google Drive Backups</span><button class="snap-close" onclick="document.getElementById('gdrive-restore-modal').style.display='none'">✕</button></div>
+          <div class="snap-body"><div style="text-align:center;padding:30px;color:rgba(255,255,255,.5)">No backups found on Google Drive.<br>Press <b>Ctrl+Shift+S</b> to create one.</div></div>
+        </div>`;
+      modal.style.display = 'flex';
+      return;
+    }
+
+    let rowsHtml = '';
+    files.forEach(f => {
+      const date = new Date(f.createdTime);
+      const timeStr = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' +
+        date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const sizeKB = f.size ? (parseInt(f.size) / 1024).toFixed(1) + ' KB' : '';
+      rowsHtml += `
+        <div class="snap-row" data-fid="${f.id}">
+          <div class="snap-info">
+            <div class="snap-time">${timeStr}</div>
+            <div class="snap-pages">${f.name} ${sizeKB ? '(' + sizeKB + ')' : ''}</div>
+          </div>
+          <button class="snap-restore-btn gdrive-restore-btn" data-fid="${f.id}" title="Restore this backup">Restore</button>
+        </div>`;
+    });
+
+    modal.innerHTML = `
+      <div class="snap-overlay" onclick="document.getElementById('gdrive-restore-modal').style.display='none'"></div>
+      <div class="snap-dialog">
+        <div class="snap-header"><span>☁️ Google Drive Backups</span><button class="snap-close" onclick="document.getElementById('gdrive-restore-modal').style.display='none'">✕</button></div>
+        <div class="snap-body">${rowsHtml}</div>
+      </div>`;
+    modal.style.display = 'flex';
+
+    // Attach click handlers
+    modal.querySelectorAll('.gdrive-restore-btn').forEach(btn => {
+      btn.onclick = async () => {
+        const fileId = btn.dataset.fid;
+        if (!confirm('Restore this backup from Google Drive?\\nCurrent state will be saved as a snapshot first.')) return;
+        try {
+          // Save current state first
+          showToast('💾 Saving current state…');
+          await saveSnapshot(true);
+
+          // Download the backup file
+          showToast('☁️ Downloading backup…');
+          const dlResp = await fetch(
+            `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+            { headers: { 'Authorization': 'Bearer ' + token } }
+          );
+          const raw = await dlResp.json();
+
+          // Parse and apply
+          const imported = _parseImport(raw);
+          if (!imported) {
+            showToast('❌ Could not parse backup file', 3000);
+            return;
+          }
+          D = imported;
+          sanitizeData(D);
+          sv(true, true);
+          switchActivePage(D.cur);
+          modal.style.display = 'none';
+          showToast('✅ Restored from Google Drive!', 3000);
+        } catch (err) {
+          console.error('[GDRIVE RESTORE ERROR]', err);
+          showToast('❌ Restore failed: ' + err.message, 4000);
+        }
+      };
+    });
+
+  } catch (err) {
+    console.error('[GDRIVE RESTORE ERROR]', err);
+    showToast('❌ Failed to load backups: ' + err.message, 4000);
+  }
 }
 
 function uid() {
@@ -1792,6 +2092,16 @@ function parseBookmarks(dl, widget) {
     }
   }
 }
+
+// Google Drive buttons
+document.getElementById('gdrive-export').onclick = () => {
+  document.getElementById('io-pop').classList.remove('open');
+  exportToGoogleDrive();
+};
+document.getElementById('gdrive-restore').onclick = () => {
+  document.getElementById('io-pop').classList.remove('open');
+  restoreFromGoogleDrive();
+};
 
 document.getElementById('reset-btn').onclick = () => {
   if (!confirm('Reset all data?')) return;
@@ -2718,6 +3028,10 @@ function delEnv(eid) {
   const groupsToDel = D.groups.filter(g => g.envId === eid);
   const groupIds = groupsToDel.map(g => g.id);
 
+  // FIX: Queue deleted page IDs for Firebase cleanup
+  const pagesToDel = D.pages.filter((p) => groupIds.includes(p.groupId));
+  pagesToDel.forEach(p => _pendingDeletePageIds.push(p.id));
+
   D.pages = D.pages.filter((p) => !groupIds.includes(p.groupId));
   D.groups = D.groups.filter((g) => g.envId !== eid);
   D.environments.splice(envIdx, 1);
@@ -2744,6 +3058,10 @@ function delGroup(gid) {
   if (!confirm('Delete this group and ALL its pages?')) return;
   const gidx = D.groups.findIndex((g) => g.id === gid);
   if (gidx < 0) return;
+
+  // FIX: Queue deleted page IDs for Firebase cleanup
+  D.pages.filter((p) => p.groupId === gid).forEach(p => _pendingDeletePageIds.push(p.id));
+
   D.pages = D.pages.filter((p) => p.groupId !== gid);
   D.groups.splice(gidx, 1);
   if (D.curGroup === gid || !D.groups.some(g => g.id === D.curGroup)) {
@@ -2767,6 +3085,10 @@ function delPage(pid) {
     return;
   }
   if (!confirm('Delete this page?')) return;
+
+  // FIX: Queue deleted page ID for Firebase cleanup
+  _pendingDeletePageIds.push(pid);
+
   D.pages = D.pages.filter((p) => p.id !== pid);
   if (D.cur === pid) {
     const remaining =
@@ -3680,11 +4002,7 @@ function renderAll() {
   buildInbox();
   document.documentElement.style.setProperty('--ac', D.settings.accent || '#6c8fff');
   document.getElementById('ac-dot').style.background = D.settings.accent || '#6c8fff';
-  // Cache locally for fast reload
-  try {
-    localStorage.setItem('startmine_cache', JSON.stringify(D));
-    localStorage.setItem('startmine_cache_ts', '' + Date.now());
-  } catch (e) { /* quota exceeded */ }
+  // FIX: Removed conflicting startmine_cache layer — the proper sm_meta/sm_pages_meta/sm_page_{id} system handles caching
 }
 
 // ─── Export Bookmark Widget to Miro Clipboard (Copy Paste) ───
@@ -3852,22 +4170,8 @@ window.convertPageToMiro = function (pageId) {
 };
 
 
-// ─── Local Cache: instant load from localStorage on startup ───
-(function initLocalCache() {
-  const origInitDB = initDB;
-  initDB = function () {
-    // Load cached data first for instant render
-    try {
-      const cached = localStorage.getItem('startmine_cache');
-      if (cached) {
-        const data = JSON.parse(cached);
-        if (data && data.pages) {
-          D = sanitizeData(data);
-          renderAll();
-        }
-      }
-    } catch (e) { /* ignore parse errors */ }
-    // Then start Firebase real-time listener (will overwrite with fresh data)
-    origInitDB();
-  };
-})();
+// FIX: Removed stale startmine_cache layer that could cause data loss.
+// The proper sharded cache (sm_meta, sm_pages_meta, sm_page_{id}) is already used
+// in setupShardedListeners() for instant loading.
+// Clean up any leftover stale cache on first load:
+try { localStorage.removeItem('startmine_cache'); localStorage.removeItem('startmine_cache_ts'); } catch(e) {}
