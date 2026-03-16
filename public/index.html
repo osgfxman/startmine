@@ -77,6 +77,9 @@
           <div class="io-it" id="gdrive-export" style="color:#4dd0e1">☁️ Export to Google Drive <span style="font-size:.65rem;opacity:.6;margin-left:auto">Ctrl+Alt+S</span></div>
           <div class="io-it" id="gdrive-restore" style="color:#7ed4a4">☁️ Restore from Google Drive</div>
           <div class="io-sep"></div>
+          <div class="io-it" id="github-export" style="color:#c9a0dc">🐙 Export to GitHub <span style="font-size:.65rem;opacity:.6;margin-left:auto">Ctrl+Alt+G</span></div>
+          <div class="io-it" id="github-restore" style="color:#a0c9dc">🐙 Restore from GitHub</div>
+          <div class="io-sep"></div>
           <div class="io-it" id="reset-btn" style="color:var(--red)">🗑️ Reset All</div>
         </div>
       </div>
@@ -342,7 +345,7 @@
         <circle cx="6" cy="6.5" r="1" fill="currentColor" />
         <circle cx="9" cy="6.5" r="1" fill="currentColor" />
       </svg></button>
-    <button class="mtb-btn" id="mtb-save" title="Save All to Firebase (Ctrl+S)" onclick="saveSnapshot()">💾</button>
+    <button class="mtb-btn" id="mtb-save-all" title="Save All: Firebase + Drive + GitHub (Ctrl+Alt+A)" onclick="saveAllBackups()">🛡️</button>
     <div style="width:28px;height:1px;background:rgba(255,255,255,.15);margin:4px auto;"></div>
     <button class="mtb-btn" id="mtb-snapshot" title="Snapshots (Ctrl+S)" onclick="openSnapshotModal()">📸</button>
   </div>

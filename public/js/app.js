@@ -752,7 +752,7 @@ function showToast(msg, duration = 2000) {
   if (!toast) {
     toast = document.createElement('div');
     toast.id = 'sm-toast';
-    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(60px);background:rgba(20,20,30,.92);color:#fff;padding:10px 24px;border-radius:12px;font-size:.85rem;z-index:999999;pointer-events:none;opacity:0;transition:all .3s ease;backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.1);';
+    toast.style.cssText = 'position:fixed;top:18px;left:50%;transform:translateX(-50%) translateY(-60px);background:rgba(20,20,30,.95);color:#fff;padding:12px 28px;border-radius:14px;font-size:.92rem;z-index:999999;pointer-events:none;opacity:0;transition:all .35s cubic-bezier(.4,0,.2,1);backdrop-filter:blur(12px);border:1px solid rgba(108,143,255,.35);box-shadow:0 4px 24px rgba(0,0,0,.4);font-weight:500;';
     document.body.appendChild(toast);
   }
   toast.textContent = msg;
@@ -761,7 +761,7 @@ function showToast(msg, duration = 2000) {
   clearTimeout(toast._tmr);
   toast._tmr = setTimeout(() => {
     toast.style.opacity = '0';
-    toast.style.transform = 'translateX(-50%) translateY(60px)';
+    toast.style.transform = 'translateX(-50%) translateY(-60px)';
   }, duration);
 }
 
@@ -1237,6 +1237,223 @@ async function restoreFromGoogleDrive() {
     console.error('[GDRIVE RESTORE ERROR]', err);
     showToast('❌ Failed to load backups: ' + err.message, 4000);
   }
+}
+
+// ─── GitHub Backup System (Version Control) ───
+const GITHUB_PAT = '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';
+const GITHUB_OWNER = 'osgfxman';
+const GITHUB_REPO = 'startmine-backup';
+const GITHUB_FILE = 'startmine_data.json';
+const GITHUB_API = 'https://api.github.com';
+
+function ghHeaders() {
+  return {
+    'Authorization': 'Bearer ' + GITHUB_PAT,
+    'Accept': 'application/vnd.github+json',
+    'Content-Type': 'application/json',
+    'X-GitHub-Api-Version': '2022-11-28'
+  };
+}
+
+// Ensure repo exists, create if not
+async function ensureGitHubRepo() {
+  try {
+    const resp = await fetch(`${GITHUB_API}/repos/${GITHUB_OWNER}/${GITHUB_REPO}`, { headers: ghHeaders() });
+    if (resp.ok) return true;
+  } catch (e) { /* repo doesn't exist */ }
+
+  // Try to create repo
+  try {
+    const createResp = await fetch(`${GITHUB_API}/user/repos`, {
+      method: 'POST',
+      headers: ghHeaders(),
+      body: JSON.stringify({ name: GITHUB_REPO, private: true, description: 'Startmine automatic backups', auto_init: true })
+    });
+    if (createResp.ok) {
+      showToast('📦 Created GitHub repo: ' + GITHUB_REPO, 3000);
+      return true;
+    }
+    const err = await createResp.json();
+    throw new Error(err.message || 'Could not create repo');
+  } catch (e) {
+    showToast('❌ GitHub repo not found. Please create "' + GITHUB_REPO + '" manually on GitHub.', 5000);
+    throw e;
+  }
+}
+
+// Export to GitHub (commit with version control)
+async function exportToGitHub() {
+  try {
+    showToast('🐙 Saving to GitHub…');
+    await ensureGitHubRepo();
+
+    const exportData = buildFullExportData();
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(exportData, null, 2))));
+    const now = new Date();
+    const commitMsg = 'Backup ' + now.toISOString().slice(0, 19).replace('T', ' ');
+
+    // Get current file SHA (needed for updates)
+    let sha = null;
+    try {
+      const getResp = await fetch(`${GITHUB_API}/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE}`, { headers: ghHeaders() });
+      if (getResp.ok) {
+        const fileData = await getResp.json();
+        sha = fileData.sha;
+      }
+    } catch (e) { /* file doesn't exist yet */ }
+
+    // Create or update file
+    const body = { message: commitMsg, content };
+    if (sha) body.sha = sha;
+
+    const putResp = await fetch(`${GITHUB_API}/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE}`, {
+      method: 'PUT',
+      headers: ghHeaders(),
+      body: JSON.stringify(body)
+    });
+
+    if (!putResp.ok) {
+      const errData = await putResp.json();
+      throw new Error(errData.message || 'Upload failed');
+    }
+
+    const result = await putResp.json();
+    showToast('✅ Saved to GitHub: ' + commitMsg, 3000);
+    console.log('[GITHUB] Backup committed:', result.commit?.sha?.slice(0, 7));
+    return result;
+  } catch (err) {
+    console.error('[GITHUB EXPORT ERROR]', err);
+    showToast('❌ GitHub export failed: ' + err.message, 4000);
+  }
+}
+
+// Restore from GitHub — shows commit history
+async function restoreFromGitHub() {
+  try {
+    showToast('🐙 Loading GitHub history…');
+    await ensureGitHubRepo();
+
+    // Get commit history for the backup file
+    const commitsResp = await fetch(
+      `${GITHUB_API}/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits?path=${GITHUB_FILE}&per_page=30`,
+      { headers: ghHeaders() }
+    );
+    if (!commitsResp.ok) throw new Error('Could not load commit history');
+    const commits = await commitsResp.json();
+
+    // Build modal UI
+    let modal = document.getElementById('github-restore-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'github-restore-modal';
+      document.body.appendChild(modal);
+    }
+
+    if (commits.length === 0) {
+      modal.innerHTML = `
+        <div class="snap-overlay" onclick="document.getElementById('github-restore-modal').style.display='none'"></div>
+        <div class="snap-dialog">
+          <div class="snap-header"><span>🐙 GitHub Backups</span><button class="snap-close" onclick="document.getElementById('github-restore-modal').style.display='none'">✕</button></div>
+          <div class="snap-body"><div style="text-align:center;padding:30px;color:rgba(255,255,255,.5)">No backups found on GitHub.<br>Press <b>Ctrl+Alt+G</b> to create one.</div></div>
+        </div>`;
+      modal.style.display = 'flex';
+      return;
+    }
+
+    let rowsHtml = '';
+    commits.forEach(c => {
+      const date = new Date(c.commit.author.date);
+      const timeStr = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' +
+        date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const shortSha = c.sha.slice(0, 7);
+      rowsHtml += `
+        <div class="snap-row" data-sha="${c.sha}">
+          <div class="snap-info">
+            <div class="snap-time">${timeStr}</div>
+            <div class="snap-pages">${c.commit.message} <span style="opacity:.5;font-size:.7rem">${shortSha}</span></div>
+          </div>
+          <button class="snap-restore-btn github-restore-btn" data-sha="${c.sha}" title="Restore this version">Restore</button>
+        </div>`;
+    });
+
+    modal.innerHTML = `
+      <div class="snap-overlay" onclick="document.getElementById('github-restore-modal').style.display='none'"></div>
+      <div class="snap-dialog">
+        <div class="snap-header"><span>🐙 GitHub Version History</span><button class="snap-close" onclick="document.getElementById('github-restore-modal').style.display='none'">✕</button></div>
+        <div class="snap-body">${rowsHtml}</div>
+      </div>`;
+    modal.style.display = 'flex';
+
+    // Attach click handlers
+    modal.querySelectorAll('.github-restore-btn').forEach(btn => {
+      btn.onclick = async () => {
+        const sha = btn.dataset.sha;
+        if (!confirm('Restore this version from GitHub?\\nCurrent state will be saved as a snapshot first.')) return;
+        try {
+          showToast('💾 Saving current state…');
+          await saveSnapshot(true);
+
+          showToast('🐙 Downloading version…');
+          // Get file at specific commit
+          const fileResp = await fetch(
+            `${GITHUB_API}/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE}?ref=${sha}`,
+            { headers: ghHeaders() }
+          );
+          if (!fileResp.ok) throw new Error('Could not download version');
+          const fileData = await fileResp.json();
+          const raw = JSON.parse(decodeURIComponent(escape(atob(fileData.content.replace(/\n/g, '')))));
+
+          const imported = _parseImport(raw);
+          if (!imported) {
+            showToast('❌ Could not parse backup file', 3000);
+            return;
+          }
+          D = imported;
+          sanitizeData(D);
+          sv(true, true);
+          switchActivePage(D.cur);
+          modal.style.display = 'none';
+          showToast('✅ Restored from GitHub!', 3000);
+        } catch (err) {
+          console.error('[GITHUB RESTORE ERROR]', err);
+          showToast('❌ Restore failed: ' + err.message, 4000);
+        }
+      };
+    });
+  } catch (err) {
+    console.error('[GITHUB RESTORE ERROR]', err);
+    showToast('❌ Failed to load GitHub history: ' + err.message, 4000);
+  }
+}
+
+// ─── Save All: Firebase Snapshot + Google Drive + GitHub ───
+async function saveAllBackups() {
+  showToast('🔄 Saving to all destinations…');
+  const results = { firebase: false, drive: false, github: false };
+
+  // 1. Firebase Snapshot
+  try {
+    await saveSnapshot(true);
+    results.firebase = true;
+  } catch (e) { console.error('[SAVE ALL] Firebase failed:', e); }
+
+  // 2. Google Drive + GitHub in parallel
+  const [driveResult, githubResult] = await Promise.allSettled([
+    exportToGoogleDrive().then(() => { results.drive = true; }),
+    exportToGitHub().then(() => { results.github = true; })
+  ]);
+
+  const icons = [
+    results.firebase ? '✅' : '❌',
+    results.drive ? '✅' : '❌',
+    results.github ? '✅' : '❌'
+  ];
+  const allOk = results.firebase && results.drive && results.github;
+  showToast(
+    (allOk ? '✅ All saved! ' : '⚠️ Partial save: ') +
+    `Firebase ${icons[0]}  Drive ${icons[1]}  GitHub ${icons[2]}`,
+    allOk ? 3000 : 5000
+  );
 }
 
 function uid() {
@@ -2101,6 +2318,16 @@ document.getElementById('gdrive-export').onclick = () => {
 document.getElementById('gdrive-restore').onclick = () => {
   document.getElementById('io-pop').classList.remove('open');
   restoreFromGoogleDrive();
+};
+
+// GitHub buttons
+document.getElementById('github-export').onclick = () => {
+  document.getElementById('io-pop').classList.remove('open');
+  exportToGitHub();
+};
+document.getElementById('github-restore').onclick = () => {
+  document.getElementById('io-pop').classList.remove('open');
+  restoreFromGitHub();
 };
 
 document.getElementById('reset-btn').onclick = () => {

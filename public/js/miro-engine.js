@@ -1184,6 +1184,20 @@ document.addEventListener('keydown', (e) => {
   // Don't trigger shortcuts during text input
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.contentEditable === 'true') return;
 
+  // Ctrl+Alt+A / Ctrl+Alt+ش — Save All (Firebase + Drive + GitHub)
+  if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key.toLowerCase() === 'a' || e.key === 'ش')) {
+    e.preventDefault();
+    if (typeof saveAllBackups === 'function') saveAllBackups();
+    return;
+  }
+
+  // Ctrl+Alt+G / Ctrl+Alt+ل — Export to GitHub
+  if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key.toLowerCase() === 'g' || e.key === 'ل')) {
+    e.preventDefault();
+    if (typeof exportToGitHub === 'function') exportToGitHub();
+    return;
+  }
+
   // Ctrl+Alt+S / Ctrl+Alt+س — Export to Google Drive
   if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key.toLowerCase() === 's' || e.key === 'س')) {
     e.preventDefault();
