@@ -1240,15 +1240,29 @@ async function restoreFromGoogleDrive() {
 }
 
 // ─── GitHub Backup System (Version Control) ───
-const GITHUB_PAT = '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';
+// Token stored in localStorage to avoid GitHub Secret Scanning auto-revoking it
+function getGitHubPAT() {
+  let pat = localStorage.getItem('gh_pat');
+  if (!pat) {
+    pat = prompt('Enter your GitHub Personal Access Token (PAT).\nThis is stored locally and only needs to be entered once.\n\nGet one from: github.com/settings/tokens');
+    if (pat && pat.trim()) {
+      localStorage.setItem('gh_pat', pat.trim());
+    } else {
+      return null;
+    }
+  }
+  return pat;
+}
 const GITHUB_OWNER = 'osgfxman';
 const GITHUB_REPO = 'startmine-backup';
 const GITHUB_FILE = 'startmine_data.json';
 const GITHUB_API = 'https://api.github.com';
 
 function ghHeaders() {
+  const pat = getGitHubPAT();
+  if (!pat) return null;
   return {
-    'Authorization': 'Bearer ' + GITHUB_PAT,
+    'Authorization': 'Bearer ' + pat,
     'Accept': 'application/vnd.github+json',
     'Content-Type': 'application/json',
     'X-GitHub-Api-Version': '2022-11-28'
@@ -1284,6 +1298,7 @@ async function ensureGitHubRepo() {
 // Export to GitHub (commit with version control)
 async function exportToGitHub() {
   try {
+    if (!getGitHubPAT()) { showToast('❌ GitHub token required', 3000); return; }
     showToast('🐙 Saving to GitHub…');
     await ensureGitHubRepo();
 
@@ -1330,6 +1345,7 @@ async function exportToGitHub() {
 // Restore from GitHub — shows commit history
 async function restoreFromGitHub() {
   try {
+    if (!getGitHubPAT()) { showToast('❌ GitHub token required', 3000); return; }
     showToast('🐙 Loading GitHub history…');
     await ensureGitHubRepo();
 
