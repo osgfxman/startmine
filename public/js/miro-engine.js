@@ -564,7 +564,7 @@ function deleteMiroCard(cid) {
 
       // Debounced save so zoom state persists
       clearTimeout(_wheelSvTimer);
-      _wheelSvTimer = setTimeout(() => sv(), 300);
+      _wheelSvTimer = setTimeout(() => sv(), 1000);
     },
     { passive: false },
   );

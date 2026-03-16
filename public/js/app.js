@@ -162,7 +162,141 @@ function isOwnWrite() {
 let _svTimer = null;
 let _lastSyncedPageData = null;
 let _lastSyncedPagesMetaStr = null;
+let _lastSyncedMetaStr = null;
 let _pendingDeletePageIds = []; // Track page IDs that need Firebase cleanup
+
+/* ─── Offline Mode ─── */
+let _offlineMode = false;
+let _dirtyOffline = false;
+let _lastSvTs = 0; // Timestamp of last successful sv() for beacon dedup
+try { _offlineMode = localStorage.getItem('sm_offline_mode') === '1'; } catch(e) {}
+
+function setOfflineMode(val) {
+  _offlineMode = val;
+  try { localStorage.setItem('sm_offline_mode', val ? '1' : '0'); } catch(e) {}
+  updateOfflineUI();
+}
+
+function updateOfflineUI() {
+  const cb = document.getElementById('offline-toggle-cb');
+  const lbl = document.getElementById('offline-label');
+  const syncBtn = document.getElementById('sync-now-btn');
+  if (cb) cb.checked = _offlineMode;
+  if (lbl) lbl.textContent = _offlineMode ? '✈️ Offline' : '⚡ Realtime';
+  if (syncBtn) syncBtn.disabled = !_offlineMode;
+  // Update sync status display
+  if (_offlineMode) {
+    setSyncStatus('loading', _dirtyOffline ? '✈️ Offline Mode *' : '✈️ Offline Mode');
+  }
+}
+
+function markDirtyOffline() {
+  if (_offlineMode && !_dirtyOffline) {
+    _dirtyOffline = true;
+    updateOfflineUI();
+  }
+}
+
+function toggleOfflineMode() {
+  if (_offlineMode) {
+    // Switching to Realtime: sync first if dirty, then re-attach listeners
+    if (_dirtyOffline) {
+      syncNow().then(() => {
+        setOfflineMode(false);
+        _dirtyOffline = false;
+        setupShardedListeners();
+        setSyncStatus('ok', 'Realtime Sync Active \u2713');
+      }).catch(err => {
+        showToast('❌ Sync failed: ' + (err.message || err));
+      });
+    } else {
+      setOfflineMode(false);
+      setupShardedListeners();
+      setSyncStatus('ok', 'Realtime Sync Active \u2713');
+    }
+  } else {
+    // Switching to Offline: detach listeners
+    detachAllListeners();
+    setOfflineMode(true);
+    setSyncStatus('loading', '✈️ Offline Mode');
+    showToast('✈️ Offline Mode — changes saved locally');
+  }
+}
+
+function detachAllListeners() {
+  if (!USER_ID) return;
+  const metaRef = `users/${USER_ID}/startmine_meta`;
+  const pagesMetaRef = `users/${USER_ID}/startmine_pages_meta`;
+  db.ref(metaRef).off();
+  db.ref(pagesMetaRef).off();
+  db.ref('.info/connected').off();
+  if (_activePageListener) {
+    db.ref(_activePageListener).off();
+  }
+}
+
+function syncNow() {
+  if (!USER_ID) return Promise.resolve();
+  showToast('🔄 Syncing to cloud...');
+  setOwnWrite(true);
+
+  const metaRef = `users/${USER_ID}/startmine_meta`;
+  const pagesMetaRef = `users/${USER_ID}/startmine_pages_meta`;
+
+  const meta = {
+    settings: D.settings,
+    curEnv: D.curEnv,
+    curGroup: D.curGroup,
+    environments: D.environments,
+    groups: D.groups,
+    inbox: D.inbox
+  };
+
+  const pagesMeta = D.pages.map(p => ({
+    id: p.id, groupId: p.groupId, name: p.name,
+    pageType: p.pageType, zoom: p.zoom, panX: p.panX, panY: p.panY,
+    bg: p.bg, bgType: p.bgType, tabColor: p.tabColor || ''
+  }));
+
+  const updates = {};
+  updates[metaRef] = meta;
+  updates[pagesMetaRef] = pagesMeta;
+
+  // Push all page data
+  D.pages.forEach(p => {
+    let widgets = p.widgets || [];
+    let miroCards = p.miroCards || [];
+    if (widgets.length === 0 && miroCards.length === 0) {
+      const cached = getCachedPageData(p.id);
+      if (cached) {
+        widgets = cached.widgets || [];
+        miroCards = cached.miroCards || [];
+      }
+    }
+    updates[`users/${USER_ID}/startmine_pages/${p.id}`] = { widgets, miroCards };
+  });
+
+  return db.ref().update(updates)
+    .then(() => {
+      setOwnWrite(false);
+      _dirtyOffline = false;
+      _lastSyncedMetaStr = JSON.stringify(meta);
+      _lastSyncedPagesMetaStr = JSON.stringify(pagesMeta);
+      const activePg = cp();
+      if (activePg) {
+        _lastSyncedPageData = {
+          widgets: JSON.stringify(activePg.widgets || []),
+          miroCards: JSON.stringify(activePg.miroCards || [])
+        };
+      }
+      updateOfflineUI();
+      showToast('✅ Synced successfully!');
+    })
+    .catch(err => {
+      setOwnWrite(false);
+      throw err;
+    });
+}
 
 /* ─── LocalStorage Cache ─── */
 const LS_META = 'sm_meta';
@@ -306,6 +440,33 @@ function sanitizeData(d) {
 
 function initDB() {
   isFirstLoad = true;
+
+  // If in offline mode, just load from cache and render
+  if (_offlineMode) {
+    const cachedMeta = getCachedMeta();
+    const cachedPagesMeta = getCachedPagesMeta();
+    if (cachedMeta && cachedPagesMeta) {
+      D.settings = cachedMeta.settings || D.settings;
+      D.curEnv = cachedMeta.curEnv || D.curEnv;
+      D.curGroup = cachedMeta.curGroup || D.curGroup;
+      D.environments = cachedMeta.environments || D.environments;
+      D.groups = cachedMeta.groups || D.groups;
+      D.inbox = cachedMeta.inbox || D.inbox;
+      D.pages = cachedPagesMeta;
+      if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
+      const cachedPage = getCachedPageData(D.cur);
+      const pg = cp();
+      if (pg && cachedPage) {
+        pg.widgets = cachedPage.widgets || [];
+        pg.miroCards = cachedPage.miroCards || [];
+      }
+      isFirstLoad = false;
+      renderMeta();
+      buildCols();
+      updateOfflineUI();
+    }
+    return;
+  }
 
   // Backwards compatibility migration logic: if the user still has monolithic data, migrate it first
   db.ref(DB_REF).once('value', (snap) => {
@@ -531,6 +692,12 @@ function switchActivePage(pageId) {
     document.getElementById('cw').innerHTML = '<div style="padding: 2rem; color: var(--mu); text-align: center;">Loading page data...</div>';
   }
 
+  // In offline mode, just load from cache, don't attach Firebase listener
+  if (_offlineMode) {
+    buildCols();
+    return;
+  }
+
   db.ref(pageDataRef).on('value', (snap) => {
     if (isOwnWrite()) return;
     const pData = snap.val() || { widgets: [], miroCards: [] };
@@ -558,6 +725,26 @@ function sv(saveAll = false, immediate = false) {
   if (!USER_ID) return;
   // Capture undo snapshot before saving (for Miro pages)
   if (typeof pushUndo === 'function') { try { pushUndo(); } catch(e) {} }
+
+  // ─── Offline Mode: save to localStorage only ───
+  if (_offlineMode) {
+    const activePg = cp();
+    if (activePg) {
+      cachePageData(activePg.id, { widgets: activePg.widgets || [], miroCards: activePg.miroCards || [] });
+    }
+    const meta = {
+      settings: D.settings, curEnv: D.curEnv, curGroup: D.curGroup,
+      environments: D.environments, groups: D.groups, inbox: D.inbox
+    };
+    cacheMeta(meta);
+    cachePagesMeta(D.pages.map(p => ({
+      id: p.id, groupId: p.groupId, name: p.name, pageType: p.pageType,
+      zoom: p.zoom, panX: p.panX, panY: p.panY, bg: p.bg, bgType: p.bgType,
+      tabColor: p.tabColor || ''
+    })));
+    markDirtyOffline();
+    return;
+  }
 
   const doSave = () => {
     setOwnWrite(true);
@@ -589,7 +776,13 @@ function sv(saveAll = false, immediate = false) {
     }));
 
     const updates = {};
-    updates[metaRef] = meta;
+
+    // Smart meta sync: only write if changed
+    const curMetaStr = JSON.stringify(meta);
+    if (curMetaStr !== _lastSyncedMetaStr) {
+      updates[metaRef] = meta;
+      _lastSyncedMetaStr = curMetaStr;
+    }
 
     // Smart pagesMeta sync: only upload what changed
     const curPagesMetaStr = JSON.stringify(pagesMeta);
@@ -699,9 +892,16 @@ function sv(saveAll = false, immediate = false) {
       }
     }
 
+    // Skip empty updates (nothing changed)
+    if (Object.keys(updates).length === 0) {
+      setOwnWrite(false);
+      return;
+    }
+
     db.ref().update(updates)
       .then(() => {
         setOwnWrite(false);
+        _lastSvTs = Date.now();
         // Cache active page data to localStorage after successful save
         const activePg = cp();
         if (activePg) {
@@ -731,14 +931,20 @@ function sv(saveAll = false, immediate = false) {
 }
 
 // ─── Save Guards: prevent data loss on tab close ───
-window.addEventListener('beforeunload', () => {
+window.addEventListener('beforeunload', (e) => {
   if (_svTimer) { clearTimeout(_svTimer); sv(false, true); }
-  // Auto-snapshot on browser close
-  saveSnapshotBeacon();
+  // Warn if offline with unsynced changes
+  if (_offlineMode && _dirtyOffline) {
+    e.preventDefault();
+    e.returnValue = 'You have unsynced offline changes. Leave anyway?';
+  }
+  // Auto-snapshot on browser close (skip if sv just fired within 3s)
+  if (Date.now() - _lastSvTs > 3000) saveSnapshotBeacon();
 });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && _svTimer) { clearTimeout(_svTimer); sv(false, true); }
-  if (document.hidden) saveSnapshotBeacon();
+  // Skip redundant beacon if sv just fired within 3s
+  if (document.hidden && Date.now() - _lastSvTs > 3000) saveSnapshotBeacon();
 });
 
 // ─── Versioned Snapshot Backup System ───

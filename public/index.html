@@ -44,6 +44,16 @@
     <div id="tb">
       <button class="ib" id="outline-btn" title="Page Outline (F2)">📑</button>
       <span id="user-email">👤</span>
+      <div class="tb-sep"></div>
+      <div class="tb-offline-group">
+        <label class="offline-toggle" title="Realtime / Offline Mode">
+          <input type="checkbox" id="offline-toggle-cb" onchange="toggleOfflineMode()">
+          <span class="offline-slider"></span>
+          <span class="offline-label" id="offline-label">⚡ Realtime</span>
+        </label>
+        <button class="ib" id="sync-now-btn" title="Sync to Cloud" disabled onclick="syncNow()">🔄</button>
+      </div>
+      <div class="tb-sep"></div>
       <div id="sync-dot" class="loading"></div>
       <span id="sync-msg">Connecting...</span>
       <div class="tb-sep"></div>

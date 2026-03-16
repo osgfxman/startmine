@@ -2308,3 +2308,83 @@ body:not(.outline-open) #root {
 .bm-drop-right {
   border-right: 2px solid var(--ac) !important;
 }
+
+/* ─── Offline Mode Toggle ─── */
+.tb-offline-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.offline-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.offline-toggle input[type="checkbox"] {
+  display: none;
+}
+
+.offline-slider {
+  position: relative;
+  width: 28px;
+  height: 14px;
+  background: #7ed4a4;
+  border-radius: 14px;
+  transition: background 0.25s;
+  flex-shrink: 0;
+}
+
+.offline-slider::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.25s;
+  box-shadow: 0 1px 3px rgba(0,0,0,.3);
+}
+
+.offline-toggle input:checked + .offline-slider {
+  background: #e8c97a;
+}
+
+.offline-toggle input:checked + .offline-slider::after {
+  transform: translateX(14px);
+}
+
+.offline-label {
+  font-size: 0.58rem;
+  color: var(--mu);
+  white-space: nowrap;
+  min-width: 55px;
+  transition: color 0.2s;
+}
+
+.offline-toggle:hover .offline-label {
+  color: var(--tx);
+}
+
+#sync-now-btn {
+  font-size: 0.65rem;
+  transition: all 0.2s;
+}
+
+#sync-now-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+#sync-now-btn:not(:disabled):hover {
+  background: rgba(108, 143, 255, .18);
+  border-color: var(--ac);
+  color: var(--tx);
+}
