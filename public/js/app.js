@@ -1240,7 +1240,7 @@ async function restoreFromGoogleDrive() {
 }
 
 // ─── GitHub Backup System (Version Control) ───
-const GITHUB_PAT = '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';
+const GITHUB_PAT = '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';
 const GITHUB_OWNER = 'osgfxman';
 const GITHUB_REPO = 'startmine-backup';
 const GITHUB_FILE = 'startmine_data.json';
