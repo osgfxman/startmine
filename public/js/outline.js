@@ -53,7 +53,7 @@ function getCardInfo(c) {
   if (c.type === 'grid') return { emoji: '📊', label: 'Table ' + (c.rows || 3) + '×' + (c.cols || 3) };
   if (c.type === 'mindmap') return { emoji: '🧠', label: c.root?.text || 'Mind Map' };
   if (c.type === 'trello') return { emoji: '📋', label: c.title || 'List' };
-  if (c.type === 'bwidget') return { emoji: '🔖', label: c.title || 'Bookmarks', favicon: null };
+  if (c.type === 'bwidget') return { emoji: c.emoji || '📌', label: c.title || 'Bookmarks', favicon: null };
   // Default: bookmark card
   return { emoji: '🔗', label: c.label || (c.url ? domainOf(c.url) : 'Card'), favicon: c.url };
 }

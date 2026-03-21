@@ -2739,6 +2739,51 @@ document.addEventListener('keydown', (e) => {
       }
     }
   }
+
+  // B key → create bookmark widget at canvas center
+  if (key === 'b' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+    e.preventDefault();
+    const canvas = document.getElementById('miro-canvas');
+    if (!canvas) return;
+    const zoom = (page.zoom || 100) / 100;
+    const cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
+    const cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+    page.miroCards.push({
+      id: uid(), type: 'bwidget',
+      title: 'Bookmarks', emoji: '📌',
+      items: [],
+      x: cx - 160, y: cy - 200,
+      w: 320, h: 400
+    });
+    if (typeof pushUndo === 'function') pushUndo();
+    sv(); buildMiroCanvas(); if (typeof buildOutline === 'function') buildOutline();
+  }
+
+  // Ctrl+Enter → open inbox and focus input
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    const inboxSide = document.getElementById('inbox-side');
+    if (inboxSide && !inboxSide.classList.contains('open')) {
+      inboxSide.classList.add('open');
+      const btn = document.getElementById('inbox-btn');
+      if (btn) btn.classList.add('active-toggle');
+    }
+    const inp = document.getElementById('inbox-input');
+    if (inp) inp.focus();
+  }
+});
+
+// Esc → close inbox
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const inboxSide = document.getElementById('inbox-side');
+    if (inboxSide && inboxSide.classList.contains('open')) {
+      inboxSide.classList.remove('open');
+      const btn = document.getElementById('inbox-btn');
+      if (btn) btn.classList.remove('active-toggle');
+      e.preventDefault();
+    }
+  }
 });
 
 // ─── Inbox drag-to-canvas: drop creates miro elements ───
@@ -2780,7 +2825,7 @@ document.addEventListener('keydown', (e) => {
       // Create image element
       page.miroCards.push({
         id: uid(), type: 'image',
-        src: inboxItem.data,
+        imageUrl: inboxItem.data,
         label: inboxItem.label || 'Image',
         x: dropX - 150, y: dropY - 100,
         w: 300, h: 200
