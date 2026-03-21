@@ -2709,6 +2709,38 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// ─── Ctrl+G / Ctrl+Shift+G → Group / Ungroup ───
+// Also supports Arabic keyboard: ل = G
+document.addEventListener('keydown', (e) => {
+  const page = cp();
+  if (page.pageType !== 'miro') return;
+  const tag = (document.activeElement || {}).tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement && document.activeElement.contentEditable === 'true')) return;
+
+  const key = e.key.toLowerCase();
+  // Ctrl+G or Ctrl+ل (Arabic G)
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (key === 'g' || key === 'ل')) {
+    e.preventDefault();
+    if (typeof groupSelectedCards === 'function') groupSelectedCards();
+  }
+  // Ctrl+Shift+G or Ctrl+Shift+ل
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (key === 'g' || key === 'ل')) {
+    e.preventDefault();
+    if (typeof ungroupSelectedCards === 'function') ungroupSelectedCards();
+  }
+  // F key → zoom-to-fit selection
+  if (key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+    if (_miroSelected.size > 0) {
+      e.preventDefault();
+      if (_miroSelected.size === 1) {
+        if (typeof zoomToFitCard === 'function') zoomToFitCard([..._miroSelected][0]);
+      } else {
+        if (typeof zoomToFitCards === 'function') zoomToFitCards([..._miroSelected]);
+      }
+    }
+  }
+});
+
 // ─── Inbox drag-to-canvas: drop creates miro elements ───
 (function () {
   const canvas = document.getElementById('miro-canvas');

@@ -2245,6 +2245,56 @@ input[type='range']::-webkit-slider-thumb {
   font-size: 0.68rem;
 }
 
+/* Outline favicon */
+.ol-fav { width:14px; height:14px; border-radius:2px; flex-shrink:0; object-fit:contain; }
+
+/* Outline groups */
+.outline-group { border-bottom: 1px solid rgba(255,255,255,0.04); }
+.outline-group-hdr {
+  display:flex; align-items:center; gap:5px;
+  padding:6px 10px; font-size:.7rem; color:var(--tx);
+  cursor:pointer; user-select:none;
+  transition: background .12s;
+}
+.outline-group-hdr:hover { background:rgba(255,255,255,.05); }
+.outline-group-hdr .og-arrow {
+  font-size:.55rem; transition:transform .15s; flex-shrink:0; color:var(--mu);
+}
+.outline-group-hdr.collapsed .og-arrow { transform:rotate(-90deg); }
+.outline-group-hdr .og-name {
+  flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500;
+}
+.outline-group-hdr .og-count {
+  font-size:.6rem; color:var(--mu); background:rgba(255,255,255,.06);
+  padding:1px 5px; border-radius:8px;
+}
+.outline-group-hdr .og-ungroup {
+  background:none; border:none; color:var(--mu); cursor:pointer;
+  font-size:.6rem; opacity:0; transition:opacity .12s; padding:0 2px;
+}
+.outline-group-hdr:hover .og-ungroup { opacity:1; }
+.outline-group-body { overflow:hidden; transition: max-height .2s ease; }
+.outline-group-body.collapsed { max-height:0!important; overflow:hidden; }
+
+/* Indent levels */
+.outline-item.level-1 { padding-left:28px; }
+.outline-item.level-2 { padding-left:42px; }
+.outline-group.level-1 > .outline-group-hdr { padding-left:22px; }
+.outline-group.level-2 > .outline-group-hdr { padding-left:36px; }
+
+/* Drag reorder */
+.outline-item.ol-dragging, .outline-group-hdr.ol-dragging { opacity:.4; }
+.outline-item.ol-drag-over { border-top:2px solid var(--ac); }
+.outline-group-hdr.ol-drag-over { border-top:2px solid var(--ac); }
+
+/* Group button in outline header */
+.outline-hdr .ol-group-btn {
+  background:none; border:1px solid var(--bd); border-radius:4px;
+  color:var(--mu); cursor:pointer; font-size:.6rem; padding:2px 6px;
+  transition: all .12s; margin-left:4px;
+}
+.outline-hdr .ol-group-btn:hover { background:rgba(108,143,255,.15); color:var(--ac); border-color:var(--ac); }
+
 /* Shift main content when outline is open */
 body.outline-open #root {
   margin-right: var(--outline-w, 210px);
