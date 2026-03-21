@@ -38,7 +38,7 @@ document.getElementById('outline-close').onclick = () => {
   });
   function onMove(e) {
     if (!resizing) return;
-    const w = e.clientX;
+    const w = window.innerWidth - e.clientX;
     if (w >= 120 && w <= window.innerWidth * 0.5) {
       side.style.width = w + 'px';
       document.documentElement.style.setProperty('--outline-w', w + 'px');

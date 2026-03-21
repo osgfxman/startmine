@@ -12,8 +12,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1774120946">
-  <link rel="stylesheet" href="css/miro.css?v=1774120946">
+  <link rel="stylesheet" href="css/base.css?v=1774123437">
+  <link rel="stylesheet" href="css/miro.css?v=1774123437">
 </head>
 
 <body>
@@ -42,7 +42,7 @@
     <div id="sync-bar"></div>
 
     <div id="tb">
-      <button class="ib" id="outline-btn" title="Page Outline (F2)">📑</button>
+      <button class="ib" id="inbox-btn" title="Inbox">📥</button>
       <span id="user-email">👤</span>
       <div class="tb-sep"></div>
       <div class="tb-offline-group">
@@ -95,7 +95,7 @@
       </div>
       <button class="ib" id="pv-mode-btn" title="Quick Preview Mode">👁️</button>
       <button class="ib" id="settings-btn" title="Settings">⚙️</button>
-      <button class="ib" id="inbox-btn" title="Inbox">📥</button>
+      <button class="ib" id="outline-btn" title="Page Outline (F2)">📑</button>
     </div>
 
     <div id="ribbon">
@@ -141,9 +141,11 @@
     <div id="inbox-resize"></div>
     <div class="inbox-hdr"><span>📥 Inbox</span><button id="inbox-close">✕</button></div>
     <div class="inbox-add">
-      <input type="url" id="inbox-url" placeholder="Paste URL…">
-      <input type="text" id="inbox-lbl" placeholder="Label" style="max-width:80px">
-      <button id="inbox-add-btn">Add</button>
+      <textarea id="inbox-input" placeholder="Type text, paste URL, or drop image…" rows="2" style="flex:1;background:rgba(255,255,255,.06);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:.7rem;padding:4px 6px;outline:none;resize:none;font-family:var(--font)"></textarea>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <button id="inbox-add-btn" style="background:var(--ac);border:none;border-radius:5px;color:#fff;font-size:.65rem;padding:4px 8px;cursor:pointer;white-space:nowrap">Add</button>
+        <label style="background:rgba(255,255,255,.06);border:1px solid var(--bd);border-radius:5px;color:var(--mu);font-size:.6rem;padding:3px 6px;cursor:pointer;text-align:center;white-space:nowrap">📷<input type="file" id="inbox-img-input" accept="image/*" style="display:none"></label>
+      </div>
     </div>
     <div class="inbox-list" id="inbox-list"></div>
   </div>
@@ -587,11 +589,11 @@
     <div class="ctx-item danger" data-action="delete"><span class="ctx-icon">🗑️</span><span class="ctx-label">Delete</span><span class="ctx-shortcut">Del</span></div>
   </div>
 
-    <script src="js/app.js?v=1774120946"></script>
-    <script src="js/outline.js?v=1774120946"></script>
-    <script src="js/miro-engine.js?v=1774120946"></script>
-    <script src="js/thumbnails.js?v=1774120946"></script>
-    <script src="js/alignment.js?v=1774120946"></script>
+    <script src="js/app.js?v=1774123437"></script>
+    <script src="js/outline.js?v=1774123437"></script>
+    <script src="js/miro-engine.js?v=1774123437"></script>
+    <script src="js/thumbnails.js?v=1774123437"></script>
+    <script src="js/alignment.js?v=1774123437"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});

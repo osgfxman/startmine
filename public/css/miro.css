@@ -572,7 +572,7 @@
   }
 
   body.outline-open #root {
-    margin-left: var(--outline-w, 180px);
+    margin-right: var(--outline-w, 180px);
   }
 }
 
@@ -584,7 +584,7 @@
   }
 
   body.outline-open #root {
-    margin-left: var(--outline-w, 160px);
+    margin-right: var(--outline-w, 160px);
   }
 }
 

@@ -3093,20 +3093,59 @@ document.getElementById('inbox-close').onclick = () => {
   document.getElementById('inbox-btn').classList.remove('active-toggle');
 };
 document.getElementById('inbox-add-btn').onclick = addToInbox;
-document.getElementById('inbox-url').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') addToInbox();
+document.getElementById('inbox-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addToInbox(); }
+});
+// Image input
+document.getElementById('inbox-img-input').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    if (!D.inbox) D.inbox = [];
+    D.inbox.push({ id: uid(), type: 'image', data: reader.result, label: file.name, ts: Date.now() });
+    sv(); buildInbox();
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+});
+// Image paste in inbox textarea
+document.getElementById('inbox-input').addEventListener('paste', (e) => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      const file = item.getAsFile();
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (!D.inbox) D.inbox = [];
+        D.inbox.push({ id: uid(), type: 'image', data: reader.result, label: 'Pasted image', ts: Date.now() });
+        sv(); buildInbox();
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+  }
 });
 function addToInbox() {
-  let url = document.getElementById('inbox-url').value.trim();
-  if (!url) return;
-  if (!url.startsWith('http')) url = 'https://' + url;
-  const label = document.getElementById('inbox-lbl').value.trim() || url;
+  const input = document.getElementById('inbox-input');
+  const text = input.value.trim();
+  if (!text) return;
   if (!D.inbox) D.inbox = [];
-  D.inbox.push({ id: uid(), url, label, ts: Date.now() });
-  document.getElementById('inbox-url').value = '';
-  document.getElementById('inbox-lbl').value = '';
-  sv();
-  buildInbox();
+  // Detect if it's a URL
+  const urlRegex = /^(https?:\/\/[^\s]+)$/i;
+  if (urlRegex.test(text) || /^(www\.[^\s]+)$/i.test(text)) {
+    let url = text;
+    if (!url.startsWith('http')) url = 'https://' + url;
+    let label = url;
+    try { label = new URL(url).hostname.replace('www.', '').split('.')[0].replace(/^./, c => c.toUpperCase()); } catch (e) {}
+    D.inbox.push({ id: uid(), type: 'url', url, label, ts: Date.now() });
+  } else {
+    D.inbox.push({ id: uid(), type: 'text', text, label: text.substring(0, 40), ts: Date.now() });
+  }
+  input.value = '';
+  sv(); buildInbox();
 }
 let _dragInboxId = null;
 let _dragBmId = null;
@@ -3117,7 +3156,7 @@ function buildInbox() {
   list.innerHTML = '';
   if (!D.inbox || !D.inbox.length) {
     list.innerHTML =
-      '<div style="padding:1.5rem;text-align:center;color:var(--mu);font-size:.7rem">Empty — paste URLs here for later</div>';
+      '<div style="padding:1.5rem;text-align:center;color:var(--mu);font-size:.7rem">Empty — add text, URLs, or images</div>';
     return;
   }
   D.inbox.forEach((item) => {
@@ -3127,40 +3166,48 @@ function buildInbox() {
     row.addEventListener('dragstart', (e) => {
       _dragInboxId = item.id;
       e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', item.id);
+      e.dataTransfer.setData('application/x-inbox-type', item.type || 'url');
       row.style.opacity = '.4';
     });
     row.addEventListener('dragend', () => {
       _dragInboxId = null;
       row.style.opacity = '1';
     });
-    const img = document.createElement('img');
-    img.src = getFav(item.url);
-    img.onerror = () => {
-      img.style.display = 'none';
-    };
+    const icon = document.createElement('span');
+    icon.style.cssText = 'font-size:.8rem;flex-shrink:0';
+    if (item.type === 'image') {
+      icon.textContent = '🖼️';
+      const thumb = document.createElement('img');
+      thumb.src = item.data;
+      thumb.style.cssText = 'width:30px;height:30px;object-fit:cover;border-radius:3px;flex-shrink:0';
+      row.appendChild(thumb);
+    } else if (item.type === 'url') {
+      icon.textContent = '🔗';
+      row.appendChild(icon);
+    } else {
+      icon.textContent = '📝';
+      row.appendChild(icon);
+    }
     const lbl = document.createElement('span');
     lbl.className = 'inbox-lbl';
-    lbl.textContent = item.label;
-    const url = document.createElement('span');
-    url.className = 'inbox-url';
-    url.textContent = domainOf(item.url);
-    const open = document.createElement('a');
-    open.href = item.url;
-    open.target = '_blank';
-    open.style.cssText = 'color:var(--ac);font-size:.6rem;text-decoration:none;flex-shrink:0';
-    open.textContent = '↗';
+    lbl.textContent = item.label || item.text || item.url || '';
     const rm = document.createElement('button');
     rm.className = 'inbox-rm';
     rm.textContent = '✕';
     rm.onclick = () => {
       D.inbox = D.inbox.filter((x) => x.id !== item.id);
-      sv();
-      buildInbox();
+      sv(); buildInbox();
     };
-    row.appendChild(img);
     row.appendChild(lbl);
-    row.appendChild(url);
-    row.appendChild(open);
+    if (item.type === 'url') {
+      const open = document.createElement('a');
+      open.href = item.url;
+      open.target = '_blank';
+      open.style.cssText = 'color:var(--ac);font-size:.6rem;text-decoration:none;flex-shrink:0';
+      open.textContent = '↗';
+      row.appendChild(open);
+    }
     row.appendChild(rm);
     list.appendChild(row);
   });

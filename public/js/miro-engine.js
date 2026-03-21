@@ -2708,3 +2708,67 @@ document.addEventListener('keydown', (e) => {
     zSendBackward(cids);
   }
 });
+
+// ─── Inbox drag-to-canvas: drop creates miro elements ───
+(function () {
+  const canvas = document.getElementById('miro-canvas');
+  if (!canvas) return;
+  canvas.addEventListener('dragover', (e) => {
+    if (typeof _dragInboxId !== 'undefined' && _dragInboxId) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    }
+  });
+  canvas.addEventListener('drop', (e) => {
+    if (typeof _dragInboxId === 'undefined' || !_dragInboxId) return;
+    e.preventDefault();
+    const page = cp();
+    if (!page || page.pageType !== 'miro') return;
+
+    const inboxItem = (D.inbox || []).find(x => x.id === _dragInboxId);
+    if (!inboxItem) return;
+
+    const zoom = (page.zoom || 100) / 100;
+    const rect = canvas.getBoundingClientRect();
+    const dropX = (e.clientX - rect.left - (page.panX || 0)) / zoom;
+    const dropY = (e.clientY - rect.top - (page.panY || 0)) / zoom;
+
+    const itemType = inboxItem.type || 'url';
+
+    if (itemType === 'text') {
+      // Create sticky note
+      page.miroCards.push({
+        id: uid(), type: 'sticky',
+        text: inboxItem.text || inboxItem.label || '',
+        bg: '#ffe599',
+        x: dropX - 100, y: dropY - 100,
+        w: 200, h: 200
+      });
+    } else if (itemType === 'image') {
+      // Create image element
+      page.miroCards.push({
+        id: uid(), type: 'image',
+        src: inboxItem.data,
+        label: inboxItem.label || 'Image',
+        x: dropX - 150, y: dropY - 100,
+        w: 300, h: 200
+      });
+    } else {
+      // URL → bookmark card
+      const url = inboxItem.url || '';
+      page.miroCards.push({
+        id: uid(), type: 'card',
+        url: url,
+        label: inboxItem.label || domainOf(url),
+        x: dropX - 140, y: dropY - 120,
+        w: 280, h: 240
+      });
+    }
+
+    // Remove from inbox
+    D.inbox = D.inbox.filter(x => x.id !== _dragInboxId);
+    _dragInboxId = null;
+    sv(); buildMiroCanvas(); buildOutline();
+    if (typeof buildInbox === 'function') buildInbox();
+  });
+})();

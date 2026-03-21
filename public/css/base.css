@@ -680,17 +680,17 @@ body {
 #inbox-side {
   position: fixed;
   top: 0;
-  right: 0;
+  left: 0;
   width: 280px;
   min-width: 200px;
   max-width: 50vw;
   height: 100vh;
   background: rgba(10, 12, 22, 0.97);
-  border-left: 1px solid var(--bd);
+  border-right: 1px solid var(--bd);
   z-index: 800;
   display: flex;
   flex-direction: column;
-  transform: translateX(100%);
+  transform: translateX(-100%);
   transition: transform 0.22s ease;
   backdrop-filter: blur(12px);
 }
@@ -701,7 +701,7 @@ body {
 
 #inbox-resize {
   position: absolute;
-  left: -4px;
+  right: -4px;
   top: 0;
   width: 8px;
   height: 100%;
@@ -2136,18 +2136,18 @@ input[type='range']::-webkit-slider-thumb {
 /* Outline Sidebar */
 #outline-side {
   position: fixed;
-  left: 0;
+  right: 0;
   top: 0;
   width: 210px;
   min-width: 120px;
   max-width: 50vw;
   height: 100vh;
   background: rgba(10, 12, 22, 0.95);
-  border-right: 1px solid var(--bd);
+  border-left: 1px solid var(--bd);
   z-index: 790;
   display: flex;
   flex-direction: column;
-  transform: translateX(-100%);
+  transform: translateX(100%);
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   backdrop-filter: blur(14px);
   overflow: hidden;
@@ -2159,7 +2159,7 @@ input[type='range']::-webkit-slider-thumb {
 
 #outline-resize {
   position: absolute;
-  right: -4px;
+  left: -4px;
   top: 0;
   width: 8px;
   height: 100%;
@@ -2247,17 +2247,17 @@ input[type='range']::-webkit-slider-thumb {
 
 /* Shift main content when outline is open */
 body.outline-open #root {
-  margin-left: var(--outline-w, 210px);
-  transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-right: var(--outline-w, 210px);
+  transition: margin-right 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 body:not(.outline-open) #root {
-  margin-left: 0;
-  transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-right: 0;
+  transition: margin-right 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Inbox pushed to right */
-#inbox-btn {
+/* Outline pushed to right */
+#outline-btn {
   margin-left: auto;
 }
 
