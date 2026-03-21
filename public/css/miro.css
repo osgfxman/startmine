@@ -635,7 +635,7 @@
 }
 
 #miro-widget-handle {
-  right: -58px;
+  left: -18px;
   font-size: 14px;
 }
 
@@ -1566,32 +1566,24 @@
   display: none !important;
 }
 
-/* ─── Image Card ─── */
 .miro-image {
   position: absolute;
   background: transparent;
   border: none;
   border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
   cursor: default;
   display: flex;
   flex-direction: column;
-  transition: box-shadow 0.15s;
   min-width: 60px;
   min-height: 60px;
 }
 
-.miro-image:hover {
-  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.6);
-}
+
 
 .miro-image.miro-selected {
   outline: 2px solid var(--ac);
   outline-offset: 2px;
-  box-shadow:
-    0 0 0 4px rgba(108, 143, 255, 0.18),
-    0 4px 20px rgba(0, 0, 0, 0.45);
 }
 
 .miro-image.miro-hl {
