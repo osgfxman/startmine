@@ -556,6 +556,11 @@
     <script src="js/miro-engine.js?v=3.1"></script>
     <script src="js/thumbnails.js?v=3.1"></script>
     <script src="js/alignment.js?v=3.1"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      }
+    </script>
 </body>
 
 </html>

@@ -165,11 +165,15 @@ let _lastSyncedPagesMetaStr = null;
 let _lastSyncedMetaStr = null;
 let _pendingDeletePageIds = []; // Track page IDs that need Firebase cleanup
 
-/* ─── Offline Mode ─── */
-let _offlineMode = false;
+/* ─── Offline Mode (default ON) ─── */
+let _offlineMode = true;
 let _dirtyOffline = false;
 let _lastSvTs = 0; // Timestamp of last successful sv() for beacon dedup
-try { _offlineMode = localStorage.getItem('sm_offline_mode') === '1'; } catch(e) {}
+try {
+  const stored = localStorage.getItem('sm_offline_mode');
+  if (stored !== null) _offlineMode = stored === '1';
+  else localStorage.setItem('sm_offline_mode', '1'); // First visit: default to offline
+} catch(e) {}
 
 function setOfflineMode(val) {
   _offlineMode = val;
@@ -930,21 +934,39 @@ function sv(saveAll = false, immediate = false) {
   else _svTimer = setTimeout(doSave, 800);
 }
 
-// ─── Save Guards: prevent data loss on tab close ───
+// ─── Save Guards: force-save to localStorage on tab close ───
+function forceLocalSave() {
+  try {
+    const activePg = cp();
+    if (activePg) {
+      cachePageData(activePg.id, { widgets: activePg.widgets || [], miroCards: activePg.miroCards || [] });
+    }
+    const meta = {
+      settings: D.settings, curEnv: D.curEnv, curGroup: D.curGroup,
+      environments: D.environments, groups: D.groups, inbox: D.inbox
+    };
+    cacheMeta(meta);
+    cachePagesMeta(D.pages.map(p => ({
+      id: p.id, groupId: p.groupId, name: p.name, pageType: p.pageType,
+      zoom: p.zoom, panX: p.panX, panY: p.panY, bg: p.bg, bgType: p.bgType,
+      tabColor: p.tabColor || ''
+    })));
+  } catch(e) { console.warn('[FORCE SAVE]', e); }
+}
+
 window.addEventListener('beforeunload', (e) => {
+  // Always force-save to localStorage first (guarantees no data loss)
+  forceLocalSave();
   if (_svTimer) { clearTimeout(_svTimer); sv(false, true); }
-  // Warn if offline with unsynced changes
-  if (_offlineMode && _dirtyOffline) {
-    e.preventDefault();
-    e.returnValue = 'You have unsynced offline changes. Leave anyway?';
-  }
   // Auto-snapshot on browser close (skip if sv just fired within 3s)
   if (Date.now() - _lastSvTs > 3000) saveSnapshotBeacon();
 });
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && _svTimer) { clearTimeout(_svTimer); sv(false, true); }
-  // Skip redundant beacon if sv just fired within 3s
-  if (document.hidden && Date.now() - _lastSvTs > 3000) saveSnapshotBeacon();
+  if (document.hidden) {
+    forceLocalSave();
+    if (_svTimer) { clearTimeout(_svTimer); sv(false, true); }
+    if (Date.now() - _lastSvTs > 3000) saveSnapshotBeacon();
+  }
 });
 
 // ─── Versioned Snapshot Backup System ───
