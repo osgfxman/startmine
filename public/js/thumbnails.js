@@ -3002,3 +3002,234 @@ function buildMiroBookmarkWidget(card) {
 
   return el;
 }
+
+/* ─── Trello / Kanban Board Widget ─── */
+function buildMiroTrello(card) {
+  const el = document.createElement('div');
+  el.className = 'miro-trello';
+  el.dataset.cid = card.id;
+  el.style.left = (card.x || 0) + 'px';
+  el.style.top = (card.y || 0) + 'px';
+  el.style.width = (card.w || 760) + 'px';
+  el.style.height = (card.h || 420) + 'px';
+
+  // Init data
+  if (!card.lists) {
+    card.lists = [
+      { id: uid(), name: '2Do', color: '#6c8fff', cards: [{ id: uid(), text: 'First task', done: false }] },
+      { id: uid(), name: 'In Progress', color: '#ffd43b', cards: [{ id: uid(), text: 'Working on this', done: false }] },
+      { id: uid(), name: 'Done', color: '#51cf66', cards: [] }
+    ];
+  }
+
+  // ─── Header ───
+  const header = document.createElement('div');
+  header.className = 'mt-header';
+  const title = document.createElement('span');
+  title.className = 'mt-title';
+  title.contentEditable = true;
+  title.textContent = card.title || 'Trello Board';
+  title.spellcheck = false;
+  title.addEventListener('blur', () => { card.title = title.textContent; sv(); });
+  title.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); title.blur(); } });
+  title.addEventListener('mousedown', (e) => e.stopPropagation());
+
+  const del = document.createElement('button');
+  del.className = 'mc-del';
+  del.textContent = '✕';
+  del.onclick = (e) => { e.stopPropagation(); deleteMiroCard(card.id); };
+
+  header.appendChild(title);
+  header.appendChild(del);
+
+  // ─── Lists Container ───
+  const listsWrap = document.createElement('div');
+  listsWrap.className = 'mt-lists-wrap';
+  listsWrap.addEventListener('mousedown', (e) => {
+    if (e.target === listsWrap) e.stopPropagation();
+  });
+
+  // Drag state
+  let _dragCardData = null; // { listId, cardIdx }
+
+  function renderLists() {
+    listsWrap.innerHTML = '';
+    card.lists.forEach((list, li) => {
+      const listEl = document.createElement('div');
+      listEl.className = 'mt-list';
+      listEl.dataset.listId = list.id;
+
+      // List header
+      const lh = document.createElement('div');
+      lh.className = 'mt-list-header';
+      const colorBar = document.createElement('div');
+      colorBar.className = 'mt-list-color';
+      colorBar.style.background = list.color || '#6c8fff';
+      const nameEl = document.createElement('input');
+      nameEl.className = 'mt-list-name';
+      nameEl.type = 'text';
+      nameEl.value = list.name;
+      nameEl.spellcheck = false;
+      nameEl.addEventListener('change', () => { list.name = nameEl.value; sv(); });
+      nameEl.addEventListener('mousedown', (e) => e.stopPropagation());
+      const listDel = document.createElement('button');
+      listDel.className = 'mt-list-del';
+      listDel.textContent = '✕';
+      listDel.onclick = (e) => {
+        e.stopPropagation();
+        card.lists.splice(li, 1);
+        sv(); renderLists();
+      };
+      lh.appendChild(colorBar);
+      lh.appendChild(nameEl);
+      lh.appendChild(listDel);
+      listEl.appendChild(lh);
+
+      // List body (cards)
+      const body = document.createElement('div');
+      body.className = 'mt-list-body';
+      body.dataset.listId = list.id;
+
+      // Drop zone events
+      body.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        body.classList.add('drag-over');
+      });
+      body.addEventListener('dragleave', () => body.classList.remove('drag-over'));
+      body.addEventListener('drop', (e) => {
+        e.preventDefault();
+        body.classList.remove('drag-over');
+        if (!_dragCardData) return;
+        const srcList = card.lists.find(l => l.id === _dragCardData.listId);
+        if (!srcList) return;
+        const [movedCard] = srcList.cards.splice(_dragCardData.cardIdx, 1);
+        if (!movedCard) return;
+        // Find drop position
+        const afterEl = getDragAfterElement(body, e.clientY);
+        if (afterEl) {
+          const afterIdx = [...body.children].indexOf(afterEl);
+          const cardIdx = afterIdx >= 0 ? afterIdx : list.cards.length;
+          list.cards.splice(cardIdx, 0, movedCard);
+        } else {
+          list.cards.push(movedCard);
+        }
+        _dragCardData = null;
+        sv(); renderLists();
+      });
+
+      list.cards.forEach((c, ci) => {
+        const cardEl = document.createElement('div');
+        cardEl.className = 'mt-card' + (c.done ? ' done' : '');
+        cardEl.draggable = true;
+        cardEl.addEventListener('dragstart', (e) => {
+          e.stopPropagation();
+          _dragCardData = { listId: list.id, cardIdx: ci };
+          cardEl.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+        });
+        cardEl.addEventListener('dragend', () => {
+          cardEl.classList.remove('dragging');
+          _dragCardData = null;
+        });
+
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.className = 'mt-card-check';
+        check.checked = c.done;
+        check.onchange = () => {
+          c.done = check.checked;
+          cardEl.classList.toggle('done', c.done);
+          sv();
+        };
+        check.addEventListener('mousedown', (e) => e.stopPropagation());
+
+        const txt = document.createElement('span');
+        txt.className = 'mt-card-text';
+        txt.contentEditable = true;
+        txt.textContent = c.text;
+        txt.spellcheck = false;
+        txt.addEventListener('blur', () => { c.text = txt.textContent; sv(); });
+        txt.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); txt.blur(); } });
+        txt.addEventListener('mousedown', (e) => e.stopPropagation());
+
+        const cdel = document.createElement('button');
+        cdel.className = 'mt-card-del';
+        cdel.textContent = '✕';
+        cdel.onclick = (e) => {
+          e.stopPropagation();
+          list.cards.splice(ci, 1);
+          sv(); renderLists();
+        };
+
+        cardEl.appendChild(check);
+        cardEl.appendChild(txt);
+        cardEl.appendChild(cdel);
+        body.appendChild(cardEl);
+      });
+      listEl.appendChild(body);
+
+      // Add card button
+      const addCard = document.createElement('button');
+      addCard.className = 'mt-add-card';
+      addCard.innerHTML = '+ Add card';
+      addCard.onclick = (e) => {
+        e.stopPropagation();
+        list.cards.push({ id: uid(), text: 'New card', done: false });
+        sv(); renderLists();
+        // Focus the new card text
+        setTimeout(() => {
+          const cards = listEl.querySelectorAll('.mt-card-text');
+          const last = cards[cards.length - 1];
+          if (last) { last.focus(); document.execCommand('selectAll', false, null); }
+        }, 50);
+      };
+      listEl.appendChild(addCard);
+      listsWrap.appendChild(listEl);
+    });
+
+    // Add list button
+    const addList = document.createElement('button');
+    addList.className = 'mt-add-list';
+    addList.innerHTML = '+ Add list';
+    addList.onclick = (e) => {
+      e.stopPropagation();
+      const colors = ['#6c8fff', '#ff6b6b', '#ffd43b', '#51cf66', '#cc5de8', '#ff922b', '#22b8cf'];
+      card.lists.push({ id: uid(), name: 'New List', color: colors[card.lists.length % colors.length], cards: [] });
+      sv(); renderLists();
+    };
+    listsWrap.appendChild(addList);
+  }
+
+  // Helper: find element to insert before during drag
+  function getDragAfterElement(container, y) {
+    const els = [...container.querySelectorAll('.mt-card:not(.dragging)')];
+    let closest = null;
+    let closestOffset = Number.NEGATIVE_INFINITY;
+    els.forEach(child => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closestOffset) {
+        closestOffset = offset;
+        closest = child;
+      }
+    });
+    return closest;
+  }
+
+  renderLists();
+
+  el.appendChild(header);
+  el.appendChild(listsWrap);
+
+  // Drag
+  miroSetupCardDrag(el, card, ['.mc-del', '.mt-title', '.mt-list-name', '.mt-card', '.mt-card-text', '.mt-card-check', '.mt-add-card', '.mt-add-list', '.mt-list-del', '.mt-card-del', '.mt-lists-wrap']);
+
+  // Resize
+  attach8WayResize(el, card, 300, 200);
+
+  // Lock UI
+  attachLockUI(el, card);
+
+  return el;
+}

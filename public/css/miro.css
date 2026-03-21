@@ -2348,7 +2348,7 @@
 #miro-toolbar {
   position: fixed;
   left: 14px;
-  top: 50%;
+  top: 55%;
   transform: translateY(-50%);
   display: none;
   flex-direction: column;
@@ -3124,4 +3124,221 @@ td.mg-sel {
 .ctx-item.danger:hover {
   background: rgba(255, 80, 80, 0.15);
   color: #ff4444;
+}
+
+/* ─── Trello / Kanban Board Widget ─── */
+.miro-trello {
+  position: absolute;
+  background: rgba(20, 22, 34, 0.92);
+  border-radius: 14px;
+  border: 1px solid rgba(108, 143, 255, 0.2);
+  overflow: visible;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0,0,0,.35);
+  min-width: 300px;
+  min-height: 200px;
+}
+.miro-trello.miro-selected {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(108,143,255,.18);
+}
+.miro-trello .mt-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  cursor: default;
+}
+.miro-trello .mt-header .mt-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  flex: 1;
+  outline: none;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+.miro-trello .mt-header .mt-title:focus {
+  background: rgba(255,255,255,.08);
+}
+.miro-trello .mt-lists-wrap {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  align-items: flex-start;
+  height: calc(100% - 50px);
+}
+.miro-trello .mt-list {
+  flex: 0 0 220px;
+  min-width: 200px;
+  max-height: 100%;
+  background: rgba(255,255,255,.06);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(255,255,255,.06);
+}
+.miro-trello .mt-list-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  gap: 6px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.miro-trello .mt-list-header .mt-list-color {
+  width: 4px;
+  height: 20px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.miro-trello .mt-list-header .mt-list-name {
+  font-size: .85rem;
+  font-weight: 600;
+  color: #ddd;
+  flex: 1;
+  outline: none;
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.miro-trello .mt-list-header .mt-list-name:focus {
+  background: rgba(255,255,255,.08);
+}
+.miro-trello .mt-list-header .mt-list-del {
+  opacity: 0;
+  cursor: pointer;
+  color: #ff6b6b;
+  font-size: .75rem;
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: opacity .2s;
+}
+.miro-trello .mt-list:hover .mt-list-del {
+  opacity: .6;
+}
+.miro-trello .mt-list-del:hover {
+  opacity: 1 !important;
+  background: rgba(255,80,80,.12);
+}
+.miro-trello .mt-list-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 30px;
+}
+.miro-trello .mt-list-body.drag-over {
+  background: rgba(108,143,255,.08);
+  border-radius: 6px;
+}
+.miro-trello .mt-card {
+  background: rgba(255,255,255,.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: grab;
+  transition: background .15s, box-shadow .15s;
+  border: 1px solid rgba(255,255,255,.05);
+  position: relative;
+}
+.miro-trello .mt-card:hover {
+  background: rgba(255,255,255,.12);
+  box-shadow: 0 2px 8px rgba(0,0,0,.2);
+}
+.miro-trello .mt-card.dragging {
+  opacity: .4;
+}
+.miro-trello .mt-card .mt-card-check {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  cursor: pointer;
+  accent-color: var(--ac);
+  flex-shrink: 0;
+}
+.miro-trello .mt-card .mt-card-text {
+  flex: 1;
+  font-size: .82rem;
+  color: #ccc;
+  line-height: 1.35;
+  outline: none;
+  word-break: break-word;
+  border-radius: 4px;
+  padding: 1px 3px;
+}
+.miro-trello .mt-card .mt-card-text:focus {
+  background: rgba(255,255,255,.06);
+  color: #fff;
+}
+.miro-trello .mt-card.done .mt-card-text {
+  text-decoration: line-through;
+  opacity: .5;
+}
+.miro-trello .mt-card .mt-card-del {
+  opacity: 0;
+  cursor: pointer;
+  color: #ff6b6b;
+  font-size: .7rem;
+  background: none;
+  border: none;
+  padding: 2px;
+  line-height: 1;
+  transition: opacity .15s;
+}
+.miro-trello .mt-card:hover .mt-card-del {
+  opacity: .6;
+}
+.miro-trello .mt-card-del:hover {
+  opacity: 1 !important;
+}
+.miro-trello .mt-add-card {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  font-size: .78rem;
+  color: rgba(255,255,255,.4);
+  cursor: pointer;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  transition: background .15s, color .15s;
+  width: 100%;
+  text-align: left;
+}
+.miro-trello .mt-add-card:hover {
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.7);
+}
+.miro-trello .mt-add-list {
+  flex: 0 0 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  font-size: .82rem;
+  color: rgba(255,255,255,.35);
+  cursor: pointer;
+  border: 2px dashed rgba(255,255,255,.1);
+  border-radius: 10px;
+  background: none;
+  min-height: 60px;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.miro-trello .mt-add-list:hover {
+  background: rgba(255,255,255,.04);
+  color: rgba(255,255,255,.6);
+  border-color: rgba(255,255,255,.2);
 }
