@@ -717,6 +717,60 @@ function applyZoomPan(page) {
   updateMiroGrid();
 }
 
+// Zoom to fit selection (or all elements if nothing selected)
+function zoomToFitSelection() {
+  const page = cp();
+  if (!page.miroCards || page.miroCards.length === 0) return;
+  const canvas = document.getElementById('miro-canvas');
+  const cw = canvas.clientWidth;
+  const ch = canvas.clientHeight;
+  if (!cw || !ch) return;
+
+  // Get target cards
+  let targets;
+  if (_miroSelected.size > 0) {
+    targets = page.miroCards.filter(c => _miroSelected.has(c.id));
+  } else {
+    targets = page.miroCards;
+  }
+  if (targets.length === 0) return;
+
+  // Calculate bounding box
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  targets.forEach(c => {
+    const x = c.x || 0, y = c.y || 0;
+    const w = c.w || 200, h = c.h || 200;
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x + w > maxX) maxX = x + w;
+    if (y + h > maxY) maxY = y + h;
+  });
+
+  const bw = maxX - minX;
+  const bh = maxY - minY;
+  if (bw <= 0 || bh <= 0) return;
+
+  // Calculate zoom to fit with 10% padding
+  const padding = 0.1;
+  const availW = cw * (1 - padding * 2);
+  const availH = ch * (1 - padding * 2);
+  const fitZoom = Math.min(availW / bw, availH / bh);
+  const newZoomNum = Math.max(1, Math.min(400, Math.round(fitZoom * 100)));
+  const newZoom = newZoomNum / 100;
+
+  // Center the bounding box
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  page.panX = cw / 2 - centerX * newZoom;
+  page.panY = ch / 2 - centerY * newZoom;
+  page.zoom = newZoomNum;
+
+  applyZoomPan(page);
+  updateMiroScrollbars();
+  sv();
+  showToast('🔍 Zoom to fit');
+}
+
 // Zoom controls
 document.getElementById('mz-slider').oninput = function () {
   const page = cp();
@@ -1412,6 +1466,10 @@ document.addEventListener('keydown', (e) => {
           _miroSelected.clear();
           sv(); buildMiroCanvas(); buildOutline();
         }
+        break;
+      case 'f': case 'ب':
+        e.preventDefault();
+        zoomToFitSelection();
         break;
     }
   }

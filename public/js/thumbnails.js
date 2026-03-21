@@ -3005,7 +3005,7 @@ function buildMiroBookmarkWidget(card) {
 
 /* ─── Trello List Widget (single floating list) ─── */
 // Global drag state for cross-list card dragging
-let _trelloDragData = null; // { srcCardId, srcCardObj, srcListCards }
+let _trelloDragData = null;
 
 function buildMiroTrello(card) {
   const el = document.createElement('div');
@@ -3014,34 +3014,35 @@ function buildMiroTrello(card) {
   el.style.left = (card.x || 0) + 'px';
   el.style.top = (card.y || 0) + 'px';
   el.style.width = (card.w || 260) + 'px';
-  el.style.height = (card.h || 380) + 'px';
+  if (card.autofit !== false) {
+    el.style.height = 'auto';
+  } else {
+    el.style.height = (card.h || 380) + 'px';
+  }
 
   // Init data
   if (!card.cards) card.cards = [];
   if (!card.listColor) card.listColor = '#6c8fff';
   if (!card.title) card.title = 'List';
+  if (card.bgColor === undefined) card.bgColor = 'transparent';
+
+  el.style.background = card.bgColor;
 
   // ─── Color bar ───
   const colorBar = document.createElement('div');
   colorBar.className = 'tl-color-bar';
   colorBar.style.background = card.listColor;
   colorBar.style.cursor = 'pointer';
-  colorBar.title = 'Click to change color';
+  colorBar.title = 'Click to change list accent color';
   colorBar.onclick = (e) => {
     e.stopPropagation();
-    const input = document.createElement('input');
-    input.type = 'color';
-    input.value = card.listColor;
-    input.style.cssText = 'position:absolute;opacity:0;pointer-events:none;';
-    el.appendChild(input);
-    input.click();
-    input.oninput = () => {
-      card.listColor = input.value;
-      colorBar.style.background = input.value;
-      sv();
-    };
-    input.onchange = () => input.remove();
-    input.addEventListener('blur', () => input.remove());
+    const inp = document.createElement('input');
+    inp.type = 'color'; inp.value = card.listColor;
+    inp.style.cssText = 'position:absolute;opacity:0;pointer-events:none;';
+    el.appendChild(inp); inp.click();
+    inp.oninput = () => { card.listColor = inp.value; colorBar.style.background = inp.value; sv(); };
+    inp.onchange = () => inp.remove();
+    inp.addEventListener('blur', () => inp.remove());
   };
 
   // ─── Header ───
@@ -3073,7 +3074,7 @@ function buildMiroTrello(card) {
   const body = document.createElement('div');
   body.className = 'tl-body';
 
-  // Drop zone: accept cards from any trello list on the page
+  // Drop zone: accept cards from any trello list on page
   body.addEventListener('dragover', (e) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -3088,10 +3089,8 @@ function buildMiroTrello(card) {
     body.classList.remove('drag-over');
     if (!_trelloDragData) return;
     const { srcCardObj, srcListCards } = _trelloDragData;
-    // Remove from source
     const srcIdx = srcListCards.indexOf(srcCardObj);
     if (srcIdx >= 0) srcListCards.splice(srcIdx, 1);
-    // Insert at drop position
     const afterEl = getTrelloDragAfter(body, e.clientY);
     if (afterEl) {
       const afterIdx = [...body.querySelectorAll('.tl-card')].indexOf(afterEl);
@@ -3104,11 +3103,18 @@ function buildMiroTrello(card) {
     sv(); buildMiroCanvas(); buildOutline();
   });
 
+  // Helper: auto-linkify text
+  function linkify(text) {
+    return text.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  }
+
   function renderCards() {
     body.innerHTML = '';
     card.cards.forEach((c, ci) => {
       const cardEl = document.createElement('div');
       cardEl.className = 'tl-card' + (c.done ? ' done' : '');
+      if (c.bgColor) cardEl.style.background = c.bgColor;
+      if (c.textColor) cardEl.style.color = c.textColor;
       cardEl.draggable = true;
 
       cardEl.addEventListener('dragstart', (e) => {
@@ -3137,30 +3143,79 @@ function buildMiroTrello(card) {
       const txt = document.createElement('div');
       txt.className = 'tl-text';
       txt.contentEditable = true;
-      txt.textContent = c.text || '';
       txt.spellcheck = false;
+      // Use innerHTML to preserve images/links
+      if (c.html) {
+        txt.innerHTML = c.html;
+      } else {
+        txt.textContent = c.text || '';
+      }
+
+      // Image paste (Ctrl+V)
+      txt.addEventListener('paste', (e) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (const item of items) {
+          if (item.type.startsWith('image/')) {
+            e.preventDefault();
+            const file = item.getAsFile();
+            const reader = new FileReader();
+            reader.onload = () => {
+              const img = document.createElement('img');
+              img.src = reader.result;
+              txt.appendChild(img);
+              c.html = txt.innerHTML;
+              sv();
+            };
+            reader.readAsDataURL(file);
+            return;
+          }
+        }
+      });
+
+      // Image drop
+      txt.addEventListener('drop', (e) => {
+        const files = e.dataTransfer?.files;
+        if (files && files.length > 0 && files[0].type.startsWith('image/')) {
+          e.preventDefault();
+          e.stopPropagation();
+          const reader = new FileReader();
+          reader.onload = () => {
+            const img = document.createElement('img');
+            img.src = reader.result;
+            txt.appendChild(img);
+            c.html = txt.innerHTML;
+            sv();
+          };
+          reader.readAsDataURL(files[0]);
+        }
+      });
+
       txt.addEventListener('blur', () => {
-        const val = txt.textContent.trim();
-        if (!val) {
-          // Remove empty cards on blur
+        const hasContent = txt.textContent.trim() || txt.querySelector('img');
+        if (!hasContent) {
           card.cards.splice(ci, 1);
           sv(); renderCards(); updateCount();
           return;
         }
-        c.text = val;
+        // Auto-linkify plain text URLs
+        const html = txt.innerHTML;
+        const linkified = linkify(html);
+        txt.innerHTML = linkified;
+        c.html = linkified;
+        c.text = txt.textContent;
         sv();
       });
       txt.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
-          const val = txt.textContent.trim();
-          if (val) {
-            c.text = val;
-            // Create new card after this one and focus it
+          const hasContent = txt.textContent.trim() || txt.querySelector('img');
+          if (hasContent) {
+            c.html = txt.innerHTML;
+            c.text = txt.textContent;
             const newCard = { id: uid(), text: '', done: false };
             card.cards.splice(ci + 1, 0, newCard);
             sv(); renderCards(); updateCount();
-            // Focus new card
             setTimeout(() => {
               const allTexts = body.querySelectorAll('.tl-text');
               if (allTexts[ci + 1]) allTexts[ci + 1].focus();
@@ -3172,6 +3227,13 @@ function buildMiroTrello(card) {
         if (e.key === 'Escape') { txt.blur(); }
       });
       txt.addEventListener('mousedown', (e) => e.stopPropagation());
+      // Make links clickable (not editable)
+      txt.addEventListener('click', (e) => {
+        if (e.target.tagName === 'A') {
+          e.preventDefault();
+          window.open(e.target.href, '_blank');
+        }
+      });
 
       const cdel = document.createElement('button');
       cdel.className = 'tl-del';
@@ -3198,7 +3260,6 @@ function buildMiroTrello(card) {
     e.stopPropagation();
     card.cards.push({ id: uid(), text: '', done: false });
     sv(); renderCards(); updateCount();
-    // Focus the new empty card immediately
     setTimeout(() => {
       const allTexts = body.querySelectorAll('.tl-text');
       const last = allTexts[allTexts.length - 1];
@@ -3212,10 +3273,10 @@ function buildMiroTrello(card) {
   el.appendChild(addBtn);
 
   // Drag (move the whole widget)
-  miroSetupCardDrag(el, card, ['.mc-del', '.tl-title', '.tl-card', '.tl-text', '.tl-check', '.tl-add', '.tl-del', '.tl-color-bar']);
+  miroSetupCardDrag(el, card, ['.mc-del', '.mc-lock', '.tl-title', '.tl-card', '.tl-text', '.tl-check', '.tl-add', '.tl-del', '.tl-color-bar']);
 
   // Resize
-  attach8WayResize(el, card, 180, 150);
+  attach8WayResize(el, card, 180, 100);
 
   // Lock UI
   attachLockUI(el, card);
