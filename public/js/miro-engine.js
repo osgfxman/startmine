@@ -1131,7 +1131,7 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
       }, 50);
     } else if (_textCreateMode) {
       const newId = uid();
-      page.miroCards.push({ id: newId, type: 'text', text: '', x: bx - 60, y: by - 15, w: 200, h: 40, fontSize: 24, font: 'Inter', fontColor: '#ffffff', align: 'right' });
+      page.miroCards.push({ id: newId, type: 'text', text: '', x: bx - 60, y: by - 15, w: 200, h: 40, fontSize: 24, font: 'Inter', fontColor: '#333333', align: 'right' });
       sv(); buildMiroCanvas(); buildOutline();
       setTimeout(() => {
         const el = document.querySelector(`.miro-text[data-cid="${newId}"] .mt-text`);
@@ -1979,7 +1979,7 @@ document.addEventListener('paste', (e) => {
             card.w = Math.min(Math.max(100, item.text.length * (card.fontSize / 2)), 400);
             card.h = Math.max(card.fontSize * 1.5, 40);
             card.font = 'Inter';
-            card.fontColor = card.fontColor || '#ffffff';
+            card.fontColor = card.fontColor || '#333333';
             card.align = 'right';
           }
 

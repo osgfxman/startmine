@@ -446,6 +446,17 @@ function attach8WayResize(el, card, minW, minH) {
       function onUp() {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
+        // Auto-fit height for text widgets after resize
+        const mtText = el.querySelector('.mt-text');
+        if (mtText) {
+          const sh = mtText.scrollHeight + 8;
+          const minH2 = Math.max(sh, 30);
+          if (card.h < minH2) {
+            card.h = minH2;
+            el.style.height = minH2 + 'px';
+            el.style.minHeight = minH2 + 'px';
+          }
+        }
         sv();
       }
       document.addEventListener('mousemove', onMove);
@@ -1678,7 +1689,7 @@ function buildMiroText(card) {
   const tcInput = document.createElement('input');
   tcInput.type = 'color';
   tcInput.className = 'sn-rb-color-input';
-  tcInput.value = card.fontColor || '#ffffff';
+  tcInput.value = card.fontColor || '#333333';
   tcInput.onmousedown = () => { saveSelection(); };
   tcInput.oninput = (e) => {
     e.stopPropagation();
@@ -1728,7 +1739,7 @@ function buildMiroText(card) {
   text.innerHTML = card.text ?? '';
   text.style.fontFamily = card.font || 'Inter';
   text.style.fontSize = (card.fontSize || 24) + 'px';
-  text.style.color = card.fontColor || '#ffffff';
+  text.style.color = card.fontColor || '#333333';
 
   // Double-click to edit
   text.addEventListener('dblclick', (e) => {
@@ -1765,9 +1776,11 @@ function buildMiroText(card) {
     }
   });
 
-  // Show/hide toolbar on click
+  // Show/hide toolbar on click (don't hide when clicking inside text area for selection)
   el.addEventListener('click', (e) => {
     if (e.target.closest('.mc-del') || e.target.closest('.mc-lock') || e.target.closest('.mt-toolbar')) return;
+    // If text is in edit mode and click is inside the text, keep toolbar visible
+    if (text.contentEditable === 'true' && (text.contains(e.target) || e.target === text)) return;
     document.querySelectorAll('.mt-toolbar.show, .msh-toolbar.show, .sn-toolbar.show').forEach(t => { if (t !== toolbar) t.classList.remove('show'); });
     toolbar.classList.toggle('show');
   });
