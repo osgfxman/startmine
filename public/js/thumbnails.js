@@ -961,6 +961,48 @@ function buildMiroSticky(card) {
   toolbar.appendChild(tcLabel);
 
   // ── Separator ──
+  const sepFontFam = document.createElement('div');
+  sepFontFam.className = 'sn-tb-sep';
+  toolbar.appendChild(sepFontFam);
+
+  // ── Font Family selector ──
+  const snFontWrap = document.createElement('div');
+  snFontWrap.className = 'sn-rb-fs-wrap';
+  const snFontSelect = document.createElement('select');
+  snFontSelect.className = 'sn-rb-fs';
+  snFontSelect.title = 'Font Family';
+  snFontSelect.style.maxWidth = '90px';
+  const _snFonts = ['Default', 'Inter', 'DM Sans', 'Georgia', 'Courier New', 'serif', 'KFGQPC Uthmanic Script HAFS'];
+  _snFonts.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f === 'Default' ? '' : f;
+    opt.textContent = f === 'KFGQPC Uthmanic Script HAFS' ? 'KFGQPC Uthmanic' : f;
+    opt.style.fontFamily = f === 'Default' ? 'inherit' : f;
+    if ((card.fontFamily || '') === (f === 'Default' ? '' : f)) opt.selected = true;
+    snFontSelect.appendChild(opt);
+  });
+  snFontSelect.onmousedown = () => { saveSelection(); };
+  snFontSelect.onchange = (e) => {
+    e.stopPropagation();
+    card.fontFamily = snFontSelect.value;
+    restoreSelection();
+    if (snFontSelect.value) {
+      const sel = window.getSelection();
+      if (sel.rangeCount > 0 && !sel.isCollapsed && text.contains(sel.anchorNode)) {
+        document.execCommand('fontName', false, snFontSelect.value);
+      } else {
+        text.style.fontFamily = snFontSelect.value;
+      }
+    } else {
+      text.style.fontFamily = '';
+    }
+    card.text = text.innerHTML;
+    sv();
+  };
+  snFontWrap.appendChild(snFontSelect);
+  toolbar.appendChild(snFontWrap);
+
+  // ── Separator ──
   const sepG = document.createElement('div');
   sepG.className = 'sn-tb-sep';
   toolbar.appendChild(sepG);
@@ -1287,6 +1329,11 @@ function buildMiroSticky(card) {
     text.style.justifyContent = card.valign;
   }
 
+  // Apply saved font family
+  if (card.fontFamily) {
+    text.style.fontFamily = card.fontFamily;
+  }
+
   // Auto-size text after render (only if in auto mode)
   if (card.fontSizeMode === 'auto') {
     requestAnimationFrame(() => autoSizeText(text, el));
@@ -1394,83 +1441,357 @@ function buildMiroText(card) {
   el.style.width = (card.w || 200) + 'px';
   el.style.minHeight = (card.h || 40) + 'px';
 
+  // Initialize fontSizeMode if not set
+  if (card.fontSizeMode === undefined) card.fontSizeMode = card.fontSize || 24;
+
   // Delete button
   const del = document.createElement('button');
   del.className = 'mc-del';
   del.textContent = '✕';
   del.onclick = (e) => { e.stopPropagation(); deleteMiroCard(card.id); };
 
-  // Toolbar
+  // ─── Rich Toolbar (matching sticky note style) ───
   const toolbar = document.createElement('div');
   toolbar.className = 'mt-toolbar';
-  toolbar.innerHTML = `
-    <select class="mt-font" title="Font">
-      <option value="DM Sans">DM Sans</option>
-      <option value="Inter">Inter</option>
-      <option value="Georgia">Georgia</option>
-      <option value="Courier New">Courier New</option>
-      <option value="serif">Serif</option>
-    </select>
-    <input type="number" class="mt-size" value="${card.fontSize || 24}" min="8" max="200" title="Size">
-    <input type="color" class="mt-color" value="${card.fontColor || '#333333'}" title="Color">
-    <button class="mt-btn ${card.bold ? 'sel' : ''}" data-act="bold" title="Bold"><b>B</b></button>
-    <button class="mt-btn ${card.italic ? 'sel' : ''}" data-act="italic" title="Italic"><i>I</i></button>
-    <button class="mt-btn ${(card.align || 'left') === 'left' ? 'sel' : ''}" data-act="left" title="Left">≡</button>
-    <button class="mt-btn ${card.align === 'center' ? 'sel' : ''}" data-act="center" title="Center">≡</button>
-    <button class="mt-btn ${card.align === 'right' ? 'sel' : ''}" data-act="right" title="Right">≡</button>`;
 
-  // Set font select value
-  const fontSel = toolbar.querySelector('.mt-font');
-  fontSel.value = card.font || 'DM Sans';
+  // Helper to save/restore selection inside contentEditable
+  let _savedRange = null;
+  function saveSelection() {
+    const sel = window.getSelection();
+    if (sel.rangeCount > 0 && text.contains(sel.anchorNode)) {
+      _savedRange = sel.getRangeAt(0).cloneRange();
+    }
+  }
+  function restoreSelection() {
+    if (_savedRange) {
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(_savedRange);
+    }
+  }
+
+  // ── Font Family selector ──
+  const fontFamilySelect = document.createElement('select');
+  fontFamilySelect.className = 'mt-font';
+  fontFamilySelect.title = 'Font Family';
+  const _mtFonts = ['Inter', 'DM Sans', 'Georgia', 'Courier New', 'serif', 'KFGQPC Uthmanic Script HAFS'];
+  _mtFonts.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f;
+    opt.textContent = f === 'KFGQPC Uthmanic Script HAFS' ? 'KFGQPC Uthmanic' : f;
+    opt.style.fontFamily = f;
+    fontFamilySelect.appendChild(opt);
+  });
+  fontFamilySelect.value = card.font || 'Inter';
+  fontFamilySelect.onmousedown = () => { saveSelection(); };
+  fontFamilySelect.onchange = (e) => {
+    e.stopPropagation();
+    card.font = fontFamilySelect.value;
+    restoreSelection();
+    const sel = window.getSelection();
+    if (sel.rangeCount > 0 && !sel.isCollapsed && text.contains(sel.anchorNode)) {
+      document.execCommand('fontName', false, card.font);
+    } else {
+      text.style.fontFamily = card.font;
+    }
+    card.text = text.innerHTML;
+    sv();
+  };
+  toolbar.appendChild(fontFamilySelect);
+
+  // ── Separator ──
+  const sepA = document.createElement('div');
+  sepA.className = 'sn-tb-sep';
+  toolbar.appendChild(sepA);
+
+  // ── Format button helper ──
+  function mkFmtBtn(label, title, cmd, cssClass) {
+    const b = document.createElement('button');
+    b.className = 'sn-rb-btn' + (cssClass ? ' ' + cssClass : '');
+    b.innerHTML = label;
+    b.title = title;
+    b.onmousedown = (e) => { e.preventDefault(); saveSelection(); };
+    b.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      restoreSelection();
+      document.execCommand(cmd, false, null);
+      card.text = text.innerHTML;
+      sv();
+    };
+    return b;
+  }
+
+  // Bold, Italic, Underline, Strikethrough
+  toolbar.appendChild(mkFmtBtn('<b>B</b>', 'Bold (Ctrl+B)', 'bold'));
+  toolbar.appendChild(mkFmtBtn('<i>I</i>', 'Italic (Ctrl+I)', 'italic'));
+  toolbar.appendChild(mkFmtBtn('<u>U</u>', 'Underline (Ctrl+U)', 'underline'));
+  toolbar.appendChild(mkFmtBtn('<s>S</s>', 'Strikethrough', 'strikeThrough'));
+
+  // ── Separator ──
+  const sepB = document.createElement('div');
+  sepB.className = 'sn-tb-sep';
+  toolbar.appendChild(sepB);
+
+  // ── Alignment dropdown button ──
+  const alignWrap = document.createElement('div');
+  alignWrap.className = 'sn-color-dropdown';
+  const alignBtn = document.createElement('button');
+  alignBtn.className = 'sn-rb-btn';
+  alignBtn.title = 'Alignment';
+  alignBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14"><line x1="1" y1="2" x2="13" y2="2" stroke="currentColor" stroke-width="1.5"/><line x1="1" y1="7" x2="9" y2="7" stroke="currentColor" stroke-width="1.5"/><line x1="1" y1="12" x2="11" y2="12" stroke="currentColor" stroke-width="1.5"/></svg>';
+  alignBtn.onmousedown = (e) => { e.preventDefault(); saveSelection(); };
+  alignBtn.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    alignPopup.classList.toggle('show');
+  };
+  const alignPopup = document.createElement('div');
+  alignPopup.className = 'sn-color-popup sn-align-popup';
+
+  const hLabel = document.createElement('div');
+  hLabel.className = 'sn-cpop-label';
+  hLabel.textContent = 'Horizontal';
+  alignPopup.appendChild(hLabel);
+  const hRow = document.createElement('div');
+  hRow.className = 'sn-cpop-row';
+  const hAligns = [
+    { icon: '<svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="3" x2="14" y2="3" stroke="currentColor" stroke-width="1.5"/><line x1="2" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.5"/><line x1="2" y1="13" x2="12" y2="13" stroke="currentColor" stroke-width="1.5"/></svg>', title: 'Align Left', cmd: 'justifyLeft' },
+    { icon: '<svg width="16" height="16" viewBox="0 0 16 16"><line x1="1" y1="3" x2="15" y2="3" stroke="currentColor" stroke-width="1.5"/><line x1="3" y1="8" x2="13" y2="8" stroke="currentColor" stroke-width="1.5"/><line x1="2" y1="13" x2="14" y2="13" stroke="currentColor" stroke-width="1.5"/></svg>', title: 'Align Center', cmd: 'justifyCenter' },
+    { icon: '<svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="3" x2="14" y2="3" stroke="currentColor" stroke-width="1.5"/><line x1="6" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="1.5"/><line x1="4" y1="13" x2="14" y2="13" stroke="currentColor" stroke-width="1.5"/></svg>', title: 'Align Right', cmd: 'justifyRight' },
+  ];
+  hAligns.forEach(a => {
+    const b = document.createElement('button');
+    b.className = 'sn-rb-btn';
+    b.innerHTML = a.icon;
+    b.title = a.title;
+    b.onmousedown = (e) => { e.preventDefault(); saveSelection(); };
+    b.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      restoreSelection();
+      document.execCommand(a.cmd, false, null);
+      card.text = text.innerHTML;
+      sv();
+    };
+    hRow.appendChild(b);
+  });
+  alignPopup.appendChild(hRow);
+
+  alignWrap.appendChild(alignBtn);
+  alignWrap.appendChild(alignPopup);
+  toolbar.appendChild(alignWrap);
+
+  document.addEventListener('click', (e) => {
+    if (!alignWrap.contains(e.target)) alignPopup.classList.remove('show');
+  });
+
+  // ── Separator ──
+  const sepC = document.createElement('div');
+  sepC.className = 'sn-tb-sep';
+  toolbar.appendChild(sepC);
+
+  // ── Link button ──
+  const linkBtn = document.createElement('button');
+  linkBtn.className = 'sn-rb-btn';
+  linkBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M6 8a3 3 0 004 .5l2-2a3 3 0 00-4.24-4.24L6.5 3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M8 6a3 3 0 00-4-.5l-2 2a3 3 0 004.24 4.24L7.5 10.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
+  linkBtn.title = 'Insert Link';
+  linkBtn.onmousedown = (e) => { e.preventDefault(); saveSelection(); };
+  linkBtn.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    restoreSelection();
+    const url = prompt('Enter URL:');
+    if (url) {
+      document.execCommand('createLink', false, url);
+      text.querySelectorAll('a').forEach(a => {
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+      });
+      card.text = text.innerHTML;
+      sv();
+    }
+  };
+  toolbar.appendChild(linkBtn);
+
+  // ── Separator ──
+  const sepD = document.createElement('div');
+  sepD.className = 'sn-tb-sep';
+  toolbar.appendChild(sepD);
+
+  // ── Font size control ──
+  const fsWrap = document.createElement('div');
+  fsWrap.className = 'sn-rb-fs-wrap';
+  const fsSelect = document.createElement('select');
+  fsSelect.className = 'sn-rb-fs';
+  fsSelect.title = 'Font Size';
+  const fsSizes = ['8', '10', '12', '14', '18', '24', '32', '48', '64', '72', '96', '120'];
+  fsSizes.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s;
+    opt.textContent = s;
+    if (+s === +(card.fontSizeMode || 24)) opt.selected = true;
+    fsSelect.appendChild(opt);
+  });
+  fsSelect.onmousedown = () => { saveSelection(); };
+  fsSelect.onchange = (e) => {
+    e.stopPropagation();
+    const val = +fsSelect.value;
+    card.fontSizeMode = val;
+    card.fontSize = val;
+    restoreSelection();
+    const sel = window.getSelection();
+    if (sel.rangeCount > 0 && !sel.isCollapsed && text.contains(sel.anchorNode)) {
+      document.execCommand('fontSize', false, '7');
+      text.querySelectorAll('font[size="7"]').forEach(f => {
+        const span = document.createElement('span');
+        span.style.fontSize = val + 'px';
+        span.innerHTML = f.innerHTML;
+        f.replaceWith(span);
+      });
+    } else {
+      text.style.fontSize = val + 'px';
+    }
+    card.text = text.innerHTML;
+    // Auto-fit height
+    requestAnimationFrame(() => {
+      const sh = text.scrollHeight + 8;
+      if (sh > (card.h || 40)) { card.h = sh; el.style.minHeight = sh + 'px'; }
+    });
+    sv();
+  };
+  fsWrap.appendChild(fsSelect);
+  toolbar.appendChild(fsWrap);
+
+  // ── Separator ──
+  const sepE = document.createElement('div');
+  sepE.className = 'sn-tb-sep';
+  toolbar.appendChild(sepE);
+
+  // ── Text color picker ──
+  const tcLabel = document.createElement('label');
+  tcLabel.className = 'sn-rb-color-wrap';
+  tcLabel.title = 'Text Color';
+  const tcIcon = document.createElement('span');
+  tcIcon.className = 'sn-rb-color-icon';
+  tcIcon.textContent = 'A';
+  const tcInput = document.createElement('input');
+  tcInput.type = 'color';
+  tcInput.className = 'sn-rb-color-input';
+  tcInput.value = card.fontColor || '#ffffff';
+  tcInput.onmousedown = () => { saveSelection(); };
+  tcInput.oninput = (e) => {
+    e.stopPropagation();
+    restoreSelection();
+    document.execCommand('foreColor', false, tcInput.value);
+    tcIcon.style.borderBottomColor = tcInput.value;
+    card.fontColor = tcInput.value;
+    card.text = text.innerHTML;
+    sv();
+  };
+  tcLabel.appendChild(tcIcon);
+  tcLabel.appendChild(tcInput);
+  toolbar.appendChild(tcLabel);
+
+  // ── Separator ──
+  const sepF = document.createElement('div');
+  sepF.className = 'sn-tb-sep';
+  toolbar.appendChild(sepF);
+
+  // ── Duplicate button ──
+  const dupBtn = document.createElement('button');
+  dupBtn.className = 'sn-rb-btn';
+  dupBtn.title = 'Duplicate';
+  dupBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14"><rect x="1" y="3" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="5" y="1" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
+  dupBtn.onmousedown = (e) => { e.preventDefault(); };
+  dupBtn.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const page = cp();
+    if (!page.miroCards) page.miroCards = [];
+    const clone = JSON.parse(JSON.stringify(card));
+    clone.id = uid();
+    clone.x = (card.x || 0) + 30;
+    clone.y = (card.y || 0) + 30;
+    page.miroCards.push(clone);
+    sv(); buildMiroCanvas(); buildOutline();
+  };
+  toolbar.appendChild(dupBtn);
 
   // Text content
   const text = document.createElement('div');
   text.className = 'mt-text';
   text.contentEditable = false;
-  text.textContent = card.text ?? '';
-  text.style.fontFamily = card.font || 'DM Sans';
+  text.dir = 'auto';
+  text.style.direction = 'rtl';
+  text.style.textAlign = card.align || 'right';
+  text.innerHTML = card.text ?? '';
+  text.style.fontFamily = card.font || 'Inter';
   text.style.fontSize = (card.fontSize || 24) + 'px';
-  text.style.color = card.fontColor || '#333';
-  text.style.fontWeight = card.bold ? '700' : '400';
-  text.style.fontStyle = card.italic ? 'italic' : 'normal';
-  text.style.textAlign = card.align || 'left';
-
-  // Toolbar events
-  fontSel.onchange = () => { card.font = fontSel.value; text.style.fontFamily = card.font; sv(); };
-  toolbar.querySelector('.mt-size').onchange = function () { card.fontSize = +this.value; text.style.fontSize = card.fontSize + 'px'; sv(); };
-  toolbar.querySelector('.mt-color').oninput = function () { card.fontColor = this.value; text.style.color = card.fontColor; sv(); };
-  toolbar.querySelectorAll('.mt-btn').forEach(btn => {
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      const act = btn.dataset.act;
-      if (act === 'bold') { card.bold = !card.bold; text.style.fontWeight = card.bold ? '700' : '400'; btn.classList.toggle('sel'); }
-      else if (act === 'italic') { card.italic = !card.italic; text.style.fontStyle = card.italic ? 'italic' : 'normal'; btn.classList.toggle('sel'); }
-      else if (['left', 'center', 'right'].includes(act)) {
-        card.align = act; text.style.textAlign = act;
-        toolbar.querySelectorAll('[data-act="left"],[data-act="center"],[data-act="right"]').forEach(b => b.classList.remove('sel'));
-        btn.classList.add('sel');
-      }
-      sv();
-    };
-  });
+  text.style.color = card.fontColor || '#ffffff';
 
   // Double-click to edit
-  text.addEventListener('dblclick', (e) => { e.stopPropagation(); text.contentEditable = true; text.focus(); });
-  text.addEventListener('blur', () => { text.contentEditable = false; card.text = text.textContent; card.h = el.offsetHeight; sv(); });
-  text.addEventListener('input', () => { card.text = text.textContent; sv(); });
+  text.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    text.contentEditable = true;
+    text.focus();
+    toolbar.classList.add('show');
+  });
+  text.addEventListener('blur', (e) => {
+    if (toolbar.contains(e.relatedTarget)) return;
+    text.contentEditable = false;
+    card.text = text.innerHTML;
+    // Auto-fit height to content
+    const sh = text.scrollHeight + 8;
+    card.h = Math.max(sh, 30);
+    el.style.minHeight = card.h + 'px';
+    sv();
+  });
+  text.addEventListener('input', () => {
+    card.text = text.innerHTML;
+    // Auto-fit height on input
+    const sh = text.scrollHeight + 8;
+    if (sh > (card.h || 40)) { card.h = sh; el.style.minHeight = sh + 'px'; }
+    sv();
+  });
   text.addEventListener('mousedown', (e) => { if (text.contentEditable === 'true') e.stopPropagation(); });
+  text.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      text.contentEditable = false;
+      toolbar.classList.remove('show');
+      card.text = text.innerHTML;
+      text.blur();
+      sv();
+    }
+  });
 
   // Show/hide toolbar on click
   el.addEventListener('click', (e) => {
     if (e.target.closest('.mc-del') || e.target.closest('.mc-lock') || e.target.closest('.mt-toolbar')) return;
-    document.querySelectorAll('.mt-toolbar.show, .msh-toolbar.show').forEach(t => { if (t !== toolbar) t.classList.remove('show'); });
+    document.querySelectorAll('.mt-toolbar.show, .msh-toolbar.show, .sn-toolbar.show').forEach(t => { if (t !== toolbar) t.classList.remove('show'); });
     toolbar.classList.toggle('show');
   });
-  document.addEventListener('click', (e) => { if (!el.contains(e.target)) toolbar.classList.remove('show'); });
+  document.addEventListener('click', (e) => {
+    if (!el.contains(e.target)) {
+      toolbar.classList.remove('show');
+      if (text.contentEditable === 'true' && !toolbar.contains(e.target)) {
+        text.contentEditable = false;
+        card.text = text.innerHTML;
+        const sh = text.scrollHeight + 8;
+        card.h = Math.max(sh, 30);
+        el.style.minHeight = card.h + 'px';
+        sv();
+      }
+    }
+  });
 
   // Drag (via global helper)
   miroSetupCardDrag(el, card, ['.mc-del', '.mt-toolbar', '.mc-lock']);
 
+  // Auto-fit min height function for resize
+  const getAutoMinH = () => {
+    return Math.max(text.scrollHeight + 8, 30);
+  };
   attach8WayResize(el, card, 60, 30);
 
   // Lock UI
@@ -1479,6 +1800,16 @@ function buildMiroText(card) {
   el.appendChild(del);
   el.appendChild(toolbar);
   el.appendChild(text);
+
+  // Auto-fit height after initial render
+  requestAnimationFrame(() => {
+    const sh = text.scrollHeight + 8;
+    if (sh > (card.h || 40)) {
+      card.h = sh;
+      el.style.minHeight = sh + 'px';
+    }
+  });
+
   return el;
 }
 

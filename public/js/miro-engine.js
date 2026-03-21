@@ -1131,7 +1131,7 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
       }, 50);
     } else if (_textCreateMode) {
       const newId = uid();
-      page.miroCards.push({ id: newId, type: 'text', text: '', x: bx - 60, y: by - 15, w: 120, h: 30, fontSize: 24, fontFamily: 'Inter', color: '#ffffff' });
+      page.miroCards.push({ id: newId, type: 'text', text: '', x: bx - 60, y: by - 15, w: 200, h: 40, fontSize: 24, font: 'Inter', fontColor: '#ffffff', align: 'right' });
       sv(); buildMiroCanvas(); buildOutline();
       setTimeout(() => {
         const el = document.querySelector(`.miro-text[data-cid="${newId}"] .mt-text`);
@@ -1976,9 +1976,11 @@ document.addEventListener('paste', (e) => {
             card.w = item.w || 280; // Native startmine sticky dimensions
             card.h = item.h || 160;
           } else if (item.type === 'text') {
-            card.w = Math.max(100, item.text.length * (card.fontSize / 2));
-            card.h = card.fontSize * 1.5;
-            card.fontFamily = 'Inter';
+            card.w = Math.min(Math.max(100, item.text.length * (card.fontSize / 2)), 400);
+            card.h = Math.max(card.fontSize * 1.5, 40);
+            card.font = 'Inter';
+            card.fontColor = card.fontColor || '#ffffff';
+            card.align = 'right';
           }
 
           // Apply spatial positioning
