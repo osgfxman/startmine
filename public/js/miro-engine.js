@@ -2373,3 +2373,190 @@ window.createWidgetFromSelection = function () {
   buildMiroCanvas();
   if (typeof buildOutline === 'function') buildOutline();
 };
+
+/* ─── Z-Order System (Context Menu) ─── */
+let _ctxTargetCid = null;
+
+function getCardIndex(page, cid) {
+  return (page.miroCards || []).findIndex(c => c.id === cid);
+}
+
+function zBringToFront(cids) {
+  const page = cp();
+  if (!page || !page.miroCards) return;
+  const cards = [];
+  const rest = [];
+  page.miroCards.forEach(c => {
+    if (cids.has(c.id)) cards.push(c);
+    else rest.push(c);
+  });
+  if (cards.length === 0) return;
+  page.miroCards = [...rest, ...cards];
+  sv(); buildMiroCanvas();
+  if (typeof buildOutline === 'function') buildOutline();
+}
+
+function zSendToBack(cids) {
+  const page = cp();
+  if (!page || !page.miroCards) return;
+  const cards = [];
+  const rest = [];
+  page.miroCards.forEach(c => {
+    if (cids.has(c.id)) cards.push(c);
+    else rest.push(c);
+  });
+  if (cards.length === 0) return;
+  page.miroCards = [...cards, ...rest];
+  sv(); buildMiroCanvas();
+  if (typeof buildOutline === 'function') buildOutline();
+}
+
+function zBringForward(cids) {
+  const page = cp();
+  if (!page || !page.miroCards) return;
+  const arr = page.miroCards;
+  // Process from end to start so swaps don't interfere
+  for (let i = arr.length - 2; i >= 0; i--) {
+    if (cids.has(arr[i].id) && !cids.has(arr[i + 1].id)) {
+      [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]];
+    }
+  }
+  sv(); buildMiroCanvas();
+  if (typeof buildOutline === 'function') buildOutline();
+}
+
+function zSendBackward(cids) {
+  const page = cp();
+  if (!page || !page.miroCards) return;
+  const arr = page.miroCards;
+  // Process from start to end so swaps don't interfere
+  for (let i = 1; i < arr.length; i++) {
+    if (cids.has(arr[i].id) && !cids.has(arr[i - 1].id)) {
+      [arr[i], arr[i - 1]] = [arr[i - 1], arr[i]];
+    }
+  }
+  sv(); buildMiroCanvas();
+  if (typeof buildOutline === 'function') buildOutline();
+}
+
+function zDeleteCards(cids) {
+  const page = cp();
+  if (!page || !page.miroCards) return;
+  if (typeof pushUndo === 'function') pushUndo();
+  page.miroCards = page.miroCards.filter(c => !cids.has(c.id));
+  clearMiroSelection();
+  sv(); buildMiroCanvas();
+  if (typeof buildOutline === 'function') buildOutline();
+}
+
+// Get the set of card IDs to operate on (selected cards or the right-clicked card)
+function getZTargetCids() {
+  if (_miroSelected.size > 0) return new Set(_miroSelected);
+  if (_ctxTargetCid) return new Set([_ctxTargetCid]);
+  return new Set();
+}
+
+// ─── Context Menu Show/Hide ───
+function showCtxMenu(x, y) {
+  const menu = document.getElementById('miro-ctx-menu');
+  if (!menu) return;
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+  menu.classList.add('show');
+  // Adjust if menu goes off-screen
+  requestAnimationFrame(() => {
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 8) + 'px';
+    if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 8) + 'px';
+  });
+}
+
+function hideCtxMenu() {
+  const menu = document.getElementById('miro-ctx-menu');
+  if (menu) menu.classList.remove('show');
+  _ctxTargetCid = null;
+}
+
+// ─── Right-click handler for all miro card types ───
+document.getElementById('miro-canvas').addEventListener('contextmenu', (e) => {
+  // Find the closest miro card element
+  const cardEl = e.target.closest('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-widget');
+  if (!cardEl) {
+    hideCtxMenu();
+    return; // Allow default context menu on empty canvas
+  }
+  e.preventDefault();
+  e.stopPropagation();
+
+  const cid = cardEl.dataset.cid;
+  if (!cid) return;
+
+  _ctxTargetCid = cid;
+
+  // If right-clicked card is not in selection, select it exclusively
+  if (_miroSelected.size > 0 && !_miroSelected.has(cid)) {
+    clearMiroSelection();
+    addMiroSelect(cid);
+  } else if (_miroSelected.size === 0) {
+    addMiroSelect(cid);
+  }
+
+  showCtxMenu(e.clientX, e.clientY);
+});
+
+// ─── Context menu item clicks ───
+document.getElementById('miro-ctx-menu').addEventListener('click', (e) => {
+  const item = e.target.closest('.ctx-item');
+  if (!item) return;
+  const action = item.dataset.action;
+  const cids = getZTargetCids();
+  if (cids.size === 0) { hideCtxMenu(); return; }
+
+  if (typeof pushUndo === 'function') pushUndo();
+
+  switch (action) {
+    case 'bring-front': zBringToFront(cids); break;
+    case 'bring-forward': zBringForward(cids); break;
+    case 'send-backward': zSendBackward(cids); break;
+    case 'send-back': zSendToBack(cids); break;
+    case 'delete': zDeleteCards(cids); break;
+  }
+  hideCtxMenu();
+});
+
+// Close context menu on click elsewhere or Escape
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#miro-ctx-menu')) hideCtxMenu();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') hideCtxMenu();
+});
+
+// ─── Keyboard shortcuts for z-order ───
+document.addEventListener('keydown', (e) => {
+  if (!_miroMode) return;
+  // Don't trigger if typing in an input/textarea
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+  if (!e.ctrlKey && !e.metaKey) return;
+
+  const cids = getZTargetCids();
+  if (cids.size === 0) return;
+
+  if (e.key === 'ArrowUp' && (e.shiftKey)) {
+    e.preventDefault();
+    if (typeof pushUndo === 'function') pushUndo();
+    zBringToFront(cids);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (typeof pushUndo === 'function') pushUndo();
+    zBringForward(cids);
+  } else if (e.key === 'ArrowDown' && (e.shiftKey)) {
+    e.preventDefault();
+    if (typeof pushUndo === 'function') pushUndo();
+    zSendToBack(cids);
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (typeof pushUndo === 'function') pushUndo();
+    zSendBackward(cids);
+  }
+});

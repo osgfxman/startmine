@@ -2976,3 +2976,77 @@ td.mg-sel {
   color: #fff;
   border-color: rgba(108,143,255,.6);
 }
+
+/* ─── Miro Context Menu (Z-Order) ─── */
+#miro-ctx-menu {
+  position: fixed;
+  z-index: 10000;
+  background: rgba(22, 24, 38, 0.96);
+  border: 1px solid rgba(108, 143, 255, 0.25);
+  border-radius: 12px;
+  padding: 6px 0;
+  min-width: 200px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0,0,0,0.3);
+  backdrop-filter: blur(16px);
+  display: none;
+  font-size: 0.82rem;
+  animation: ctxFadeIn 0.12s ease;
+}
+
+@keyframes ctxFadeIn {
+  from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+#miro-ctx-menu.show {
+  display: block;
+}
+
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  color: var(--tx, #e0e0e0);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  white-space: nowrap;
+}
+
+.ctx-item:hover {
+  background: rgba(108, 143, 255, 0.15);
+  color: #fff;
+}
+
+.ctx-item .ctx-icon {
+  width: 18px;
+  text-align: center;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.ctx-item .ctx-label {
+  flex: 1;
+}
+
+.ctx-item .ctx-shortcut {
+  font-size: 0.65rem;
+  color: var(--mu, #888);
+  opacity: 0.7;
+  margin-left: 12px;
+}
+
+.ctx-sep {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 10px;
+}
+
+.ctx-item.danger {
+  color: #ff6b6b;
+}
+
+.ctx-item.danger:hover {
+  background: rgba(255, 80, 80, 0.15);
+  color: #ff4444;
+}
