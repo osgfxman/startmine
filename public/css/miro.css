@@ -1569,8 +1569,8 @@
 /* ─── Image Card ─── */
 .miro-image {
   position: absolute;
-  background: var(--s2);
-  border: 1px solid var(--bd);
+  background: transparent;
+  border: none;
   border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
@@ -1605,8 +1605,7 @@
   object-fit: contain;
   display: block;
   pointer-events: none;
-  background:
-    repeating-conic-gradient(rgba(255, 255, 255, 0.04) 0% 25%, transparent 0% 50%) 0 0 / 14px 14px;
+  background: transparent;
 }
 
 .miro-image .mi-placeholder {

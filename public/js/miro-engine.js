@@ -1005,6 +1005,35 @@ document.querySelectorAll('.msp-item').forEach(item => {
 });
 document.getElementById('miro-canvas').addEventListener('dragover', (e) => { e.preventDefault(); });
 document.getElementById('miro-canvas').addEventListener('drop', (e) => {
+  // Handle dropped image files from desktop/explorer
+  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    const file = e.dataTransfer.files[0];
+    if (file.type.startsWith('image/')) {
+      e.preventDefault();
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const dataUrl = event.target.result;
+        const img = new Image();
+        img.onload = function() {
+          const page = cp();
+          if (!page.miroCards) page.miroCards = [];
+          const zoom = (page.zoom || 100) / 100;
+          const rect = document.getElementById('miro-canvas').getBoundingClientRect();
+          const x = (e.clientX - rect.left - (page.panX || 0)) / zoom;
+          const y = (e.clientY - rect.top - (page.panY || 0)) / zoom;
+          let w = img.width, h = img.height;
+          if (w > 800) { h = Math.round(800 * (h / w)); w = 800; }
+          const card = { id: uid(), type: 'image', w, h, x: x - w / 2, y: y - h / 2, imageUrl: dataUrl };
+          page.miroCards.push(card);
+          sv(); buildMiroCanvas(); buildOutline();
+        };
+        img.src = dataUrl;
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+  }
+
   const shapeType = e.dataTransfer.getData('shape');
   if (!shapeType) return;
   e.preventDefault();
