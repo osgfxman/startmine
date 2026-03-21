@@ -446,16 +446,14 @@ function attach8WayResize(el, card, minW, minH) {
       function onUp() {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
-        // Auto-fit height for text widgets after resize
+        // Auto-fit height for text widgets after resize (both grow AND shrink)
         const mtText = el.querySelector('.mt-text');
         if (mtText) {
           const sh = mtText.scrollHeight + 8;
-          const minH2 = Math.max(sh, 30);
-          if (card.h < minH2) {
-            card.h = minH2;
-            el.style.height = minH2 + 'px';
-            el.style.minHeight = minH2 + 'px';
-          }
+          const fitH = Math.max(sh, 30);
+          card.h = fitH;
+          el.style.height = fitH + 'px';
+          el.style.minHeight = fitH + 'px';
         }
         sv();
       }
@@ -1836,9 +1834,51 @@ function renderShapeSVG(card) {
   let inner = '';
   switch (card.shape) {
     case 'rect': inner = `<rect x="${sw}" y="${sw}" width="${w - sw * 2}" height="${h - sw * 2}" rx="4" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`; break;
+    case 'rounded-rect': inner = `<rect x="${sw}" y="${sw}" width="${w - sw * 2}" height="${h - sw * 2}" rx="${Math.min(w, h) / 4}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`; break;
     case 'ellipse': inner = `<ellipse cx="${w / 2}" cy="${h / 2}" rx="${w / 2 - sw}" ry="${h / 2 - sw}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`; break;
     case 'triangle': inner = `<polygon points="${w / 2},${sw} ${w - sw},${h - sw} ${sw},${h - sw}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`; break;
     case 'diamond': inner = `<polygon points="${w / 2},${sw} ${w - sw},${h / 2} ${w / 2},${h - sw} ${sw},${h / 2}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`; break;
+    case 'star': {
+      const cx = w / 2, cy = h / 2, or = Math.min(w, h) / 2 - sw, ir = or * 0.4;
+      let pts = '';
+      for (let i = 0; i < 10; i++) {
+        const a = (Math.PI / 5) * i - Math.PI / 2;
+        const r = i % 2 === 0 ? or : ir;
+        pts += `${cx + r * Math.cos(a)},${cy + r * Math.sin(a)} `;
+      }
+      inner = `<polygon points="${pts.trim()}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+      break;
+    }
+    case 'hexagon': {
+      const cx = w / 2, cy = h / 2, r = Math.min(w, h) / 2 - sw;
+      let pts = '';
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 3) * i - Math.PI / 6;
+        pts += `${cx + r * Math.cos(a)},${cy + r * Math.sin(a)} `;
+      }
+      inner = `<polygon points="${pts.trim()}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+      break;
+    }
+    case 'pentagon': {
+      const cx = w / 2, cy = h / 2, r = Math.min(w, h) / 2 - sw;
+      let pts = '';
+      for (let i = 0; i < 5; i++) {
+        const a = (2 * Math.PI / 5) * i - Math.PI / 2;
+        pts += `${cx + r * Math.cos(a)},${cy + r * Math.sin(a)} `;
+      }
+      inner = `<polygon points="${pts.trim()}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+      break;
+    }
+    case 'cross': {
+      const t = Math.min(w, h) * 0.3;
+      inner = `<polygon points="${w / 2 - t},${sw} ${w / 2 + t},${sw} ${w / 2 + t},${h / 2 - t} ${w - sw},${h / 2 - t} ${w - sw},${h / 2 + t} ${w / 2 + t},${h / 2 + t} ${w / 2 + t},${h - sw} ${w / 2 - t},${h - sw} ${w / 2 - t},${h / 2 + t} ${sw},${h / 2 + t} ${sw},${h / 2 - t} ${w / 2 - t},${h / 2 - t}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+      break;
+    }
+    case 'arrow-shape': {
+      const aw = w * 0.35;
+      inner = `<polygon points="${sw},${h / 2 - h * 0.2} ${w - aw},${h / 2 - h * 0.2} ${w - aw},${sw} ${w - sw},${h / 2} ${w - aw},${h - sw} ${w - aw},${h / 2 + h * 0.2} ${sw},${h / 2 + h * 0.2}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+      break;
+    }
     case 'arrow': inner = `<line x1="${sw}" y1="${h / 2}" x2="${w - 14}" y2="${h / 2}" stroke="${stroke}" stroke-width="${sw}"/><polyline points="${w - 20},${h / 2 - 10} ${w - sw},${h / 2} ${w - 20},${h / 2 + 10}" fill="none" stroke="${stroke}" stroke-width="${sw}"/>`; break;
     case 'line': inner = `<line x1="${sw}" y1="${h - sw}" x2="${w - sw}" y2="${sw}" stroke="${stroke}" stroke-width="${sw}"/>`; break;
     default: inner = `<rect x="${sw}" y="${sw}" width="${w - sw * 2}" height="${h - sw * 2}" rx="4" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
@@ -1860,38 +1900,277 @@ function buildMiroShape(card) {
   svgWrap.className = 'msh-svg';
   svgWrap.innerHTML = renderShapeSVG(card);
 
+  // Text overlay inside shape
+  const textOverlay = document.createElement('div');
+  textOverlay.className = 'msh-text';
+  textOverlay.contentEditable = false;
+  textOverlay.dir = 'auto';
+  textOverlay.style.direction = 'rtl';
+  textOverlay.style.textAlign = card.textAlign || 'center';
+  textOverlay.innerHTML = card.text || '';
+  textOverlay.style.fontSize = (card.fontSize || 14) + 'px';
+  textOverlay.style.color = card.textColor || '#333333';
+  textOverlay.style.fontFamily = card.fontFamily || 'Inter';
+
   // Delete button
   const del = document.createElement('button');
   del.className = 'mc-del';
   del.textContent = '✕';
   del.onclick = (e) => { e.stopPropagation(); deleteMiroCard(card.id); };
 
-  // Toolbar
+  // ─── Toolbar ───
   const toolbar = document.createElement('div');
   toolbar.className = 'msh-toolbar';
-  toolbar.innerHTML = `
-    <label title="Fill"><span style="font-size:.65rem">Fill</span><input type="color" class="msh-fill" value="${card.fillColor === 'none' ? '#6c8fff' : (String(card.fillColor).startsWith('#') ? '#' + String(card.fillColor).replace('#', '').padStart(6, '0').slice(0, 6) : '#6c8fff')}"></label>
-    <button class="mt-btn msh-nofill ${card.fillColor === 'none' ? 'sel' : ''}" title="No Fill">⊘</button>
-    <label title="Stroke"><span style="font-size:.65rem">Stroke</span><input type="color" class="msh-stroke" value="${card.strokeColor === 'none' ? '#333333' : (String(card.strokeColor).startsWith('#') ? '#' + String(card.strokeColor).replace('#', '').padStart(6, '0').slice(0, 6) : '#333333')}"></label>
-    <button class="mt-btn msh-nostroke ${card.strokeColor === 'none' ? 'sel' : ''}" title="No Stroke">⊘</button>
-    <label title="Width"><span style="font-size:.65rem">W</span><input type="number" class="msh-sw" value="${card.strokeWidth ?? 2}" min="0" max="20"></label>
-    <label title="Opacity"><span style="font-size:.65rem">Op</span><input type="range" class="msh-op" value="${Math.round((card.opacity ?? 1) * 100)}" min="0" max="100"></label>`;
+
+  // Selection save/restore for rich text inside shape
+  let _savedRange = null;
+  function saveSelection() {
+    const sel = window.getSelection();
+    if (sel.rangeCount > 0 && textOverlay.contains(sel.anchorNode)) {
+      _savedRange = sel.getRangeAt(0).cloneRange();
+    }
+  }
+  function restoreSelection() {
+    if (_savedRange) {
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(_savedRange);
+    }
+  }
+
+  // Fill color
+  const fillLabel = document.createElement('label');
+  fillLabel.title = 'Fill';
+  fillLabel.innerHTML = '<span style="font-size:.65rem">Fill</span>';
+  const fillInput = document.createElement('input');
+  fillInput.type = 'color';
+  fillInput.className = 'msh-fill';
+  fillInput.value = card.fillColor === 'none' ? '#6c8fff' : (String(card.fillColor).startsWith('#') ? '#' + String(card.fillColor).replace('#', '').padStart(6, '0').slice(0, 6) : '#6c8fff');
+  fillInput.oninput = function () { card.fillColor = this.value; noFillBtn.classList.remove('sel'); updateSVG(); sv(); };
+  fillLabel.appendChild(fillInput);
+  toolbar.appendChild(fillLabel);
+
+  const noFillBtn = document.createElement('button');
+  noFillBtn.className = 'mt-btn msh-nofill' + (card.fillColor === 'none' ? ' sel' : '');
+  noFillBtn.title = 'No Fill';
+  noFillBtn.textContent = '⊘';
+  noFillBtn.onclick = function (e) { e.stopPropagation(); card.fillColor = card.fillColor === 'none' ? '#6c8fff' : 'none'; this.classList.toggle('sel', card.fillColor === 'none'); updateSVG(); sv(); };
+  toolbar.appendChild(noFillBtn);
+
+  // Stroke color
+  const strokeLabel = document.createElement('label');
+  strokeLabel.title = 'Stroke';
+  strokeLabel.innerHTML = '<span style="font-size:.65rem">Stroke</span>';
+  const strokeInput = document.createElement('input');
+  strokeInput.type = 'color';
+  strokeInput.className = 'msh-stroke';
+  strokeInput.value = card.strokeColor === 'none' ? '#333333' : (String(card.strokeColor).startsWith('#') ? '#' + String(card.strokeColor).replace('#', '').padStart(6, '0').slice(0, 6) : '#333333');
+  strokeInput.oninput = function () { card.strokeColor = this.value; noStrokeBtn.classList.remove('sel'); updateSVG(); sv(); };
+  strokeLabel.appendChild(strokeInput);
+  toolbar.appendChild(strokeLabel);
+
+  const noStrokeBtn = document.createElement('button');
+  noStrokeBtn.className = 'mt-btn msh-nostroke' + (card.strokeColor === 'none' ? ' sel' : '');
+  noStrokeBtn.title = 'No Stroke';
+  noStrokeBtn.textContent = '⊘';
+  noStrokeBtn.onclick = function (e) { e.stopPropagation(); card.strokeColor = card.strokeColor === 'none' ? '#333' : 'none'; this.classList.toggle('sel', card.strokeColor === 'none'); updateSVG(); sv(); };
+  toolbar.appendChild(noStrokeBtn);
+
+  // Stroke width
+  const swLabel = document.createElement('label');
+  swLabel.title = 'Width';
+  swLabel.innerHTML = '<span style="font-size:.65rem">W</span>';
+  const swInput = document.createElement('input');
+  swInput.type = 'number';
+  swInput.className = 'msh-sw';
+  swInput.value = card.strokeWidth ?? 2;
+  swInput.min = 0;
+  swInput.max = 20;
+  swInput.onchange = function () { card.strokeWidth = +this.value; updateSVG(); sv(); };
+  swLabel.appendChild(swInput);
+  toolbar.appendChild(swLabel);
+
+  // Opacity
+  const opLabel = document.createElement('label');
+  opLabel.title = 'Opacity';
+  opLabel.innerHTML = '<span style="font-size:.65rem">Op</span>';
+  const opInput = document.createElement('input');
+  opInput.type = 'range';
+  opInput.className = 'msh-op';
+  opInput.value = Math.round((card.opacity ?? 1) * 100);
+  opInput.min = 0;
+  opInput.max = 100;
+  opInput.oninput = function () { card.opacity = +this.value / 100; updateSVG(); sv(); };
+  opLabel.appendChild(opInput);
+  toolbar.appendChild(opLabel);
+
+  // Separator before text controls
+  const sepT = document.createElement('div');
+  sepT.className = 'sn-tb-sep';
+  toolbar.appendChild(sepT);
+
+  // Text format buttons (B, I, U)
+  function mkShapeFmtBtn(label, title, cmd) {
+    const b = document.createElement('button');
+    b.className = 'sn-rb-btn';
+    b.innerHTML = label;
+    b.title = title;
+    b.onmousedown = (e) => { e.preventDefault(); saveSelection(); };
+    b.onclick = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      restoreSelection();
+      document.execCommand(cmd, false, null);
+      card.text = textOverlay.innerHTML;
+      sv();
+    };
+    return b;
+  }
+  toolbar.appendChild(mkShapeFmtBtn('<b>B</b>', 'Bold', 'bold'));
+  toolbar.appendChild(mkShapeFmtBtn('<i>I</i>', 'Italic', 'italic'));
+  toolbar.appendChild(mkShapeFmtBtn('<u>U</u>', 'Underline', 'underline'));
+
+  // Font size
+  const fsSel = document.createElement('select');
+  fsSel.className = 'sn-rb-fs';
+  fsSel.title = 'Font Size';
+  fsSel.style.maxWidth = '60px';
+  // Add Auto option first
+  const autoOpt = document.createElement('option');
+  autoOpt.value = 'auto';
+  autoOpt.textContent = 'Auto';
+  if (card.fontSize === 'auto' || !card.fontSize) autoOpt.selected = true;
+  fsSel.appendChild(autoOpt);
+  ['8', '10', '12', '14', '18', '24', '32', '48'].forEach(s => {
+    const o = document.createElement('option');
+    o.value = s; o.textContent = s;
+    if (String(card.fontSize) === s) o.selected = true;
+    fsSel.appendChild(o);
+  });
+  fsSel.onmousedown = () => { saveSelection(); };
+  fsSel.onchange = (e) => {
+    e.stopPropagation();
+    if (fsSel.value === 'auto') {
+      card.fontSize = 'auto';
+      autoFitShapeText();
+    } else {
+      card.fontSize = +fsSel.value;
+      restoreSelection();
+      const sel = window.getSelection();
+      if (sel.rangeCount > 0 && !sel.isCollapsed && textOverlay.contains(sel.anchorNode)) {
+        document.execCommand('fontSize', false, '7');
+        textOverlay.querySelectorAll('font[size="7"]').forEach(f => {
+          const span = document.createElement('span');
+          span.style.fontSize = card.fontSize + 'px';
+          span.innerHTML = f.innerHTML;
+          f.replaceWith(span);
+        });
+      } else {
+        textOverlay.style.fontSize = card.fontSize + 'px';
+      }
+    }
+    card.text = textOverlay.innerHTML;
+    sv();
+  };
+  toolbar.appendChild(fsSel);
+
+  // Auto-fit text size to shape
+  function autoFitShapeText() {
+    if (card.fontSize !== 'auto') return;
+    const maxW = (card.w || 160) - 24;
+    const maxH = (card.h || 120) - 16;
+    let lo = 6, hi = 72, best = 14;
+    while (lo <= hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      textOverlay.style.fontSize = mid + 'px';
+      if (textOverlay.scrollWidth <= maxW + 2 && textOverlay.scrollHeight <= maxH + 2) {
+        best = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    textOverlay.style.fontSize = best + 'px';
+  }
+  // Run auto-fit on initial render
+  if (card.fontSize === 'auto' || !card.fontSize) {
+    card.fontSize = 'auto';
+    requestAnimationFrame(() => autoFitShapeText());
+  }
+
+  // Text color
+  const tcWrap = document.createElement('label');
+  tcWrap.className = 'sn-rb-color-wrap';
+  tcWrap.title = 'Text Color';
+  const tcIcon = document.createElement('span');
+  tcIcon.className = 'sn-rb-color-icon';
+  tcIcon.textContent = 'A';
+  const tcIn = document.createElement('input');
+  tcIn.type = 'color';
+  tcIn.className = 'sn-rb-color-input';
+  tcIn.value = card.textColor || '#333333';
+  tcIn.onmousedown = () => { saveSelection(); };
+  tcIn.oninput = (e) => {
+    e.stopPropagation();
+    restoreSelection();
+    document.execCommand('foreColor', false, tcIn.value);
+    tcIcon.style.borderBottomColor = tcIn.value;
+    card.textColor = tcIn.value;
+    card.text = textOverlay.innerHTML;
+    sv();
+  };
+  tcWrap.appendChild(tcIcon);
+  tcWrap.appendChild(tcIn);
+  toolbar.appendChild(tcWrap);
 
   function updateSVG() { svgWrap.innerHTML = renderShapeSVG(card); }
-  toolbar.querySelector('.msh-fill').oninput = function () { card.fillColor = this.value; toolbar.querySelector('.msh-nofill').classList.remove('sel'); updateSVG(); sv(); };
-  toolbar.querySelector('.msh-nofill').onclick = function (e) { e.stopPropagation(); card.fillColor = card.fillColor === 'none' ? '#6c8fff' : 'none'; this.classList.toggle('sel', card.fillColor === 'none'); updateSVG(); sv(); };
-  toolbar.querySelector('.msh-stroke').oninput = function () { card.strokeColor = this.value; toolbar.querySelector('.msh-nostroke').classList.remove('sel'); updateSVG(); sv(); };
-  toolbar.querySelector('.msh-nostroke').onclick = function (e) { e.stopPropagation(); card.strokeColor = card.strokeColor === 'none' ? '#333' : 'none'; this.classList.toggle('sel', card.strokeColor === 'none'); updateSVG(); sv(); };
-  toolbar.querySelector('.msh-sw').onchange = function () { card.strokeWidth = +this.value; updateSVG(); sv(); };
-  toolbar.querySelector('.msh-op').oninput = function () { card.opacity = +this.value / 100; updateSVG(); sv(); };
+
+  // Double-click text overlay to edit
+  textOverlay.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    textOverlay.contentEditable = true;
+    textOverlay.focus();
+    toolbar.classList.add('show');
+  });
+  textOverlay.addEventListener('blur', (e) => {
+    if (toolbar.contains(e.relatedTarget)) return;
+    textOverlay.contentEditable = false;
+    card.text = textOverlay.innerHTML;
+    sv();
+  });
+  textOverlay.addEventListener('input', () => {
+    card.text = textOverlay.innerHTML;
+    sv();
+  });
+  textOverlay.addEventListener('mousedown', (e) => {
+    if (textOverlay.contentEditable === 'true') e.stopPropagation();
+  });
+  textOverlay.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      textOverlay.contentEditable = false;
+      toolbar.classList.remove('show');
+      card.text = textOverlay.innerHTML;
+      textOverlay.blur();
+      sv();
+    }
+  });
 
   // Show/hide toolbar on click
   el.addEventListener('click', (e) => {
     if (e.target.closest('.mc-del') || e.target.closest('.mc-lock') || e.target.closest('.msh-toolbar')) return;
-    document.querySelectorAll('.mt-toolbar.show, .msh-toolbar.show').forEach(t => { if (t !== toolbar) t.classList.remove('show'); });
+    if (textOverlay.contentEditable === 'true' && (textOverlay.contains(e.target) || e.target === textOverlay)) return;
+    document.querySelectorAll('.mt-toolbar.show, .msh-toolbar.show, .sn-toolbar.show').forEach(t => { if (t !== toolbar) t.classList.remove('show'); });
     toolbar.classList.toggle('show');
   });
-  document.addEventListener('click', (e) => { if (!el.contains(e.target)) toolbar.classList.remove('show'); });
+  document.addEventListener('click', (e) => {
+    if (!el.contains(e.target)) {
+      toolbar.classList.remove('show');
+      if (textOverlay.contentEditable === 'true') {
+        textOverlay.contentEditable = false;
+        card.text = textOverlay.innerHTML;
+        sv();
+      }
+    }
+  });
 
   // Drag (via global helper)
   miroSetupCardDrag(el, card, ['.mc-del', '.msh-toolbar', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl']);
@@ -1899,8 +2178,8 @@ function buildMiroShape(card) {
   // Resize needs to re-render SVG
   const origAttach = attach8WayResize;
   attach8WayResize(el, card, 40, 40);
-  // After resize, update SVG
-  el.addEventListener('mouseup', () => { updateSVG(); });
+  // After resize, update SVG and auto-fit text
+  el.addEventListener('mouseup', () => { updateSVG(); autoFitShapeText(); });
 
   // Lock UI
   attachLockUI(el, card);
@@ -1908,6 +2187,7 @@ function buildMiroShape(card) {
   el.appendChild(del);
   el.appendChild(toolbar);
   el.appendChild(svgWrap);
+  el.appendChild(textOverlay);
   return el;
 }
 

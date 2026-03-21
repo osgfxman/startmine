@@ -12,8 +12,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1774109543">
-  <link rel="stylesheet" href="css/miro.css?v=1774109543">
+  <link rel="stylesheet" href="css/base.css?v=1774113131">
+  <link rel="stylesheet" href="css/miro.css?v=1774113131">
 </head>
 
 <body>
@@ -356,6 +356,7 @@
         <circle cx="9" cy="6.5" r="1" fill="currentColor" />
       </svg></button>
     <button class="mtb-btn" id="mtb-save-all" title="Save All: Firebase + Drive + GitHub (Ctrl+Alt+A)" onclick="saveAllBackups()">🛡️</button>
+    <button class="mtb-btn" id="mtb-undo" title="Undo (Ctrl+Z)" onclick="performUndo()"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M7 7h8a5 5 0 0 1 0 10H9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="3,11 7,7 11,11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <div style="width:28px;height:1px;background:rgba(255,255,255,.15);margin:4px auto;"></div>
     <button class="mtb-btn" id="mtb-snapshot" title="Snapshots (Ctrl+S)" onclick="openSnapshotModal()">📸</button>
   </div>
@@ -384,6 +385,9 @@
       <div class="msp-item" data-shape="rect" draggable="true" title="Rectangle"><svg viewBox="0 0 40 30">
           <rect x="2" y="2" width="36" height="26" rx="3" fill="none" stroke="currentColor" stroke-width="2" />
         </svg></div>
+      <div class="msp-item" data-shape="rounded-rect" draggable="true" title="Rounded Rectangle"><svg viewBox="0 0 40 30">
+          <rect x="2" y="2" width="36" height="26" rx="10" fill="none" stroke="currentColor" stroke-width="2" />
+        </svg></div>
       <div class="msp-item" data-shape="ellipse" draggable="true" title="Circle"><svg viewBox="0 0 40 40">
           <ellipse cx="20" cy="20" rx="18" ry="18" fill="none" stroke="currentColor" stroke-width="2" />
         </svg></div>
@@ -392,6 +396,21 @@
         </svg></div>
       <div class="msp-item" data-shape="diamond" draggable="true" title="Diamond"><svg viewBox="0 0 40 40">
           <polygon points="20,2 38,20 20,38 2,20" fill="none" stroke="currentColor" stroke-width="2" />
+        </svg></div>
+      <div class="msp-item" data-shape="star" draggable="true" title="Star"><svg viewBox="0 0 40 40">
+          <polygon points="20,2 25,15 38,15 27,23 31,37 20,28 9,37 13,23 2,15 15,15" fill="none" stroke="currentColor" stroke-width="2" />
+        </svg></div>
+      <div class="msp-item" data-shape="hexagon" draggable="true" title="Hexagon"><svg viewBox="0 0 40 36">
+          <polygon points="30,2 38,18 30,34 10,34 2,18 10,2" fill="none" stroke="currentColor" stroke-width="2" />
+        </svg></div>
+      <div class="msp-item" data-shape="pentagon" draggable="true" title="Pentagon"><svg viewBox="0 0 40 40">
+          <polygon points="20,2 38,15 32,36 8,36 2,15" fill="none" stroke="currentColor" stroke-width="2" />
+        </svg></div>
+      <div class="msp-item" data-shape="cross" draggable="true" title="Cross / Plus"><svg viewBox="0 0 40 40">
+          <polygon points="14,2 26,2 26,14 38,14 38,26 26,26 26,38 14,38 14,26 2,26 2,14 14,14" fill="none" stroke="currentColor" stroke-width="2" />
+        </svg></div>
+      <div class="msp-item" data-shape="arrow-shape" draggable="true" title="Arrow Shape"><svg viewBox="0 0 44 30">
+          <polygon points="2,10 28,10 28,2 42,15 28,28 28,20 2,20" fill="none" stroke="currentColor" stroke-width="2" />
         </svg></div>
       <div class="msp-item" data-shape="arrow" draggable="true" title="Arrow"><svg viewBox="0 0 44 24">
           <line x1="2" y1="12" x2="34" y2="12" stroke="currentColor" stroke-width="2" />
@@ -562,11 +581,11 @@
     <div class="ctx-item danger" data-action="delete"><span class="ctx-icon">🗑️</span><span class="ctx-label">Delete</span><span class="ctx-shortcut">Del</span></div>
   </div>
 
-    <script src="js/app.js?v=1774109543"></script>
-    <script src="js/outline.js?v=1774109543"></script>
-    <script src="js/miro-engine.js?v=1774109543"></script>
-    <script src="js/thumbnails.js?v=1774109543"></script>
-    <script src="js/alignment.js?v=1774109543"></script>
+    <script src="js/app.js?v=1774113131"></script>
+    <script src="js/outline.js?v=1774113131"></script>
+    <script src="js/miro-engine.js?v=1774113131"></script>
+    <script src="js/thumbnails.js?v=1774113131"></script>
+    <script src="js/alignment.js?v=1774113131"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});

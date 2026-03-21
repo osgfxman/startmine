@@ -25,15 +25,20 @@ function pushUndo() {
   if (_undoStack.length > UNDO_MAX) _undoStack.shift();
 }
 function performUndo() {
-  if (_undoStack.length === 0) return;
+  if (_undoStack.length === 0) {
+    if (typeof showToast === 'function') showToast('Nothing to undo');
+    return;
+  }
   const page = cp();
   if (!page) return;
   const snapshot = _undoStack.pop();
   try {
     _undoInProgress = true;
     page.miroCards = JSON.parse(snapshot);
+    _miroSelected.clear();
     sv(); buildMiroCanvas(); buildOutline();
     _undoInProgress = false;
+    if (typeof showToast === 'function') showToast('↩ Undo');
   } catch (e) { _undoInProgress = false; console.error('[UNDO ERROR]', e); }
 }
 
@@ -1127,16 +1132,28 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
       sv(); buildMiroCanvas(); buildOutline();
       setTimeout(() => {
         const el = document.querySelector(`.miro-sticky[data-cid="${newId}"] .ms-text`);
-        if (el) el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
-      }, 50);
+        if (el) {
+          el.contentEditable = true;
+          el.focus();
+          // Show toolbar
+          const tb = el.closest('.miro-sticky')?.querySelector('.sn-toolbar');
+          if (tb) tb.classList.add('show');
+        }
+      }, 100);
     } else if (_textCreateMode) {
       const newId = uid();
       page.miroCards.push({ id: newId, type: 'text', text: '', x: bx - 60, y: by - 15, w: 200, h: 40, fontSize: 24, font: 'Inter', fontColor: '#333333', align: 'right' });
       sv(); buildMiroCanvas(); buildOutline();
       setTimeout(() => {
         const el = document.querySelector(`.miro-text[data-cid="${newId}"] .mt-text`);
-        if (el) el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
-      }, 50);
+        if (el) {
+          el.contentEditable = true;
+          el.focus();
+          // Show toolbar
+          const tb = el.closest('.miro-text')?.querySelector('.mt-toolbar');
+          if (tb) tb.classList.add('show');
+        }
+      }, 100);
     } else if (_gridCreateMode) {
       const rows = 3, cols = 3;
       const cells = [];
@@ -1574,42 +1591,62 @@ document.addEventListener('paste', (e) => {
                   const miroShapeType = (jd.shape || jd.shapeType || 'rectangle').toLowerCase();
                   let smShape = 'rect';
                   if (miroShapeType.includes('circle') || miroShapeType.includes('ellipse') || miroShapeType.includes('oval')) smShape = 'ellipse';
-                  else if (miroShapeType.includes('triangle') || miroShapeType.includes('wedge_round_rectangle_callout')) smShape = 'triangle';
-                  else if (miroShapeType.includes('diamond') || miroShapeType.includes('rhombus')) smShape = 'diamond';
-                  else if (miroShapeType.includes('round') || miroShapeType.includes('pill') || miroShapeType.includes('flowchart_decision')) smShape = 'diamond';
+                  else if (miroShapeType.includes('triangle') || miroShapeType.includes('wedge')) smShape = 'triangle';
+                  else if (miroShapeType.includes('diamond') || miroShapeType.includes('rhombus') || miroShapeType.includes('flowchart_decision')) smShape = 'diamond';
+                  else if (miroShapeType.includes('star')) smShape = 'star';
+                  else if (miroShapeType.includes('hexagon')) smShape = 'hexagon';
+                  else if (miroShapeType.includes('pentagon')) smShape = 'pentagon';
+                  else if (miroShapeType.includes('cross') || miroShapeType.includes('plus')) smShape = 'cross';
+                  else if (miroShapeType.includes('arrow') && !miroShapeType.includes('line')) smShape = 'arrow-shape';
+                  else if (miroShapeType.includes('round') || miroShapeType.includes('pill')) smShape = 'rounded-rect';
                   else smShape = 'rect';
 
-                  // Extract colors from style
-                  let fillColor = '#6c8fff'; // Default fill
-                  let strokeColor = '#333';  // Default stroke
+                  // Extract colors from style - improved color parser
+                  let fillColor = 'none';
+                  let strokeColor = '#333';
                   let strokeWidth = 2;
+                  let textColor = '#333333';
+
+                  // Helper: robustly parse Miro color values
+                  const parseMiroColor = (val) => {
+                    if (val === undefined || val === null || val === '' || val === 'transparent') return null;
+                    const s = String(val).trim();
+                    // Already a hex color
+                    if (s.startsWith('#')) return s.length >= 7 ? s : '#' + s.slice(1).padStart(6, '0');
+                    // rgb/rgba string
+                    if (s.startsWith('rgb')) {
+                      const m = s.match(/\d+/g);
+                      if (m && m.length >= 3) {
+                        return '#' + [m[0], m[1], m[2]].map(n => parseInt(n).toString(16).padStart(2, '0')).join('');
+                      }
+                      return null;
+                    }
+                    // Numeric (Miro's decimal color encoding)
+                    const num = parseInt(s);
+                    if (isNaN(num) || num === 0) return null; // 0 = transparent in Miro
+                    const hex = num.toString(16).padStart(6, '0').slice(-6);
+                    return '#' + hex;
+                  };
+
                   if (styleObj) {
-                    // Helper to convert Miro's numeric color to 6-char hex
-                    const parseMiroColor = (val) => {
-                      if (val === undefined || val === null) return null;
-                      const numStr = parseInt(val).toString(16);
-                      // Miro's decimal sometimes creates >6 char hex (e.g. 15877926 -> f24526)
-                      // We pad and take the last 6 chars for standard CSS hex
-                      return '#' + numStr.padStart(6, '0').slice(-6);
-                    };
-
-                    // Fill: sbc (shape background color) or bc/backgroundColor
+                    // Fill: sbc (shape background color), bc, backgroundColor, fillColor
                     let fillHex = parseMiroColor(styleObj.sbc) ||
-                                  (styleObj.backgroundColor || styleObj.bc || null);
-                    if (fillHex) {
-                      fillHex = String(fillHex);
-                      if (!fillHex.startsWith('#')) fillHex = '#' + fillHex;
-                      fillColor = fillHex;
-                    }
+                                  parseMiroColor(styleObj.bc) ||
+                                  parseMiroColor(styleObj.backgroundColor) ||
+                                  parseMiroColor(styleObj.fillColor) ||
+                                  parseMiroColor(jd.fillColor) ||
+                                  parseMiroColor(jd.backgroundColor);
+                    if (fillHex) fillColor = fillHex;
 
-                    // Stroke: lc (line color) or borderColor
+                    // Stroke: lc (line color), borderColor
                     let strokeHex = parseMiroColor(styleObj.lc) ||
-                                   (styleObj.borderColor || null);
-                    if (strokeHex) {
-                      strokeHex = String(strokeHex);
-                      if (!strokeHex.startsWith('#')) strokeHex = '#' + strokeHex;
-                      strokeColor = strokeHex;
-                    }
+                                   parseMiroColor(styleObj.borderColor) ||
+                                   parseMiroColor(jd.borderColor);
+                    if (strokeHex) strokeColor = strokeHex;
+
+                    // Text color: fc (font color)
+                    let tcHex = parseMiroColor(styleObj.fc) || parseMiroColor(styleObj.fontColor);
+                    if (tcHex) textColor = tcHex;
 
                     if (styleObj.lw !== undefined) strokeWidth = parseInt(styleObj.lw);
                     else if (styleObj.borderWidth !== undefined) strokeWidth = parseInt(styleObj.borderWidth);
@@ -1622,6 +1659,7 @@ document.addEventListener('paste', (e) => {
                     strokeColor: strokeColor,
                     strokeWidth: strokeWidth,
                     text: textHTML || '',
+                    textColor: textColor,
                     fontSize: styleObj && styleObj.fs ? parseInt(styleObj.fs) : (styleObj && styleObj.fontSize ? parseInt(styleObj.fontSize) : 14)
                   };
                   extractPosition(jd, cardOpts, obj.widgetData);
@@ -1629,7 +1667,7 @@ document.addEventListener('paste', (e) => {
                   if (!cardOpts.w) cardOpts.w = 160;
                   if (!cardOpts.h) cardOpts.h = 120;
                   extracted.push(cardOpts);
-                  console.log('[PASTE] Miro shape →', smShape, 'fill:', fillColor, 'size:', cardOpts.w, 'x', cardOpts.h);
+                  console.log('[PASTE] Miro shape →', smShape, 'fill:', fillColor, 'stroke:', strokeColor, 'size:', cardOpts.w, 'x', cardOpts.h);
                 } else {
                   // --- Normal sticker or text handling ---
                   let startmineType = type === 'text' ? 'text' : 'sticky';
