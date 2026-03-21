@@ -1852,18 +1852,25 @@ document.addEventListener('paste', (e) => {
         clearMiroSelection();
 
         // ═══════════════════════════════════════════════════════════════
-        // POSITION, SIZE & FONT NORMALIZATION — CENTER-BASED
+        // POSITION, SIZE & FONT — FAITHFUL 1:1 MIRO REPRODUCTION
         // Miro clipboard coordinates (offsetPx) are CENTER-ORIGIN in a
-        // unified coordinate space. They are ALWAYS reliable for relative
-        // item positions. Visual sizes = w * scale (preserves aspect ratio).
-        // We zero-base and normalize CENTER coords, then offset to
-        // top-left using final screen-pixel sizes. This ensures per-item
-        // scale differences NEVER corrupt relative spacing.
+        // unified coordinate space. Visual sizes = w * scale.
+        // We use them AS-IS with NO rescaling, so pasted elements
+        // match their Miro.com appearance exactly.
         // ═══════════════════════════════════════════════════════════════
 
-        // Step 1: Calculate visual sizes (for card dimensions only, NOT positioning)
+        // Step 1: Calculate visual sizes (w * scale) — no rescaling
         extracted.forEach(item => {
           const sc = item._scale || 1;
+          // Apply Miro sticky-note defaults if no size was extracted
+          if (item.type === 'sticky' && !item.w && !item.h) {
+            // Miro rectangular sticker: base ~350×228, square: ~199×228
+            // Aspect ratio clue: if Miro gave us a size hint via sibling data, use it
+            item.w = 350; item.h = 228;
+          }
+          if (item.type === 'text' && !item.w) { item.w = 260; }
+          if (item.type === 'text' && !item.h) { item.h = 100; }
+
           item._vw = (item.w || 200) * sc;  // visual width
           item._vh = (item.h || 200) * sc;  // visual height
           if (item.fontSize) item._vfs = item.fontSize * sc;
@@ -1884,29 +1891,25 @@ document.addEventListener('paste', (e) => {
           }
         });
 
-        // Step 3: Compute bounding box of centers + half-sizes for factor calc
-        let maxCX = 0, maxCY = 0;
+        // Step 3: Determine scale factor
+        // Use 1:1 (no rescaling) so Miro sizes/spacing are preserved exactly.
+        // Only apply a cap if the layout would exceed 4000px on screen.
+        let globalFactor = 1;
+        let maxSpanX = 0, maxSpanY = 0;
         extracted.forEach(item => {
           if (item._ox !== undefined) {
-            maxCX = Math.max(maxCX, item._ox + item._vw / 2);
-            maxCY = Math.max(maxCY, item._oy + item._vh / 2);
+            maxSpanX = Math.max(maxSpanX, item._ox + item._vw / 2);
+            maxSpanY = Math.max(maxSpanY, item._oy + item._vh / 2);
           }
         });
-
-        // Step 4: Global normalization factor from median visual width → 280px
-        const vWidths = extracted.map(i => i._vw || 200).sort((a,b) => a - b);
-        const medianVW = vWidths[Math.floor(vWidths.length / 2)];
-        let globalFactor = medianVW / 280;
-        // Constrain: overall layout shouldn't exceed ~2000px on screen
-        const maxSpan = Math.max(maxCX, maxCY);
-        if (maxSpan > 0 && maxSpan / globalFactor > 2000) {
-          globalFactor = maxSpan / 2000;
+        const maxSpan = Math.max(maxSpanX, maxSpanY);
+        if (maxSpan > 4000) {
+          globalFactor = maxSpan / 4000;
         }
-        if (globalFactor < 0.01) globalFactor = 1;
 
-        console.log('[PASTE] Factor:', globalFactor.toFixed(3), 'Items:', extracted.length, 'MedianVW:', medianVW.toFixed(0));
+        console.log('[PASTE] Factor:', globalFactor.toFixed(3), 'Items:', extracted.length, 'MaxSpan:', maxSpan.toFixed(0));
 
-        // Step 5: Create cards — position from CENTER coords, size from visual dims
+        // Step 4: Create cards — position from CENTER coords, size from visual dims
         extracted.forEach(item => {
           const newId = uid();
           const card = { id: newId, ...item };
