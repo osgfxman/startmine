@@ -1088,7 +1088,7 @@ function setActiveTool(tool) {
   else if (_gridCreateMode) { hint.textContent = '📊 Click anywhere to place a table • Press Esc to cancel'; hint.style.display = 'block'; }
   else if (_mindmapCreateMode) { hint.textContent = '🧠 Click anywhere to place a mind map • Press Esc to cancel'; hint.style.display = 'block'; }
   else if (_widgetCreateMode) { hint.textContent = '🗂️ Click anywhere to place a bookmark widget • Press Esc to cancel'; hint.style.display = 'block'; }
-  else if (_trelloCreateMode) { hint.textContent = '📋 Click anywhere to place a Trello board • Press Esc to cancel'; hint.style.display = 'block'; }
+  else if (_trelloCreateMode) { hint.textContent = '📋 Click anywhere to place Trello lists • Press Esc to cancel'; hint.style.display = 'block'; }
   else { hint.style.display = 'none'; }
 
   document.getElementById('miro-pen-toolbar').classList.toggle('show', _penMode);
@@ -1184,7 +1184,18 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
       page.miroCards.push({ id: uid(), type: 'bwidget', title: 'Bookmarks', emoji: '🗂️', items: [], x: bx - 160, y: by - 200, w: 320, h: 400, color: { r: 255, g: 255, b: 255, a: 1 } });
       sv(); buildMiroCanvas(); buildOutline();
     } else if (_trelloCreateMode) {
-      page.miroCards.push({ id: uid(), type: 'trello', title: 'Trello Board', x: bx - 380, y: by - 210, w: 760, h: 420 });
+      const gap = 20;
+      const lw = 260, lh = 380;
+      const lists = [
+        { title: '2Do', color: '#6c8fff' },
+        { title: 'In Progress', color: '#ffd43b' },
+        { title: 'Done', color: '#51cf66' }
+      ];
+      const totalW = lists.length * lw + (lists.length - 1) * gap;
+      const startX = bx - totalW / 2;
+      lists.forEach((l, i) => {
+        page.miroCards.push({ id: uid(), type: 'trello', title: l.title, listColor: l.color, cards: [], x: startX + i * (lw + gap), y: by - lh / 2, w: lw, h: lh });
+      });
       sv(); buildMiroCanvas(); buildOutline();
     }
   } catch (err) {
