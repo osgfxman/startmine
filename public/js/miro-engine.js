@@ -1522,22 +1522,30 @@ document.addEventListener('paste', (e) => {
                   opts._ox = widgetData.x;
                   opts._oy = widgetData.y;
                 }
-                // Capture scale factor for coordinate normalization
-                if (jd.scale && typeof jd.scale === 'object' && jd.scale.scale) {
+
+                // Capture scale factor — try multiple locations
+                if (jd.scale && typeof jd.scale === 'object' && typeof jd.scale.scale === 'number') {
                   opts._scale = jd.scale.scale;
                 } else if (typeof jd.scale === 'number') {
                   opts._scale = jd.scale;
+                } else if (jd._position && typeof jd._position.scale === 'number') {
+                  opts._scale = jd._position.scale;
+                } else if (widgetData && typeof widgetData.scale === 'number') {
+                  opts._scale = widgetData.scale;
                 }
-                // Size: try multiple sources
+
+                // Size: try multiple sources (use typeof checks to handle 0 values)
                 if (jd.size) {
-                  if (jd.size.width) opts.w = jd.size.width;
-                  if (jd.size.height) opts.h = jd.size.height;
+                  if (typeof jd.size.width === 'number') opts.w = jd.size.width;
+                  else if (typeof jd.size.w === 'number') opts.w = jd.size.w;
+                  if (typeof jd.size.height === 'number') opts.h = jd.size.height;
+                  else if (typeof jd.size.h === 'number') opts.h = jd.size.h;
                 }
-                if (!opts.w && typeof jd.width === 'number') opts.w = jd.width;
-                if (!opts.h && typeof jd.height === 'number') opts.h = jd.height;
+                if (opts.w === undefined && typeof jd.width === 'number') opts.w = jd.width;
+                if (opts.h === undefined && typeof jd.height === 'number') opts.h = jd.height;
                 // Also check widgetData-level width/height
-                if (!opts.w && widgetData && typeof widgetData.width === 'number') opts.w = widgetData.width;
-                if (!opts.h && widgetData && typeof widgetData.height === 'number') opts.h = widgetData.height;
+                if (opts.w === undefined && widgetData && typeof widgetData.width === 'number') opts.w = widgetData.width;
+                if (opts.h === undefined && widgetData && typeof widgetData.height === 'number') opts.h = widgetData.height;
                 // Mark that positions are center-origin (Miro standard)
                 opts._centerOrigin = true;
 
@@ -1728,92 +1736,82 @@ document.addEventListener('paste', (e) => {
         clearMiroSelection();
 
         // ═══════════════════════════════════════════════════════════════
-        // POSITION, SIZE & FONT NORMALIZATION
-        // Miro clipboard coordinates (offsetPx) are CENTER-ORIGIN and 
-        // in a unified internal coordinate space. Visual sizes in this 
-        // space are (width * scale). We find a Global Normalization 
-        // Factor mapping the median item width to 280px to guarantee 
-        // perfect proportional pasted layouts regardless of selection size.
+        // POSITION, SIZE & FONT NORMALIZATION — CENTER-BASED
+        // Miro clipboard coordinates (offsetPx) are CENTER-ORIGIN in a
+        // unified coordinate space. They are ALWAYS reliable for relative
+        // item positions. Visual sizes = w * scale (preserves aspect ratio).
+        // We zero-base and normalize CENTER coords, then offset to
+        // top-left using final screen-pixel sizes. This ensures per-item
+        // scale differences NEVER corrupt relative spacing.
         // ═══════════════════════════════════════════════════════════════
 
-        // Step 1: Calculate visual sizes and convert center to top-left
+        // Step 1: Calculate visual sizes (for card dimensions only, NOT positioning)
         extracted.forEach(item => {
           const sc = item._scale || 1;
-          item._vw = (item.w || 200) * sc;  // visual width in Miro space
-          item._vh = (item.h || 200) * sc;  // visual height in Miro space
-          
-          // Track visual font size if available
+          item._vw = (item.w || 200) * sc;  // visual width
+          item._vh = (item.h || 200) * sc;  // visual height
           if (item.fontSize) item._vfs = item.fontSize * sc;
+        });
 
+        // Step 2: Zero-base the CENTER coordinates (keep as centers!)
+        let minCX = Infinity, minCY = Infinity;
+        extracted.forEach(item => {
           if (item._ox !== undefined) {
-            item._miroLeft = item._ox - (item._vw / 2);
-            item._miroTop = item._oy - (item._vh / 2);
+            minCX = Math.min(minCX, item._ox);
+            minCY = Math.min(minCY, item._oy);
           }
         });
-
-        // Step 2: Zero-base the top-left coordinates
-        let minX = Infinity, minY = Infinity;
         extracted.forEach(item => {
-          if (item._miroLeft !== undefined) {
-            minX = Math.min(minX, item._miroLeft);
-            minY = Math.min(minY, item._miroTop);
+          if (item._ox !== undefined) {
+            item._ox -= minCX;
+            item._oy -= minCY;
           }
         });
 
+        // Step 3: Compute bounding box of centers + half-sizes for factor calc
+        let maxCX = 0, maxCY = 0;
         extracted.forEach(item => {
-          if (item._miroLeft !== undefined) {
-            item._miroLeft -= minX;
-            item._miroTop -= minY;
+          if (item._ox !== undefined) {
+            maxCX = Math.max(maxCX, item._ox + item._vw / 2);
+            maxCY = Math.max(maxCY, item._oy + item._vh / 2);
           }
         });
 
-        // Step 3: Calculate global normalization factor based on median width
-        let globalFactor = 33.125; // Good default for exact Miro mapping
-        const vWidths = extracted.map(i => i._vw || 0).filter(w => w > 0).sort((a,b) => a - b);
-        if (vWidths.length > 0) {
-          // Map the median visual width to Startmine's default 280px
-          const medianVW = vWidths[Math.floor(vWidths.length / 2)];
-          if (medianVW > 10) globalFactor = medianVW / 280;
+        // Step 4: Global normalization factor from median visual width → 280px
+        const vWidths = extracted.map(i => i._vw || 200).sort((a,b) => a - b);
+        const medianVW = vWidths[Math.floor(vWidths.length / 2)];
+        let globalFactor = medianVW / 280;
+        // Constrain: overall layout shouldn't exceed ~2000px on screen
+        const maxSpan = Math.max(maxCX, maxCY);
+        if (maxSpan > 0 && maxSpan / globalFactor > 2000) {
+          globalFactor = maxSpan / 2000;
         }
+        if (globalFactor < 0.01) globalFactor = 1;
 
-        console.log('[PASTE] Normalization Factor:', globalFactor, 'Items:', extracted.length);
+        console.log('[PASTE] Factor:', globalFactor.toFixed(3), 'Items:', extracted.length, 'MedianVW:', medianVW.toFixed(0));
 
-        // Step 4: Create cards with normalized positions, sizes, and fonts
+        // Step 5: Create cards — position from CENTER coords, size from visual dims
         extracted.forEach(item => {
           const newId = uid();
           const card = { id: newId, ...item };
 
-          // Normalized dimensions (from Miro internal space to screen pixels)
-          const screenW = item._vw / globalFactor;
-          const screenH = item._vh / globalFactor;
+          // Screen dimensions from visual sizes
+          const screenW = Math.max(item._vw / globalFactor, 30);
+          const screenH = Math.max(item._vh / globalFactor, 20);
           const screenFS = item._vfs ? (item._vfs / globalFactor) : 14;
 
-          // Apply type-specific minimums so text isn't microscopic
+          card.w = screenW;
+          card.h = screenH;
           card.fontSize = Math.max(screenFS, 8);
 
-          if (item.type === 'sticky') {
-            card.w = Math.max(screenW, 60);
-            card.h = Math.max(screenH, 40);
-          } else if (item.type === 'text') {
-            card.w = Math.max(screenW, 60);
-            card.h = Math.max(screenH, card.fontSize * 1.5);
-            card.fontFamily = 'Inter';
-          } else if (item.type === 'image') {
-            card.w = Math.max(screenW, 60);
-            card.h = Math.max(screenH, 40);
-          } else if (item.type === 'shape') {
-            card.w = Math.max(screenW, 30);
-            card.h = Math.max(screenH, 20);
+          if (item._ox !== undefined) {
+            // Convert normalized center → top-left using SCREEN-PIXEL sizes
+            const screenCX = px + (item._ox / globalFactor);
+            const screenCY = py + (item._oy / globalFactor);
+            card.x = screenCX - screenW / 2;
+            card.y = screenCY - screenH / 2;
           } else {
-            card.w = Math.max(screenW, 60);
-            card.h = Math.max(screenH, 40);
-          }
-
-          if (item._miroLeft !== undefined) {
-            card.x = px + (item._miroLeft / globalFactor);
-            card.y = py + (item._miroTop / globalFactor);
-          } else {
-            // Fallback: sequential layout for items without valid position data
+            // Fallback: sequential layout
             card.x = curX - 100;
             card.y = curY - 100;
             curX += (card.w || 280) + 40;
@@ -1830,6 +1828,9 @@ document.addEventListener('paste', (e) => {
           delete card._centerOrigin;
           delete card._vw;
           delete card._vh;
+          delete card._vfs;
+          delete card._miroLeft;
+          delete card._miroTop;
 
           page.miroCards.push(card);
           _miroSelected.add(newId);

@@ -27,7 +27,13 @@
     origCards = [];
     _miroSelected.forEach((cid) => {
       const c = (page.miroCards || []).find((x) => x.id === cid);
-      if (c) origCards.push({ id: c.id, x: c.x || 0, y: c.y || 0, w: c.w || 280, h: c.h || 240 });
+      if (c) {
+        // Use rendered dimensions to respect CSS min-width/min-height
+        const el = document.querySelector(`[data-cid="${cid}"]`);
+        const renderedW = el ? Math.max(el.offsetWidth, c.w || 280) : (c.w || 280);
+        const renderedH = el ? Math.max(el.offsetHeight, c.h || 240) : (c.h || 240);
+        origCards.push({ id: c.id, x: c.x || 0, y: c.y || 0, w: renderedW, h: renderedH });
+      }
     });
 
     // Calculate uniform card size (average) — used only in Ctrl mode
