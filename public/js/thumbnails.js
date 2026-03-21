@@ -3009,7 +3009,7 @@ let _trelloDragData = null;
 
 function buildMiroTrello(card) {
   const el = document.createElement('div');
-  el.className = 'miro-trello';
+  el.className = 'miro-trello' + (card.taskMode ? ' task-mode' : '');
   el.dataset.cid = card.id;
   el.style.left = (card.x || 0) + 'px';
   el.style.top = (card.y || 0) + 'px';
@@ -3022,6 +3022,7 @@ function buildMiroTrello(card) {
 
   // Init data
   if (!card.cards) card.cards = [];
+  if (!card.archived) card.archived = [];
   if (!card.listColor) card.listColor = '#6c8fff';
   if (!card.title) card.title = 'List';
   if (card.bgColor === undefined) card.bgColor = 'transparent';
@@ -3033,7 +3034,7 @@ function buildMiroTrello(card) {
   colorBar.className = 'tl-color-bar';
   colorBar.style.background = card.listColor;
   colorBar.style.cursor = 'pointer';
-  colorBar.title = 'Click to change list accent color';
+  colorBar.title = 'Change list color';
   colorBar.onclick = (e) => {
     e.stopPropagation();
     const inp = document.createElement('input');
@@ -3056,9 +3057,28 @@ function buildMiroTrello(card) {
   titleEl.addEventListener('change', () => { card.title = titleEl.value; sv(); });
   titleEl.addEventListener('mousedown', (e) => e.stopPropagation());
 
+  // Task mode toggle
+  const taskToggle = document.createElement('label');
+  taskToggle.className = 'tl-task-toggle';
+  taskToggle.title = 'Task mode';
+  const taskCb = document.createElement('input');
+  taskCb.type = 'checkbox';
+  taskCb.checked = !!card.taskMode;
+  taskCb.onchange = () => {
+    card.taskMode = taskCb.checked;
+    el.classList.toggle('task-mode', card.taskMode);
+    updateProgress();
+    sv();
+  };
+  taskCb.addEventListener('mousedown', (e) => e.stopPropagation());
+  taskToggle.appendChild(taskCb);
+  taskToggle.appendChild(document.createTextNode('Tasks'));
+
   const countEl = document.createElement('span');
   countEl.className = 'tl-count';
-  function updateCount() { countEl.textContent = card.cards.length; }
+  function updateCount() {
+    countEl.textContent = card.cards.length;
+  }
   updateCount();
 
   const del = document.createElement('button');
@@ -3067,14 +3087,42 @@ function buildMiroTrello(card) {
   del.onclick = (e) => { e.stopPropagation(); deleteMiroCard(card.id); };
 
   header.appendChild(titleEl);
+  header.appendChild(taskToggle);
   header.appendChild(countEl);
   header.appendChild(del);
+
+  // ─── Progress Bar ───
+  const progressWrap = document.createElement('div');
+  progressWrap.className = 'tl-progress-wrap';
+  const progressBar = document.createElement('div');
+  progressBar.className = 'tl-progress-bar';
+  const progressFill = document.createElement('div');
+  progressFill.className = 'tl-progress-fill';
+  progressBar.appendChild(progressFill);
+  const progressLabel = document.createElement('div');
+  progressLabel.className = 'tl-progress-label';
+  progressWrap.appendChild(progressBar);
+  progressWrap.appendChild(progressLabel);
+
+  function updateProgress() {
+    if (!card.taskMode) return;
+    let totalWeight = 0, doneWeight = 0;
+    card.cards.forEach(c => {
+      const w = c.weight != null ? c.weight : 100;
+      totalWeight += w;
+      if (c.done) doneWeight += w;
+    });
+    const pct = totalWeight > 0 ? Math.round((doneWeight / totalWeight) * 100) : 0;
+    progressFill.style.width = pct + '%';
+    progressLabel.textContent = pct + '% (' + card.cards.filter(c => c.done).length + '/' + card.cards.length + ')';
+  }
+  updateProgress();
 
   // ─── Card Body ───
   const body = document.createElement('div');
   body.className = 'tl-body';
 
-  // Drop zone: accept cards from any trello list on page
+  // Drop zone
   body.addEventListener('dragover', (e) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -3089,8 +3137,10 @@ function buildMiroTrello(card) {
     body.classList.remove('drag-over');
     if (!_trelloDragData) return;
     const { srcCardObj, srcListCards } = _trelloDragData;
+    // Remove from source list
     const srcIdx = srcListCards.indexOf(srcCardObj);
     if (srcIdx >= 0) srcListCards.splice(srcIdx, 1);
+    // Insert at drop position
     const afterEl = getTrelloDragAfter(body, e.clientY);
     if (afterEl) {
       const afterIdx = [...body.querySelectorAll('.tl-card')].indexOf(afterEl);
@@ -3103,20 +3153,17 @@ function buildMiroTrello(card) {
     sv(); buildMiroCanvas(); buildOutline();
   });
 
-  // Helper: auto-linkify text
   function linkify(text) {
     return text.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
   }
 
-  function renderCards() {
-    body.innerHTML = '';
-    card.cards.forEach((c, ci) => {
-      const cardEl = document.createElement('div');
-      cardEl.className = 'tl-card' + (c.done ? ' done' : '');
-      if (c.bgColor) cardEl.style.background = c.bgColor;
-      if (c.textColor) cardEl.style.color = c.textColor;
+  function buildCardEl(c, ci, isArchived) {
+    const cardEl = document.createElement('div');
+    cardEl.className = 'tl-card' + (c.done ? ' done' : '');
+    if (c.bgColor) cardEl.style.background = c.bgColor;
+    if (c.textColor) { cardEl.style.color = c.textColor; }
+    if (!isArchived) {
       cardEl.draggable = true;
-
       cardEl.addEventListener('dragstart', (e) => {
         e.stopPropagation();
         _trelloDragData = { srcCardObj: c, srcListCards: card.cards };
@@ -3128,30 +3175,29 @@ function buildMiroTrello(card) {
         cardEl.classList.remove('dragging');
         _trelloDragData = null;
       });
+    }
 
-      const check = document.createElement('input');
-      check.type = 'checkbox';
-      check.className = 'tl-check';
-      check.checked = !!c.done;
-      check.onchange = () => {
-        c.done = check.checked;
-        cardEl.classList.toggle('done', c.done);
-        sv();
-      };
-      check.addEventListener('mousedown', (e) => e.stopPropagation());
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.className = 'tl-check';
+    check.checked = !!c.done;
+    check.onchange = () => {
+      c.done = check.checked;
+      cardEl.classList.toggle('done', c.done);
+      updateProgress();
+      sv();
+    };
+    check.addEventListener('mousedown', (e) => e.stopPropagation());
 
-      const txt = document.createElement('div');
-      txt.className = 'tl-text';
-      txt.contentEditable = true;
-      txt.spellcheck = false;
-      // Use innerHTML to preserve images/links
-      if (c.html) {
-        txt.innerHTML = c.html;
-      } else {
-        txt.textContent = c.text || '';
-      }
+    const txt = document.createElement('div');
+    txt.className = 'tl-text';
+    txt.contentEditable = !isArchived;
+    txt.spellcheck = false;
+    if (c.html) { txt.innerHTML = c.html; }
+    else { txt.textContent = c.text || ''; }
 
-      // Image paste (Ctrl+V)
+    if (!isArchived) {
+      // Image paste
       txt.addEventListener('paste', (e) => {
         const items = e.clipboardData?.items;
         if (!items) return;
@@ -3164,41 +3210,35 @@ function buildMiroTrello(card) {
               const img = document.createElement('img');
               img.src = reader.result;
               txt.appendChild(img);
-              c.html = txt.innerHTML;
-              sv();
+              c.html = txt.innerHTML; sv();
             };
             reader.readAsDataURL(file);
             return;
           }
         }
       });
-
       // Image drop
       txt.addEventListener('drop', (e) => {
         const files = e.dataTransfer?.files;
         if (files && files.length > 0 && files[0].type.startsWith('image/')) {
-          e.preventDefault();
-          e.stopPropagation();
+          e.preventDefault(); e.stopPropagation();
           const reader = new FileReader();
           reader.onload = () => {
             const img = document.createElement('img');
             img.src = reader.result;
             txt.appendChild(img);
-            c.html = txt.innerHTML;
-            sv();
+            c.html = txt.innerHTML; sv();
           };
           reader.readAsDataURL(files[0]);
         }
       });
-
       txt.addEventListener('blur', () => {
         const hasContent = txt.textContent.trim() || txt.querySelector('img');
         if (!hasContent) {
           card.cards.splice(ci, 1);
-          sv(); renderCards(); updateCount();
+          sv(); renderCards(); updateCount(); updateProgress();
           return;
         }
-        // Auto-linkify plain text URLs
         const html = txt.innerHTML;
         const linkified = linkify(html);
         txt.innerHTML = linkified;
@@ -3211,46 +3251,167 @@ function buildMiroTrello(card) {
           e.preventDefault();
           const hasContent = txt.textContent.trim() || txt.querySelector('img');
           if (hasContent) {
-            c.html = txt.innerHTML;
-            c.text = txt.textContent;
+            c.html = txt.innerHTML; c.text = txt.textContent;
             const newCard = { id: uid(), text: '', done: false };
             card.cards.splice(ci + 1, 0, newCard);
-            sv(); renderCards(); updateCount();
+            sv(); renderCards(); updateCount(); updateProgress();
             setTimeout(() => {
               const allTexts = body.querySelectorAll('.tl-text');
               if (allTexts[ci + 1]) allTexts[ci + 1].focus();
             }, 30);
-          } else {
-            txt.blur();
-          }
+          } else { txt.blur(); }
         }
         if (e.key === 'Escape') { txt.blur(); }
       });
       txt.addEventListener('mousedown', (e) => e.stopPropagation());
-      // Make links clickable (not editable)
       txt.addEventListener('click', (e) => {
-        if (e.target.tagName === 'A') {
-          e.preventDefault();
-          window.open(e.target.href, '_blank');
-        }
+        if (e.target.tagName === 'A') { e.preventDefault(); window.open(e.target.href, '_blank'); }
       });
+    }
 
+    // Weight tag
+    const weight = c.weight != null ? c.weight : 100;
+    if (weight !== 100 && card.taskMode) {
+      const wtag = document.createElement('span');
+      wtag.className = 'tl-weight';
+      wtag.textContent = weight + '%';
+      wtag.title = 'Task weight';
+      cardEl.appendChild(wtag);
+    }
+
+    // Card actions
+    const actions = document.createElement('div');
+    actions.className = 'tl-card-actions';
+
+    if (!isArchived) {
+      // Color picker
+      const colorBtn = document.createElement('button');
+      colorBtn.textContent = '🎨';
+      colorBtn.title = 'Card color';
+      colorBtn.onclick = (e) => {
+        e.stopPropagation();
+        const inp = document.createElement('input');
+        inp.type = 'color'; inp.value = c.bgColor || '#ffffff';
+        inp.style.cssText = 'position:absolute;opacity:0;pointer-events:none;';
+        cardEl.appendChild(inp); inp.click();
+        inp.oninput = () => { c.bgColor = inp.value; cardEl.style.background = inp.value; sv(); };
+        inp.onchange = () => inp.remove();
+        inp.addEventListener('blur', () => inp.remove());
+      };
+      actions.appendChild(colorBtn);
+
+      // Weight button (only in task mode)
+      if (card.taskMode) {
+        const wBtn = document.createElement('button');
+        wBtn.textContent = '⚖';
+        wBtn.title = 'Set weight (%)';
+        wBtn.onclick = (e) => {
+          e.stopPropagation();
+          const val = prompt('Card weight (%)', c.weight != null ? c.weight : 100);
+          if (val !== null) {
+            c.weight = Math.max(1, parseInt(val) || 100);
+            sv(); renderCards(); updateCount(); updateProgress();
+          }
+        };
+        actions.appendChild(wBtn);
+      }
+
+      // Archive button
+      const archiveBtn = document.createElement('button');
+      archiveBtn.textContent = '📥';
+      archiveBtn.title = 'Archive card';
+      archiveBtn.onclick = (e) => {
+        e.stopPropagation();
+        card.cards.splice(ci, 1);
+        card.archived.push(c);
+        sv(); renderCards(); renderArchive(); updateCount(); updateProgress();
+      };
+      actions.appendChild(archiveBtn);
+
+      // Delete button
       const cdel = document.createElement('button');
-      cdel.className = 'tl-del';
       cdel.textContent = '✕';
+      cdel.title = 'Delete card';
+      cdel.style.color = '#e55';
       cdel.onclick = (e) => {
         e.stopPropagation();
         card.cards.splice(ci, 1);
-        sv(); renderCards(); updateCount();
+        sv(); renderCards(); updateCount(); updateProgress();
       };
+      actions.appendChild(cdel);
+    } else {
+      // Restore from archive
+      const restoreBtn = document.createElement('button');
+      restoreBtn.textContent = '↩';
+      restoreBtn.title = 'Restore card';
+      restoreBtn.onclick = (e) => {
+        e.stopPropagation();
+        const idx = card.archived.indexOf(c);
+        if (idx >= 0) card.archived.splice(idx, 1);
+        card.cards.push(c);
+        sv(); renderCards(); renderArchive(); updateCount(); updateProgress();
+      };
+      actions.appendChild(restoreBtn);
 
-      cardEl.appendChild(check);
-      cardEl.appendChild(txt);
-      cardEl.appendChild(cdel);
-      body.appendChild(cardEl);
+      const permDel = document.createElement('button');
+      permDel.textContent = '✕';
+      permDel.title = 'Delete permanently';
+      permDel.style.color = '#e55';
+      permDel.onclick = (e) => {
+        e.stopPropagation();
+        const idx = card.archived.indexOf(c);
+        if (idx >= 0) card.archived.splice(idx, 1);
+        sv(); renderArchive();
+      };
+      actions.appendChild(permDel);
+    }
+
+    cardEl.appendChild(check);
+    cardEl.appendChild(txt);
+    cardEl.appendChild(actions);
+    return cardEl;
+  }
+
+  function renderCards() {
+    body.innerHTML = '';
+    card.cards.forEach((c, ci) => {
+      body.appendChild(buildCardEl(c, ci, false));
     });
   }
   renderCards();
+
+  // ─── Archive Section ───
+  const archiveToggle = document.createElement('button');
+  archiveToggle.className = 'tl-archive-toggle';
+  const archiveArrow = document.createElement('span');
+  archiveArrow.className = 'tl-arrow';
+  archiveArrow.textContent = '▶';
+  const archiveLabel = document.createElement('span');
+  archiveToggle.appendChild(archiveArrow);
+  archiveToggle.appendChild(archiveLabel);
+
+  const archiveBody = document.createElement('div');
+  archiveBody.className = 'tl-archive-body';
+
+  archiveToggle.onclick = (e) => {
+    e.stopPropagation();
+    archiveToggle.classList.toggle('open');
+    archiveBody.classList.toggle('show');
+  };
+
+  function renderArchive() {
+    archiveBody.innerHTML = '';
+    archiveLabel.textContent = 'Archive (' + card.archived.length + ')';
+    if (card.archived.length === 0) {
+      archiveToggle.style.display = 'none';
+    } else {
+      archiveToggle.style.display = 'flex';
+    }
+    card.archived.forEach((c, ci) => {
+      archiveBody.appendChild(buildCardEl(c, ci, true));
+    });
+  }
+  renderArchive();
 
   // ─── Add Card Button ───
   const addBtn = document.createElement('button');
@@ -3259,7 +3420,7 @@ function buildMiroTrello(card) {
   addBtn.onclick = (e) => {
     e.stopPropagation();
     card.cards.push({ id: uid(), text: '', done: false });
-    sv(); renderCards(); updateCount();
+    sv(); renderCards(); updateCount(); updateProgress();
     setTimeout(() => {
       const allTexts = body.querySelectorAll('.tl-text');
       const last = allTexts[allTexts.length - 1];
@@ -3269,11 +3430,14 @@ function buildMiroTrello(card) {
 
   el.appendChild(colorBar);
   el.appendChild(header);
+  el.appendChild(progressWrap);
   el.appendChild(body);
   el.appendChild(addBtn);
+  el.appendChild(archiveToggle);
+  el.appendChild(archiveBody);
 
-  // Drag (move the whole widget)
-  miroSetupCardDrag(el, card, ['.mc-del', '.mc-lock', '.tl-title', '.tl-card', '.tl-text', '.tl-check', '.tl-add', '.tl-del', '.tl-color-bar']);
+  // Drag
+  miroSetupCardDrag(el, card, ['.mc-del', '.mc-lock', '.tl-title', '.tl-card', '.tl-text', '.tl-check', '.tl-add', '.tl-del', '.tl-color-bar', '.tl-card-actions', '.tl-task-toggle', '.tl-archive-toggle', '.tl-archive-body', '.tl-weight']);
 
   // Resize
   attach8WayResize(el, card, 180, 100);

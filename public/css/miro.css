@@ -3240,3 +3240,70 @@ td.mg-sel {
   width: 100%; text-align: right; direction: rtl; flex-shrink: 0;
 }
 .miro-trello .tl-add:hover { background: rgba(0,0,0,.04); color: #555; }
+
+/* Task Mode Toggle */
+.miro-trello .tl-task-toggle {
+  display: flex; align-items: center; gap: 4px; cursor: pointer;
+  font-size: .65rem; color: #888; margin-right: auto;
+}
+.miro-trello .tl-task-toggle input[type="checkbox"] {
+  width: 13px; height: 13px; accent-color: var(--ac); cursor: pointer;
+}
+
+/* Progress Bar */
+.miro-trello .tl-progress-wrap {
+  padding: 0 8px 4px; display: none;
+}
+.miro-trello.task-mode .tl-progress-wrap { display: block; }
+.miro-trello .tl-progress-bar {
+  height: 6px; background: rgba(0,0,0,.08); border-radius: 3px; overflow: hidden;
+  position: relative;
+}
+.miro-trello .tl-progress-fill {
+  height: 100%; background: linear-gradient(90deg, var(--ac), #51cf66);
+  border-radius: 3px; transition: width .3s ease;
+}
+.miro-trello .tl-progress-label {
+  font-size: .6rem; color: #888; text-align: center; margin-top: 2px;
+}
+
+/* Card Actions Row */
+.miro-trello .tl-card .tl-card-actions {
+  display: flex; flex-direction: column; gap: 2px; margin-right: -4px; opacity: 0;
+  transition: opacity .12s;
+}
+.miro-trello .tl-card:hover .tl-card-actions { opacity: .6; }
+.miro-trello .tl-card .tl-card-actions button {
+  background: none; border: none; cursor: pointer; font-size: .6rem;
+  padding: 1px 2px; line-height: 1; color: #888; border-radius: 3px;
+}
+.miro-trello .tl-card .tl-card-actions button:hover {
+  background: rgba(0,0,0,.06); color: #333;
+}
+
+/* Card Weight Tag */
+.miro-trello .tl-weight {
+  font-size: .55rem; color: #fff; background: var(--ac);
+  padding: 0px 4px; border-radius: 8px; line-height: 1.5; white-space: nowrap;
+  align-self: flex-start; margin-top: 1px;
+}
+
+/* Archive Section */
+.miro-trello .tl-archive-toggle {
+  display: flex; align-items: center; gap: 4px; padding: 4px 8px;
+  font-size: .65rem; color: #aaa; cursor: pointer; border: none;
+  background: none; width: 100%; text-align: right; direction: rtl;
+}
+.miro-trello .tl-archive-toggle:hover { color: #666; }
+.miro-trello .tl-archive-toggle .tl-arrow {
+  display: inline-block; transition: transform .15s; font-size: .5rem;
+}
+.miro-trello .tl-archive-toggle.open .tl-arrow { transform: rotate(90deg); }
+.miro-trello .tl-archive-body {
+  display: none; padding: 2px 6px 4px; flex-direction: column; gap: 3px;
+}
+.miro-trello .tl-archive-body.show { display: flex; }
+.miro-trello .tl-archive-body .tl-card {
+  opacity: .55; background: #f5f5f5;
+}
+.miro-trello .tl-archive-body .tl-card .tl-text { text-decoration: line-through; }
