@@ -671,6 +671,86 @@
   fill: rgba(255, 255, 255, 0.85);
 }
 
+/* ── Filter & Convert toolbar buttons ── */
+#miro-filter-btn,
+#miro-convert-btn {
+  position: absolute;
+  top: -36px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(40, 42, 58, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #cfd2e0;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 0 10px;
+  cursor: pointer;
+  pointer-events: all;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+  z-index: 12;
+  font-family: var(--font);
+}
+#miro-filter-btn { left: 50%; transform: translateX(-110%); }
+#miro-convert-btn { left: 50%; transform: translateX(10%); }
+
+#miro-filter-btn:hover,
+#miro-convert-btn:hover {
+  background: rgba(108, 143, 255, 0.7);
+  border-color: rgba(108, 143, 255, 0.6);
+  color: #fff;
+}
+
+/* Dropdown menus */
+.miro-dropdown-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 6px;
+  min-width: 160px;
+  background: rgba(30, 32, 48, 0.96);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  padding: 4px 0;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+  z-index: 20;
+}
+#miro-filter-btn:hover .miro-dropdown-menu,
+#miro-convert-btn:hover .miro-dropdown-menu {
+  display: block;
+}
+
+.miro-dropdown-menu .dd-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  cursor: pointer;
+  color: #cfd2e0;
+  font-size: 12px;
+  transition: background 0.1s;
+}
+.miro-dropdown-menu .dd-row:hover {
+  background: rgba(108, 143, 255, 0.3);
+  color: #fff;
+}
+.miro-dropdown-menu .dd-row .dd-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+}
+.miro-dropdown-menu .dd-row .dd-count {
+  margin-left: auto;
+  opacity: 0.5;
+  font-size: 11px;
+}
+
 /* Column count indicator during alignment drag */
 #miro-col-indicator {
   position: fixed;

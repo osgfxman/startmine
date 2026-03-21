@@ -62,7 +62,7 @@
 
   function arrangeGrid(cols, e) {
     const page = cp();
-    const gap = 18;
+    const gap = 6;
     const rows = Math.ceil(totalCards / cols);
 
     // Sort cards by their original position (left-to-right, top-to-bottom)
@@ -152,6 +152,7 @@
     document.removeEventListener('mouseup', onAlignUp);
     indicator.classList.remove('show');
     sv();
+    buildMiroCanvas();
     updateMiroSelFrame();
   }
 })();

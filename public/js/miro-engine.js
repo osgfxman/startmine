@@ -102,6 +102,103 @@ function updateMiroSelFrame() {
   frame.style.top = bbox.minY - pad + 'px';
   frame.style.width = bbox.w + pad * 2 + 'px';
   frame.style.height = bbox.h + pad * 2 + 'px';
+
+  // ── Type icons/labels ──
+  const typeInfo = {
+    sticky:    { icon: '📝', label: 'Sticky note' },
+    shape:     { icon: '⬠', label: 'Shape' },
+    text:      { icon: 'T',  label: 'Text' },
+    image:     { icon: '🖼️', label: 'Image' },
+    bookmark:  { icon: '🔗', label: 'Bookmark' },
+    trelloList:{ icon: '📋', label: 'Trello list' },
+  };
+
+  // ── Count types in selection ──
+  const page = cp();
+  const typeCounts = {};
+  _miroSelected.forEach(cid => {
+    const c = (page.miroCards || []).find(x => x.id === cid);
+    if (c) {
+      const t = c.type || 'sticky';
+      typeCounts[t] = (typeCounts[t] || 0) + 1;
+    }
+  });
+  const typeKeys = Object.keys(typeCounts).sort();
+
+  // ── Populate Filter menu ──
+  const filterLabel = document.getElementById('miro-filter-label');
+  const filterMenu  = document.getElementById('miro-filter-menu');
+  filterLabel.textContent = `Filter ${_miroSelected.size}`;
+  filterMenu.innerHTML = '';
+  typeKeys.forEach(t => {
+    const info = typeInfo[t] || { icon: '?', label: t };
+    const row = document.createElement('div');
+    row.className = 'dd-row';
+    row.innerHTML = `<span class="dd-icon">${info.icon}</span>${info.label}<span class="dd-count">${typeCounts[t]}</span>`;
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Keep only items of this type selected
+      const toRemove = [];
+      _miroSelected.forEach(cid => {
+        const c = (page.miroCards || []).find(x => x.id === cid);
+        if (c && (c.type || 'sticky') !== t) toRemove.push(cid);
+      });
+      toRemove.forEach(cid => {
+        _miroSelected.delete(cid);
+        const el = document.querySelector(`[data-cid="${cid}"]`);
+        if (el) el.classList.remove('miro-selected');
+      });
+      updateMiroSelFrame();
+      buildMiroCanvas();
+    });
+    filterMenu.appendChild(row);
+  });
+
+  // ── Populate Convert To menu ──
+  const convertMenu = document.getElementById('miro-convert-menu');
+  convertMenu.innerHTML = '';
+  const convertTargets = ['sticky', 'shape', 'text'];
+  convertTargets.forEach(t => {
+    const info = typeInfo[t] || { icon: '?', label: t };
+    const row = document.createElement('div');
+    row.className = 'dd-row';
+    row.innerHTML = `<span class="dd-icon">${info.icon}</span>${info.label}`;
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      convertSelectedTo(t);
+    });
+    convertMenu.appendChild(row);
+  });
+}
+
+// ── Convert selected elements to target type ──
+function convertSelectedTo(targetType) {
+  const page = cp();
+  _miroSelected.forEach(cid => {
+    const c = (page.miroCards || []).find(x => x.id === cid);
+    if (!c) return;
+    const oldType = c.type || 'sticky';
+    if (oldType === targetType) return;
+
+    c.type = targetType;
+    // Set sensible defaults based on target
+    if (targetType === 'sticky' && !c.color) {
+      c.color = '#FEF445'; // default yellow sticky
+    }
+    if (targetType === 'shape') {
+      if (!c.shapeType) c.shapeType = 'rect';
+      if (!c.bgHex) c.bgHex = '#e6e6e6';
+    }
+    if (targetType === 'text') {
+      // Remove visual bg for plain text
+      delete c.color;
+      delete c.bgHex;
+      if (!c.fontSize) c.fontSize = 18;
+    }
+  });
+  sv();
+  buildMiroCanvas();
+  updateMiroSelFrame();
 }
 
 /* ─── Miro Infinite Zoom Grid ─── */
