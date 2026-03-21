@@ -1587,19 +1587,26 @@ document.addEventListener('paste', (e) => {
               const jd = obj.widgetData.json;
               const type = (obj.widgetData.type || '').toLowerCase();
 
-              // Debug: dump raw Miro object data for analysis
-              console.log('[PASTE] Miro object:', type, JSON.stringify({
+              // Debug: dump ALL raw Miro object data for analysis
+              console.log('[PASTE] Miro RAW:', type, JSON.stringify({
                 x: jd.x, y: jd.y, width: jd.width, height: jd.height,
                 size: jd.size, scale: jd.scale, _position: jd._position,
                 shape: jd.shape, shapeType: jd.shapeType,
                 wdX: obj.widgetData.x, wdY: obj.widgetData.y,
-                wdW: obj.widgetData.width, wdH: obj.widgetData.height
+                wdW: obj.widgetData.width, wdH: obj.widgetData.height,
+                wdScale: obj.widgetData.scale,
+                allKeys: Object.keys(jd).join(','),
+                wdKeys: Object.keys(obj.widgetData).join(',')
               }));
 
               // Helper: extract position and size from Miro JSON data
               // Miro stores coords as CENTER of the widget, and uses multiple formats
+              // KEY INSIGHT: jd.size.width/height = BASE dimension (before scaling)
+              //              jd.width/height = VISUAL dimension (may already be scaled)
+              //              scale = per-item multiplier
+              // Visual size = base * scale  OR  jd.width/height if available
               const extractPosition = (jd, opts, widgetData) => {
-                // 1. Try _position.offsetPx (internal scaled coords)
+                // ── Position (center-origin) ──
                 if (jd._position && jd._position.offsetPx) {
                   opts._ox = jd._position.offsetPx.x;
                   opts._oy = jd._position.offsetPx.y;
@@ -1607,44 +1614,79 @@ document.addEventListener('paste', (e) => {
                   opts._ox = jd._position.x;
                   opts._oy = jd._position.y;
                 }
-                // 2. Try direct x/y on jd (Miro center-origin coordinates)
                 if (opts._ox === undefined && typeof jd.x === 'number') {
                   opts._ox = jd.x;
                   opts._oy = jd.y;
                 }
-                // 3. Fallback to widgetData-level x/y
                 if (opts._ox === undefined && widgetData && typeof widgetData.x === 'number') {
                   opts._ox = widgetData.x;
                   opts._oy = widgetData.y;
                 }
 
-                // Capture scale factor — try multiple locations
+                // ── Scale factor — try EVERY possible location ──
+                let scale;
                 if (jd.scale && typeof jd.scale === 'object' && typeof jd.scale.scale === 'number') {
-                  opts._scale = jd.scale.scale;
+                  scale = jd.scale.scale;
                 } else if (typeof jd.scale === 'number') {
-                  opts._scale = jd.scale;
+                  scale = jd.scale;
                 } else if (jd._position && typeof jd._position.scale === 'number') {
-                  opts._scale = jd._position.scale;
+                  scale = jd._position.scale;
                 } else if (widgetData && typeof widgetData.scale === 'number') {
-                  opts._scale = widgetData.scale;
+                  scale = widgetData.scale;
+                } else if (jd.scaleFactor) {
+                  scale = jd.scaleFactor;
+                } else if (jd.transform && typeof jd.transform.scale === 'number') {
+                  scale = jd.transform.scale;
                 }
 
-                // Size: try multiple sources (use typeof checks to handle 0 values)
+                // ── Base dimensions (from jd.size) ──
+                let baseW, baseH;
                 if (jd.size) {
-                  if (typeof jd.size.width === 'number') opts.w = jd.size.width;
-                  else if (typeof jd.size.w === 'number') opts.w = jd.size.w;
-                  if (typeof jd.size.height === 'number') opts.h = jd.size.height;
-                  else if (typeof jd.size.h === 'number') opts.h = jd.size.h;
+                  if (typeof jd.size.width === 'number') baseW = jd.size.width;
+                  else if (typeof jd.size.w === 'number') baseW = jd.size.w;
+                  if (typeof jd.size.height === 'number') baseH = jd.size.height;
+                  else if (typeof jd.size.h === 'number') baseH = jd.size.h;
                 }
-                if (opts.w === undefined && typeof jd.width === 'number') opts.w = jd.width;
-                if (opts.h === undefined && typeof jd.height === 'number') opts.h = jd.height;
-                // Also check widgetData-level width/height
-                if (opts.w === undefined && widgetData && typeof widgetData.width === 'number') opts.w = widgetData.width;
-                if (opts.h === undefined && widgetData && typeof widgetData.height === 'number') opts.h = widgetData.height;
-                // Mark that positions are center-origin (Miro standard)
+
+                // ── Visual dimensions (from jd.width/height — may already be scaled) ──
+                let visW, visH;
+                if (typeof jd.width === 'number') visW = jd.width;
+                if (typeof jd.height === 'number') visH = jd.height;
+                // Also check widgetData-level
+                if (visW === undefined && widgetData && typeof widgetData.width === 'number') visW = widgetData.width;
+                if (visH === undefined && widgetData && typeof widgetData.height === 'number') visH = widgetData.height;
+
+                // ── Derive scale from ratio if not explicitly found ──
+                if (scale === undefined && baseW && visW && baseW > 0) {
+                  scale = visW / baseW;
+                }
+
+                // ── Compute final visual dimensions ──
+                if (baseW && scale) {
+                  // We have both base and scale → compute visual
+                  opts.w = baseW * scale;
+                  opts.h = (baseH || baseW) * scale;
+                } else if (visW) {
+                  // Only visual dimensions available
+                  opts.w = visW;
+                  opts.h = visH || visW;
+                } else if (baseW) {
+                  // Only base dimensions, no scale
+                  opts.w = baseW;
+                  opts.h = baseH || baseW;
+                }
+                // If width comes from jd.width AND it differs from base, it's already visual
+                // But if they're the same and scale exists, multiply
+                opts._scale = scale || 1;
+                opts._baseW = baseW;
+                opts._baseH = baseH;
                 opts._centerOrigin = true;
 
-                console.log('[PASTE] extractPosition:', { type: opts.type, _ox: opts._ox, _oy: opts._oy, w: opts.w, h: opts.h, _scale: opts._scale });
+                console.log('[PASTE] extractPosition:', {
+                  type: opts.type, _ox: opts._ox, _oy: opts._oy,
+                  w: opts.w, h: opts.h, _scale: scale,
+                  baseW, baseH, visW, visH
+                });
               };
 
               if (type === 'sticker' || type === 'shape' || type === 'text') {
@@ -1779,6 +1821,12 @@ document.addEventListener('paste', (e) => {
                   if (exactBgHex) cardOpts.bgHex = exactBgHex;
                   extractPosition(jd, cardOpts, obj.widgetData);
 
+                  // Fix Miro "square" sticker aspect ratio:
+                  // Miro stores square stickies as 199×228 internally but RENDERS them as 1:1 squares
+                  if (type === 'sticker' && cardOpts._baseW && cardOpts._baseW <= 200) {
+                    cardOpts.h = cardOpts.w; // Force 1:1 aspect ratio
+                  }
+
                   extracted.push(cardOpts);
                 }
               } else if (type === 'image') {
@@ -1859,21 +1907,25 @@ document.addEventListener('paste', (e) => {
         // match their Miro.com appearance exactly.
         // ═══════════════════════════════════════════════════════════════
 
-        // Step 1: Calculate visual sizes (w * scale) — no rescaling
+        // Step 1: Use visual sizes from extractPosition (already scaled)
+        // extractPosition now computes w/h as visual dimensions (base * scale)
+        // so we just apply defaults where missing, NO additional scale multiply
         extracted.forEach(item => {
-          const sc = item._scale || 1;
-          // Apply Miro sticky-note defaults if no size was extracted
-          if (item.type === 'sticky' && !item.w && !item.h) {
-            // Miro rectangular sticker: base ~350×228, square: ~199×228
-            // Aspect ratio clue: if Miro gave us a size hint via sibling data, use it
-            item.w = 350; item.h = 228;
+          // Apply defaults if extractPosition didn't find any size
+          if (!item.w && !item.h) {
+            if (item.type === 'sticky') { item.w = 350; item.h = 228; }
+            else if (item.type === 'text') { item.w = 260; item.h = 100; }
+            else { item.w = 200; item.h = 200; }
           }
-          if (item.type === 'text' && !item.w) { item.w = 260; }
-          if (item.type === 'text' && !item.h) { item.h = 100; }
 
-          item._vw = (item.w || 200) * sc;  // visual width
-          item._vh = (item.h || 200) * sc;  // visual height
-          if (item.fontSize) item._vfs = item.fontSize * sc;
+          item._vw = item.w || 200;   // visual width (already scaled)
+          item._vh = item.h || 200;   // visual height (already scaled)
+          // Font size was set during extraction — scale it if _scale > 1
+          if (item.fontSize && item._scale && item._scale !== 1) {
+            item._vfs = item.fontSize * item._scale;
+          } else {
+            item._vfs = item.fontSize;
+          }
         });
 
         // Step 2: Zero-base the CENTER coordinates (keep as centers!)
@@ -1891,10 +1943,14 @@ document.addEventListener('paste', (e) => {
           }
         });
 
-        // Step 3: Determine scale factor
-        // Use 1:1 (no rescaling) so Miro sizes/spacing are preserved exactly.
-        // Only apply a cap if the layout would exceed 4000px on screen.
-        let globalFactor = 1;
+        // Step 3: Determine scale factor using MEDIAN visual width → 280px
+        // Now that visual dims correctly include per-item scale, median-based
+        // normalization produces accurate relative sizes AND readable absolute sizes.
+        const vWidths = extracted.map(i => i._vw || 200).sort((a, b) => a - b);
+        const medianVW = vWidths[Math.floor(vWidths.length / 2)];
+        let globalFactor = medianVW / 280;
+        if (globalFactor < 0.5) globalFactor = 0.5;  // Don't enlarge too much
+        // Safety: ensure layout fits in reasonable bounds
         let maxSpanX = 0, maxSpanY = 0;
         extracted.forEach(item => {
           if (item._ox !== undefined) {
@@ -1903,11 +1959,11 @@ document.addEventListener('paste', (e) => {
           }
         });
         const maxSpan = Math.max(maxSpanX, maxSpanY);
-        if (maxSpan > 4000) {
-          globalFactor = maxSpan / 4000;
+        if (maxSpan > 0 && maxSpan / globalFactor > 6000) {
+          globalFactor = maxSpan / 6000;
         }
 
-        console.log('[PASTE] Factor:', globalFactor.toFixed(3), 'Items:', extracted.length, 'MaxSpan:', maxSpan.toFixed(0));
+        console.log('[PASTE] Factor:', globalFactor.toFixed(3), 'MedianVW:', medianVW.toFixed(0), 'Items:', extracted.length, 'MaxSpan:', maxSpan.toFixed(0));
 
         // Step 4: Create cards — position from CENTER coords, size from visual dims
         extracted.forEach(item => {
@@ -1948,6 +2004,8 @@ document.addEventListener('paste', (e) => {
           delete card._vw;
           delete card._vh;
           delete card._vfs;
+          delete card._baseW;
+          delete card._baseH;
           delete card._miroLeft;
           delete card._miroTop;
 
