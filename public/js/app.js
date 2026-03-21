@@ -266,15 +266,22 @@ function syncNow() {
   updates[metaRef] = meta;
   updates[pagesMetaRef] = pagesMeta;
 
-  // Push all page data
+  // Push all page data (active page from memory, others from cache)
   D.pages.forEach(p => {
-    let widgets = p.widgets || [];
-    let miroCards = p.miroCards || [];
-    if (widgets.length === 0 && miroCards.length === 0) {
+    let widgets, miroCards;
+    if (p.id === D.cur) {
+      // Active page: use live in-memory data
+      widgets = p.widgets || [];
+      miroCards = p.miroCards || [];
+    } else {
+      // Non-active page: always prefer cache (memory is evicted)
       const cached = getCachedPageData(p.id);
       if (cached) {
         widgets = cached.widgets || [];
         miroCards = cached.miroCards || [];
+      } else {
+        widgets = p.widgets || [];
+        miroCards = p.miroCards || [];
       }
     }
     updates[`users/${USER_ID}/startmine_pages/${p.id}`] = { widgets, miroCards };
@@ -305,6 +312,7 @@ function syncNow() {
 /* ─── LocalStorage Cache ─── */
 const LS_META = 'sm_meta';
 const LS_PAGES_META = 'sm_pages_meta';
+const LS_CUR_PAGE = 'sm_cur_page';
 function lsPageKey(pid) { return 'sm_page_' + pid; }
 function cacheMeta(meta) { try { localStorage.setItem(LS_META, JSON.stringify(meta)); } catch (e) { } }
 function cachePagesMeta(pm) { try { localStorage.setItem(LS_PAGES_META, JSON.stringify(pm)); } catch (e) { } }
@@ -457,6 +465,17 @@ function initDB() {
       D.groups = cachedMeta.groups || D.groups;
       D.inbox = cachedMeta.inbox || D.inbox;
       D.pages = cachedPagesMeta;
+      // Restore last page from localStorage
+      const dg = D.settings.defaultGroup || '__last__';
+      const dp = D.settings.defaultPage || '__last__';
+      if (dg !== '__last__' && D.groups.some((g) => g.id === dg)) D.curGroup = dg;
+      if (dp !== '__last__' && D.pages.some((p) => p.id === dp)) D.cur = dp;
+      else {
+        try {
+          const lastPid = localStorage.getItem(LS_CUR_PAGE);
+          if (lastPid && D.pages.some(p => p.id === lastPid)) D.cur = lastPid;
+        } catch(e) {}
+      }
       if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
       const cachedPage = getCachedPageData(D.cur);
       const pg = cp();
@@ -560,6 +579,12 @@ function setupShardedListeners() {
       const dp = D.settings.defaultPage || '__last__';
       if (dg !== '__last__' && D.groups.some((g) => g.id === dg)) D.curGroup = dg;
       if (dp !== '__last__' && D.pages.some((p) => p.id === dp)) D.cur = dp;
+      else {
+        try {
+          const lastPid = localStorage.getItem(LS_CUR_PAGE);
+          if (lastPid && D.pages.some(p => p.id === lastPid)) D.cur = lastPid;
+        } catch(e) {}
+      }
       if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
       // Load cached page data for instant render
       const cachedPage = getCachedPageData(D.cur);
@@ -635,6 +660,12 @@ function setupShardedListeners() {
       const dp = D.settings.defaultPage || '__last__';
       if (dg !== '__last__' && D.groups.some((g) => g.id === dg)) D.curGroup = dg;
       if (dp !== '__last__' && D.pages.some((p) => p.id === dp)) D.cur = dp;
+      else {
+        try {
+          const lastPid = localStorage.getItem(LS_CUR_PAGE);
+          if (lastPid && D.pages.some(p => p.id === lastPid)) D.cur = lastPid;
+        } catch(e) {}
+      }
       if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
       isFirstLoad = false;
       switchActivePage(D.cur); // This will render All
@@ -667,7 +698,18 @@ function renderMeta() {
 
 // Switch the active synchronized payload
 function switchActivePage(pageId) {
+  // ─── Evict previous page heavy data from memory ───
+  const prevPg = cp();
+  if (prevPg && prevPg.id !== pageId) {
+    // Save current heavy data to cache before evicting
+    if ((prevPg.widgets && prevPg.widgets.length > 0) || (prevPg.miroCards && prevPg.miroCards.length > 0)) {
+      cachePageData(prevPg.id, { widgets: prevPg.widgets || [], miroCards: prevPg.miroCards || [] });
+    }
+    prevPg.widgets = [];
+    prevPg.miroCards = [];
+  }
   D.cur = pageId;
+  try { localStorage.setItem(LS_CUR_PAGE, pageId); } catch(e) {}
   renderMeta();
 
   if (_activePageListener) {
@@ -937,6 +979,7 @@ function sv(saveAll = false, immediate = false) {
 // ─── Save Guards: force-save to localStorage on tab close ───
 function forceLocalSave() {
   try {
+    localStorage.setItem(LS_CUR_PAGE, D.cur);
     const activePg = cp();
     if (activePg) {
       cachePageData(activePg.id, { widgets: activePg.widgets || [], miroCards: activePg.miroCards || [] });
@@ -1020,14 +1063,18 @@ function saveSnapshot(silent = false) {
     pages: {}
   };
   D.pages.forEach(p => {
-    // FIX: Use localStorage cache for pages that don't have heavy data in memory
-    let widgets = p.widgets || [];
-    let miroCards = p.miroCards || [];
-    if (widgets.length === 0 && miroCards.length === 0) {
+    let widgets, miroCards;
+    if (p.id === D.cur) {
+      widgets = p.widgets || [];
+      miroCards = p.miroCards || [];
+    } else {
       const cached = getCachedPageData(p.id);
       if (cached) {
         widgets = cached.widgets || [];
         miroCards = cached.miroCards || [];
+      } else {
+        widgets = p.widgets || [];
+        miroCards = p.miroCards || [];
       }
     }
     snapshot.pages[p.id] = { widgets, miroCards };
@@ -1083,14 +1130,18 @@ function saveSnapshotBeacon() {
       pages: {}
     };
     D.pages.forEach(p => {
-      // FIX: Use localStorage cache for pages without loaded data
-      let widgets = p.widgets || [];
-      let miroCards = p.miroCards || [];
-      if (widgets.length === 0 && miroCards.length === 0) {
+      let widgets, miroCards;
+      if (p.id === D.cur) {
+        widgets = p.widgets || [];
+        miroCards = p.miroCards || [];
+      } else {
         const cached = getCachedPageData(p.id);
         if (cached) {
           widgets = cached.widgets || [];
           miroCards = cached.miroCards || [];
+        } else {
+          widgets = p.widgets || [];
+          miroCards = p.miroCards || [];
         }
       }
       snapshot.pages[p.id] = { widgets, miroCards };
@@ -1715,6 +1766,14 @@ function fw(id) {
     if (w) return w;
     w = (p.miroCards || []).find((x) => x.id === id);
     if (w) return w;
+    // Search localStorage cache for evicted pages
+    const cached = getCachedPageData(p.id);
+    if (cached) {
+      w = (cached.widgets || []).find((x) => x.id === id);
+      if (w) return w;
+      w = (cached.miroCards || []).find((x) => x.id === id);
+      if (w) return w;
+    }
   }
   return null;
 }
