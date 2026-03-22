@@ -137,19 +137,15 @@ function updateMiroSelFrame() {
     row.innerHTML = `<span class="dd-icon">${info.icon}</span>${info.label}<span class="dd-count">${typeCounts[t]}</span>`;
     row.addEventListener('click', (e) => {
       e.stopPropagation();
-      // Keep only items of this type selected
+      // Keep only items of this type selected — use fresh page ref
+      const curPage = cp();
       const toRemove = [];
       _miroSelected.forEach(cid => {
-        const c = (page.miroCards || []).find(x => x.id === cid);
+        const c = (curPage.miroCards || []).find(x => x.id === cid);
         if (c && (c.type || 'sticky') !== t) toRemove.push(cid);
       });
-      toRemove.forEach(cid => {
-        _miroSelected.delete(cid);
-        const el = document.querySelector(`[data-cid="${cid}"]`);
-        if (el) el.classList.remove('miro-selected');
-      });
+      toRemove.forEach(cid => removeMiroSelect(cid));
       updateMiroSelFrame();
-      buildMiroCanvas();
     });
     filterMenu.appendChild(row);
   });
@@ -173,6 +169,7 @@ function updateMiroSelFrame() {
 
 // ── Convert selected elements to target type ──
 function convertSelectedTo(targetType) {
+  pushUndo();
   const page = cp();
   _miroSelected.forEach(cid => {
     const c = (page.miroCards || []).find(x => x.id === cid);

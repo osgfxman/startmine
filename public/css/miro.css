@@ -712,14 +712,14 @@
   top: 100%;
   left: 50%;
   transform: translateX(-50%);
-  margin-top: 6px;
   min-width: 160px;
+  padding-top: 4px;
+  z-index: 20;
+  pointer-events: all;
   background: rgba(30, 32, 48, 0.96);
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 8px;
-  padding: 4px 0;
   box-shadow: 0 6px 24px rgba(0,0,0,0.5);
-  z-index: 20;
 }
 #miro-filter-btn:hover .miro-dropdown-menu,
 #miro-convert-btn:hover .miro-dropdown-menu {
