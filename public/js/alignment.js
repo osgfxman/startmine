@@ -152,7 +152,11 @@
     document.removeEventListener('mouseup', onAlignUp);
     indicator.classList.remove('show');
     sv();
+    // Save selection IDs BEFORE buildMiroCanvas (which calls _miroSelected.clear())
+    const savedSel = [..._miroSelected];
     buildMiroCanvas();
+    // Restore selection after DOM rebuild
+    savedSel.forEach(cid => addMiroSelect(cid));
     updateMiroSelFrame();
   }
 })();

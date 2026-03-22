@@ -651,14 +651,14 @@
 #miro-align-handle:hover,
 #miro-widget-handle:hover {
   background: rgba(108, 143, 255, 0.85);
-  transform: scale(1.12);
   box-shadow: 0 3px 16px rgba(108, 143, 255, 0.5);
+  filter: brightness(1.2);
 }
 
 #miro-align-handle:active,
 #miro-widget-handle:active {
   background: var(--ac);
-  transform: scale(1.05);
+  filter: brightness(0.9);
 }
 
 #miro-align-handle:active {

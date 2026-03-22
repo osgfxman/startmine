@@ -103,6 +103,15 @@ function updateMiroSelFrame() {
   frame.style.width = bbox.w + pad * 2 + 'px';
   frame.style.height = bbox.h + pad * 2 + 'px';
 
+  // Counter-scale interactive elements so they stay constant size on screen
+  const page = cp();
+  const zoom = (page.zoom || 100) / 100;
+  const invZoom = Math.min(3, Math.max(0.25, 1 / zoom));
+  const handleEls = frame.querySelectorAll('#miro-align-handle, #miro-widget-handle, #miro-filter-btn, #miro-convert-btn');
+  handleEls.forEach(el => {
+    el.style.transform = `scale(${invZoom})`;
+  });
+
   // ── Type icons/labels ──
   const typeInfo = {
     sticky:    { icon: '📝', label: 'Sticky note' },
@@ -114,7 +123,6 @@ function updateMiroSelFrame() {
   };
 
   // ── Count types in selection ──
-  const page = cp();
   const typeCounts = {};
   _miroSelected.forEach(cid => {
     const c = (page.miroCards || []).find(x => x.id === cid);
