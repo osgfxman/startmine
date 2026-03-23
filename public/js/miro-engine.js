@@ -615,6 +615,7 @@ function deleteMiroCard(cid) {
             cw = c.w || 280,
             ch2 = c.h || 240;
           const intersects = !(cx + cw < x || cx > x + w || cy + ch2 < y || cy > y + h);
+          if (c.locked) return; // Locked elements are invisible to selection
           if (intersects) addMiroSelect(c.id);
           else if (!e.ctrlKey && !e.metaKey) removeMiroSelect(c.id);
         });
