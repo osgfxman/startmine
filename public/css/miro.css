@@ -3597,7 +3597,60 @@ td.mg-sel {
 }
 .miro-array.miro-selected .mc-del { display: flex; }
 .miro-array .mc-del:hover { color: var(--red); background: rgba(0,0,0,0.9); }
+/* Array resize handles — always visible when selected, zoom-scaled */
+.miro-array [class^="mc-resize-"] {
+  position: absolute;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.miro-array.miro-selected [class^="mc-resize-"] {
+  opacity: 1;
+}
+.miro-array .mc-resize-br,
+.miro-array .mc-resize-bl,
+.miro-array .mc-resize-tr,
+.miro-array .mc-resize-tl {
+  width: 16px;
+  height: 16px;
+  background: rgba(108, 143, 255, 0.7);
+  border: 2px solid rgba(255,255,255,0.8);
+  border-radius: 50%;
+  transform: scale(var(--inv-zoom, 1));
+  transform-origin: center;
+}
+.miro-array .mc-resize-br { right: -8px; bottom: -8px; cursor: nwse-resize; }
+.miro-array .mc-resize-tl { left: -8px; top: -8px; cursor: nwse-resize; }
+.miro-array .mc-resize-tr { right: -8px; top: -8px; cursor: nesw-resize; }
+.miro-array .mc-resize-bl { left: -8px; bottom: -8px; cursor: nesw-resize; }
+.miro-array .mc-resize-t {
+  top: -4px; left: 20px; right: 20px; height: 8px;
+  cursor: ns-resize; background: transparent;
+  transform: scaleY(var(--inv-zoom, 1)); transform-origin: top;
+}
+.miro-array .mc-resize-b {
+  bottom: -4px; left: 20px; right: 20px; height: 8px;
+  cursor: ns-resize; background: transparent;
+  transform: scaleY(var(--inv-zoom, 1)); transform-origin: bottom;
+}
+.miro-array .mc-resize-l {
+  left: -4px; top: 20px; bottom: 20px; width: 8px;
+  cursor: ew-resize; background: transparent;
+  transform: scaleX(var(--inv-zoom, 1)); transform-origin: left;
+}
+.miro-array .mc-resize-r {
+  right: -4px; top: 20px; bottom: 20px; width: 8px;
+  cursor: ew-resize; background: transparent;
+  transform: scaleX(var(--inv-zoom, 1)); transform-origin: right;
+}
+.miro-array .mc-resize-br:hover,
+.miro-array .mc-resize-bl:hover,
+.miro-array .mc-resize-tr:hover,
+.miro-array .mc-resize-tl:hover {
+  background: rgba(108, 143, 255, 1);
+}
 .miro-array.is-locked .mc-del,
-.miro-array.is-locked .ma-toolbar {
+.miro-array.is-locked .ma-toolbar,
+.miro-array.is-locked [class^="mc-resize-"] {
   display: none !important;
 }
