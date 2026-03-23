@@ -3464,18 +3464,25 @@ function getTrelloDragAfter(container, y) {
   return closest;
 }
 
-// ─── Array Widget: Tile a single image at original size ───
+// ─── Array Widget: Tile a single image at original size, supports 2D ───
 function buildMiroArray(card) {
   if (!card.rows) card.rows = 1;
   if (!card.cols) card.cols = 1;
   if (card.gap === undefined) card.gap = 0;
-  // tileW/tileH = original image dimensions (fixed per tile)
   const tw = card.tileW || card.w || 300;
   const th = card.tileH || card.h || 200;
 
-  // Auto-calculate container size from tiles
-  const totalW = card.cols * tw + (card.cols - 1) * card.gap;
-  const totalH = card.rows * th + (card.rows - 1) * card.gap;
+  // 2D support: outer grid
+  const r2 = card.rows2 || 1;
+  const c2 = card.cols2 || 1;
+  const g2 = card.gap2 || 0;
+
+  // Inner block size
+  const innerW = card.cols * tw + (card.cols - 1) * card.gap;
+  const innerH = card.rows * th + (card.rows - 1) * card.gap;
+  // Total container size
+  const totalW = c2 * innerW + (c2 - 1) * g2;
+  const totalH = r2 * innerH + (r2 - 1) * g2;
 
   const el = document.createElement('div');
   el.className = 'miro-array';
@@ -3484,7 +3491,6 @@ function buildMiroArray(card) {
   el.style.top = (card.y || 0) + 'px';
   el.style.width = totalW + 'px';
   el.style.height = totalH + 'px';
-  // Store computed size back so drag/selection knows true size
   card.w = totalW;
   card.h = totalH;
 
@@ -3494,41 +3500,68 @@ function buildMiroArray(card) {
   del.textContent = '✕';
   del.onclick = (e) => { e.stopPropagation(); deleteMiroCard(card.id); };
 
-  // ─── Grid of tiles at original image size ───
-  const grid = document.createElement('div');
-  grid.className = 'ma-grid';
-  grid.style.display = 'grid';
-  grid.style.gridTemplateColumns = `repeat(${card.cols}, ${tw}px)`;
-  grid.style.gridTemplateRows = `repeat(${card.rows}, ${th}px)`;
-  grid.style.gap = card.gap + 'px';
+  // Build one inner grid block
+  function buildInnerGrid() {
+    const grid = document.createElement('div');
+    grid.className = 'ma-grid';
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = `repeat(${card.cols}, ${tw}px)`;
+    grid.style.gridTemplateRows = `repeat(${card.rows}, ${th}px)`;
+    grid.style.gap = card.gap + 'px';
+    return grid;
+  }
 
-  const totalTiles = card.rows * card.cols;
+  // Create ONE source image (browser loads once)
+  let srcImg = null;
   if (card.imageUrl) {
-    // Create ONE image — browser loads & caches it once
-    const srcImg = document.createElement('img');
+    srcImg = document.createElement('img');
     srcImg.src = card.imageUrl;
     srcImg.draggable = false;
     srcImg.style.width = tw + 'px';
     srcImg.style.height = th + 'px';
     srcImg.style.objectFit = 'fill';
     srcImg.style.display = 'block';
+  }
 
-    for (let i = 0; i < totalTiles; i++) {
-      // cloneNode — zero network requests, reuses browser cache
-      grid.appendChild(i === 0 ? srcImg : srcImg.cloneNode(true));
-    }
-  } else {
-    for (let i = 0; i < totalTiles; i++) {
-      const ph = document.createElement('div');
-      ph.className = 'ma-tile ma-empty';
-      ph.style.width = tw + 'px';
-      ph.style.height = th + 'px';
-      ph.textContent = '📎';
-      grid.appendChild(ph);
+  function fillGrid(grid) {
+    const n = card.rows * card.cols;
+    for (let i = 0; i < n; i++) {
+      if (srcImg) {
+        grid.appendChild(srcImg.cloneNode(true));
+      } else {
+        const ph = document.createElement('div');
+        ph.className = 'ma-tile ma-empty';
+        ph.style.width = tw + 'px';
+        ph.style.height = th + 'px';
+        ph.textContent = '📎';
+        grid.appendChild(ph);
+      }
     }
   }
 
-  // ─── Toolbar (always visible when selected) ───
+  // Determine rendering: 1D or 2D
+  let contentEl;
+  const is2D = r2 > 1 || c2 > 1;
+  if (is2D) {
+    // Outer grid of inner grids
+    contentEl = document.createElement('div');
+    contentEl.className = 'ma-outer-grid';
+    contentEl.style.display = 'grid';
+    contentEl.style.gridTemplateColumns = `repeat(${c2}, ${innerW}px)`;
+    contentEl.style.gridTemplateRows = `repeat(${r2}, ${innerH}px)`;
+    contentEl.style.gap = g2 + 'px';
+    const outerCount = r2 * c2;
+    for (let j = 0; j < outerCount; j++) {
+      const ig = buildInnerGrid();
+      fillGrid(ig);
+      contentEl.appendChild(ig);
+    }
+  } else {
+    contentEl = buildInnerGrid();
+    fillGrid(contentEl);
+  }
+
+  // ─── Toolbar ───
   const toolbar = document.createElement('div');
   toolbar.className = 'ma-toolbar';
 
@@ -3541,7 +3574,8 @@ function buildMiroArray(card) {
     return b;
   }
 
-  function mkNumGroup(labelText, value, min, onChange) {
+  function mkNumGroup(labelText, value, min, onChange, step) {
+    step = step || 1;
     const grp = document.createElement('span');
     grp.className = 'ma-num-group';
     const lbl = document.createElement('span');
@@ -3560,40 +3594,62 @@ function buildMiroArray(card) {
     }
     inp.addEventListener('change', apply);
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); apply(); } });
-    grp.appendChild(mkBtn('−', 'Decrease ' + labelText, () => { const v = Math.max(min, (parseInt(inp.value)||min) - (labelText === 'Gap' ? 2 : 1)); onChange(v); }));
+    grp.appendChild(mkBtn('−', 'Decrease ' + labelText, () => { const v = Math.max(min, (parseInt(inp.value)||min) - step); onChange(v); }));
     grp.appendChild(lbl);
     grp.appendChild(inp);
-    grp.appendChild(mkBtn('+', 'Increase ' + labelText, () => { const v = (parseInt(inp.value)||min) + (labelText === 'Gap' ? 2 : 1); onChange(v); }));
+    grp.appendChild(mkBtn('+', 'Increase ' + labelText, () => { const v = (parseInt(inp.value)||min) + step; onChange(v); }));
     return grp;
   }
 
-  toolbar.appendChild(mkNumGroup('Rows', card.rows, 1, (v) => { card.rows = v; }));
-  toolbar.appendChild(mkNumGroup('Cols', card.cols, 1, (v) => { card.cols = v; }));
-  toolbar.appendChild(mkNumGroup('Gap', card.gap, 0, (v) => { card.gap = v; }));
+  // Inner array controls (always shown)
+  toolbar.appendChild(mkNumGroup('R1', card.rows, 1, (v) => { card.rows = v; }));
+  toolbar.appendChild(mkNumGroup('C1', card.cols, 1, (v) => { card.cols = v; }));
+  toolbar.appendChild(mkNumGroup('G1', card.gap, 0, (v) => { card.gap = v; }, 2));
 
-  // Drag + lock (no resize — size is auto-calculated from tiles)
+  // 2D controls (shown when 2D is active)
+  if (is2D) {
+    // Visual separator
+    const sep = document.createElement('span');
+    sep.className = 'ma-sep';
+    sep.textContent = '▸';
+    toolbar.appendChild(sep);
+    toolbar.appendChild(mkNumGroup('R2', r2, 1, (v) => { card.rows2 = v; }));
+    toolbar.appendChild(mkNumGroup('C2', c2, 1, (v) => { card.cols2 = v; }));
+    toolbar.appendChild(mkNumGroup('G2', g2, 0, (v) => { card.gap2 = v; }, 2));
+  }
+
+  // Drag + lock
   miroSetupCardDrag(el, card, ['.mc-del', '.ma-toolbar', '.mc-lock']);
   attachLockUI(el, card);
 
   el.appendChild(del);
-  el.appendChild(grid);
+  el.appendChild(contentEl);
   el.appendChild(toolbar);
   return el;
 }
 
-// Convert an existing image card to an Array card
+// Convert an image card to a 1D Array
 function convertImageToArray(cardId) {
   const page = cp();
   const card = (page.miroCards || []).find(c => c.id === cardId);
   if (!card) return;
   pushUndo();
-  // Preserve original size as tile dimensions
   card.tileW = card.w || 300;
   card.tileH = card.h || 200;
   card.type = 'array';
-  card.rows = 1;
-  card.cols = 1;
-  card.gap = 0;
+  card.rows = 1; card.cols = 1; card.gap = 0;
+  sv(); buildMiroCanvas();
+}
+
+// Convert an existing array to 2D Array
+function make2DArray(cardId) {
+  const page = cp();
+  const card = (page.miroCards || []).find(c => c.id === cardId);
+  if (!card || card.type !== 'array') return;
+  pushUndo();
+  card.rows2 = card.rows2 || 1;
+  card.cols2 = card.cols2 || 2;
+  card.gap2 = card.gap2 || 0;
   sv(); buildMiroCanvas();
 }
 

@@ -2852,6 +2852,9 @@ document.getElementById('miro-ctx-menu').addEventListener('click', (e) => {
     case 'make-array':
       cids.forEach(cid => convertImageToArray(cid));
       break;
+    case 'make-2d-array':
+      cids.forEach(cid => make2DArray(cid));
+      break;
   }
   hideCtxMenu();
 });

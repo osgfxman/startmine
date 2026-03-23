@@ -3482,6 +3482,14 @@ td.mg-sel {
   pointer-events: none;
   display: block;
 }
+.miro-array .ma-outer-grid {
+  pointer-events: none;
+}
+.miro-array .ma-sep {
+  color: rgba(108, 143, 255, 0.5);
+  font-size: 0.65rem;
+  padding: 0 3px;
+}
 .miro-array .ma-tile.ma-empty {
   background: rgba(255,255,255,0.04);
   border: 1px dashed rgba(255,255,255,0.1);
