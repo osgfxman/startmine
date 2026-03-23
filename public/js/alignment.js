@@ -202,6 +202,12 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
         else if (corner === 'tl') { newW = startW - dx; newH = startH - dy; }
         newW = Math.max(40, newW);
         newH = Math.max(40, newH);
+        // Shift = lock aspect ratio
+        if (ev.shiftKey) {
+          const s = Math.max(newW / startW, newH / startH);
+          newW = startW * s;
+          newH = startH * s;
+        }
         const scaleX = newW / startW;
         const scaleY = newH / startH;
         origCards.forEach(o => {

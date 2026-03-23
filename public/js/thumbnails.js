@@ -414,6 +414,22 @@ function attach8WayResize(el, card, minW, minH) {
           ny = oY + dy;
         }
 
+        // Shift = lock aspect ratio (corners only)
+        if (ev.shiftKey && ['br','bl','tr','tl'].includes(handleType)) {
+          const aspect = oW / oH;
+          if (Math.abs(nw - oW) / oW >= Math.abs(nh - oH) / oH) {
+            // Width changed more — adjust height to match
+            const newH = nw / aspect;
+            if (handleType === 'tr' || handleType === 'tl') ny = oY + oH - newH;
+            nh = newH;
+          } else {
+            // Height changed more — adjust width to match
+            const newW = nh * aspect;
+            if (handleType === 'bl' || handleType === 'tl') nx = oX + oW - newW;
+            nw = newW;
+          }
+        }
+
         // Enforce min size
         const cMinW = typeof minW === 'function' ? minW() : minW;
         if (nw < cMinW) {
@@ -3619,8 +3635,29 @@ function buildMiroArray(card) {
     toolbar.appendChild(row2);
   }
 
-  // Drag + lock
-  miroSetupCardDrag(el, card, ['.mc-del', '.ma-toolbar', '.mc-lock']);
+  // Drag + lock + resize
+  miroSetupCardDrag(el, card, ['.mc-del', '.ma-toolbar', '.mc-lock', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.mc-resize-t', '.mc-resize-b', '.mc-resize-l', '.mc-resize-r']);
+
+  // 8-way resize: after resize, recalculate tileW/tileH from new container size
+  const origTW = tw, origTH = th;
+  attach8WayResize(el, card, 40, 40);
+  // Override the mouseup to recalculate tile dimensions
+  const resizeHandles = el.querySelectorAll('[class^="mc-resize-"]');
+  resizeHandles.forEach(h => {
+    h.addEventListener('mouseup', () => {
+      // Back-calculate tileW/tileH from new container w/h
+      const r2v = card.rows2 || 1, c2v = card.cols2 || 1;
+      const g2v = card.gap2 || 0, g1 = card.gap || 0;
+      // totalW = c2v * (cols * tileW + (cols-1)*g1) + (c2v-1)*g2v
+      // Solve for tileW: tileW = (totalW - (c2v-1)*g2v) / c2v - (cols-1)*g1) / cols
+      const innerBlockW = (card.w - (c2v - 1) * g2v) / c2v;
+      const innerBlockH = (card.h - (r2v - 1) * g2v) / r2v;
+      card.tileW = Math.max(10, (innerBlockW - (card.cols - 1) * g1) / card.cols);
+      card.tileH = Math.max(10, (innerBlockH - (card.rows - 1) * g1) / card.rows);
+      sv(); buildMiroCanvas();
+    }, { once: false });
+  });
+
   attachLockUI(el, card);
 
   el.appendChild(del);
