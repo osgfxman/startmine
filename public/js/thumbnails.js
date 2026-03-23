@@ -3541,17 +3541,35 @@ function buildMiroArray(card) {
     return b;
   }
 
-  const info = document.createElement('span');
-  info.className = 'ma-info';
-  info.textContent = `${card.rows}R × ${card.cols}C`;
+  function mkNumGroup(labelText, value, min, onChange) {
+    const grp = document.createElement('span');
+    grp.className = 'ma-num-group';
+    const lbl = document.createElement('span');
+    lbl.className = 'ma-lbl';
+    lbl.textContent = labelText;
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.className = 'ma-input';
+    inp.value = value;
+    inp.min = min;
+    inp.onmousedown = (e) => e.stopPropagation();
+    inp.onclick = (e) => e.stopPropagation();
+    function apply() {
+      const v = Math.max(min, parseInt(inp.value) || min);
+      pushUndo(); onChange(v); sv(); buildMiroCanvas();
+    }
+    inp.addEventListener('change', apply);
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); apply(); } });
+    grp.appendChild(mkBtn('−', 'Decrease ' + labelText, () => { const v = Math.max(min, (parseInt(inp.value)||min) - (labelText === 'Gap' ? 2 : 1)); onChange(v); }));
+    grp.appendChild(lbl);
+    grp.appendChild(inp);
+    grp.appendChild(mkBtn('+', 'Increase ' + labelText, () => { const v = (parseInt(inp.value)||min) + (labelText === 'Gap' ? 2 : 1); onChange(v); }));
+    return grp;
+  }
 
-  toolbar.appendChild(mkBtn('−R', 'Remove row', () => { if (card.rows > 1) card.rows--; }));
-  toolbar.appendChild(mkBtn('+R', 'Add row', () => { card.rows++; }));
-  toolbar.appendChild(info);
-  toolbar.appendChild(mkBtn('−C', 'Remove column', () => { if (card.cols > 1) card.cols--; }));
-  toolbar.appendChild(mkBtn('+C', 'Add column', () => { card.cols++; }));
-  toolbar.appendChild(mkBtn('−G', 'Decrease gap', () => { card.gap = Math.max(0, card.gap - 2); }));
-  toolbar.appendChild(mkBtn('+G', 'Increase gap', () => { card.gap += 2; }));
+  toolbar.appendChild(mkNumGroup('Rows', card.rows, 1, (v) => { card.rows = v; }));
+  toolbar.appendChild(mkNumGroup('Cols', card.cols, 1, (v) => { card.cols = v; }));
+  toolbar.appendChild(mkNumGroup('Gap', card.gap, 0, (v) => { card.gap = v; }));
 
   // Drag + lock (no resize — size is auto-calculated from tiles)
   miroSetupCardDrag(el, card, ['.mc-del', '.ma-toolbar', '.mc-lock']);

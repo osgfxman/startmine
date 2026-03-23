@@ -3524,11 +3524,44 @@ td.mg-sel {
   background: rgba(108, 143, 255, 0.4);
   color: #fff;
 }
-.miro-array .ma-info {
-  color: rgba(255,255,255,0.6);
-  font-size: 0.72rem;
+.miro-array .ma-num-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   padding: 0 4px;
+  border-right: 1px solid rgba(255,255,255,0.1);
+}
+.miro-array .ma-num-group:last-child { border-right: none; }
+.miro-array .ma-lbl {
+  color: rgba(255,255,255,0.45);
+  font-size: 0.65rem;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-right: 2px;
+}
+.miro-array .ma-input {
+  width: 38px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 2px 0;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.miro-array .ma-input::-webkit-inner-spin-button,
+.miro-array .ma-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.miro-array .ma-input:focus {
+  outline: none;
+  border-color: rgba(108, 143, 255, 0.5);
+  background: rgba(255,255,255,0.12);
 }
 .miro-array .mc-del {
   position: absolute;
