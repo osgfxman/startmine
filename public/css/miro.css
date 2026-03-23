@@ -3461,3 +3461,97 @@ td.mg-sel {
 .miro-widget.is-locked .wb {
   pointer-events: none;
 }
+
+/* ─── Array Widget ─── */
+.miro-array {
+  position: absolute;
+  background: transparent;
+  border: 1px dashed rgba(108, 143, 255, 0.15);
+  border-radius: 4px;
+  overflow: visible;
+  cursor: default;
+}
+.miro-array.miro-selected {
+  border-color: rgba(108, 143, 255, 0.5);
+  box-shadow: 0 0 0 2px rgba(108, 143, 255, 0.15);
+}
+.miro-array .ma-grid {
+  pointer-events: none;
+}
+.miro-array .ma-grid img {
+  pointer-events: none;
+  display: block;
+}
+.miro-array .ma-tile.ma-empty {
+  background: rgba(255,255,255,0.04);
+  border: 1px dashed rgba(255,255,255,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+}
+.miro-array .ma-toolbar {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) scale(var(--inv-zoom, 1));
+  transform-origin: bottom center;
+  background: rgba(22, 24, 38, 0.95);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  padding: 4px 8px;
+  display: none;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  z-index: 12;
+  white-space: nowrap;
+}
+.miro-array.miro-selected .ma-toolbar {
+  display: flex;
+}
+.miro-array .ma-toolbar button {
+  background: rgba(255,255,255,0.1);
+  border: none;
+  color: #ddd;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.miro-array .ma-toolbar button:hover {
+  background: rgba(108, 143, 255, 0.4);
+  color: #fff;
+}
+.miro-array .ma-info {
+  color: rgba(255,255,255,0.6);
+  font-size: 0.72rem;
+  padding: 0 4px;
+  font-weight: 600;
+}
+.miro-array .mc-del {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  z-index: 3;
+  background: rgba(0, 0, 0, 0.7);
+  border: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 0.65rem;
+  transform: scale(var(--inv-zoom, 1));
+  transform-origin: center;
+}
+.miro-array.miro-selected .mc-del { display: flex; }
+.miro-array .mc-del:hover { color: var(--red); background: rgba(0,0,0,0.9); }
+.miro-array.is-locked .mc-del,
+.miro-array.is-locked .ma-toolbar {
+  display: none !important;
+}

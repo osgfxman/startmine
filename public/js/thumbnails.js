@@ -3463,3 +3463,119 @@ function getTrelloDragAfter(container, y) {
   });
   return closest;
 }
+
+// ─── Array Widget: Tile a single image at original size ───
+function buildMiroArray(card) {
+  if (!card.rows) card.rows = 1;
+  if (!card.cols) card.cols = 1;
+  if (card.gap === undefined) card.gap = 0;
+  // tileW/tileH = original image dimensions (fixed per tile)
+  const tw = card.tileW || card.w || 300;
+  const th = card.tileH || card.h || 200;
+
+  // Auto-calculate container size from tiles
+  const totalW = card.cols * tw + (card.cols - 1) * card.gap;
+  const totalH = card.rows * th + (card.rows - 1) * card.gap;
+
+  const el = document.createElement('div');
+  el.className = 'miro-array';
+  el.dataset.cid = card.id;
+  el.style.left = (card.x || 0) + 'px';
+  el.style.top = (card.y || 0) + 'px';
+  el.style.width = totalW + 'px';
+  el.style.height = totalH + 'px';
+  // Store computed size back so drag/selection knows true size
+  card.w = totalW;
+  card.h = totalH;
+
+  // Delete button
+  const del = document.createElement('button');
+  del.className = 'mc-del';
+  del.textContent = '✕';
+  del.onclick = (e) => { e.stopPropagation(); deleteMiroCard(card.id); };
+
+  // ─── Grid of tiles at original image size ───
+  const grid = document.createElement('div');
+  grid.className = 'ma-grid';
+  grid.style.display = 'grid';
+  grid.style.gridTemplateColumns = `repeat(${card.cols}, ${tw}px)`;
+  grid.style.gridTemplateRows = `repeat(${card.rows}, ${th}px)`;
+  grid.style.gap = card.gap + 'px';
+
+  const totalTiles = card.rows * card.cols;
+  if (card.imageUrl) {
+    // Create ONE image — browser loads & caches it once
+    const srcImg = document.createElement('img');
+    srcImg.src = card.imageUrl;
+    srcImg.draggable = false;
+    srcImg.style.width = tw + 'px';
+    srcImg.style.height = th + 'px';
+    srcImg.style.objectFit = 'fill';
+    srcImg.style.display = 'block';
+
+    for (let i = 0; i < totalTiles; i++) {
+      // cloneNode — zero network requests, reuses browser cache
+      grid.appendChild(i === 0 ? srcImg : srcImg.cloneNode(true));
+    }
+  } else {
+    for (let i = 0; i < totalTiles; i++) {
+      const ph = document.createElement('div');
+      ph.className = 'ma-tile ma-empty';
+      ph.style.width = tw + 'px';
+      ph.style.height = th + 'px';
+      ph.textContent = '📎';
+      grid.appendChild(ph);
+    }
+  }
+
+  // ─── Toolbar (always visible when selected) ───
+  const toolbar = document.createElement('div');
+  toolbar.className = 'ma-toolbar';
+
+  function mkBtn(label, title, fn) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.title = title;
+    b.onmousedown = (e) => e.preventDefault();
+    b.onclick = (e) => { e.stopPropagation(); pushUndo(); fn(); sv(); buildMiroCanvas(); };
+    return b;
+  }
+
+  const info = document.createElement('span');
+  info.className = 'ma-info';
+  info.textContent = `${card.rows}R × ${card.cols}C`;
+
+  toolbar.appendChild(mkBtn('−R', 'Remove row', () => { if (card.rows > 1) card.rows--; }));
+  toolbar.appendChild(mkBtn('+R', 'Add row', () => { card.rows++; }));
+  toolbar.appendChild(info);
+  toolbar.appendChild(mkBtn('−C', 'Remove column', () => { if (card.cols > 1) card.cols--; }));
+  toolbar.appendChild(mkBtn('+C', 'Add column', () => { card.cols++; }));
+  toolbar.appendChild(mkBtn('−G', 'Decrease gap', () => { card.gap = Math.max(0, card.gap - 2); }));
+  toolbar.appendChild(mkBtn('+G', 'Increase gap', () => { card.gap += 2; }));
+
+  // Drag + lock (no resize — size is auto-calculated from tiles)
+  miroSetupCardDrag(el, card, ['.mc-del', '.ma-toolbar', '.mc-lock']);
+  attachLockUI(el, card);
+
+  el.appendChild(del);
+  el.appendChild(grid);
+  el.appendChild(toolbar);
+  return el;
+}
+
+// Convert an existing image card to an Array card
+function convertImageToArray(cardId) {
+  const page = cp();
+  const card = (page.miroCards || []).find(c => c.id === cardId);
+  if (!card) return;
+  pushUndo();
+  // Preserve original size as tile dimensions
+  card.tileW = card.w || 300;
+  card.tileH = card.h || 200;
+  card.type = 'array';
+  card.rows = 1;
+  card.cols = 1;
+  card.gap = 0;
+  sv(); buildMiroCanvas();
+}
+

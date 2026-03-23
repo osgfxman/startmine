@@ -281,7 +281,7 @@ function buildMiroCanvas() {
   if (!page.miroCards) page.miroCards = [];
   const board = document.getElementById('miro-board');
   // Remove only card elements, preserve selection overlays
-  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget').forEach((el) => el.remove());
+  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array').forEach((el) => el.remove());
   // Clear selection state
   _miroSelected.clear();
   document.getElementById('miro-sel-frame').style.display = 'none';
@@ -306,6 +306,7 @@ function buildMiroCanvas() {
     else if (card.type === 'mindmap') board.appendChild(buildMiroMindMap(card));
     else if (card.type === 'trello') board.appendChild(buildMiroTrello(card));
     else if (card.type === 'bwidget') board.appendChild(buildMiroBookmarkWidget(card));
+    else if (card.type === 'array') board.appendChild(buildMiroArray(card));
     else board.appendChild(buildMiroCard(card));
     } catch (err) { console.error('[RENDER ERROR]', card.type, card.id, err); }
   });
@@ -2808,7 +2809,7 @@ function hideCtxMenu() {
 // ─── Right-click handler for all miro card types ───
 document.getElementById('miro-canvas').addEventListener('contextmenu', (e) => {
   // Find the closest miro card element
-  const cardEl = e.target.closest('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-widget');
+  const cardEl = e.target.closest('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-widget, .miro-array');
   if (!cardEl) {
     hideCtxMenu();
     return; // Allow default context menu on empty canvas
@@ -2848,6 +2849,9 @@ document.getElementById('miro-ctx-menu').addEventListener('click', (e) => {
     case 'send-backward': zSendBackward(cids); break;
     case 'send-back': zSendToBack(cids); break;
     case 'delete': zDeleteCards(cids); break;
+    case 'make-array':
+      cids.forEach(cid => convertImageToArray(cid));
+      break;
   }
   hideCtxMenu();
 });
