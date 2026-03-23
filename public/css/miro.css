@@ -3507,16 +3507,21 @@ td.mg-sel {
   background: rgba(22, 24, 38, 0.95);
   border: 1px solid var(--bd);
   border-radius: 10px;
-  padding: 4px 8px;
+  padding: 5px 8px;
   display: none;
-  align-items: center;
-  gap: 4px;
+  flex-direction: column;
+  gap: 3px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
   z-index: 12;
   white-space: nowrap;
 }
 .miro-array.miro-selected .ma-toolbar {
   display: flex;
+}
+.miro-array .ma-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 .miro-array .ma-toolbar button {
   background: rgba(255,255,255,0.1);

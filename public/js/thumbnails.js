@@ -3541,7 +3541,7 @@ function buildMiroArray(card) {
 
   // Determine rendering: 1D or 2D
   let contentEl;
-  const is2D = r2 > 1 || c2 > 1;
+  const is2D = card.rows2 !== undefined || card.cols2 !== undefined;
   if (is2D) {
     // Outer grid of inner grids
     contentEl = document.createElement('div');
@@ -3601,21 +3601,22 @@ function buildMiroArray(card) {
     return grp;
   }
 
-  // Inner array controls (always shown)
-  toolbar.appendChild(mkNumGroup('R1', card.rows, 1, (v) => { card.rows = v; }));
-  toolbar.appendChild(mkNumGroup('C1', card.cols, 1, (v) => { card.cols = v; }));
-  toolbar.appendChild(mkNumGroup('G1', card.gap, 0, (v) => { card.gap = v; }, 2));
+  // Row 1: Inner array controls
+  const row1 = document.createElement('div');
+  row1.className = 'ma-toolbar-row';
+  row1.appendChild(mkNumGroup('R1', card.rows, 1, (v) => { card.rows = v; }));
+  row1.appendChild(mkNumGroup('C1', card.cols, 1, (v) => { card.cols = v; }));
+  row1.appendChild(mkNumGroup('G1', card.gap, 0, (v) => { card.gap = v; }, 2));
+  toolbar.appendChild(row1);
 
-  // 2D controls (shown when 2D is active)
+  // Row 2: 2D controls (always shown once 2D is activated)
   if (is2D) {
-    // Visual separator
-    const sep = document.createElement('span');
-    sep.className = 'ma-sep';
-    sep.textContent = '▸';
-    toolbar.appendChild(sep);
-    toolbar.appendChild(mkNumGroup('R2', r2, 1, (v) => { card.rows2 = v; }));
-    toolbar.appendChild(mkNumGroup('C2', c2, 1, (v) => { card.cols2 = v; }));
-    toolbar.appendChild(mkNumGroup('G2', g2, 0, (v) => { card.gap2 = v; }, 2));
+    const row2 = document.createElement('div');
+    row2.className = 'ma-toolbar-row';
+    row2.appendChild(mkNumGroup('R2', r2, 1, (v) => { card.rows2 = v; }));
+    row2.appendChild(mkNumGroup('C2', c2, 1, (v) => { card.cols2 = v; }));
+    row2.appendChild(mkNumGroup('G2', g2, 0, (v) => { card.gap2 = v; }, 2));
+    toolbar.appendChild(row2);
   }
 
   // Drag + lock
@@ -3648,7 +3649,7 @@ function make2DArray(cardId) {
   if (!card || card.type !== 'array') return;
   pushUndo();
   card.rows2 = card.rows2 || 1;
-  card.cols2 = card.cols2 || 2;
+  card.cols2 = card.cols2 || 1;
   card.gap2 = card.gap2 || 0;
   sv(); buildMiroCanvas();
 }
