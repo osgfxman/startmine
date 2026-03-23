@@ -12,8 +12,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1774216985">
-  <link rel="stylesheet" href="css/miro.css?v=1774216985">
+  <link rel="stylesheet" href="css/base.css?v=1774229019">
+  <link rel="stylesheet" href="css/miro.css?v=1774229019">
 </head>
 
 <body>
@@ -115,6 +115,11 @@
       <div id="miro-board">
         <div id="miro-sel-box"></div>
         <div id="miro-sel-frame">
+          <!-- Group resize corner handles -->
+          <div class="msel-resize" data-corner="tl"></div>
+          <div class="msel-resize" data-corner="tr"></div>
+          <div class="msel-resize" data-corner="bl"></div>
+          <div class="msel-resize" data-corner="br"></div>
           <!-- Filter by type -->
           <div id="miro-filter-btn" title="Filter selection by type">
             <span id="miro-filter-label">Filter</span> ▾
@@ -135,7 +140,6 @@
         </div>
       </div>
     </div>
-    <div id="miro-col-indicator"></div>
 
     <!-- Outline Sidebar -->
     <div id="outline-side">
@@ -599,11 +603,11 @@
     <div class="ctx-item danger" data-action="delete"><span class="ctx-icon">🗑️</span><span class="ctx-label">Delete</span><span class="ctx-shortcut">Del</span></div>
   </div>
 
-    <script src="js/app.js?v=1774216985"></script>
-    <script src="js/outline.js?v=1774216985"></script>
-    <script src="js/miro-engine.js?v=1774216985"></script>
-    <script src="js/thumbnails.js?v=1774216985"></script>
-    <script src="js/alignment.js?v=1774216985"></script>
+    <script src="js/app.js?v=1774229019"></script>
+    <script src="js/outline.js?v=1774229019"></script>
+    <script src="js/miro-engine.js?v=1774229019"></script>
+    <script src="js/thumbnails.js?v=1774229019"></script>
+    <script src="js/alignment.js?v=1774229019"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});

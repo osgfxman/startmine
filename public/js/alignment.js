@@ -137,20 +137,12 @@
     }
 
     updateMiroSelFrame();
-
-    // Show column indicator near cursor
-    const modeLabel = _forceUniform ? ' ⊞' : '';
-    indicator.textContent = `${cols} col${cols > 1 ? 's' : ''} × ${rows} row${rows > 1 ? 's' : ''}${modeLabel}`;
-    indicator.classList.add('show');
-    indicator.style.left = e.clientX + 20 + 'px';
-    indicator.style.top = e.clientY - 20 + 'px';
   }
 
   function onAlignUp() {
     _alignDragging = false;
     document.removeEventListener('mousemove', onAlignMove);
     document.removeEventListener('mouseup', onAlignUp);
-    indicator.classList.remove('show');
     sv();
     // Save selection IDs BEFORE buildMiroCanvas (which calls _miroSelected.clear())
     const savedSel = [..._miroSelected];
@@ -174,3 +166,73 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
   }
 });
 
+// ─── Group Resize via Selection Frame Corners ───
+(function () {
+  document.querySelectorAll('.msel-resize').forEach(handle => {
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const corner = handle.dataset.corner; // tl, tr, bl, br
+      const page = cp();
+      const zoom = (page.zoom || 100) / 100;
+      const bbox = getSelectedCardsBBox();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startW = bbox.w;
+      const startH = bbox.h;
+      // Anchor = opposite corner
+      const anchorX = corner.includes('r') ? bbox.minX : bbox.maxX;
+      const anchorY = corner.includes('b') ? bbox.minY : bbox.maxY;
+      // Snapshot original card positions/sizes
+      const origCards = [];
+      _miroSelected.forEach(cid => {
+        const c = (page.miroCards || []).find(x => x.id === cid);
+        if (c) origCards.push({ id: cid, x: c.x || 0, y: c.y || 0, w: c.w || 280, h: c.h || 240 });
+      });
+      pushUndo();
+
+      function onMove(ev) {
+        const dx = (ev.clientX - startX) / zoom;
+        const dy = (ev.clientY - startY) / zoom;
+        // Determine new bbox size based on corner
+        let newW = startW, newH = startH;
+        if (corner === 'br') { newW = startW + dx; newH = startH + dy; }
+        else if (corner === 'bl') { newW = startW - dx; newH = startH + dy; }
+        else if (corner === 'tr') { newW = startW + dx; newH = startH - dy; }
+        else if (corner === 'tl') { newW = startW - dx; newH = startH - dy; }
+        newW = Math.max(40, newW);
+        newH = Math.max(40, newH);
+        const scaleX = newW / startW;
+        const scaleY = newH / startH;
+        origCards.forEach(o => {
+          const c = page.miroCards.find(x => x.id === o.id);
+          if (!c) return;
+          c.w = Math.max(20, o.w * scaleX);
+          c.h = Math.max(20, o.h * scaleY);
+          c.x = anchorX + (o.x - anchorX) * scaleX;
+          c.y = anchorY + (o.y - anchorY) * scaleY;
+          // Update DOM directly for live feedback
+          const el = document.querySelector(`[data-cid="${c.id}"]`);
+          if (el) {
+            el.style.left = c.x + 'px';
+            el.style.top = c.y + 'px';
+            el.style.width = c.w + 'px';
+            el.style.height = c.h + 'px';
+          }
+        });
+        updateMiroSelFrame();
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        sv();
+        const savedSel = [..._miroSelected];
+        buildMiroCanvas();
+        savedSel.forEach(cid => addMiroSelect(cid));
+        updateMiroSelFrame();
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  });
+})();

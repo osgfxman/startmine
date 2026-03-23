@@ -35,6 +35,20 @@
   transform-origin: 0 0;
 }
 
+/* ── Zoom-aware floating UI: stays constant screen size at any zoom ── */
+#miro-board .mc-del,
+#miro-board .mc-lock {
+  transform: scale(var(--inv-zoom, 1));
+  transform-origin: top right;
+}
+#miro-board .sn-toolbar {
+  transform: translateX(-50%) scale(var(--inv-zoom, 1));
+}
+#miro-board .sn-color-popup {
+  transform: scale(var(--inv-zoom, 1));
+  transform-origin: top left;
+}
+
 .miro-card {
   position: absolute;
   background: var(--s2);
@@ -148,7 +162,7 @@
 .miro-card .mc-lock {
   position: absolute;
   top: 6px;
-  right: 32px;
+  right: 40px;
   z-index: 3;
   background: rgba(0, 0, 0, 0.55);
   border: none;
@@ -612,8 +626,29 @@
   border: 1.5px solid rgba(108, 143, 255, 0.45);
   border-radius: 6px;
   pointer-events: none;
-  z-index: 9;
+  z-index: 100;
   display: none;
+}
+
+/* Group resize corner handles */
+.msel-resize {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border: 2px solid rgba(108, 143, 255, 0.8);
+  border-radius: 2px;
+  pointer-events: all;
+  z-index: 101;
+  transform: scale(var(--inv-zoom, 1));
+}
+.msel-resize[data-corner="tl"] { top: -5px; left: -5px; cursor: nwse-resize; }
+.msel-resize[data-corner="tr"] { top: -5px; right: -5px; cursor: nesw-resize; }
+.msel-resize[data-corner="bl"] { bottom: -5px; left: -5px; cursor: nesw-resize; }
+.msel-resize[data-corner="br"] { bottom: -5px; right: -5px; cursor: nwse-resize; }
+.msel-resize:hover {
+  background: rgba(108, 143, 255, 0.9);
+  border-color: #fff;
 }
 
 #miro-align-handle,

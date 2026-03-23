@@ -31,6 +31,15 @@ function performUndo() {
   }
   const page = cp();
   if (!page) return;
+  const currentState = JSON.stringify(page.miroCards);
+  // Skip entries identical to current state (no visible change)
+  while (_undoStack.length > 0 && _undoStack[_undoStack.length - 1] === currentState) {
+    _undoStack.pop();
+  }
+  if (_undoStack.length === 0) {
+    if (typeof showToast === 'function') showToast('Nothing to undo');
+    return;
+  }
   const snapshot = _undoStack.pop();
   try {
     _undoInProgress = true;
@@ -281,6 +290,8 @@ function buildMiroCanvas() {
   const px = page.panX || 0,
     py = page.panY || 0;
   board.style.transform = `translate(${px}px,${py}px) scale(${zoom})`;
+  // Set inverse zoom so floating UI (toolbars, delete buttons) stays constant screen size
+  board.style.setProperty('--inv-zoom', Math.min(3, Math.max(0.25, 1 / zoom)));
   document.getElementById('mz-slider').value = page.zoom || 100;
   document.getElementById('mz-pct').textContent = (page.zoom || 100) + '%';
 
@@ -812,11 +823,16 @@ function deleteMiroCard(cid) {
 // ─── Central zoom/pan apply helper ───
 function applyZoomPan(page) {
   const zoom = (page.zoom || 100) / 100;
-  document.getElementById('miro-board').style.transform =
+  const board = document.getElementById('miro-board');
+  board.style.transform =
     `translate(${page.panX || 0}px,${page.panY || 0}px) scale(${zoom})`;
+  // Keep floating UI at constant screen size
+  board.style.setProperty('--inv-zoom', Math.min(3, Math.max(0.25, 1 / zoom)));
   document.getElementById('mz-slider').value = page.zoom || 100;
   document.getElementById('mz-pct').textContent = (page.zoom || 100) + '%';
   updateMiroGrid();
+  // Update sel-frame handles if visible
+  if (_miroSelected.size >= 2) updateMiroSelFrame();
 }
 
 // Zoom to fit selection (or all elements if nothing selected)
