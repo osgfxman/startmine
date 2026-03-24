@@ -968,6 +968,13 @@
   cursor: text;
   text-align: center;
 }
+.ms-text p {
+  margin: 0;
+  padding: 0;
+}
+.ms-text span {
+  line-height: inherit;
+}
 
 .ms-text:empty::before {
   content: 'Type here...';
@@ -1289,7 +1296,8 @@
   position: absolute;
   bottom: calc(100% + 8px);
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) scale(var(--inv-zoom, 1));
+  transform-origin: bottom center;
   background: rgba(22, 24, 38, 0.95);
   border: 1px solid var(--bd);
   border-radius: 10px;
@@ -1304,7 +1312,8 @@
   white-space: nowrap;
 }
 
-.sn-toolbar.show {
+.sn-toolbar.show,
+.miro-selected .sn-toolbar {
   display: flex;
 }
 

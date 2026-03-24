@@ -236,6 +236,18 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
         buildMiroCanvas();
         savedSel.forEach(cid => addMiroSelect(cid));
         updateMiroSelFrame();
+        // Re-run autoSizeText on resized sticky notes
+        const curPage = cp();
+        savedSel.forEach(cid => {
+          const c = (curPage.miroCards || []).find(x => x.id === cid);
+          if (c && c.type === 'sticky' && c.fontSizeMode === 'auto') {
+            const el = document.querySelector(`[data-cid="${cid}"]`);
+            if (el) {
+              const txt = el.querySelector('.ms-text');
+              if (txt) requestAnimationFrame(() => autoSizeText(txt, el));
+            }
+          }
+        });
       }
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);

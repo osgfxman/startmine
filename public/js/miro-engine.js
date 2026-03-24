@@ -116,10 +116,15 @@ function updateMiroSelFrame() {
   const page = cp();
   const zoom = (page.zoom || 100) / 100;
   const invZoom = Math.min(3, Math.max(0.25, 1 / zoom));
-  const handleEls = frame.querySelectorAll('#miro-align-handle, #miro-widget-handle, #miro-filter-btn, #miro-convert-btn');
+  const handleEls = frame.querySelectorAll('#miro-align-handle, #miro-widget-handle');
   handleEls.forEach(el => {
     el.style.transform = `scale(${invZoom})`;
   });
+  // Filter/Convert buttons need both translateX and scale
+  const filterBtn = document.getElementById('miro-filter-btn');
+  const convertBtn = document.getElementById('miro-convert-btn');
+  if (filterBtn) filterBtn.style.transform = `translateX(-110%) scale(${invZoom})`;
+  if (convertBtn) convertBtn.style.transform = `translateX(10%) scale(${invZoom})`;
 
   // ── Type icons/labels ──
   const typeInfo = {

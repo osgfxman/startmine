@@ -934,6 +934,23 @@ function buildMiroSticky(card) {
     if (val === 'auto') {
       card.fontSizeMode = 'auto';
       autoSizeText(text, el);
+      card.text = text.innerHTML;
+      // Also apply to all other selected sticky notes
+      if (typeof _miroSelected !== 'undefined') {
+        const page = cp();
+        _miroSelected.forEach(cid => {
+          if (cid === card.id) return;
+          const sc = (page.miroCards || []).find(c => c.id === cid);
+          if (sc && sc.type === 'sticky') {
+            sc.fontSizeMode = 'auto';
+            const sEl = document.querySelector(`[data-cid="${cid}"]`);
+            if (sEl) {
+              const sTxt = sEl.querySelector('.ms-text');
+              if (sTxt) { autoSizeText(sTxt, sEl); sc.text = sTxt.innerHTML; }
+            }
+          }
+        });
+      }
     } else {
       card.fontSizeMode = +val;
       restoreSelection();
@@ -1347,12 +1364,11 @@ function buildMiroSticky(card) {
   el.appendChild(text);
   el.appendChild(tagStrip);
 
-  // Apply saved vertical alignment
-  if (card.valign) {
-    text.style.display = 'flex';
-    text.style.flexDirection = 'column';
-    text.style.justifyContent = card.valign;
-  }
+  // Apply vertical alignment (default: center)
+  if (!card.valign) card.valign = 'center';
+  text.style.display = 'flex';
+  text.style.flexDirection = 'column';
+  text.style.justifyContent = card.valign;
 
   // Apply saved font family
   if (card.fontFamily) {
@@ -1373,14 +1389,35 @@ function autoSizeText(textEl, containerEl) {
     textEl.style.fontSize = '18px';
     return;
   }
-  let lo = 8,
-    hi = 120,
-    best = 8;
-  // Binary search for largest font that fits without overflow
+  // Strip ALL inline styles from children that could interfere with auto-sizing
+  textEl.querySelectorAll('[style]').forEach(child => {
+    child.style.removeProperty('font-size');
+    child.style.removeProperty('line-height');
+    child.style.removeProperty('letter-spacing');
+  });
+  // Normalize <p> margins (Miro paste adds <p> with default browser margins)
+  textEl.querySelectorAll('p').forEach(p => {
+    p.style.margin = '0';
+    p.style.padding = '0';
+  });
+
+  // Calculate available height (from container if available, minus toolbar/padding)
+  let maxH = textEl.clientHeight;
+  if (!maxH && containerEl) {
+    const cs = getComputedStyle(textEl);
+    const pt = parseFloat(cs.paddingTop) || 0;
+    const pb = parseFloat(cs.paddingBottom) || 0;
+    maxH = (containerEl.clientHeight || parseFloat(containerEl.style.height) || 160) - pt - pb;
+  }
+  if (maxH < 20) maxH = 160; // fallback
+
+  // Binary search for largest font that fits — upper bound scales with container height
+  const maxFont = Math.min(500, Math.max(120, Math.floor(maxH * 1.2)));
+  let lo = 6, hi = maxFont, best = 6;
   while (lo <= hi) {
     const mid = Math.floor((lo + hi) / 2);
     textEl.style.fontSize = mid + 'px';
-    if (textEl.scrollHeight <= textEl.clientHeight + 2) {
+    if (textEl.scrollHeight <= maxH + 2) {
       best = mid;
       lo = mid + 1;
     } else {
@@ -3485,13 +3522,21 @@ function buildMiroArray(card) {
   if (!card.rows) card.rows = 1;
   if (!card.cols) card.cols = 1;
   if (card.gap === undefined) card.gap = 0;
-  const tw = card.tileW || card.w || 300;
-  const th = card.tileH || card.h || 200;
+  // Safety clamps to prevent corrupted data from freezing
+  card.rows = Math.min(Math.max(1, card.rows), 100);
+  card.cols = Math.min(Math.max(1, card.cols), 100);
+  card.gap = Math.min(Math.max(0, card.gap), 200);
+  // Compute and PERSIST tileW/tileH on first use to prevent feedback loop
+  // (card.w gets overwritten to totalW each render, so we must NOT fallback to card.w)
+  if (!card.tileW || !isFinite(card.tileW) || card.tileW > 5000) card.tileW = 300;
+  if (!card.tileH || !isFinite(card.tileH) || card.tileH > 5000) card.tileH = 200;
+  const tw = card.tileW;
+  const th = card.tileH;
 
-  // 2D support: outer grid
-  const r2 = card.rows2 || 1;
-  const c2 = card.cols2 || 1;
-  const g2 = card.gap2 || 0;
+  // 2D support: outer grid (with safety clamps)
+  const r2 = Math.min(Math.max(1, card.rows2 || 1), 50);
+  const c2 = Math.min(Math.max(1, card.cols2 || 1), 50);
+  const g2 = Math.min(Math.max(0, card.gap2 || 0), 200);
 
   // Inner block size
   const innerW = card.cols * tw + (card.cols - 1) * card.gap;
