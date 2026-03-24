@@ -10,6 +10,35 @@ let _alignDragging = false;
 let _justRubberBanded = false;
 let _stickyCreateMode = false;
 
+/* ─── Edge Auto-Pan: pan canvas when mouse is near screen edge during drag ─── */
+let _edgePanRAF = null;
+function startEdgeAutoPan(e) {
+  const edge = 40, speed = 8;
+  const page = cp();
+  if (!page) return;
+  const canvas = document.getElementById('miro-canvas');
+  if (!canvas) return;
+  const w = window.innerWidth, h = window.innerHeight;
+  let dx = 0, dy = 0;
+  if (e.clientX < edge) dx = speed;
+  else if (e.clientX > w - edge) dx = -speed;
+  if (e.clientY < edge) dy = speed;
+  else if (e.clientY > h - edge) dy = -speed;
+  if (dx === 0 && dy === 0) { stopEdgeAutoPan(); return; }
+  if (_edgePanRAF) return; // already running
+  function tick() {
+    page.panX = (page.panX || 0) + dx;
+    page.panY = (page.panY || 0) + dy;
+    const zoom = (page.zoom || 100) / 100;
+    canvas.style.transform = `translate(${page.panX}px,${page.panY}px) scale(${zoom})`;
+    _edgePanRAF = requestAnimationFrame(tick);
+  }
+  _edgePanRAF = requestAnimationFrame(tick);
+}
+function stopEdgeAutoPan() {
+  if (_edgePanRAF) { cancelAnimationFrame(_edgePanRAF); _edgePanRAF = null; }
+}
+
 /* ─── Multi-Step Undo System ─── */
 const _undoStack = [];
 const UNDO_MAX = 50;
@@ -73,7 +102,12 @@ function toggleMiroSelect(cid) {
 function clearMiroSelection() {
   _miroSelected.forEach((cid) => {
     const el = document.querySelector(`[data-cid="${cid}"]`);
-    if (el) el.classList.remove('miro-selected');
+    if (el) {
+      el.classList.remove('miro-selected');
+      // Hide sticky toolbar if present
+      const tb = el.querySelector('.sn-toolbar');
+      if (tb) tb.classList.remove('show');
+    }
   });
   _miroSelected.clear();
   document.getElementById('miro-sel-frame').style.display = 'none';
@@ -201,12 +235,21 @@ function convertSelectedTo(targetType) {
 
     c.type = targetType;
     // Set sensible defaults based on target
-    if (targetType === 'sticky' && !c.color) {
-      c.color = '#FEF445'; // default yellow sticky
+    if (targetType === 'sticky') {
+      if (!c.color) c.color = 'yellow';
+      // Preserve shape fill color as sticky bg
+      if (oldType === 'shape' && c.fillColor && c.fillColor !== 'none') {
+        c.bgHex = c.fillColor;
+      }
+      // Keep text from shape
+      if (oldType === 'shape' && c.text === undefined) c.text = '';
+      // Clean up shape properties
+      delete c.shape; delete c.fillColor; delete c.strokeColor; delete c.strokeWidth; delete c.textColor;
     }
     if (targetType === 'shape') {
-      if (!c.shapeType) c.shapeType = 'rect';
-      if (!c.bgHex) c.bgHex = '#e6e6e6';
+      if (!c.shape) c.shape = 'rect';
+      if (!c.fillColor) c.fillColor = c.bgHex || '#e6e6e6';
+      if (!c.strokeColor) c.strokeColor = '#333';
     }
     if (targetType === 'text') {
       // Remove visual bg for plain text
@@ -556,9 +599,16 @@ function deleteMiroCard(cid) {
     }
 
     // Only handle pan/rubberband if clicking on empty canvas or board
+    // BUT middle mouse button (button === 1) always pans, even over elements
+    if (e.button === 1) {
+      e.preventDefault();
+      _miroPanning = true;
+      _miroPanStartX = e.clientX - (page.panX || 0);
+      _miroPanStartY = e.clientY - (page.panY || 0);
+      canvas.style.cursor = 'grabbing';
+      return;
+    }
     if (e.target !== canvas && e.target.id !== 'miro-board') return;
-
-    // Right-click or middle-click: always pan
     if (e.button !== 0) {
       e.preventDefault();
       _miroPanning = true;
@@ -1462,8 +1512,8 @@ document.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
   const isCmd = e.ctrlKey || e.metaKey;
 
-  // Undo: Ctrl+Z / Ctrl+ض
-  if (isCmd && (key === 'z' || key === 'ض')) {
+  // Undo: Ctrl+Z (works with any keyboard layout via e.code)
+  if (isCmd && (key === 'z' || e.code === 'KeyZ')) {
     e.preventDefault();
     performUndo();
     return;
@@ -1673,6 +1723,8 @@ document.addEventListener('paste', (e) => {
     let miroHandled = false;
 
     if (isMiroData) {
+      // Mark IMMEDIATELY to prevent any text fallback from creating duplicate notes
+      window._lastMiroPasteTime = Date.now();
       const miroColors = [
         'yellow', 'green', 'blue', 'pink', 'orange', 'purple', 'cyan', 'red', 'white', 'gray', 'dark'
       ];

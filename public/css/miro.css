@@ -1312,8 +1312,7 @@
   white-space: nowrap;
 }
 
-.sn-toolbar.show,
-.miro-selected .sn-toolbar {
+.sn-toolbar.show {
   display: flex;
 }
 

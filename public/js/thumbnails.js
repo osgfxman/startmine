@@ -251,6 +251,8 @@ function updateCardThumb(card) {
 /* ─── Global Card DragHelper ─── */
 function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
   el.addEventListener('mousedown', (e) => {
+    // Middle mouse button: always let it bubble for panning
+    if (e.button === 1) return;
     if (card.locked) return; // Prevent drag if locked
     if (e.target.contentEditable === 'true') return;
     for (const sel of ignoreSelectors) {
@@ -339,11 +341,14 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
         }
       });
       updateMiroSelFrame();
+      // Edge auto-pan when dragging near screen edge
+      if (typeof startEdgeAutoPan === 'function') startEdgeAutoPan(ev);
     }
 
     function onUp() {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      if (typeof stopEdgeAutoPan === 'function') stopEdgeAutoPan();
 
       // Cleanup z-indexes
       origPositions.forEach((orig, cid) => {
@@ -680,6 +685,22 @@ function buildMiroSticky(card) {
       el.style.backgroundColor = c.hex;
       colorDot.style.background = c.hex;
       colorPopup.classList.remove('show');
+      // Propagate custom color to all other selected stickies
+      if (typeof _miroSelected !== 'undefined') {
+        const page = cp();
+        _miroSelected.forEach(cid => {
+          if (cid === card.id) return;
+          const sc = (page.miroCards || []).find(x => x.id === cid);
+          if (sc && sc.type === 'sticky') {
+            sc.color = null; sc.bgHex = c.hex;
+            const sEl = document.querySelector(`[data-cid="${cid}"]`);
+            if (sEl) {
+              sEl.className = 'miro-sticky' + (sEl.classList.contains('miro-selected') ? ' miro-selected' : '');
+              sEl.style.backgroundColor = c.hex;
+            }
+          }
+        });
+      }
       sv();
     };
     row1.appendChild(dot);
@@ -709,6 +730,22 @@ function buildMiroSticky(card) {
       colorPopup.querySelectorAll('.sn-cpop-color').forEach(d => d.classList.remove('sel'));
       dot.classList.add('sel');
       colorPopup.classList.remove('show');
+      // Propagate color to all other selected stickies
+      if (typeof _miroSelected !== 'undefined') {
+        const page = cp();
+        _miroSelected.forEach(cid => {
+          if (cid === card.id) return;
+          const sc = (page.miroCards || []).find(x => x.id === cid);
+          if (sc && sc.type === 'sticky') {
+            sc.color = c; sc.bgHex = null;
+            const sEl = document.querySelector(`[data-cid="${cid}"]`);
+            if (sEl) {
+              sEl.style.backgroundColor = '';
+              sEl.className = 'miro-sticky sn-' + c + (sEl.classList.contains('miro-selected') ? ' miro-selected' : '');
+            }
+          }
+        });
+      }
       sv();
     };
     row2.appendChild(dot);
@@ -748,6 +785,25 @@ function buildMiroSticky(card) {
       toolbar.querySelectorAll('.sn-tb-size').forEach((b) => b.classList.remove('sel'));
       btn.classList.add('sel');
       if (card.fontSizeMode === 'auto') autoSizeText(text, el);
+      // Propagate size to all other selected stickies
+      if (typeof _miroSelected !== 'undefined') {
+        const page = cp();
+        _miroSelected.forEach(cid => {
+          if (cid === card.id) return;
+          const sc = (page.miroCards || []).find(c => c.id === cid);
+          if (sc && sc.type === 'sticky') {
+            sc.w = sz.w; sc.h = sz.h;
+            const sEl = document.querySelector(`[data-cid="${cid}"]`);
+            if (sEl) {
+              sEl.style.width = sz.w + 'px'; sEl.style.height = sz.h + 'px';
+              if (sc.fontSizeMode === 'auto') {
+                const sTxt = sEl.querySelector('.ms-text');
+                if (sTxt) autoSizeText(sTxt, sEl);
+              }
+            }
+          }
+        });
+      }
       updateMiroSelFrame();
       sv();
     };
@@ -965,6 +1021,22 @@ function buildMiroSticky(card) {
         });
       } else {
         text.style.fontSize = val + 'px';
+      }
+      // Propagate fixed font size to all other selected stickies
+      if (typeof _miroSelected !== 'undefined') {
+        const page = cp();
+        _miroSelected.forEach(cid => {
+          if (cid === card.id) return;
+          const sc = (page.miroCards || []).find(c => c.id === cid);
+          if (sc && sc.type === 'sticky') {
+            sc.fontSizeMode = +val;
+            const sEl = document.querySelector(`[data-cid="${cid}"]`);
+            if (sEl) {
+              const sTxt = sEl.querySelector('.ms-text');
+              if (sTxt) { sTxt.style.fontSize = val + 'px'; sc.text = sTxt.innerHTML; }
+            }
+          }
+        });
       }
     }
     card.text = text.innerHTML;
@@ -1281,6 +1353,14 @@ function buildMiroSticky(card) {
     text.contentEditable = true;
     text.focus();
     toolbar.classList.add('show');
+  });
+  // Single click/selection — show toolbar if this is the only selected item
+  el.addEventListener('mouseup', () => {
+    requestAnimationFrame(() => {
+      if (_miroSelected.has(card.id)) {
+        toolbar.classList.add('show');
+      }
+    });
   });
   text.addEventListener('blur', (e) => {
     // Don't exit edit mode if clicking inside toolbar
@@ -3683,24 +3763,67 @@ function buildMiroArray(card) {
   // Drag + lock + resize
   miroSetupCardDrag(el, card, ['.mc-del', '.ma-toolbar', '.mc-lock', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.mc-resize-t', '.mc-resize-b', '.mc-resize-l', '.mc-resize-r']);
 
-  // 8-way resize: after resize, recalculate tileW/tileH from new container size
-  const origTW = tw, origTH = th;
-  attach8WayResize(el, card, 40, 40);
-  // Override the mouseup to recalculate tile dimensions
-  const resizeHandles = el.querySelectorAll('[class^="mc-resize-"]');
-  resizeHandles.forEach(h => {
-    h.addEventListener('mouseup', () => {
-      // Back-calculate tileW/tileH from new container w/h
-      const r2v = card.rows2 || 1, c2v = card.cols2 || 1;
-      const g2v = card.gap2 || 0, g1 = card.gap || 0;
-      // totalW = c2v * (cols * tileW + (cols-1)*g1) + (c2v-1)*g2v
-      // Solve for tileW: tileW = (totalW - (c2v-1)*g2v) / c2v - (cols-1)*g1) / cols
-      const innerBlockW = (card.w - (c2v - 1) * g2v) / c2v;
-      const innerBlockH = (card.h - (r2v - 1) * g2v) / r2v;
-      card.tileW = Math.max(10, (innerBlockW - (card.cols - 1) * g1) / card.cols);
-      card.tileH = Math.max(10, (innerBlockH - (card.rows - 1) * g1) / card.rows);
-      sv(); buildMiroCanvas();
-    }, { once: false });
+  // Custom array resize: uses CSS transform scale on content for smooth live preview
+  const origW = card.w, origH = card.h;
+  ['br', 'bl', 'tr', 'tl'].forEach(corner => {
+    const handle = document.createElement('div');
+    handle.className = 'mc-resize-' + corner;
+    handle.addEventListener('mousedown', (e) => {
+      if (card.locked) return;
+      e.stopPropagation();
+      e.preventDefault();
+      const page = cp();
+      const zoom = (page.zoom || 100) / 100;
+      const sx = e.clientX, sy = e.clientY;
+      const startW = card.w, startH = card.h;
+      const startX = card.x || 0, startY = card.y || 0;
+      const startTW = card.tileW, startTH = card.tileH;
+      const aspect = startW / startH;
+      pushUndo();
+
+      function onMove(ev) {
+        const dx = (ev.clientX - sx) / zoom;
+        const dy = (ev.clientY - sy) / zoom;
+        let nw = startW, nh = startH, nx = startX, ny = startY;
+        if (corner === 'br') { nw = startW + dx; nh = startH + dy; }
+        else if (corner === 'bl') { nw = startW - dx; nh = startH + dy; nx = startX + dx; }
+        else if (corner === 'tr') { nw = startW + dx; nh = startH - dy; ny = startY + dy; }
+        else if (corner === 'tl') { nw = startW - dx; nh = startH - dy; nx = startX + dx; ny = startY + dy; }
+        // Shift = lock aspect ratio
+        if (ev.shiftKey) {
+          const s = Math.max(nw / startW, nh / startH);
+          nw = startW * s; nh = startH * s;
+          if (corner === 'bl' || corner === 'tl') nx = startX + startW - nw;
+          if (corner === 'tr' || corner === 'tl') ny = startY + startH - nh;
+        }
+        nw = Math.max(40, nw); nh = Math.max(40, nh);
+        // Scale content visually
+        const scaleX = nw / startW, scaleY = nh / startH;
+        contentEl.style.transform = `scale(${scaleX}, ${scaleY})`;
+        contentEl.style.transformOrigin = corner.includes('t') ? 'bottom' : 'top';
+        if (corner.includes('l')) contentEl.style.transformOrigin += ' right';
+        else contentEl.style.transformOrigin += ' left';
+        // Update container position/size
+        el.style.width = nw + 'px'; el.style.height = nh + 'px';
+        el.style.left = nx + 'px'; el.style.top = ny + 'px';
+        card.w = nw; card.h = nh; card.x = nx; card.y = ny;
+        updateMiroSelFrame();
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        contentEl.style.transform = '';
+        contentEl.style.transformOrigin = '';
+        // Recalculate tileW/tileH from new size
+        const scaleX = card.w / startW, scaleY = card.h / startH;
+        card.tileW = Math.max(10, startTW * scaleX);
+        card.tileH = Math.max(10, startTH * scaleY);
+        sv(); buildMiroCanvas();
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+    el.appendChild(handle);
   });
 
   attachLockUI(el, card);
