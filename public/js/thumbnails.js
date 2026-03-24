@@ -1488,13 +1488,27 @@ function autoSizeText(textEl, containerEl) {
   }
   if (maxH < 20) maxH = 160; // fallback
 
-  // Binary search for largest font that fits — upper bound scales with container height
+  // Calculate available width for word-aware sizing
+  let maxW = textEl.clientWidth;
+  if (!maxW && containerEl) {
+    const cs = getComputedStyle(textEl);
+    const pl = parseFloat(cs.paddingLeft) || 0;
+    const pr = parseFloat(cs.paddingRight) || 0;
+    maxW = (containerEl.clientWidth || parseFloat(containerEl.style.width) || 280) - pl - pr;
+  }
+  if (maxW < 20) maxW = 280; // fallback
+
+  // Enforce word-break CSS: never break mid-word
+  textEl.style.wordBreak = 'normal';
+  textEl.style.overflowWrap = 'break-word';
+
+  // Binary search for largest font that fits — check BOTH height and width
   const maxFont = Math.min(500, Math.max(120, Math.floor(maxH * 1.2)));
   let lo = 6, hi = maxFont, best = 6;
   while (lo <= hi) {
     const mid = Math.floor((lo + hi) / 2);
     textEl.style.fontSize = mid + 'px';
-    if (textEl.scrollHeight <= maxH + 2) {
+    if (textEl.scrollHeight <= maxH + 2 && textEl.scrollWidth <= maxW + 2) {
       best = mid;
       lo = mid + 1;
     } else {

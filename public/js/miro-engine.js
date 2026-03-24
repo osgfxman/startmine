@@ -768,7 +768,7 @@ function deleteMiroCard(cid) {
       const boardPointY = (cursorY - (page.panY || 0)) / oldZoom;
 
       // Both trackpad pinch and regular scroll → zoom at cursor
-      const delta = e.ctrlKey ? (-e.deltaY * 0.8) : (e.deltaY > 0 ? -5 : 5);
+      const delta = e.ctrlKey ? (-e.deltaY * 0.8) : e.altKey ? (e.deltaY > 0 ? -1 : 1) : (e.deltaY > 0 ? -5 : 5);
       let newZoomNum = Math.max(1, Math.min(400, (page.zoom || 100) + delta));
       page.zoom = newZoomNum;
 

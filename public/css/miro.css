@@ -1294,20 +1294,18 @@
 /* Sticky toolbar (on click) */
 .sn-toolbar {
   position: absolute;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 10px);
   left: 50%;
   transform: translateX(-50%) scale(var(--inv-zoom, 1));
   transform-origin: bottom center;
-  background: rgba(22, 24, 38, 0.95);
-  border: 1px solid var(--bd);
-  border-radius: 10px;
-  padding: 4px 8px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 6px 10px;
   display: none;
   align-items: center;
-  gap: 3px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
+  gap: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
   z-index: 12;
   white-space: nowrap;
 }
@@ -1339,31 +1337,31 @@
 .sn-toolbar .sn-tb-sep {
   width: 1px;
   height: 18px;
-  background: var(--bd);
-  margin: 0 2px;
+  background: rgba(0, 0, 0, 0.1);
+  margin: 0 3px;
 }
 
 .sn-toolbar .sn-tb-size {
-  padding: 2px 8px;
-  border-radius: 5px;
-  border: 1px solid var(--bd);
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
   background: none;
-  color: var(--tx);
+  color: #333;
   cursor: pointer;
   font-family: var(--font);
-  font-size: 0.65rem;
+  font-size: 0.72rem;
   font-weight: 600;
   transition: all 0.1s;
 }
 
 .sn-toolbar .sn-tb-size:hover {
-  background: rgba(108, 143, 255, 0.15);
-  border-color: var(--ac);
+  background: rgba(108, 143, 255, 0.1);
+  border-color: #6c8fff;
 }
 
 .sn-toolbar .sn-tb-size.sel {
-  background: rgba(108, 143, 255, 0.18);
-  border-color: var(--ac);
+  background: rgba(108, 143, 255, 0.15);
+  border-color: #6c8fff;
 }
 
 /* ─── Color Dropdown Button ─── */
@@ -1375,11 +1373,11 @@
 
 .sn-tb-color-btn {
   background: none;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(0, 0, 0, 0.12);
   border-radius: 6px;
   cursor: pointer;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1388,15 +1386,15 @@
 }
 
 .sn-tb-color-btn:hover {
-  border-color: var(--ac);
-  background: rgba(108, 143, 255, 0.12);
+  border-color: #6c8fff;
+  background: rgba(108, 143, 255, 0.08);
 }
 
 .sn-color-dot {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid rgba(0, 0, 0, 0.15);
   pointer-events: none;
 }
 
@@ -1573,12 +1571,12 @@
 .sn-rb-btn {
   background: none;
   border: 1px solid transparent;
-  color: rgba(255, 255, 255, 0.8);
+  color: #555;
   cursor: pointer;
   font-family: var(--font);
-  font-size: 0.72rem;
-  width: 28px;
-  height: 28px;
+  font-size: 0.78rem;
+  width: 30px;
+  height: 30px;
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -1588,22 +1586,22 @@
 }
 
 .sn-rb-btn:hover {
-  background: rgba(108, 143, 255, 0.18);
-  border-color: rgba(108, 143, 255, 0.3);
-  color: #fff;
+  background: rgba(108, 143, 255, 0.1);
+  border-color: rgba(108, 143, 255, 0.2);
+  color: #4a7aff;
 }
 
 .sn-rb-btn:active,
 .sn-rb-btn.active {
-  background: rgba(108, 143, 255, 0.3);
-  border-color: var(--ac);
-  color: #fff;
+  background: rgba(108, 143, 255, 0.18);
+  border-color: #6c8fff;
+  color: #4a7aff;
 }
 
 .sn-rb-sep {
   width: 1px;
   height: 20px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.1);
   margin: 0 3px;
   flex-shrink: 0;
 }
@@ -1620,26 +1618,26 @@
 }
 
 .sn-rb-fs {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 5px;
-  color: rgba(255, 255, 255, 0.85);
+  background: #f5f5f5;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  color: #333;
   font-family: var(--font);
-  font-size: 0.65rem;
+  font-size: 0.72rem;
   padding: 3px 4px;
   cursor: pointer;
   outline: none;
   min-width: 50px;
-  height: 26px;
+  height: 28px;
 }
 
 .sn-rb-fs:hover {
-  border-color: rgba(108, 143, 255, 0.4);
+  border-color: #6c8fff;
 }
 
 .sn-rb-fs option {
-  background: #1a1c2e;
-  color: #eee;
+  background: #fff;
+  color: #333;
 }
 
 /* Text color picker */
@@ -1662,7 +1660,7 @@
 .sn-rb-color-icon {
   font-weight: 700;
   font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.85);
+  color: #555;
   border-bottom: 3px solid #ff4444;
   line-height: 1;
   padding-bottom: 1px;
@@ -2081,18 +2079,18 @@
 /* Text toolbar */
 .mt-toolbar {
   position: absolute;
-  bottom: calc(100% + 6px);
+  bottom: calc(100% + 10px);
   left: 50%;
-  transform: translateX(-50%);
-  background: var(--s2);
-  border: 1px solid var(--bd);
-  border-radius: 10px;
-  padding: 5px 8px;
+  transform: translateX(-50%) scale(var(--inv-zoom, 1));
+  transform-origin: bottom center;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 6px 10px;
   display: none;
   align-items: center;
   gap: 5px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
-  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
   z-index: 10;
   white-space: nowrap;
 }
@@ -2102,56 +2100,58 @@
 }
 
 .mt-toolbar .mt-font {
-  background: var(--s1);
-  border: 1px solid var(--bd);
-  color: var(--tx);
-  border-radius: 5px;
-  padding: 2px 4px;
-  font-size: .65rem;
+  background: #f5f5f5;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: #333;
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: .72rem;
   font-family: var(--font);
   max-width: 90px;
 }
 
 .mt-toolbar .mt-size {
-  background: var(--s1);
-  border: 1px solid var(--bd);
-  color: var(--tx);
-  border-radius: 5px;
-  padding: 2px;
-  font-size: .65rem;
+  background: #f5f5f5;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: #333;
+  border-radius: 6px;
+  padding: 3px;
+  font-size: .72rem;
   width: 42px;
   text-align: center;
 }
 
 .mt-toolbar .mt-color {
-  width: 22px;
-  height: 22px;
-  border: none;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 4px;
   cursor: pointer;
   padding: 0;
 }
 
 .mt-toolbar .mt-btn {
-  padding: 2px 6px;
-  border-radius: 5px;
-  border: 1px solid var(--bd);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
   background: none;
-  color: var(--tx);
+  color: #555;
   cursor: pointer;
   font-family: var(--font);
-  font-size: .65rem;
+  font-size: .72rem;
   transition: all .1s;
 }
 
 .mt-toolbar .mt-btn:hover {
-  background: rgba(108, 143, 255, .15);
-  border-color: var(--ac);
+  background: rgba(108, 143, 255, .1);
+  border-color: #6c8fff;
+  color: #4a7aff;
 }
 
 .mt-toolbar .mt-btn.sel {
-  background: rgba(108, 143, 255, .18);
-  border-color: var(--ac);
+  background: rgba(108, 143, 255, .15);
+  border-color: #6c8fff;
+  color: #4a7aff;
 }
 
 /* ─── Shape Widget ─── */
@@ -2331,18 +2331,18 @@
 /* Shape toolbar */
 .msh-toolbar {
   position: absolute;
-  bottom: calc(100% + 6px);
+  bottom: calc(100% + 10px);
   left: 50%;
-  transform: translateX(-50%);
-  background: var(--s2);
-  border: 1px solid var(--bd);
-  border-radius: 10px;
-  padding: 5px 10px;
+  transform: translateX(-50%) scale(var(--inv-zoom, 1));
+  transform-origin: bottom center;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 6px 10px;
   display: none;
   align-items: center;
   gap: 8px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
-  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
   z-index: 10;
   white-space: nowrap;
 }
@@ -2355,26 +2355,27 @@
   display: flex;
   align-items: center;
   gap: 3px;
-  color: var(--mu);
+  color: #555;
   font-family: var(--font);
+  font-size: .72rem;
 }
 
 .msh-toolbar input[type="color"] {
-  width: 22px;
-  height: 22px;
-  border: none;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 4px;
   cursor: pointer;
   padding: 0;
 }
 
 .msh-toolbar input[type="number"] {
-  background: var(--s1);
-  border: 1px solid var(--bd);
-  color: var(--tx);
-  border-radius: 5px;
-  padding: 2px;
-  font-size: .65rem;
+  background: #f5f5f5;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: #333;
+  border-radius: 6px;
+  padding: 3px;
+  font-size: .72rem;
   width: 36px;
   text-align: center;
 }
