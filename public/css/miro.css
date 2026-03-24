@@ -730,8 +730,8 @@
   z-index: 12;
   font-family: var(--font);
 }
-#miro-filter-btn { left: 50%; transform: translateX(-110%); }
-#miro-convert-btn { left: 50%; transform: translateX(10%); }
+#miro-filter-btn { left: 50%; transform: translateX(-120%); }
+#miro-convert-btn { left: 50%; transform: translateX(20%); }
 
 #miro-filter-btn:hover,
 #miro-convert-btn:hover {

@@ -341,14 +341,11 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
         }
       });
       updateMiroSelFrame();
-      // Edge auto-pan when dragging near screen edge
-      if (typeof startEdgeAutoPan === 'function') startEdgeAutoPan(ev);
     }
 
     function onUp() {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      if (typeof stopEdgeAutoPan === 'function') stopEdgeAutoPan();
 
       // Cleanup z-indexes
       origPositions.forEach((orig, cid) => {
@@ -2254,6 +2251,27 @@ function buildMiroShape(card) {
   tcWrap.appendChild(tcIcon);
   tcWrap.appendChild(tcIn);
   toolbar.appendChild(tcWrap);
+
+  // Separator before convert
+  const sepConv = document.createElement('div');
+  sepConv.className = 'sn-tb-sep';
+  toolbar.appendChild(sepConv);
+
+  // Convert to Sticky Note button
+  const convBtn = document.createElement('button');
+  convBtn.className = 'sn-rb-btn';
+  convBtn.innerHTML = '⇄ 📝';
+  convBtn.title = 'Convert to Sticky Note';
+  convBtn.style.fontSize = '11px';
+  convBtn.onclick = (e) => {
+    e.stopPropagation();
+    if (!_miroSelected.has(card.id)) {
+      clearMiroSelection();
+      addMiroSelect(card.id);
+    }
+    convertSelectedTo('sticky');
+  };
+  toolbar.appendChild(convBtn);
 
   function updateSVG() { svgWrap.innerHTML = renderShapeSVG(card); }
 

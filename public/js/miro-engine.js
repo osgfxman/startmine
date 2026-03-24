@@ -157,8 +157,8 @@ function updateMiroSelFrame() {
   // Filter/Convert buttons need both translateX and scale
   const filterBtn = document.getElementById('miro-filter-btn');
   const convertBtn = document.getElementById('miro-convert-btn');
-  if (filterBtn) filterBtn.style.transform = `translateX(-110%) scale(${invZoom})`;
-  if (convertBtn) convertBtn.style.transform = `translateX(10%) scale(${invZoom})`;
+  if (filterBtn) filterBtn.style.transform = `translateX(-120%) scale(${invZoom})`;
+  if (convertBtn) convertBtn.style.transform = `translateX(20%) scale(${invZoom})`;
 
   // ── Type icons/labels ──
   const typeInfo = {
