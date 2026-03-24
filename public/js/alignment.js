@@ -76,8 +76,12 @@
     // Vertical drag controls gap distribution:
     // - Normal: up/down adjusts vertical gap (between rows)
     // - Ctrl held: up/down adjusts horizontal gap (between columns)
+    // - Ctrl+Alt held: up/down adjusts both gaps together
     const verticalGapDelta = Math.max(0, deltaY * 0.5);
-    if (e.ctrlKey || e.metaKey) {
+    if ((e.ctrlKey || e.metaKey) && e.altKey) {
+      extraGapH += verticalGapDelta;
+      extraGapV += verticalGapDelta;
+    } else if (e.ctrlKey || e.metaKey) {
       extraGapH += verticalGapDelta;
     } else {
       extraGapV += verticalGapDelta;
