@@ -2,7 +2,7 @@
 (function () {
   const handle = document.getElementById('miro-align-handle');
   const indicator = document.getElementById('miro-col-indicator');
-  let startX = 0,
+  let startX = 0, startY = 0,
     baseCols = 0,
     totalCards = 0;
   let origCards = []; // {id, x, y, w, h}
@@ -20,6 +20,7 @@
     _alignDragging = true;
     _forceUniform = e.ctrlKey || e.metaKey; // Ctrl+drag = uniform sizing
     startX = e.clientX;
+    startY = e.clientY;
     totalCards = _miroSelected.size;
     baseCols = Math.round(Math.sqrt(totalCards));
 
@@ -54,6 +55,7 @@
   function onAlignMove(e) {
     if (!_alignDragging) return;
     const deltaX = e.clientX - startX;
+    const deltaY = e.clientY - startY;
     // Moving right = more columns, moving left = fewer columns (like Miro)
     const colDelta = Math.round(deltaX / 100);
     const cols = clamp(baseCols + colDelta, 1, totalCards);
@@ -69,6 +71,16 @@
     } else if (rawCols < 1) {
       // Dragging left past 1 col (all in one column) → distribute vertical spacing
       extraGapV = Math.max(0, (1 - rawCols) * 30);
+    }
+
+    // Vertical drag controls gap distribution:
+    // - Normal: up/down adjusts vertical gap (between rows)
+    // - Ctrl held: up/down adjusts horizontal gap (between columns)
+    const verticalGapDelta = Math.max(0, deltaY * 0.5);
+    if (e.ctrlKey || e.metaKey) {
+      extraGapH += verticalGapDelta;
+    } else {
+      extraGapV += verticalGapDelta;
     }
 
     arrangeGrid(cols, e, extraGapH, extraGapV);
