@@ -186,14 +186,33 @@ function updateMiroSelFrame() {
   const filterMenu  = document.getElementById('miro-filter-menu');
   filterLabel.textContent = `Filter ${_miroSelected.size}`;
   filterMenu.innerHTML = '';
+
+  // Color hex map for sticky dots
+  const _filterColorHex = {
+    yellow: '#f9e96b', pink: '#f4a4c0', green: '#a6d89b', blue: '#84c6e8',
+    purple: '#c9a6e8', orange: '#f5b971', red: '#ff6b6b', cyan: '#66d9e8',
+    white: '#f1f3f5', gray: '#adb5bd', dark: '#495057', magenta: '#e64980',
+  };
+
+  // Count sticky colors
+  const stickyColorCounts = {};
+  _miroSelected.forEach(cid => {
+    const c = (page.miroCards || []).find(x => x.id === cid);
+    if (c && (c.type || 'sticky') === 'sticky') {
+      const col = c.color || 'yellow';
+      stickyColorCounts[col] = (stickyColorCounts[col] || 0) + 1;
+    }
+  });
+
   typeKeys.forEach(t => {
     const info = typeInfo[t] || { icon: '?', label: t };
+    const label = t === 'sticky' && Object.keys(stickyColorCounts).length > 1
+      ? `${info.label} (ALL)` : info.label;
     const row = document.createElement('div');
     row.className = 'dd-row';
-    row.innerHTML = `<span class="dd-icon">${info.icon}</span>${info.label}<span class="dd-count">${typeCounts[t]}</span>`;
+    row.innerHTML = `<span class="dd-icon">${info.icon}</span>${label}<span class="dd-count">${typeCounts[t]}</span>`;
     row.addEventListener('click', (e) => {
       e.stopPropagation();
-      // Keep only items of this type selected — use fresh page ref
       const curPage = cp();
       const toRemove = [];
       _miroSelected.forEach(cid => {
@@ -204,6 +223,29 @@ function updateMiroSelFrame() {
       updateMiroSelFrame();
     });
     filterMenu.appendChild(row);
+
+    // Add color sub-rows for stickies
+    if (t === 'sticky' && Object.keys(stickyColorCounts).length > 1) {
+      Object.entries(stickyColorCounts).sort((a, b) => b[1] - a[1]).forEach(([col, cnt]) => {
+        const cRow = document.createElement('div');
+        cRow.className = 'dd-row';
+        cRow.style.paddingLeft = '28px';
+        const dot = `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${_filterColorHex[col] || '#ccc'};margin-right:6px;vertical-align:middle;border:1px solid rgba(0,0,0,0.15)"></span>`;
+        cRow.innerHTML = `${dot}${col}<span class="dd-count">${cnt}</span>`;
+        cRow.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          const curPage = cp();
+          const toRemove = [];
+          _miroSelected.forEach(cid => {
+            const c = (curPage.miroCards || []).find(x => x.id === cid);
+            if (!c || (c.type || 'sticky') !== 'sticky' || (c.color || 'yellow') !== col) toRemove.push(cid);
+          });
+          toRemove.forEach(cid => removeMiroSelect(cid));
+          updateMiroSelFrame();
+        });
+        filterMenu.appendChild(cRow);
+      });
+    }
   });
 
   // ── Populate Convert To menu ──
