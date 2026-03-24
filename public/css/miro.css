@@ -3584,6 +3584,32 @@ td.mg-sel {
   border-color: rgba(108, 143, 255, 0.5);
   background: rgba(255,255,255,0.12);
 }
+.miro-array .ma-exec-btn {
+  background: linear-gradient(135deg, #4a7aff 0%, #6c8fff 100%);
+  border: none;
+  color: #fff;
+  padding: 5px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+  transition: background .15s;
+}
+.miro-array .ma-exec-btn:hover {
+  background: linear-gradient(135deg, #3a6aef 0%, #5c7fef 100%);
+}
+.miro-array .ma-color-input {
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 4px;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  vertical-align: middle;
+}
 .miro-array .mc-del {
   position: absolute;
   top: -12px;

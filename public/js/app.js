@@ -276,12 +276,16 @@ function syncNow() {
     } else {
       // Non-active page: always prefer cache (memory is evicted)
       const cached = getCachedPageData(p.id);
-      if (cached) {
+      if (cached && (cached.widgets?.length > 0 || cached.miroCards?.length > 0)) {
         widgets = cached.widgets || [];
         miroCards = cached.miroCards || [];
-      } else {
+      } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0)) {
         widgets = p.widgets || [];
         miroCards = p.miroCards || [];
+      } else {
+        // SAFETY: skip to avoid overwriting Firebase with empty data
+        console.warn(`[SYNC GUARD] Skipping page "${p.name}" (${p.id}) — no data available`);
+        return;
       }
     }
     updates[`users/${USER_ID}/startmine_pages/${p.id}`] = { widgets, miroCards };
@@ -872,15 +876,45 @@ function sv(saveAll = false, immediate = false) {
 
     if (saveAll) {
       D.pages.forEach(p => {
-        updates[`users/${USER_ID}/startmine_pages/${p.id}`] = {
-          widgets: p.widgets || [],
-          miroCards: p.miroCards || []
-        };
+        let widgets, miroCards;
+        if (p.id === D.cur) {
+          // Active page — use live data
+          widgets = p.widgets || [];
+          miroCards = p.miroCards || [];
+        } else {
+          // NON-ACTIVE page — MUST load from cache, NOT from evicted memory!
+          const cached = getCachedPageData(p.id);
+          if (cached && (cached.widgets?.length > 0 || cached.miroCards?.length > 0)) {
+            widgets = cached.widgets || [];
+            miroCards = cached.miroCards || [];
+          } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0)) {
+            widgets = p.widgets || [];
+            miroCards = p.miroCards || [];
+          } else {
+            // SAFETY: Skip pages with no data in cache AND no data in memory
+            // to avoid overwriting good Firebase data with empty arrays
+            console.warn(`[SV GUARD] Skipping page "${p.name}" (${p.id}) — no data in memory or cache, refusing to overwrite Firebase`);
+            return;
+          }
+        }
+        updates[`users/${USER_ID}/startmine_pages/${p.id}`] = { widgets, miroCards };
       });
     } else {
       // Only upload the heavy data for the active page
       const activePg = cp();
       if (activePg) {
+        // ─── DATA LOSS GUARD: Don't overwrite non-empty Firebase data with empty data ───
+        const curHasData = (activePg.widgets && activePg.widgets.length > 0) || (activePg.miroCards && activePg.miroCards.length > 0);
+        if (!curHasData && _lastSyncedPageData) {
+          const oldHadWidgets = JSON.parse(_lastSyncedPageData.widgets || '[]').length > 0;
+          const oldHadCards = JSON.parse(_lastSyncedPageData.miroCards || '[]').length > 0;
+          if (oldHadWidgets || oldHadCards) {
+            console.error(`[SV GUARD] 🚨 Refusing to overwrite page "${activePg.name}" — was non-empty, now empty!`);
+            if (typeof showToast === 'function') showToast('⚠️ Data loss prevented — page was not saved (empty data detected)', 5000);
+            setOwnWrite(false);
+            return;
+          }
+        }
         if (_lastSyncedPageData) {
           const curWidgetsStr = JSON.stringify(activePg.widgets || []);
           const curCardsStr = JSON.stringify(activePg.miroCards || []);

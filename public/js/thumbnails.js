@@ -3667,6 +3667,10 @@ function buildMiroArray(card) {
     grid.style.gridTemplateColumns = `repeat(${card.cols}, ${tw}px)`;
     grid.style.gridTemplateRows = `repeat(${card.rows}, ${th}px)`;
     grid.style.gap = card.gap + 'px';
+    // S2 stroke around the inner grid block (applied at outer level)
+    if (card.s2Width && card.s2Width > 0) {
+      grid.style.border = `${card.s2Width}px solid ${card.s2Color || '#333'}`;
+    }
     return grid;
   }
 
@@ -3685,16 +3689,25 @@ function buildMiroArray(card) {
   function fillGrid(grid) {
     const n = card.rows * card.cols;
     for (let i = 0; i < n; i++) {
-      if (srcImg) {
-        grid.appendChild(srcImg.cloneNode(true));
-      } else {
-        const ph = document.createElement('div');
-        ph.className = 'ma-tile ma-empty';
-        ph.style.width = tw + 'px';
-        ph.style.height = th + 'px';
-        ph.textContent = '📎';
-        grid.appendChild(ph);
+      const tileWrap = document.createElement('div');
+      tileWrap.style.width = tw + 'px';
+      tileWrap.style.height = th + 'px';
+      tileWrap.style.overflow = 'hidden';
+      // S1 stroke around each individual tile
+      if (card.s1Width && card.s1Width > 0) {
+        tileWrap.style.border = `${card.s1Width}px solid ${card.s1Color || '#333'}`;
+        tileWrap.style.boxSizing = 'border-box';
       }
+      if (srcImg) {
+        const img = srcImg.cloneNode(true);
+        img.style.width = '100%';
+        img.style.height = '100%';
+        tileWrap.appendChild(img);
+      } else {
+        tileWrap.className = 'ma-tile ma-empty';
+        tileWrap.textContent = '📎';
+      }
+      grid.appendChild(tileWrap);
     }
   }
 
@@ -3706,8 +3719,8 @@ function buildMiroArray(card) {
     contentEl = document.createElement('div');
     contentEl.className = 'ma-outer-grid';
     contentEl.style.display = 'grid';
-    contentEl.style.gridTemplateColumns = `repeat(${c2}, ${innerW}px)`;
-    contentEl.style.gridTemplateRows = `repeat(${r2}, ${innerH}px)`;
+    contentEl.style.gridTemplateColumns = `repeat(${c2}, ${innerW + (card.s2Width || 0) * 2}px)`;
+    contentEl.style.gridTemplateRows = `repeat(${r2}, ${innerH + (card.s2Width || 0) * 2}px)`;
     contentEl.style.gap = g2 + 'px';
     const outerCount = r2 * c2;
     for (let j = 0; j < outerCount; j++) {
@@ -3724,16 +3737,8 @@ function buildMiroArray(card) {
   const toolbar = document.createElement('div');
   toolbar.className = 'ma-toolbar';
 
-  function mkBtn(label, title, fn) {
-    const b = document.createElement('button');
-    b.textContent = label;
-    b.title = title;
-    b.onmousedown = (e) => e.preventDefault();
-    b.onclick = (e) => { e.stopPropagation(); pushUndo(); fn(); sv(); buildMiroCanvas(); };
-    return b;
-  }
-
-  function mkNumGroup(labelText, value, min, onChange, step) {
+  // Helper: create a number input (NO auto-apply — deferred)
+  function mkInput(labelText, value, min, step) {
     step = step || 1;
     const grp = document.createElement('span');
     grp.className = 'ma-num-group';
@@ -3745,38 +3750,107 @@ function buildMiroArray(card) {
     inp.className = 'ma-input';
     inp.value = value;
     inp.min = min;
+    inp.step = step;
     inp.onmousedown = (e) => e.stopPropagation();
     inp.onclick = (e) => e.stopPropagation();
-    function apply() {
-      const v = Math.max(min, parseInt(inp.value) || min);
-      pushUndo(); onChange(v); sv(); buildMiroCanvas();
-    }
-    inp.addEventListener('change', apply);
-    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); apply(); } });
-    grp.appendChild(mkBtn('−', 'Decrease ' + labelText, () => { const v = Math.max(min, (parseInt(inp.value)||min) - step); onChange(v); }));
     grp.appendChild(lbl);
     grp.appendChild(inp);
-    grp.appendChild(mkBtn('+', 'Increase ' + labelText, () => { const v = (parseInt(inp.value)||min) + step; onChange(v); }));
+    grp._inp = inp;
     return grp;
   }
 
   // Row 1: Inner array controls
   const row1 = document.createElement('div');
   row1.className = 'ma-toolbar-row';
-  row1.appendChild(mkNumGroup('R1', card.rows, 1, (v) => { card.rows = v; }));
-  row1.appendChild(mkNumGroup('C1', card.cols, 1, (v) => { card.cols = v; }));
-  row1.appendChild(mkNumGroup('G1', card.gap, 0, (v) => { card.gap = v; }, 2));
+  const r1Grp = mkInput('R1', card.rows, 1);
+  const c1Grp = mkInput('C1', card.cols, 1);
+  const g1Grp = mkInput('G1', card.gap, 0, 2);
+  row1.appendChild(r1Grp);
+  row1.appendChild(c1Grp);
+  row1.appendChild(g1Grp);
   toolbar.appendChild(row1);
 
-  // Row 2: 2D controls (always shown once 2D is activated)
+  // Row 2: 2D controls
+  let r2Grp, c2Grp, g2Grp;
   if (is2D) {
     const row2 = document.createElement('div');
     row2.className = 'ma-toolbar-row';
-    row2.appendChild(mkNumGroup('R2', r2, 1, (v) => { card.rows2 = v; }));
-    row2.appendChild(mkNumGroup('C2', c2, 1, (v) => { card.cols2 = v; }));
-    row2.appendChild(mkNumGroup('G2', g2, 0, (v) => { card.gap2 = v; }, 2));
+    r2Grp = mkInput('R2', r2, 1);
+    c2Grp = mkInput('C2', c2, 1);
+    g2Grp = mkInput('G2', g2, 0, 2);
+    row2.appendChild(r2Grp);
+    row2.appendChild(c2Grp);
+    row2.appendChild(g2Grp);
     toolbar.appendChild(row2);
   }
+
+  // Row 3: Stroke controls
+  const row3 = document.createElement('div');
+  row3.className = 'ma-toolbar-row';
+
+  // S1 — stroke around each tile
+  const s1Lbl = document.createElement('span');
+  s1Lbl.className = 'ma-lbl';
+  s1Lbl.textContent = 'S1';
+  row3.appendChild(s1Lbl);
+  const s1WGrp = mkInput('W', card.s1Width || 0, 0);
+  row3.appendChild(s1WGrp);
+  const s1Color = document.createElement('input');
+  s1Color.type = 'color';
+  s1Color.value = card.s1Color || '#333333';
+  s1Color.title = 'S1 Color';
+  s1Color.className = 'ma-color-input';
+  s1Color.onmousedown = (e) => e.stopPropagation();
+  row3.appendChild(s1Color);
+
+  // S2 — stroke around each inner grid block
+  const s2Lbl = document.createElement('span');
+  s2Lbl.className = 'ma-lbl';
+  s2Lbl.textContent = 'S2';
+  s2Lbl.style.marginLeft = '8px';
+  row3.appendChild(s2Lbl);
+  const s2WGrp = mkInput('W', card.s2Width || 0, 0);
+  row3.appendChild(s2WGrp);
+  const s2Color = document.createElement('input');
+  s2Color.type = 'color';
+  s2Color.value = card.s2Color || '#333333';
+  s2Color.title = 'S2 Color';
+  s2Color.className = 'ma-color-input';
+  s2Color.onmousedown = (e) => e.stopPropagation();
+  row3.appendChild(s2Color);
+
+  toolbar.appendChild(row3);
+
+  // Row 4: Execute button
+  const row4 = document.createElement('div');
+  row4.className = 'ma-toolbar-row';
+  row4.style.justifyContent = 'center';
+  const execBtn = document.createElement('button');
+  execBtn.className = 'ma-exec-btn';
+  execBtn.textContent = '▶ Execute';
+  execBtn.title = 'Apply all changes';
+  execBtn.onmousedown = (e) => e.preventDefault();
+  execBtn.onclick = (e) => {
+    e.stopPropagation();
+    pushUndo();
+    // Read all inputs and apply
+    card.rows = Math.max(1, parseInt(r1Grp._inp.value) || 1);
+    card.cols = Math.max(1, parseInt(c1Grp._inp.value) || 1);
+    card.gap = Math.max(0, parseInt(g1Grp._inp.value) || 0);
+    if (is2D && r2Grp && c2Grp && g2Grp) {
+      card.rows2 = Math.max(1, parseInt(r2Grp._inp.value) || 1);
+      card.cols2 = Math.max(1, parseInt(c2Grp._inp.value) || 1);
+      card.gap2 = Math.max(0, parseInt(g2Grp._inp.value) || 0);
+    }
+    // Stroke values
+    card.s1Width = Math.max(0, parseInt(s1WGrp._inp.value) || 0);
+    card.s1Color = s1Color.value;
+    card.s2Width = Math.max(0, parseInt(s2WGrp._inp.value) || 0);
+    card.s2Color = s2Color.value;
+    sv(); buildMiroCanvas();
+  };
+  row4.appendChild(execBtn);
+  toolbar.appendChild(row4);
 
   // Drag + lock + resize
   miroSetupCardDrag(el, card, ['.mc-del', '.ma-toolbar', '.mc-lock', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.mc-resize-t', '.mc-resize-b', '.mc-resize-l', '.mc-resize-r']);
@@ -3865,12 +3939,20 @@ function convertImageToArray(cardId) {
   sv(); buildMiroCanvas();
 }
 
-// Convert an existing array to 2D Array
+// Convert an existing array to 2D Array (or directly from image)
 function make2DArray(cardId) {
   const page = cp();
   const card = (page.miroCards || []).find(c => c.id === cardId);
-  if (!card || card.type !== 'array') return;
+  if (!card) return;
   pushUndo();
+  // If it's still an image, convert to array first
+  if (card.type === 'image') {
+    card.tileW = card.w || 300;
+    card.tileH = card.h || 200;
+    card.type = 'array';
+    card.rows = 1; card.cols = 1; card.gap = 0;
+  }
+  if (card.type !== 'array') return;
   card.rows2 = card.rows2 || 1;
   card.cols2 = card.cols2 || 1;
   card.gap2 = card.gap2 || 0;
