@@ -57,12 +57,28 @@
     // Moving right = more columns, moving left = fewer columns (like Miro)
     const colDelta = Math.round(deltaX / 100);
     const cols = clamp(baseCols + colDelta, 1, totalCards);
-    arrangeGrid(cols, e);
+
+    // Calculate overflow beyond alignment limits for distribution
+    const maxCols = totalCards;
+    const rawCols = baseCols + colDelta;
+    let extraGapH = 0, extraGapV = 0;
+
+    if (rawCols > maxCols) {
+      // Dragging right past max cols → distribute horizontal spacing
+      extraGapH = Math.max(0, (rawCols - maxCols) * 30);
+    } else if (rawCols < 1) {
+      // Dragging left past 1 col (all in one column) → distribute vertical spacing
+      extraGapV = Math.max(0, (1 - rawCols) * 30);
+    }
+
+    arrangeGrid(cols, e, extraGapH, extraGapV);
   }
 
-  function arrangeGrid(cols, e) {
+  function arrangeGrid(cols, e, extraGapH, extraGapV) {
     const page = cp();
-    const gap = 6;
+    const baseGap = 6;
+    const gapH = baseGap + (extraGapH || 0);
+    const gapV = baseGap + (extraGapV || 0);
     const rows = Math.ceil(totalCards / cols);
 
     // Sort cards by their original position (left-to-right, top-to-bottom)
@@ -78,8 +94,8 @@
       sorted.forEach((oc, i) => {
         const col = i % cols;
         const row = Math.floor(i / cols);
-        const newX = anchorX + col * (uniformW + gap);
-        const newY = anchorY + row * (uniformH + gap);
+        const newX = anchorX + col * (uniformW + gapH);
+        const newY = anchorY + row * (uniformH + gapV);
         const c = (page.miroCards || []).find((x) => x.id === oc.id);
         if (c) {
           c.x = newX;
@@ -109,9 +125,9 @@
 
       // Calculate cumulative offsets for each column and row
       const colOffsets = [0];
-      for (let ci = 1; ci < cols; ci++) colOffsets[ci] = colOffsets[ci - 1] + colMaxW[ci - 1] + gap;
+      for (let ci = 1; ci < cols; ci++) colOffsets[ci] = colOffsets[ci - 1] + colMaxW[ci - 1] + gapH;
       const rowOffsets = [0];
-      for (let ri = 1; ri < rows; ri++) rowOffsets[ri] = rowOffsets[ri - 1] + rowMaxH[ri - 1] + gap;
+      for (let ri = 1; ri < rows; ri++) rowOffsets[ri] = rowOffsets[ri - 1] + rowMaxH[ri - 1] + gapV;
 
       sorted.forEach((oc, i) => {
         const col = i % cols;
