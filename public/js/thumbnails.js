@@ -249,7 +249,41 @@ function updateCardThumb(card) {
 }
 
 /* ─── Global Card DragHelper ─── */
+// Track which group is "opened" for individual editing (double-click to open, Esc to close)
+let _openGroupId = null;
+
+function closeOpenGroup() {
+  if (_openGroupId) {
+    // Remove visual indicator from open group members
+    document.querySelectorAll('.miro-group-open').forEach(el => el.classList.remove('miro-group-open'));
+    _openGroupId = null;
+  }
+}
+
+// Esc closes the open group
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && _openGroupId) {
+    closeOpenGroup();
+  }
+});
+
 function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
+  // Double-click → open group for individual editing
+  el.addEventListener('dblclick', (e) => {
+    if (typeof findGroupOfCard !== 'function' || typeof getOutlineGroups !== 'function') return;
+    const groups = getOutlineGroups();
+    const group = findGroupOfCard(card.id, groups);
+    if (!group) return;
+    // Open this group
+    _openGroupId = group.id;
+    // Add visual class to all group members
+    const allIds = collectGroupCardIds(group);
+    allIds.forEach(cid => {
+      const cardEl = document.querySelector(`[data-cid="${cid}"]`);
+      if (cardEl) cardEl.classList.add('miro-group-open');
+    });
+  });
+
   el.addEventListener('mousedown', (e) => {
     // Middle mouse button: always let it bubble for panning
     if (e.button === 1) return;
@@ -263,7 +297,25 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
     e.stopPropagation();
     if (e.ctrlKey || e.metaKey) { toggleMiroSelect(card.id); return; }
 
-    if (!_miroSelected.has(card.id)) { clearMiroSelection(); addMiroSelect(card.id); }
+    // Group-aware selection: auto-select all group siblings unless group is "open"
+    clearMiroSelection();
+    addMiroSelect(card.id);
+
+    if (typeof findGroupOfCard === 'function' && typeof getOutlineGroups === 'function') {
+      const groups = getOutlineGroups();
+      const group = findGroupOfCard(card.id, groups);
+      if (group && group.id !== _openGroupId) {
+        // Close any previously open group
+        closeOpenGroup();
+        // Select ALL siblings in this group (move as unit)
+        const allIds = collectGroupCardIds(group);
+        allIds.forEach(cid => { if (!_miroSelected.has(cid)) addMiroSelect(cid); });
+      } else if (!group) {
+        // Not in any group — close any open group
+        closeOpenGroup();
+      }
+      // If group.id === _openGroupId → group is open, only the clicked card selected (individual mode)
+    }
 
     const page = cp();
     const zoom = (page.zoom || 100) / 100;
