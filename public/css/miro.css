@@ -666,7 +666,8 @@
 }
 
 #miro-align-handle,
-#miro-widget-handle {
+#miro-widget-handle,
+#miro-multi-lock {
   position: absolute;
   top: -18px;
   width: 32px;
@@ -697,15 +698,25 @@
   font-size: 14px;
 }
 
+#miro-multi-lock {
+  left: -18px;
+  bottom: -48px;
+  top: auto;
+  font-size: 14px;
+  user-select: none;
+}
+
 #miro-align-handle:hover,
-#miro-widget-handle:hover {
+#miro-widget-handle:hover,
+#miro-multi-lock:hover {
   background: rgba(108, 143, 255, 0.85);
   box-shadow: 0 3px 16px rgba(108, 143, 255, 0.5);
   filter: brightness(1.2);
 }
 
 #miro-align-handle:active,
-#miro-widget-handle:active {
+#miro-widget-handle:active,
+#miro-multi-lock:active {
   background: var(--ac);
   filter: brightness(0.9);
 }

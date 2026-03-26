@@ -199,6 +199,7 @@ function ungroupSelectedCards() {
 
 /* ─── Build Outline ─── */
 let _olDragId = null;
+let _lastOutlineClickCid = null;
 
 function buildOutline() {
   const list = document.getElementById('outline-list');
@@ -250,13 +251,46 @@ function buildOutline() {
       title.textContent = info.label;
       item.appendChild(title);
 
-      item.onclick = () => {
+      item.onclick = (e) => {
+        if (e.ctrlKey || e.metaKey || e.altKey) {
+          // Toggle add/remove from selection
+          if (typeof _miroSelected !== 'undefined' && _miroSelected.has(c.id)) {
+            if (typeof removeMiroSelect === 'function') removeMiroSelect(c.id);
+          } else {
+            if (typeof addMiroSelect === 'function') addMiroSelect(c.id);
+          }
+          if (typeof updateMiroSelFrame === 'function') updateMiroSelFrame();
+          item.classList.toggle('active', _miroSelected.has(c.id));
+          _lastOutlineClickCid = c.id;
+          return;
+        }
+        if (e.shiftKey && _lastOutlineClickCid) {
+          // Range select: from _lastOutlineClickCid to c.id
+          const allItems = [...list.querySelectorAll('.outline-item')];
+          const startIdx = allItems.findIndex(i => i.dataset.cid === _lastOutlineClickCid);
+          const endIdx = allItems.findIndex(i => i.dataset.cid === c.id);
+          if (startIdx >= 0 && endIdx >= 0) {
+            const lo = Math.min(startIdx, endIdx), hi = Math.max(startIdx, endIdx);
+            for (let i = lo; i <= hi; i++) {
+              const cid = allItems[i].dataset.cid;
+              if (cid && typeof addMiroSelect === 'function') {
+                addMiroSelect(cid);
+                allItems[i].classList.add('active');
+              }
+            }
+          }
+          if (typeof updateMiroSelFrame === 'function') updateMiroSelFrame();
+          return;
+        }
+        // Normal click: clear and select single
         if (typeof clearMiroSelection === 'function') clearMiroSelection();
         if (typeof addMiroSelect === 'function') addMiroSelect(c.id);
+        if (typeof updateMiroSelFrame === 'function') updateMiroSelFrame();
         zoomToFitCard(c.id);
         // Highlight active in outline
         list.querySelectorAll('.outline-item').forEach(i => i.classList.remove('active'));
         item.classList.add('active');
+        _lastOutlineClickCid = c.id;
       };
 
       // Drag reorder

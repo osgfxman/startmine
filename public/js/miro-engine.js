@@ -150,7 +150,7 @@ function updateMiroSelFrame() {
   const page = cp();
   const zoom = (page.zoom || 100) / 100;
   const invZoom = Math.min(3, Math.max(0.25, 1 / zoom));
-  const handleEls = frame.querySelectorAll('#miro-align-handle, #miro-widget-handle');
+  const handleEls = frame.querySelectorAll('#miro-align-handle, #miro-widget-handle, #miro-multi-lock');
   handleEls.forEach(el => {
     el.style.transform = `scale(${invZoom})`;
   });
@@ -3133,5 +3133,68 @@ document.addEventListener('keydown', (e) => {
     _dragInboxId = null;
     sv(); buildMiroCanvas(); buildOutline();
     if (typeof buildInbox === 'function') buildInbox();
+  });
+})();
+
+// ─── Multi-Lock Button Logic ───
+(function () {
+  const lockBtn = document.getElementById('miro-multi-lock');
+  if (!lockBtn) return;
+  let pressTimer = null;
+  let justUnlocked = false;
+  const HOLD_DURATION = 500;
+
+  lockBtn.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    const page = cp();
+    const anyLocked = [..._miroSelected].some(cid => {
+      const c = (page.miroCards || []).find(x => x.id === cid);
+      return c && c.locked;
+    });
+    if (!anyLocked) return;
+    lockBtn.classList.add('active');
+    pressTimer = setTimeout(() => {
+      _miroSelected.forEach(cid => {
+        const c = (page.miroCards || []).find(x => x.id === cid);
+        if (c) {
+          c.locked = false;
+          const el = document.querySelector(`[data-cid="${cid}"]`);
+          if (el) el.classList.remove('is-locked');
+        }
+      });
+      lockBtn.textContent = '🔒';
+      lockBtn.classList.remove('active');
+      justUnlocked = true;
+      sv();
+    }, HOLD_DURATION);
+  });
+
+  lockBtn.addEventListener('mouseup', (e) => {
+    e.stopPropagation();
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    lockBtn.classList.remove('active');
+  });
+
+  lockBtn.addEventListener('mouseleave', () => {
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    lockBtn.classList.remove('active');
+  });
+
+  lockBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (justUnlocked) { justUnlocked = false; return; }
+    const page = cp();
+    _miroSelected.forEach(cid => {
+      const c = (page.miroCards || []).find(x => x.id === cid);
+      if (c) {
+        c.locked = true;
+        const el = document.querySelector(`[data-cid="${cid}"]`);
+        if (el) el.classList.add('is-locked');
+      }
+    });
+    lockBtn.textContent = '🔓';
+    sv();
+    clearMiroSelection();
   });
 })();
