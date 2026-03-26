@@ -74,7 +74,9 @@ function performUndo() {
     _undoInProgress = true;
     page.miroCards = JSON.parse(snapshot);
     _miroSelected.clear();
-    sv(); buildMiroCanvas(); buildOutline();
+    buildMiroCanvas();
+    sv();
+    setTimeout(() => { if (typeof buildOutline === 'function') buildOutline(); }, 50);
     _undoInProgress = false;
     if (typeof showToast === 'function') showToast('↩ Undo');
   } catch (e) { _undoInProgress = false; console.error('[UNDO ERROR]', e); }

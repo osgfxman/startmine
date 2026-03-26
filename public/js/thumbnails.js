@@ -370,8 +370,27 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
           page.miroCards.unshift(c); // Unshift so they render beneath the currently dragged items
         });
 
-        // Render the background clones instantly
-        buildMiroCanvas(); buildOutline();
+        // Render ONLY the cloned cards (not a full rebuild!) for performance
+        const board = document.getElementById('miro-board');
+        droppedClones.forEach(c => {
+          try {
+            let el;
+            if (c.type === 'sticky') el = buildMiroSticky(c);
+            else if (c.type === 'image') el = buildMiroImage(c);
+            else if (c.type === 'text') el = buildMiroText(c);
+            else if (c.type === 'shape') el = buildMiroShape(c);
+            else if (c.type === 'pen') el = buildMiroPen(c);
+            else if (c.type === 'grid') el = buildMiroGridCard(c);
+            else if (c.type === 'mindmap') el = buildMiroMindMap(c);
+            else if (c.type === 'trello') el = buildMiroTrello(c);
+            else if (c.type === 'bwidget') el = buildMiroBookmarkWidget(c);
+            else if (c.type === 'array') el = buildMiroArray(c);
+            else el = buildMiroCard(c);
+            if (el) board.appendChild(el);
+          } catch (err) { console.error('[CLONE RENDER]', err); }
+        });
+        // Defer outline rebuild to avoid blocking the drag
+        setTimeout(() => { if (typeof buildOutline === 'function') buildOutline(); }, 100);
 
         // Important: Ensure the elements we are currently dragging remain visible on top
         origPositions.forEach((orig, cid) => {
