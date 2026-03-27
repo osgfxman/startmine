@@ -298,24 +298,28 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
     if (e.ctrlKey || e.metaKey) { toggleMiroSelect(card.id); return; }
 
     // Group-aware selection: auto-select all group siblings unless group is "open"
-    clearMiroSelection();
-    addMiroSelect(card.id);
+    // If the card is ALREADY selected, keep the current selection (for multi-drag)
+    if (!_miroSelected.has(card.id)) {
+      clearMiroSelection();
+      addMiroSelect(card.id);
 
-    if (typeof findGroupOfCard === 'function' && typeof getOutlineGroups === 'function') {
-      const groups = getOutlineGroups();
-      const group = findGroupOfCard(card.id, groups);
-      if (group && group.id !== _openGroupId) {
-        // Close any previously open group
-        closeOpenGroup();
-        // Select ALL siblings in this group (move as unit)
-        const allIds = collectGroupCardIds(group);
-        allIds.forEach(cid => { if (!_miroSelected.has(cid)) addMiroSelect(cid); });
-      } else if (!group) {
-        // Not in any group — close any open group
-        closeOpenGroup();
+      if (typeof findGroupOfCard === 'function' && typeof getOutlineGroups === 'function') {
+        const groups = getOutlineGroups();
+        const group = findGroupOfCard(card.id, groups);
+        if (group && group.id !== _openGroupId) {
+          // Close any previously open group
+          closeOpenGroup();
+          // Select ALL siblings in this group (move as unit)
+          const allIds = collectGroupCardIds(group);
+          allIds.forEach(cid => { if (!_miroSelected.has(cid)) addMiroSelect(cid); });
+        } else if (!group) {
+          // Not in any group — close any open group
+          closeOpenGroup();
+        }
+        // If group.id === _openGroupId → group is open, only the clicked card selected (individual mode)
       }
-      // If group.id === _openGroupId → group is open, only the clicked card selected (individual mode)
     }
+    updateMiroSelFrame();
 
     const page = cp();
     const zoom = (page.zoom || 100) / 100;
@@ -723,9 +727,9 @@ function attach8WayResize(el, card, minW, minH) {
         el.style.top = ny + 'px';
         el.style.height = nh + 'px';
 
-        // Auto-size text for sticky notes
+        // Auto-size text for sticky notes (only in auto mode)
         const textEl = el.querySelector('.ms-text');
-        if (textEl) autoSizeText(textEl, el);
+        if (textEl && card.fontSizeMode === 'auto') autoSizeText(textEl, el);
         updateMiroSelFrame();
       }
       function onUp() {
@@ -1697,7 +1701,7 @@ function buildMiroSticky(card) {
   miroSetupCardDrag(el, card, ['.mc-del', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.ms-shape-toggle', '.sn-toolbar', '.mc-lock']);
 
   // 4-corner resize
-  attach8WayResize(el, card, 100, 80);
+  attach8WayResize(el, card, 1, 1);
 
   // Lock UI
   attachLockUI(el, card);
@@ -1751,9 +1755,9 @@ function autoSizeText(textEl, containerEl) {
     const cs = getComputedStyle(textEl);
     const pt = parseFloat(cs.paddingTop) || 0;
     const pb = parseFloat(cs.paddingBottom) || 0;
-    maxH = (containerEl.clientHeight || parseFloat(containerEl.style.height) || 160) - pt - pb;
+    maxH = (containerEl.clientHeight || parseFloat(containerEl.style.height) || 10) - pt - pb;
   }
-  if (maxH < 20) maxH = 160; // fallback
+  if (maxH < 10) maxH = 10; // minimal fallback
 
   // Calculate available width for word-aware sizing
   let maxW = textEl.clientWidth;
@@ -1761,9 +1765,9 @@ function autoSizeText(textEl, containerEl) {
     const cs = getComputedStyle(textEl);
     const pl = parseFloat(cs.paddingLeft) || 0;
     const pr = parseFloat(cs.paddingRight) || 0;
-    maxW = (containerEl.clientWidth || parseFloat(containerEl.style.width) || 280) - pl - pr;
+    maxW = (containerEl.clientWidth || parseFloat(containerEl.style.width) || 10) - pl - pr;
   }
-  if (maxW < 20) maxW = 280; // fallback
+  if (maxW < 10) maxW = 10; // minimal fallback
 
   // Enforce word-break CSS: never break mid-word
   textEl.style.wordBreak = 'normal';
@@ -1840,7 +1844,7 @@ function buildMiroImage(card) {
   miroSetupCardDrag(el, card, ['.mc-del', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.mc-lock']);
 
   // 4-corner resize
-  attach8WayResize(el, card, 60, 60);
+  attach8WayResize(el, card, 20, 20);
 
   // Lock UI
   attachLockUI(el, card);
