@@ -665,6 +665,24 @@
   border-color: #fff;
 }
 
+/* Edge resize handles */
+.msel-edge[data-corner="t"] {
+  top: -4px; left: 50%; transform: translateX(-50%) scaleY(var(--inv-zoom, 1));
+  width: 30px; height: 6px; border-radius: 3px; cursor: ns-resize; transform-origin: top;
+}
+.msel-edge[data-corner="b"] {
+  bottom: -4px; left: 50%; transform: translateX(-50%) scaleY(var(--inv-zoom, 1));
+  width: 30px; height: 6px; border-radius: 3px; cursor: ns-resize; transform-origin: bottom;
+}
+.msel-edge[data-corner="l"] {
+  left: -4px; top: 50%; transform: translateY(-50%) scaleX(var(--inv-zoom, 1));
+  width: 6px; height: 30px; border-radius: 3px; cursor: ew-resize; transform-origin: left;
+}
+.msel-edge[data-corner="r"] {
+  right: -4px; top: 50%; transform: translateY(-50%) scaleX(var(--inv-zoom, 1));
+  width: 6px; height: 30px; border-radius: 3px; cursor: ew-resize; transform-origin: right;
+}
+
 #miro-align-handle,
 #miro-widget-handle,
 #miro-multi-lock {

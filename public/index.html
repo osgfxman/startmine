@@ -12,8 +12,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1774577553">
-  <link rel="stylesheet" href="css/miro.css?v=1774577553">
+  <link rel="stylesheet" href="css/base.css?v=1774582090">
+  <link rel="stylesheet" href="css/miro.css?v=1774582090">
 </head>
 
 <body>
@@ -121,6 +121,11 @@
           <div class="msel-resize" data-corner="tr"></div>
           <div class="msel-resize" data-corner="bl"></div>
           <div class="msel-resize" data-corner="br"></div>
+          <!-- Edge resize handles -->
+          <div class="msel-resize msel-edge" data-corner="t"></div>
+          <div class="msel-resize msel-edge" data-corner="b"></div>
+          <div class="msel-resize msel-edge" data-corner="l"></div>
+          <div class="msel-resize msel-edge" data-corner="r"></div>
           <!-- Filter by type -->
           <div id="miro-filter-btn" title="Filter selection by type">
             <span id="miro-filter-label">Filter</span> ▾
@@ -614,11 +619,11 @@
     <div class="ctx-item danger" data-action="delete"><span class="ctx-icon">🗑️</span><span class="ctx-label">Delete</span><span class="ctx-shortcut">Del</span></div>
   </div>
 
-    <script src="js/app.js?v=1774577553"></script>
-    <script src="js/outline.js?v=1774577553"></script>
-    <script src="js/miro-engine.js?v=1774577553"></script>
-    <script src="js/thumbnails.js?v=1774577553"></script>
-    <script src="js/alignment.js?v=1774577553"></script>
+    <script src="js/app.js?v=1774582090"></script>
+    <script src="js/outline.js?v=1774582090"></script>
+    <script src="js/miro-engine.js?v=1774582090"></script>
+    <script src="js/thumbnails.js?v=1774582090"></script>
+    <script src="js/alignment.js?v=1774582090"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});

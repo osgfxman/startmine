@@ -1,4 +1,4 @@
-// ─── Alignment Handle Drag ───
+// ─── Alignment Handle Drag (Miro-style progressive spacing) ───
 (function () {
   const handle = document.getElementById('miro-align-handle');
   const indicator = document.getElementById('miro-col-indicator');
@@ -12,13 +12,119 @@
     uniformH = 240;
   let _forceUniform = false;
 
+  // ─── Right-click settings popup ───
+  handle.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (_miroSelected.size < 2) return;
+
+    // Remove existing popup if any
+    let popup = document.getElementById('align-settings-popup');
+    if (popup) popup.remove();
+
+    const page = cp();
+    const cards = [];
+    _miroSelected.forEach(cid => {
+      const c = (page.miroCards || []).find(x => x.id === cid);
+      if (c) cards.push(c);
+    });
+    if (cards.length < 2) return;
+
+    // Detect current layout
+    const currentCols = detectCurrentCols(cards);
+    const currentRows = Math.ceil(cards.length / currentCols);
+
+    popup = document.createElement('div');
+    popup.id = 'align-settings-popup';
+    popup.style.cssText = `
+      position: fixed; left: ${e.clientX}px; top: ${e.clientY}px;
+      background: #1e2030; border: 1px solid rgba(108,143,255,0.3);
+      border-radius: 10px; padding: 12px 14px; z-index: 9999;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5); backdrop-filter: blur(12px);
+      display: flex; flex-direction: column; gap: 8px; min-width: 180px;
+      font-family: var(--font); color: #ccc; font-size: 0.78rem;
+    `;
+
+    function row(label, value, id) {
+      const r = document.createElement('div');
+      r.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:8px;';
+      const lbl = document.createElement('span');
+      lbl.textContent = label;
+      lbl.style.cssText = 'font-weight:600; color:#aaa; font-size:0.72rem;';
+      const inp = document.createElement('input');
+      inp.type = 'number';
+      inp.id = id;
+      inp.value = value;
+      inp.min = id === 'aset-cols' ? 1 : 0;
+      inp.style.cssText = `
+        width: 54px; background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.15); border-radius: 5px;
+        color: #fff; font-size: 0.75rem; font-weight: 600;
+        text-align: center; padding: 4px 6px; outline: none;
+        -moz-appearance: textfield; appearance: textfield;
+      `;
+      r.appendChild(lbl);
+      r.appendChild(inp);
+      popup.appendChild(r);
+      return inp;
+    }
+
+    const colInput = row('Columns', currentCols, 'aset-cols');
+    const gapHInput = row('Col Gap', 6, 'aset-gaph');
+    const gapVInput = row('Row Gap', 6, 'aset-gapv');
+
+    const applyBtn = document.createElement('button');
+    applyBtn.textContent = 'Apply';
+    applyBtn.style.cssText = `
+      background: linear-gradient(135deg, #4a7aff, #6c8fff);
+      border: none; color: #fff; padding: 6px 0; border-radius: 7px;
+      cursor: pointer; font-size: 0.78rem; font-weight: 700;
+      margin-top: 4px; transition: background 0.15s;
+    `;
+    applyBtn.onclick = () => {
+      const cols = clamp(parseInt(colInput.value) || 1, 1, cards.length);
+      const gH = Math.max(0, parseInt(gapHInput.value) || 0);
+      const gV = Math.max(0, parseInt(gapVInput.value) || 0);
+
+      origCards = cards.map(c => ({ id: c.id, x: c.x || 0, y: c.y || 0, w: c.w || 280, h: c.h || 240 }));
+      anchorX = Math.min(...origCards.map(c => c.x));
+      anchorY = Math.min(...origCards.map(c => c.y));
+      totalCards = origCards.length;
+      _forceUniform = false;
+
+      pushUndo();
+      arrangeGrid(cols, null, gH, gV);
+      sv();
+      const savedSel = [..._miroSelected];
+      buildMiroCanvas();
+      savedSel.forEach(cid => addMiroSelect(cid));
+      updateMiroSelFrame();
+
+      popup.remove();
+    };
+    popup.appendChild(applyBtn);
+
+    document.body.appendChild(popup);
+
+    // Close on click outside
+    function closePopup(ev) {
+      if (!popup.contains(ev.target)) {
+        popup.remove();
+        document.removeEventListener('mousedown', closePopup);
+      }
+    }
+    setTimeout(() => document.addEventListener('mousedown', closePopup), 50);
+  });
+
+  // ─── Main drag handler ───
   handle.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return; // Only left click
     e.preventDefault();
     e.stopPropagation();
     if (_miroSelected.size < 2) return;
 
     _alignDragging = true;
-    _forceUniform = e.ctrlKey || e.metaKey; // Ctrl+drag = uniform sizing
+    _forceUniform = false;
     startX = e.clientX;
     startY = e.clientY;
     totalCards = _miroSelected.size;
@@ -29,7 +135,6 @@
     _miroSelected.forEach((cid) => {
       const c = (page.miroCards || []).find((x) => x.id === cid);
       if (c) {
-        // Use rendered dimensions to respect CSS min-width/min-height
         const el = document.querySelector(`[data-cid="${cid}"]`);
         const renderedW = el ? Math.max(el.offsetWidth, c.w || 280) : (c.w || 280);
         const renderedH = el ? Math.max(el.offsetHeight, c.h || 240) : (c.h || 240);
@@ -37,15 +142,14 @@
       }
     });
 
-    // Calculate uniform card size (average) — used only in Ctrl mode
     uniformW = Math.round(origCards.reduce((s, c) => s + c.w, 0) / origCards.length);
     uniformH = Math.round(origCards.reduce((s, c) => s + c.h, 0) / origCards.length);
 
-    // Anchor = top-left of bounding box
     anchorX = Math.min(...origCards.map((c) => c.x));
     anchorY = Math.min(...origCards.map((c) => c.y));
 
-    // Immediately arrange in initial grid
+    // Calculate widest row width for each col count (used for progressive spacing)
+    pushUndo();
     arrangeGrid(baseCols, e);
 
     document.addEventListener('mousemove', onAlignMove);
@@ -54,47 +158,71 @@
 
   function onAlignMove(e) {
     if (!_alignDragging) return;
-    const deltaX = e.clientX - startX;
-    const deltaY = e.clientY - startY;
-    // Moving right = more columns, moving left = fewer columns (like Miro)
-    const colDelta = Math.round(deltaX / 100);
-    const cols = clamp(baseCols + colDelta, 1, totalCards);
 
-    // Calculate overflow beyond alignment limits for distribution
-    const maxCols = totalCards;
-    const rawCols = baseCols + colDelta;
-    let extraGapH = 0, extraGapV = 0;
+    const isModifier = e.ctrlKey || e.metaKey || e.altKey;
 
-    if (rawCols > maxCols) {
-      // Dragging right past max cols → distribute horizontal spacing
-      extraGapH = Math.max(0, (rawCols - maxCols) * 30);
-    } else if (rawCols < 1) {
-      // Dragging left past 1 col (all in one column) → distribute vertical spacing
-      extraGapV = Math.max(0, (1 - rawCols) * 30);
-    }
+    if (isModifier) {
+      // ─── MODIFIER MODE: old behavior ───
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      const colDelta = Math.round(deltaX / 100);
+      const cols = clamp(baseCols + colDelta, 1, totalCards);
 
-    // Vertical drag controls gap distribution:
-    // - Normal: up/down adjusts vertical gap (between rows)
-    // - Ctrl held: up/down adjusts horizontal gap (between columns)
-    // - Ctrl+Alt held: up/down adjusts both gaps together
-    const verticalGapDelta = Math.max(0, deltaY * 0.5);
-    if ((e.ctrlKey || e.metaKey) && e.altKey) {
-      extraGapH += verticalGapDelta;
-      extraGapV += verticalGapDelta;
-    } else if (e.ctrlKey || e.metaKey) {
-      extraGapH += verticalGapDelta;
+      let extraGapH = 0, extraGapV = 0;
+      const verticalGapDelta = Math.max(0, deltaY * 0.5);
+      if ((e.ctrlKey || e.metaKey) && e.altKey) {
+        extraGapH += verticalGapDelta;
+        extraGapV += verticalGapDelta;
+      } else if (e.ctrlKey || e.metaKey) {
+        extraGapH += verticalGapDelta;
+      } else {
+        extraGapV += verticalGapDelta;
+      }
+
+      arrangeGrid(cols, e, extraGapH, extraGapV);
     } else {
-      extraGapV += verticalGapDelta;
-    }
+      // ─── MIRO-STYLE MODE: progressive columns + spacing ───
+      const totalDeltaX = e.clientX - startX;
 
-    arrangeGrid(cols, e, extraGapH, extraGapV);
+      // Calculate the total width of a single-row layout (all items side by side, no gap)
+      const avgW = uniformW;
+      const avgH = uniformH;
+      const ROW_GAP = 6; // Fixed row gap
+
+      // The total available "spread" from anchor determines cols + gap
+      // For each possible col count, calculate the base width (items touching)
+      // Then the remaining delta becomes gap
+      const minSpread = avgW; // 1 column = avgW
+      const currentSpread = baseCols * avgW + totalDeltaX;
+
+      // Find which column count this spread corresponds to
+      let bestCols = 1;
+      let bestGap = 0;
+
+      for (let c = totalCards; c >= 1; c--) {
+        const baseWidth = c * avgW; // Width with 0 gap
+        if (currentSpread >= baseWidth) {
+          bestCols = c;
+          // Remaining spread becomes gap between columns
+          if (c > 1) {
+            bestGap = Math.max(0, (currentSpread - baseWidth) / (c - 1));
+          } else {
+            bestGap = 0;
+          }
+          break;
+        }
+      }
+
+      bestCols = clamp(bestCols, 1, totalCards);
+
+      arrangeGrid(bestCols, e, bestGap, ROW_GAP);
+    }
   }
 
   function arrangeGrid(cols, e, extraGapH, extraGapV) {
     const page = cp();
-    const baseGap = 6;
-    const gapH = baseGap + (extraGapH || 0);
-    const gapV = baseGap + (extraGapV || 0);
+    const gapH = extraGapH !== undefined ? extraGapH : 6;
+    const gapV = extraGapV !== undefined ? extraGapV : 6;
     const rows = Math.ceil(totalCards / cols);
 
     // Sort cards by their original position (left-to-right, top-to-bottom)
@@ -106,7 +234,6 @@
     });
 
     if (_forceUniform) {
-      // Ctrl mode: all cards get uniform size
       sorted.forEach((oc, i) => {
         const col = i % cols;
         const row = Math.floor(i / cols);
@@ -128,8 +255,7 @@
         }
       });
     } else {
-      // Default mode: preserve each card's original size
-      // Calculate max width per column and max height per row
+      // Preserve each card's original size
       const colMaxW = new Array(cols).fill(0);
       const rowMaxH = new Array(rows).fill(0);
       sorted.forEach((oc, i) => {
@@ -139,7 +265,6 @@
         rowMaxH[row] = Math.max(rowMaxH[row], oc.h);
       });
 
-      // Calculate cumulative offsets for each column and row
       const colOffsets = [0];
       for (let ci = 1; ci < cols; ci++) colOffsets[ci] = colOffsets[ci - 1] + colMaxW[ci - 1] + gapH;
       const rowOffsets = [0];
@@ -148,7 +273,6 @@
       sorted.forEach((oc, i) => {
         const col = i % cols;
         const row = Math.floor(i / cols);
-        // Center card within its cell
         const cellW = colMaxW[col];
         const cellH = rowMaxH[row];
         const newX = anchorX + colOffsets[col] + (cellW - oc.w) / 2;
@@ -157,7 +281,7 @@
         if (c) {
           c.x = newX;
           c.y = newY;
-        } // keep original w/h
+        }
         const el = document.querySelector(`[data-cid="${oc.id}"]`);
         if (el) {
           el.style.left = newX + 'px';
@@ -168,20 +292,33 @@
       });
     }
 
+    // Update indicator
+    if (indicator) {
+      indicator.textContent = cols + '×' + Math.ceil(totalCards / cols);
+      indicator.style.display = 'block';
+    }
     updateMiroSelFrame();
   }
 
   function onAlignUp() {
     _alignDragging = false;
+    if (indicator) indicator.style.display = 'none';
     document.removeEventListener('mousemove', onAlignMove);
     document.removeEventListener('mouseup', onAlignUp);
     sv();
-    // Save selection IDs BEFORE buildMiroCanvas (which calls _miroSelected.clear())
     const savedSel = [..._miroSelected];
     buildMiroCanvas();
-    // Restore selection after DOM rebuild
     savedSel.forEach(cid => addMiroSelect(cid));
     updateMiroSelFrame();
+  }
+
+  // Detect current columns from card positions
+  function detectCurrentCols(cards) {
+    if (cards.length < 2) return 1;
+    const ys = cards.map(c => c.y || 0);
+    const minY = Math.min(...ys);
+    const threshold = 20;
+    return cards.filter(c => Math.abs((c.y || 0) - minY) < threshold).length || 1;
   }
 })();
 
@@ -192,7 +329,6 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
     !_alignDragging &&
     !_justRubberBanded
   ) {
-    // If in a creation mode, let the miro-engine click handler deal with it
     if (_stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode) return;
     if (typeof closeOpenGroup === 'function') closeOpenGroup();
     clearMiroSelection();
@@ -205,7 +341,7 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
     handle.addEventListener('mousedown', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const corner = handle.dataset.corner; // tl, tr, bl, br
+      const corner = handle.dataset.corner;
       const page = cp();
       const zoom = (page.zoom || 100) / 100;
       const bbox = getSelectedCardsBBox();
@@ -213,10 +349,14 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
       const startY = e.clientY;
       const startW = bbox.w;
       const startH = bbox.h;
-      // Anchor = opposite corner
-      const anchorX = corner.includes('r') ? bbox.minX : bbox.maxX;
-      const anchorY = corner.includes('b') ? bbox.minY : bbox.maxY;
-      // Snapshot original card positions/sizes
+      const isEdge = ['t', 'b', 'l', 'r'].includes(corner);
+      // For edges: anchor is the opposite edge center
+      const anchorX = (corner === 'r' || corner === 'tr' || corner === 'br') ? bbox.minX :
+                      (corner === 'l' || corner === 'tl' || corner === 'bl') ? bbox.maxX :
+                      bbox.minX; // t/b: keep X unchanged
+      const anchorY = (corner === 'b' || corner === 'bl' || corner === 'br') ? bbox.minY :
+                      (corner === 't' || corner === 'tl' || corner === 'tr') ? bbox.maxY :
+                      bbox.minY; // l/r: keep Y unchanged
       const origCards = [];
       _miroSelected.forEach(cid => {
         const c = (page.miroCards || []).find(x => x.id === cid);
@@ -227,22 +367,31 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
       function onMove(ev) {
         const dx = (ev.clientX - startX) / zoom;
         const dy = (ev.clientY - startY) / zoom;
-        // Determine new bbox size based on corner
         let newW = startW, newH = startH;
+
+        // Corners
         if (corner === 'br') { newW = startW + dx; newH = startH + dy; }
         else if (corner === 'bl') { newW = startW - dx; newH = startH + dy; }
         else if (corner === 'tr') { newW = startW + dx; newH = startH - dy; }
         else if (corner === 'tl') { newW = startW - dx; newH = startH - dy; }
+        // Edges (single axis)
+        else if (corner === 'r') { newW = startW + dx; }
+        else if (corner === 'l') { newW = startW - dx; }
+        else if (corner === 'b') { newH = startH + dy; }
+        else if (corner === 't') { newH = startH - dy; }
+
         newW = Math.max(40, newW);
         newH = Math.max(40, newH);
-        // Shift = lock aspect ratio
-        if (ev.shiftKey) {
+
+        if (ev.shiftKey && !isEdge) {
           const s = Math.max(newW / startW, newH / startH);
           newW = startW * s;
           newH = startH * s;
         }
-        const scaleX = newW / startW;
-        const scaleY = newH / startH;
+
+        const scaleX = isEdge && (corner === 't' || corner === 'b') ? 1 : newW / startW;
+        const scaleY = isEdge && (corner === 'l' || corner === 'r') ? 1 : newH / startH;
+
         origCards.forEach(o => {
           const c = page.miroCards.find(x => x.id === o.id);
           if (!c) return;
@@ -250,7 +399,6 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
           c.h = Math.max(20, o.h * scaleY);
           c.x = anchorX + (o.x - anchorX) * scaleX;
           c.y = anchorY + (o.y - anchorY) * scaleY;
-          // Update DOM directly for live feedback
           const el = document.querySelector(`[data-cid="${c.id}"]`);
           if (el) {
             el.style.left = c.x + 'px';
@@ -269,7 +417,6 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
         buildMiroCanvas();
         savedSel.forEach(cid => addMiroSelect(cid));
         updateMiroSelFrame();
-        // Re-run autoSizeText on resized sticky notes
         const curPage = cp();
         savedSel.forEach(cid => {
           const c = (curPage.miroCards || []).find(x => x.id === cid);
