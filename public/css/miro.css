@@ -627,11 +627,11 @@
 
 #miro-sel-box {
   position: absolute;
-  border: 1.5px dashed var(--ac);
-  background: rgba(108, 143, 255, 0.08);
+  border: 1.5px solid rgba(108, 143, 255, 0.7);
+  background: rgba(108, 143, 255, 0.25);
   pointer-events: none;
-  z-index: 10;
-  border-radius: 4px;
+  z-index: 9998;
+  border-radius: 2px;
   display: none;
 }
 

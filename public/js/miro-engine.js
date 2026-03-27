@@ -652,7 +652,18 @@ function deleteMiroCard(cid) {
       canvas.style.cursor = 'grabbing';
       return;
     }
-    if (e.target !== canvas && e.target.id !== 'miro-board') return;
+    // Allow rubber-band over locked elements: if target is inside a locked card, treat as empty canvas
+    if (e.target !== canvas && e.target.id !== 'miro-board') {
+      const cardEl = e.target.closest('[data-cid]');
+      if (cardEl) {
+        const cid = cardEl.dataset.cid;
+        const card = (page.miroCards || []).find(c => c.id === cid);
+        if (!card || !card.locked) return; // Non-locked card: let card's own handler deal with it
+        // Locked card: fall through to rubber-band logic below
+      } else {
+        return; // Not a card element, not canvas
+      }
+    }
     if (e.button !== 0) {
       e.preventDefault();
       _miroPanning = true;
