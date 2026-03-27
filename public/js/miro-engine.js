@@ -3395,15 +3395,15 @@ async function deleteCalendarEvent(calendarId, eventId) {
 // ─── Event Form (in-widget popup) ───
 function showCalendarEventForm(container, el, card, opts) {
   // opts: { mode:'create'|'edit', startTime, endTime, calendarId, eventId, summary, description, onDone }
-  // Remove any existing form
   const oldForm = el.querySelector('.cal-event-form');
   if (oldForm) oldForm.remove();
 
   const form = document.createElement('div');
   form.className = 'cal-event-form';
 
+  // Title (optional)
   const titleLabel = document.createElement('label');
-  titleLabel.textContent = 'Event Title';
+  titleLabel.textContent = 'Event Title (optional)';
   titleLabel.style.cssText = 'font-size:.65rem;color:#aaa;margin-bottom:2px;';
   const titleInp = document.createElement('input');
   titleInp.type = 'text';
@@ -3411,60 +3411,103 @@ function showCalendarEventForm(container, el, card, opts) {
   titleInp.placeholder = 'Timelog / Event name...';
   titleInp.value = opts.summary || '';
 
+  // Calendar selector — buttons instead of dropdown
   const calLabel = document.createElement('label');
   calLabel.textContent = 'Calendar';
   calLabel.style.cssText = 'font-size:.65rem;color:#aaa;margin-bottom:2px;margin-top:6px;';
-  const calSel = document.createElement('select');
-  calSel.className = 'cal-form-select';
+  const calBtnRow = document.createElement('div');
+  calBtnRow.className = 'cal-selector-row';
+  calBtnRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-top:2px;';
+  let _selectedCalId = opts.calendarId || '';
 
-  // Populate calendar list
   getCalendarList().then(calendars => {
-    calendars.forEach(cal => {
-      const opt = document.createElement('option');
-      opt.value = cal.id;
-      opt.textContent = cal.summary;
-      opt.style.background = '#1a1c2e';
-      if (cal.id === opts.calendarId) opt.selected = true;
-      calSel.appendChild(opt);
+    calendars.forEach((cal, i) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'cal-selector-btn';
+      const bgColor = cal.backgroundColor || '#4285f4';
+      btn.style.cssText = `background:${bgColor}22;border:2px solid ${bgColor};border-radius:6px;color:#ddd;font-size:.58rem;padding:3px 8px;cursor:pointer;font-family:var(--font);transition:all .15s;white-space:nowrap;`;
+      btn.textContent = cal.summary.length > 18 ? cal.summary.substring(0, 16) + '…' : cal.summary;
+      btn.title = cal.summary;
+      btn.dataset.calId = cal.id;
+
+      const isActive = cal.id === _selectedCalId || (!_selectedCalId && i === 0);
+      if (isActive) {
+        _selectedCalId = cal.id;
+        btn.style.background = bgColor;
+        btn.style.color = '#fff';
+        btn.style.fontWeight = '700';
+      }
+
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        _selectedCalId = cal.id;
+        calBtnRow.querySelectorAll('.cal-selector-btn').forEach(b => {
+          const c = calendars.find(cc => cc.id === b.dataset.calId);
+          const bc = c ? (c.backgroundColor || '#4285f4') : '#4285f4';
+          b.style.background = bc + '22';
+          b.style.color = '#ddd';
+          b.style.fontWeight = '400';
+        });
+        btn.style.background = bgColor;
+        btn.style.color = '#fff';
+        btn.style.fontWeight = '700';
+      };
+      calBtnRow.appendChild(btn);
     });
-    // Default to first if none matched
-    if (!opts.calendarId && calSel.options.length > 0) calSel.selectedIndex = 0;
+    if (!_selectedCalId && calendars.length > 0) _selectedCalId = calendars[0].id;
   });
 
+  // Time pickers row
   const timeRow = document.createElement('div');
-  timeRow.style.cssText = 'display:flex;gap:6px;margin-top:6px;';
+  timeRow.style.cssText = 'display:flex;gap:8px;margin-top:6px;align-items:flex-end;';
 
-  const startLabel = document.createElement('div');
-  startLabel.style.cssText = 'flex:1;';
-  startLabel.innerHTML = '<label style="font-size:.65rem;color:#aaa;">Start</label>';
-  const startInp = document.createElement('input');
-  startInp.type = 'datetime-local';
-  startInp.className = 'cal-form-input';
-  startInp.value = _toLocalDateTimeStr(opts.startTime || new Date());
-  startLabel.appendChild(startInp);
+  const startTime = opts.startTime || new Date();
+  const endTime = opts.endTime || new Date(startTime.getTime() + 30 * 60000);
 
-  const endLabel = document.createElement('div');
-  endLabel.style.cssText = 'flex:1;';
-  endLabel.innerHTML = '<label style="font-size:.65rem;color:#aaa;">End</label>';
-  const endInp = document.createElement('input');
-  endInp.type = 'datetime-local';
-  endInp.className = 'cal-form-input';
-  const defaultEnd = opts.endTime || new Date((opts.startTime || new Date()).getTime() + 30 * 60000);
-  endInp.value = _toLocalDateTimeStr(defaultEnd);
-  endLabel.appendChild(endInp);
+  // Start time picker
+  const startWrap = document.createElement('div');
+  startWrap.style.cssText = 'flex:1;';
+  startWrap.innerHTML = '<label style="font-size:.65rem;color:#aaa;">Start</label>';
+  const startPicker = _buildAnalogTimePicker(startTime);
+  startWrap.appendChild(startPicker.el);
+  timeRow.appendChild(startWrap);
 
-  timeRow.appendChild(startLabel);
-  timeRow.appendChild(endLabel);
+  // End time picker
+  const endWrap = document.createElement('div');
+  endWrap.style.cssText = 'flex:1;';
+  endWrap.innerHTML = '<label style="font-size:.65rem;color:#aaa;">End</label>';
+  const endPicker = _buildAnalogTimePicker(endTime);
+  endWrap.appendChild(endPicker.el);
+  timeRow.appendChild(endWrap);
 
+  // Date display
+  const dateRow = document.createElement('div');
+  dateRow.style.cssText = 'display:flex;gap:6px;margin-top:4px;';
+  const startDateInp = document.createElement('input');
+  startDateInp.type = 'date';
+  startDateInp.className = 'cal-form-input';
+  startDateInp.style.cssText = 'flex:1;color-scheme:dark;font-size:.65rem;';
+  startDateInp.value = _toDateStr(startTime);
+  const endDateInp = document.createElement('input');
+  endDateInp.type = 'date';
+  endDateInp.className = 'cal-form-input';
+  endDateInp.style.cssText = 'flex:1;color-scheme:dark;font-size:.65rem;';
+  endDateInp.value = _toDateStr(endTime);
+  dateRow.appendChild(startDateInp);
+  dateRow.appendChild(endDateInp);
+
+  // Description (optional)
   const descLabel = document.createElement('label');
   descLabel.textContent = 'Description (optional)';
   descLabel.style.cssText = 'font-size:.65rem;color:#aaa;margin-top:6px;margin-bottom:2px;';
   const descInp = document.createElement('textarea');
   descInp.className = 'cal-form-input';
-  descInp.style.cssText = 'height:40px;resize:vertical;';
+  descInp.style.cssText = 'height:32px;resize:vertical;';
   descInp.placeholder = 'Notes...';
   descInp.value = opts.description || '';
 
+  // Buttons
   const btnRow = document.createElement('div');
   btnRow.style.cssText = 'display:flex;gap:6px;margin-top:8px;justify-content:flex-end;';
 
@@ -3501,13 +3544,14 @@ function showCalendarEventForm(container, el, card, opts) {
   saveBtn.textContent = opts.mode === 'edit' ? '💾 Update' : '✅ Create';
   saveBtn.onclick = async (e) => {
     e.stopPropagation();
-    const title = titleInp.value.trim();
-    if (!title) { titleInp.style.border = '1px solid #e55'; titleInp.focus(); return; }
-    const calId = calSel.value;
-    const start = new Date(startInp.value);
-    const end = new Date(endInp.value);
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) { showToast('❌ Invalid date'); return; }
-    if (end <= start) { showToast('❌ End must be after start'); return; }
+    const title = titleInp.value.trim() || '(No title)';
+    const calId = _selectedCalId;
+    if (!calId) { showToast('❌ Select a calendar'); return; }
+
+    const startD = new Date(startDateInp.value + 'T' + startPicker.getTime());
+    const endD = new Date(endDateInp.value + 'T' + endPicker.getTime());
+    if (isNaN(startD.getTime()) || isNaN(endD.getTime())) { showToast('❌ Invalid date'); return; }
+    if (endD <= startD) { showToast('❌ End must be after start'); return; }
 
     saveBtn.disabled = true;
     saveBtn.textContent = '⏳...';
@@ -3516,11 +3560,11 @@ function showCalendarEventForm(container, el, card, opts) {
         await updateCalendarEvent(opts.calendarId, opts.eventId, {
           summary: title,
           description: descInp.value,
-          start, end
+          start: startD, end: endD
         });
         showToast('✅ Event updated');
       } else {
-        await createCalendarEvent(calId, title, start, end, descInp.value);
+        await createCalendarEvent(calId, title, startD, endD, descInp.value);
         showToast('✅ Event created');
       }
       form.remove();
@@ -3538,14 +3582,15 @@ function showCalendarEventForm(container, el, card, opts) {
   form.appendChild(titleLabel);
   form.appendChild(titleInp);
   form.appendChild(calLabel);
-  form.appendChild(calSel);
+  form.appendChild(calBtnRow);
   form.appendChild(timeRow);
+  form.appendChild(dateRow);
   form.appendChild(descLabel);
   form.appendChild(descInp);
   form.appendChild(btnRow);
 
-  // Stop event propagation on form interactions
-  ['mousedown', 'click', 'pointerdown'].forEach(evt => {
+  // Stop event propagation on form interactions (including wheel to prevent canvas zoom)
+  ['mousedown', 'click', 'pointerdown', 'wheel'].forEach(evt => {
     form.addEventListener(evt, e => e.stopPropagation());
   });
 
@@ -3553,9 +3598,99 @@ function showCalendarEventForm(container, el, card, opts) {
   titleInp.focus();
 }
 
+// ─── Analog Clock Time Picker ───
+function _buildAnalogTimePicker(initialDate) {
+  let hours = initialDate.getHours();
+  let minutes = initialDate.getMinutes();
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;align-items:center;gap:6px;';
+
+  // Digital display (clickable)
+  const display = document.createElement('div');
+  display.style.cssText = 'display:flex;align-items:center;gap:2px;cursor:pointer;user-select:none;';
+
+  const hDisp = document.createElement('span');
+  hDisp.className = 'cal-time-digit';
+  const sep = document.createElement('span');
+  sep.textContent = ':';
+  sep.style.cssText = 'color:#aaa;font-size:.8rem;font-weight:700;';
+  const mDisp = document.createElement('span');
+  mDisp.className = 'cal-time-digit';
+
+  function updateDisplay() {
+    hDisp.textContent = String(hours).padStart(2, '0');
+    mDisp.textContent = String(minutes).padStart(2, '0');
+  }
+  updateDisplay();
+
+  display.appendChild(hDisp);
+  display.appendChild(sep);
+  display.appendChild(mDisp);
+
+  // Up/Down arrows for hours
+  const hCol = document.createElement('div');
+  hCol.style.cssText = 'display:flex;flex-direction:column;gap:1px;';
+  const hUp = document.createElement('button');
+  hUp.type = 'button';
+  hUp.className = 'cal-time-arrow';
+  hUp.textContent = '▲';
+  hUp.onclick = (e) => { e.stopPropagation(); hours = (hours + 1) % 24; updateDisplay(); };
+  const hDn = document.createElement('button');
+  hDn.type = 'button';
+  hDn.className = 'cal-time-arrow';
+  hDn.textContent = '▼';
+  hDn.onclick = (e) => { e.stopPropagation(); hours = (hours - 1 + 24) % 24; updateDisplay(); };
+  hCol.appendChild(hUp);
+  hCol.appendChild(hDn);
+
+  // Up/Down arrows for minutes (step 5)
+  const mCol = document.createElement('div');
+  mCol.style.cssText = 'display:flex;flex-direction:column;gap:1px;';
+  const mUp = document.createElement('button');
+  mUp.type = 'button';
+  mUp.className = 'cal-time-arrow';
+  mUp.textContent = '▲';
+  mUp.onclick = (e) => { e.stopPropagation(); minutes = (minutes + 5) % 60; updateDisplay(); };
+  const mDn = document.createElement('button');
+  mDn.type = 'button';
+  mDn.className = 'cal-time-arrow';
+  mDn.textContent = '▼';
+  mDn.onclick = (e) => { e.stopPropagation(); minutes = (minutes - 5 + 60) % 60; updateDisplay(); };
+  mCol.appendChild(mUp);
+  mCol.appendChild(mDn);
+
+  // Scroll on digits to change time
+  hDisp.addEventListener('wheel', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    hours = (hours + (e.deltaY < 0 ? 1 : -1) + 24) % 24;
+    updateDisplay();
+  });
+  mDisp.addEventListener('wheel', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    minutes = (minutes + (e.deltaY < 0 ? 5 : -5) + 60) % 60;
+    updateDisplay();
+  });
+
+  wrap.appendChild(hCol);
+  wrap.appendChild(display);
+  wrap.appendChild(mCol);
+
+  return {
+    el: wrap,
+    getTime: () => `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:00`,
+    getHours: () => hours,
+    getMinutes: () => minutes,
+  };
+}
+
 function _toLocalDateTimeStr(d) {
   const pad = v => String(v).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function _toDateStr(d) {
+  const pad = v => String(v).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 // ─── Render Calendar Content (Interactive) ───
@@ -3585,7 +3720,11 @@ async function renderCalendarContent(el, card) {
 
   const events = await fetchCalendarEvents(startDate, endDate);
 
-  const HOUR_H = 40;
+  // Dynamic HOUR_H: fit 24 hours into the available body height (no scroll)
+  const bodyRect = container.getBoundingClientRect();
+  const headerHeight = 26; // day labels row height
+  const availableH = Math.max(200, (card.h || 500) - 48 - headerHeight); // 48 = widget header
+  const HOUR_H = Math.max(8, Math.floor(availableH / 24));
   const START_HOUR = 0;
   const END_HOUR = 24;
 
@@ -3594,9 +3733,9 @@ async function renderCalendarContent(el, card) {
   // ─── Day Header Row ───
   const headerRow = document.createElement('div');
   headerRow.className = 'cal-header';
-  headerRow.style.cssText = 'display:flex;border-bottom:1px solid rgba(255,255,255,.1);flex-shrink:0;';
+  headerRow.style.cssText = `display:flex;border-bottom:1px solid rgba(255,255,255,.1);flex-shrink:0;height:${headerHeight}px;`;
   const timeCorner = document.createElement('div');
-  timeCorner.style.cssText = 'width:40px;flex-shrink:0;';
+  timeCorner.style.cssText = 'width:28px;flex-shrink:0;';
   headerRow.appendChild(timeCorner);
 
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -3606,9 +3745,9 @@ async function renderCalendarContent(el, card) {
     day.setDate(startDate.getDate() + d);
     const isToday = day.toDateString() === now.toDateString();
     const hdr = document.createElement('div');
-    hdr.style.cssText = `flex:1;text-align:center;padding:4px 0;font-size:.65rem;font-weight:600;color:${isToday ? '#4a7aff' : '#aaa'};`;
+    hdr.style.cssText = `flex:1;text-align:center;padding:3px 0;font-size:.58rem;font-weight:600;color:${isToday ? '#4a7aff' : '#aaa'};`;
     const dateSpan = document.createElement('span');
-    dateSpan.style.cssText = `font-size:.72rem;${isToday ? 'background:#4a7aff;color:#fff;border-radius:50%;padding:1px 5px;' : ''}`;
+    dateSpan.style.cssText = `font-size:.65rem;${isToday ? 'background:#4a7aff;color:#fff;border-radius:50%;padding:1px 4px;' : ''}`;
     dateSpan.textContent = day.getDate();
     hdr.textContent = dayNames[day.getDay()] + ' ';
     hdr.appendChild(dateSpan);
@@ -3616,19 +3755,19 @@ async function renderCalendarContent(el, card) {
   }
   container.appendChild(headerRow);
 
-  // ─── Grid (scrollable) ───
+  // ─── Grid (NO scroll — fits full day) ───
   const grid = document.createElement('div');
   grid.className = 'cal-grid';
-  grid.style.cssText = 'display:flex;flex:1;overflow-y:auto;overflow-x:hidden;position:relative;';
+  grid.style.cssText = 'display:flex;flex:1;overflow:hidden;position:relative;';
 
   // Time column
   const timesCol = document.createElement('div');
   timesCol.className = 'cal-times';
-  timesCol.style.cssText = 'width:40px;flex-shrink:0;border-right:1px solid rgba(255,255,255,.08);';
+  timesCol.style.cssText = 'width:28px;flex-shrink:0;border-right:1px solid rgba(255,255,255,.08);';
   for (let h = START_HOUR; h < END_HOUR; h++) {
-    const label = h === 0 ? '12a' : h < 12 ? h + 'a' : h === 12 ? '12p' : (h - 12) + 'p';
+    const label = h === 0 ? '' : h < 12 ? h + 'a' : h === 12 ? '12p' : (h - 12) + 'p';
     const cell = document.createElement('div');
-    cell.style.cssText = `height:${HOUR_H}px;font-size:.55rem;color:#888;text-align:right;padding-right:4px;padding-top:1px;box-sizing:border-box;border-top:1px solid rgba(255,255,255,.05);`;
+    cell.style.cssText = `height:${HOUR_H}px;font-size:.45rem;color:#666;text-align:right;padding-right:3px;box-sizing:border-box;border-top:1px solid rgba(255,255,255,.04);line-height:${HOUR_H}px;`;
     cell.textContent = label;
     timesCol.appendChild(cell);
   }
@@ -3636,72 +3775,166 @@ async function renderCalendarContent(el, card) {
 
   // Day columns container
   const daysContainer = document.createElement('div');
-  daysContainer.style.cssText = 'display:flex;flex:1;';
+  daysContainer.style.cssText = 'display:flex;flex:1;position:relative;';
+
+  // ─── Drag-to-select state ───
+  let _dragState = null;
+  let _dragOverlay = null;
 
   for (let d = 0; d < days; d++) {
     const day = new Date(startDate);
     day.setDate(startDate.getDate() + d);
     const isToday = day.toDateString() === now.toDateString();
     const dayCol = document.createElement('div');
-    dayCol.style.cssText = 'flex:1;min-width:0;border-right:1px solid rgba(255,255,255,.05);position:relative;cursor:crosshair;';
+    dayCol.style.cssText = `flex:1;min-width:0;border-right:1px solid rgba(255,255,255,.05);position:relative;cursor:crosshair;${isToday ? 'background:rgba(74,122,255,.03);' : ''}`;
     dayCol.className = 'cal-day-col';
+    dayCol.dataset.dayIdx = d;
 
-    // Hour cells (clickable slots)
+    // Hour cells
     for (let h = START_HOUR; h < END_HOUR; h++) {
       const slot = document.createElement('div');
       slot.className = 'cal-slot';
-      slot.style.cssText = `height:${HOUR_H}px;border-top:1px solid rgba(255,255,255,.05);box-sizing:border-box;`;
+      slot.style.cssText = `height:${HOUR_H}px;border-top:1px solid rgba(255,255,255,.04);box-sizing:border-box;`;
       slot.dataset.hour = h;
       slot.dataset.day = d;
-
-      // Click empty slot → create event
-      slot.addEventListener('click', (e) => {
-        if (e.target.classList.contains('cal-event-block')) return;
-        e.stopPropagation();
-        const clickY = e.offsetY;
-        const mins = Math.floor((clickY / HOUR_H) * 60);
-        const slotTime = new Date(day);
-        slotTime.setHours(h, mins < 30 ? 0 : 30, 0, 0);
-        const endTime = new Date(slotTime.getTime() + 30 * 60000);
-        showCalendarEventForm(container, el, card, {
-          mode: 'create',
-          startTime: slotTime,
-          endTime: endTime,
-        });
-      });
-      slot.addEventListener('mousedown', e => e.stopPropagation());
-
       dayCol.appendChild(slot);
     }
 
-    // Render events for this day
+    // ─── Drag-to-select on day column (zoom-aware) ───
+    dayCol.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.cal-event-block')) return;
+      if (e.button !== 0) return;
+      e.preventDefault(); // Prevent text selection, but DON'T stopPropagation (keeps canvas zoom working)
+
+      const page = cp();
+      const zoom = (page?.zoom || 100) / 100;
+      const colRect = dayCol.getBoundingClientRect();
+      const totalH = HOUR_H * 24; // content height in unscaled px
+      const screenToContent = totalH / colRect.height; // ratio to convert screen px to content px
+
+      const screenY = e.clientY - colRect.top;
+      const contentY = screenY * screenToContent;
+      const startMinute = Math.max(0, Math.floor((contentY / totalH) * 24 * 60));
+
+      // Create drag overlay (positioned in content space)
+      _dragOverlay = document.createElement('div');
+      _dragOverlay.className = 'cal-drag-overlay';
+      _dragOverlay.style.cssText = `position:absolute;left:2px;right:2px;top:${contentY}px;height:0px;background:rgba(74,122,255,.25);border:1px solid rgba(74,122,255,.5);border-radius:3px;z-index:8;pointer-events:none;`;
+      dayCol.appendChild(_dragOverlay);
+
+      _dragState = { dayCol, day: new Date(day), contentStartY: contentY, startMinute, colRect, screenToContent, totalH };
+
+      const onMouseMove = (ev) => {
+        if (!_dragState || !_dragOverlay) return;
+        const curScreenY = ev.clientY - _dragState.colRect.top;
+        const curContentY = curScreenY * _dragState.screenToContent;
+        const top = Math.min(_dragState.contentStartY, curContentY);
+        const bottom = Math.max(_dragState.contentStartY, curContentY);
+        _dragOverlay.style.top = top + 'px';
+        _dragOverlay.style.height = (bottom - top) + 'px';
+      };
+
+      const onMouseUp = (ev) => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        if (!_dragState || !_dragOverlay) return;
+
+        const curScreenY = ev.clientY - _dragState.colRect.top;
+        const curContentY = curScreenY * _dragState.screenToContent;
+        const endMinute = Math.max(0, Math.min(24 * 60, Math.floor((curContentY / _dragState.totalH) * 24 * 60)));
+
+        _dragOverlay.remove();
+        _dragOverlay = null;
+
+        const minM = Math.min(_dragState.startMinute, endMinute);
+        const maxM = Math.max(_dragState.startMinute, endMinute);
+
+        // If drag was less than 10 minutes, treat as click (30 min default)
+        const dragDuration = maxM - minM;
+        let slotStartM, slotEndM;
+        if (dragDuration < 10) {
+          slotStartM = Math.floor(minM / 15) * 15;
+          slotEndM = slotStartM + 30;
+        } else {
+          slotStartM = Math.floor(minM / 5) * 5;
+          slotEndM = Math.ceil(maxM / 5) * 5;
+        }
+
+        const slotStart = new Date(_dragState.day);
+        slotStart.setHours(Math.floor(slotStartM / 60), slotStartM % 60, 0, 0);
+        const slotEnd = new Date(_dragState.day);
+        slotEnd.setHours(Math.floor(slotEndM / 60), slotEndM % 60, 0, 0);
+
+        _dragState = null;
+
+        showCalendarEventForm(container, el, card, {
+          mode: 'create',
+          startTime: slotStart,
+          endTime: slotEnd,
+        });
+      };
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+
+    // ─── Render events with overlap columns ───
     const dayStart = new Date(day); dayStart.setHours(0, 0, 0, 0);
     const dayEnd = new Date(day); dayEnd.setHours(23, 59, 59, 999);
 
-    events.filter(ev => {
+    const dayEvents = events.filter(ev => {
       if (ev.allDay) return false;
       const evStart = new Date(ev.start);
       return evStart >= dayStart && evStart <= dayEnd;
-    }).forEach(ev => {
+    }).map(ev => {
       const evStart = new Date(ev.start);
       const evEnd = new Date(ev.end);
-      const topMin = evStart.getHours() * 60 + evStart.getMinutes() - START_HOUR * 60;
-      const durMin = Math.max(15, (evEnd - evStart) / 60000);
+      return { ...ev, _start: evStart, _end: evEnd, _startMin: evStart.getHours() * 60 + evStart.getMinutes(), _endMin: evEnd.getHours() * 60 + evEnd.getMinutes() };
+    }).sort((a, b) => a._startMin - b._startMin || (b._endMin - b._startMin) - (a._endMin - a._startMin));
+
+    // Assign columns for overlapping events
+    const columns = [];
+    dayEvents.forEach(ev => {
+      let placed = false;
+      for (let c = 0; c < columns.length; c++) {
+        const lastInCol = columns[c][columns[c].length - 1];
+        if (ev._startMin >= lastInCol._endMin) {
+          columns[c].push(ev);
+          ev._col = c;
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        ev._col = columns.length;
+        columns.push([ev]);
+      }
+    });
+    const totalCols = Math.max(1, columns.length);
+
+    dayEvents.forEach(ev => {
+      const topMin = ev._startMin - START_HOUR * 60;
+      const durMin = Math.max(15, (ev._end - ev._start) / 60000);
       const top = (topMin / 60) * HOUR_H;
       const height = (durMin / 60) * HOUR_H;
       const color = ev.color || '#4285f4';
+      const col = ev._col || 0;
+
+      // Position: each column gets an equal share of the width
+      const colW = 100 / totalCols;
+      const leftPct = col * colW;
+      const widthPct = colW - 1; // 1% gap
 
       const evEl = document.createElement('div');
       evEl.className = 'cal-event-block';
-      evEl.style.cssText = `position:absolute;top:${top}px;left:2px;right:2px;height:${Math.max(14, height)}px;background:${color};border-radius:4px;padding:2px 4px;font-size:.55rem;color:#fff;overflow:hidden;cursor:pointer;z-index:2;opacity:.85;line-height:1.2;transition:opacity .15s;`;
-      evEl.title = `${ev.summary}\n${ev.calendarName}\n${evStart.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} - ${evEnd.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
+      const displayH = Math.max(HOUR_H * 0.35, height);
+      evEl.style.cssText = `position:absolute;top:${top}px;left:${leftPct}%;width:${widthPct}%;height:${displayH}px;background:${color};border-radius:3px;padding:1px 3px;font-size:.45rem;color:#fff;overflow:hidden;cursor:pointer;z-index:2;opacity:.85;line-height:1.2;transition:opacity .15s;box-sizing:border-box;`;
+      evEl.title = `${ev.summary}\n${ev.calendarName}\n${ev._start.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} - ${ev._end.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
       evEl.textContent = ev.summary;
 
-      // Hover glow
-      evEl.addEventListener('mouseenter', () => { evEl.style.opacity = '1'; evEl.style.boxShadow = '0 0 8px rgba(255,255,255,.3)'; });
+      evEl.addEventListener('mouseenter', () => { evEl.style.opacity = '1'; evEl.style.boxShadow = '0 0 6px rgba(255,255,255,.3)'; });
       evEl.addEventListener('mouseleave', () => { evEl.style.opacity = '.85'; evEl.style.boxShadow = 'none'; });
 
-      // Click event → edit
       evEl.addEventListener('click', (e) => {
         e.stopPropagation();
         showCalendarEventForm(container, el, card, {
@@ -3710,16 +3943,16 @@ async function renderCalendarContent(el, card) {
           calendarId: ev.calendarId,
           summary: ev.summary,
           description: ev.description,
-          startTime: evStart,
-          endTime: evEnd,
+          startTime: ev._start,
+          endTime: ev._end,
         });
       });
-      evEl.addEventListener('mousedown', e => e.stopPropagation());
+      evEl.addEventListener('mousedown', e => { e.stopPropagation(); });
 
       dayCol.appendChild(evEl);
     });
 
-    // ─── Now-line (red line showing current time) ───
+    // ─── Now-line ───
     if (isToday) {
       const nowMin = now.getHours() * 60 + now.getMinutes();
       const nowTop = (nowMin / 60) * HOUR_H;
@@ -3737,11 +3970,6 @@ async function renderCalendarContent(el, card) {
 
   grid.appendChild(daysContainer);
   container.appendChild(grid);
-
-  // Auto-scroll to ~7 AM
-  requestAnimationFrame(() => {
-    grid.scrollTop = 7 * HOUR_H;
-  });
 
   card._weekStart = startDate.getTime();
 }

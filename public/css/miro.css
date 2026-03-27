@@ -3970,3 +3970,60 @@ textarea.cal-form-input {
 .miro-calendar.is-locked .mc-lock { opacity: 1; color: var(--tx); background: rgba(108,143,255,.2); }
 .miro-calendar.is-locked .mc-del,
 .miro-calendar.is-locked [class^="mc-resize-"] { display: none !important; }
+
+/* ─── Time Picker ─── */
+.cal-time-digit {
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 6px;
+  color: #eee;
+  font-size: .9rem;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  padding: 4px 6px;
+  min-width: 28px;
+  text-align: center;
+  cursor: ns-resize;
+  user-select: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.cal-time-digit:hover {
+  border-color: rgba(108,143,255,.5);
+  background: rgba(108,143,255,.12);
+}
+
+.cal-time-arrow {
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 4px;
+  color: #888;
+  font-size: .5rem;
+  padding: 1px 4px;
+  cursor: pointer;
+  line-height: 1;
+  transition: all 0.12s;
+  font-family: var(--font);
+}
+.cal-time-arrow:hover {
+  background: rgba(108,143,255,.2);
+  color: #aac;
+  border-color: rgba(108,143,255,.3);
+}
+
+/* ─── Drag-to-select overlay ─── */
+.cal-drag-overlay {
+  animation: calDragPulse 1s ease-in-out infinite;
+}
+@keyframes calDragPulse {
+  0%, 100% { background: rgba(74,122,255,.2); }
+  50% { background: rgba(74,122,255,.35); }
+}
+
+/* ─── Calendar Selector Buttons ─── */
+.cal-selector-btn {
+  transition: all 0.15s !important;
+}
+.cal-selector-btn:hover {
+  filter: brightness(1.2);
+  transform: scale(1.03);
+}

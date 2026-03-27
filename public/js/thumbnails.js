@@ -4253,7 +4253,7 @@ function buildMiroCalendar(card) {
   el.style.left = (card.x || 0) + 'px';
   el.style.top = (card.y || 0) + 'px';
   el.style.width = (card.w || 700) + 'px';
-  el.style.height = (card.h || 500) + 'px';
+  el.style.height = (card.h || 800) + 'px';
   el.style.position = 'absolute';
   el.style.background = '#1a1c2e';
   el.style.borderRadius = '10px';
@@ -4264,20 +4264,17 @@ function buildMiroCalendar(card) {
   el.style.boxShadow = '0 4px 24px rgba(0,0,0,.4)';
   el.style.fontFamily = 'var(--font)';
 
-  // Header
+  // Header — all buttons in one row, no overlap
   const hdr = document.createElement('div');
-  hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(108,143,255,.08);border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0;';
+  hdr.style.cssText = 'display:flex;align-items:center;padding:6px 8px;background:rgba(108,143,255,.08);border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0;gap:4px;';
 
   const title = document.createElement('span');
-  title.style.cssText = 'font-weight:700;font-size:.82rem;color:#ccc;';
-  title.textContent = '\u{1F4C5} Google Calendar';
-
-  const controls = document.createElement('div');
-  controls.style.cssText = 'display:flex;align-items:center;gap:4px;';
+  title.style.cssText = 'font-weight:700;font-size:.72rem;color:#ccc;margin-right:auto;white-space:nowrap;';
+  title.textContent = '\u{1F4C5} Cal';
 
   // Nav: ◀ Prev
   const prevBtn = document.createElement('button');
-  prevBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:#aaa;font-size:.65rem;padding:3px 6px;cursor:pointer;font-family:var(--font);';
+  prevBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;color:#aaa;font-size:.6rem;padding:2px 5px;cursor:pointer;font-family:var(--font);';
   prevBtn.textContent = '◀';
   prevBtn.title = 'Previous';
   prevBtn.onclick = (e) => {
@@ -4290,7 +4287,7 @@ function buildMiroCalendar(card) {
 
   // Nav: Today
   const todayBtn = document.createElement('button');
-  todayBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:#aaa;font-size:.6rem;padding:3px 6px;cursor:pointer;font-family:var(--font);';
+  todayBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;color:#aaa;font-size:.55rem;padding:2px 5px;cursor:pointer;font-family:var(--font);';
   todayBtn.textContent = 'Today';
   todayBtn.title = 'Go to today';
   todayBtn.onclick = (e) => {
@@ -4302,7 +4299,7 @@ function buildMiroCalendar(card) {
 
   // Nav: ▶ Next
   const nextBtn = document.createElement('button');
-  nextBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:#aaa;font-size:.65rem;padding:3px 6px;cursor:pointer;font-family:var(--font);';
+  nextBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;color:#aaa;font-size:.6rem;padding:2px 5px;cursor:pointer;font-family:var(--font);';
   nextBtn.textContent = '▶';
   nextBtn.title = 'Next';
   nextBtn.onclick = (e) => {
@@ -4315,20 +4312,21 @@ function buildMiroCalendar(card) {
 
   // View toggle
   const viewBtn = document.createElement('button');
-  viewBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:#aaa;font-size:.65rem;padding:3px 8px;cursor:pointer;font-family:var(--font);';
-  viewBtn.textContent = card.calView === '3day' ? '3 Day' : 'Week';
+  viewBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;color:#aaa;font-size:.55rem;padding:2px 6px;cursor:pointer;font-family:var(--font);';
+  viewBtn.textContent = card.calView === '3day' ? '3D' : 'Wk';
+  viewBtn.title = 'Toggle Week / 3-Day';
   viewBtn.onclick = (e) => {
     e.stopPropagation();
     card.calView = card.calView === 'week' ? '3day' : 'week';
     card.calOffset = 0;
-    viewBtn.textContent = card.calView === '3day' ? '3 Day' : 'Week';
+    viewBtn.textContent = card.calView === '3day' ? '3D' : 'Wk';
     sv();
     if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
   };
 
   // Quick Log button
   const logBtn = document.createElement('button');
-  logBtn.style.cssText = 'background:rgba(74,122,255,.2);border:1px solid rgba(74,122,255,.4);border-radius:6px;color:#6c8fff;font-size:.6rem;padding:3px 8px;cursor:pointer;font-family:var(--font);font-weight:600;';
+  logBtn.style.cssText = 'background:rgba(74,122,255,.2);border:1px solid rgba(74,122,255,.4);border-radius:5px;color:#6c8fff;font-size:.55rem;padding:2px 6px;cursor:pointer;font-family:var(--font);font-weight:600;';
   logBtn.textContent = '+ Log';
   logBtn.title = 'Quick timelog at current time';
   logBtn.onclick = (e) => {
@@ -4348,7 +4346,7 @@ function buildMiroCalendar(card) {
 
   // Refresh button
   const refBtn = document.createElement('button');
-  refBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:#aaa;font-size:.72rem;padding:3px 8px;cursor:pointer;';
+  refBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;color:#aaa;font-size:.65rem;padding:2px 5px;cursor:pointer;';
   refBtn.textContent = '\u21BB';
   refBtn.title = 'Refresh';
   refBtn.onclick = (e) => {
@@ -4356,36 +4354,51 @@ function buildMiroCalendar(card) {
     if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
   };
 
-  // Delete button
+  // Delete button (in header, not overlapping)
   const del = document.createElement('button');
-  del.className = 'mc-del';
+  del.style.cssText = 'background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:5px;color:#888;font-size:.6rem;padding:2px 5px;cursor:pointer;opacity:.6;transition:opacity .12s,color .12s;';
   del.textContent = '\u2715';
+  del.title = 'Delete widget';
+  del.onmouseenter = () => { del.style.opacity = '1'; del.style.color = '#e55'; };
+  del.onmouseleave = () => { del.style.opacity = '.6'; del.style.color = '#888'; };
   del.onclick = (e) => { e.stopPropagation(); deleteMiroCard(card.id); };
 
-  controls.appendChild(prevBtn);
-  controls.appendChild(todayBtn);
-  controls.appendChild(nextBtn);
-  controls.appendChild(viewBtn);
-  controls.appendChild(logBtn);
-  controls.appendChild(refBtn);
+  // Assemble header
   hdr.appendChild(title);
-  hdr.appendChild(controls);
+  hdr.appendChild(prevBtn);
+  hdr.appendChild(todayBtn);
+  hdr.appendChild(nextBtn);
+  hdr.appendChild(viewBtn);
+  hdr.appendChild(logBtn);
+  hdr.appendChild(refBtn);
+  hdr.appendChild(del);
 
   // Body
   const body = document.createElement('div');
   body.className = 'cal-body';
   body.style.cssText = 'flex:1;display:flex;flex-direction:column;overflow:hidden;font-family:var(--font);';
 
-  el.appendChild(del);
   el.appendChild(hdr);
   el.appendChild(body);
 
-  // Drag
-  miroSetupCardDrag(el, card, ['.mc-del', '.cal-body', 'button']);
+  // Drag — exclude header buttons and body
+  miroSetupCardDrag(el, card, ['.cal-body', 'button', 'input', 'select', 'textarea']);
   // Resize
   attach8WayResize(el, card, 200, 150);
   // Lock
   attachLockUI(el, card);
+
+  // Re-render on resize (debounced)
+  let _resizeTimer = null;
+  const resObs = new ResizeObserver(() => {
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(() => {
+      card.h = el.offsetHeight;
+      card.w = el.offsetWidth;
+      if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
+    }, 200);
+  });
+  resObs.observe(el);
 
   // Load events after render
   requestAnimationFrame(() => {
