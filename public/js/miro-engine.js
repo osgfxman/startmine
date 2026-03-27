@@ -752,7 +752,30 @@ function deleteMiroCard(cid) {
     }
   });
 
-  // ─── Wheel: ALWAYS zoom at cursor position (like Miro.com) ───
+  // ─── Miro-style predefined zoom levels ───
+  const _zoomLevels = [
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+    12, 14, 16, 18, 20, 22,
+    25, 28, 31, 35, 39, 44, 49, 55, 62, 69, 77, 86, 97, 108,
+    121, 136, 152, 171, 191, 214, 240, 268, 301, 337, 377, 400
+  ];
+
+  function getNextZoomLevel(current, direction) {
+    // direction: 1 = zoom in, -1 = zoom out
+    if (direction > 0) {
+      for (let i = 0; i < _zoomLevels.length; i++) {
+        if (_zoomLevels[i] > current) return _zoomLevels[i];
+      }
+      return _zoomLevels[_zoomLevels.length - 1];
+    } else {
+      for (let i = _zoomLevels.length - 1; i >= 0; i--) {
+        if (_zoomLevels[i] < current) return _zoomLevels[i];
+      }
+      return _zoomLevels[0];
+    }
+  }
+
+  // ─── Wheel: zoom at cursor position with Miro-style zoom steps ───
   canvas.addEventListener(
     'wheel',
     (e) => {
@@ -769,11 +792,18 @@ function deleteMiroCard(cid) {
       const boardPointX = (cursorX - (page.panX || 0)) / oldZoom;
       const boardPointY = (cursorY - (page.panY || 0)) / oldZoom;
 
-      // Both trackpad pinch and regular scroll → zoom at cursor
-      const delta = e.ctrlKey ? (-e.deltaY * 0.8) : e.altKey ? (e.deltaY > 0 ? -1 : 1) : (e.deltaY > 0 ? -5 : 5);
-      let newZoomNum = Math.max(1, Math.min(400, (page.zoom || 100) + delta));
-      page.zoom = newZoomNum;
+      let newZoomNum;
+      if (e.ctrlKey) {
+        // Trackpad pinch: smooth continuous zoom
+        const delta = -e.deltaY * 0.5;
+        newZoomNum = Math.max(1, Math.min(400, Math.round((page.zoom || 100) + delta)));
+      } else {
+        // Mouse wheel: step through predefined levels
+        const direction = e.deltaY > 0 ? -1 : 1;
+        newZoomNum = getNextZoomLevel(page.zoom || 100, direction);
+      }
 
+      page.zoom = newZoomNum;
       const newZoom = newZoomNum / 100;
 
       // Adjust pan so the exact unscaled board point remains under the cursor screen point
@@ -3138,25 +3168,27 @@ document.addEventListener('keydown', (e) => {
   });
 })();
 
-// ─── Multi-Lock Button Logic ───
+// ─── Multi-Lock Button Logic (Smart Toggle) ───
 (function () {
   const lockBtn = document.getElementById('miro-multi-lock');
   if (!lockBtn) return;
-  let pressTimer = null;
-  let justUnlocked = false;
-  const HOLD_DURATION = 500;
 
-  lockBtn.addEventListener('mousedown', (e) => {
+  lockBtn.addEventListener('mousedown', (e) => { e.stopPropagation(); });
+
+  lockBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (e.button !== 0) return;
     const page = cp();
-    const anyLocked = [..._miroSelected].some(cid => {
+    if (_miroSelected.size === 0) return;
+
+    // Check if ALL selected are locked
+    let allLocked = true;
+    _miroSelected.forEach(cid => {
       const c = (page.miroCards || []).find(x => x.id === cid);
-      return c && c.locked;
+      if (c && !c.locked) allLocked = false;
     });
-    if (!anyLocked) return;
-    lockBtn.classList.add('active');
-    pressTimer = setTimeout(() => {
+
+    if (allLocked) {
+      // ALL locked → UNLOCK all
       _miroSelected.forEach(cid => {
         const c = (page.miroCards || []).find(x => x.id === cid);
         if (c) {
@@ -3166,37 +3198,21 @@ document.addEventListener('keydown', (e) => {
         }
       });
       lockBtn.textContent = '🔒';
-      lockBtn.classList.remove('active');
-      justUnlocked = true;
       sv();
-    }, HOLD_DURATION);
-  });
-
-  lockBtn.addEventListener('mouseup', (e) => {
-    e.stopPropagation();
-    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-    lockBtn.classList.remove('active');
-  });
-
-  lockBtn.addEventListener('mouseleave', () => {
-    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-    lockBtn.classList.remove('active');
-  });
-
-  lockBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (justUnlocked) { justUnlocked = false; return; }
-    const page = cp();
-    _miroSelected.forEach(cid => {
-      const c = (page.miroCards || []).find(x => x.id === cid);
-      if (c) {
-        c.locked = true;
-        const el = document.querySelector(`[data-cid="${cid}"]`);
-        if (el) el.classList.add('is-locked');
-      }
-    });
-    lockBtn.textContent = '🔓';
-    sv();
-    clearMiroSelection();
+      updateMiroSelFrame();
+    } else {
+      // Some unlocked → LOCK all
+      _miroSelected.forEach(cid => {
+        const c = (page.miroCards || []).find(x => x.id === cid);
+        if (c) {
+          c.locked = true;
+          const el = document.querySelector(`[data-cid="${cid}"]`);
+          if (el) el.classList.add('is-locked');
+        }
+      });
+      lockBtn.textContent = '🔓';
+      sv();
+      clearMiroSelection();
+    }
   });
 })();
