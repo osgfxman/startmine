@@ -399,12 +399,205 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
         });
       }
 
-      // Perform the ongoing move step on our actively selected items
+      // Perform the ongoing move step with smart alignment snapping
+      const SNAP_THRESHOLD = 5; // px in board-space
+      const snapSvg = document.getElementById('snap-guides');
+      snapSvg.innerHTML = '';
+
+      // Calculate the bounding box of all dragged items at their NEW position
+      let dragMinX = Infinity, dragMinY = Infinity, dragMaxX = -Infinity, dragMaxY = -Infinity;
       origPositions.forEach((orig, cid) => {
         const c = (page.miroCards || []).find(x => x.id === cid);
         if (!c) return;
-        c.x = orig.x + dx;
-        c.y = orig.y + dy;
+        const nx = orig.x + dx, ny = orig.y + dy;
+        const w = c.w || 280, h = c.h || 240;
+        dragMinX = Math.min(dragMinX, nx);
+        dragMinY = Math.min(dragMinY, ny);
+        dragMaxX = Math.max(dragMaxX, nx + w);
+        dragMaxY = Math.max(dragMaxY, ny + h);
+      });
+      const dragCX = (dragMinX + dragMaxX) / 2;
+      const dragCY = (dragMinY + dragMaxY) / 2;
+
+      // Gather reference edges from all NON-dragged cards
+      const refCards = [];
+      (page.miroCards || []).forEach(c => {
+        if (_miroSelected.has(c.id)) return;
+        const x = c.x || 0, y = c.y || 0, w = c.w || 280, h = c.h || 240;
+        refCards.push({ x, y, w, h, r: x + w, b: y + h, cx: x + w / 2, cy: y + h / 2 });
+      });
+
+      let snapDx = 0, snapDy = 0;
+      const guides = [];
+
+      if (!(ev.ctrlKey || ev.metaKey) && refCards.length > 0) {
+        // ── Horizontal snap (X-axis) ──
+        let bestXDist = SNAP_THRESHOLD + 1;
+        const xEdges = [
+          { val: dragMinX, label: 'l' },
+          { val: dragMaxX, label: 'r' },
+          { val: dragCX, label: 'cx' }
+        ];
+        for (const edge of xEdges) {
+          for (const ref of refCards) {
+            const targets = [ref.x, ref.r, ref.cx];
+            for (const t of targets) {
+              const dist = Math.abs(edge.val - t);
+              if (dist < bestXDist) {
+                bestXDist = dist;
+                snapDx = t - edge.val;
+                guides.push({ axis: 'v', pos: t,
+                  min: Math.min(dragMinY + snapDy, ref.y) - 20,
+                  max: Math.max(dragMaxY + snapDy, ref.b) + 20
+                });
+              }
+            }
+          }
+        }
+        if (bestXDist > SNAP_THRESHOLD) snapDx = 0;
+
+        // ── Vertical snap (Y-axis) ──
+        let bestYDist = SNAP_THRESHOLD + 1;
+        const yEdges = [
+          { val: dragMinY, label: 't' },
+          { val: dragMaxY, label: 'b' },
+          { val: dragCY, label: 'cy' }
+        ];
+        for (const edge of yEdges) {
+          for (const ref of refCards) {
+            const targets = [ref.y, ref.b, ref.cy];
+            for (const t of targets) {
+              const dist = Math.abs(edge.val - t);
+              if (dist < bestYDist) {
+                bestYDist = dist;
+                snapDy = t - edge.val;
+                guides.push({ axis: 'h', pos: t,
+                  min: Math.min(dragMinX + snapDx, ref.x) - 20,
+                  max: Math.max(dragMaxX + snapDx, ref.r) + 20
+                });
+              }
+            }
+          }
+        }
+        if (bestYDist > SNAP_THRESHOLD) snapDy = 0;
+
+        // ── Equal spacing detection ──
+        // Sort reference cards by x and y for spacing checks
+        const sortedByX = [...refCards].sort((a, b) => a.cx - b.cx);
+        const sortedByY = [...refCards].sort((a, b) => a.cy - b.cy);
+        const snappedDragL = dragMinX + snapDx, snappedDragR = dragMaxX + snapDx;
+        const snappedDragT = dragMinY + snapDy, snappedDragB = dragMaxY + snapDy;
+        const snappedDragCX = dragCX + snapDx, snappedDragCY = dragCY + snapDy;
+
+        // Check horizontal equal spacing
+        for (let i = 0; i < sortedByX.length - 1; i++) {
+          const gap = sortedByX[i + 1].x - sortedByX[i].r;
+          if (gap < 5) continue;
+          // Check gap from last ref to dragged or from dragged to first ref
+          const gapToDragFromRight = snappedDragL - sortedByX[sortedByX.length - 1].r;
+          const gapToDragFromLeft = sortedByX[0].x - snappedDragR;
+          if (Math.abs(gapToDragFromRight - gap) < SNAP_THRESHOLD) {
+            const correctX = sortedByX[sortedByX.length - 1].r + gap;
+            snapDx += correctX - snappedDragL;
+            const midY = (snappedDragCY + sortedByX[sortedByX.length - 1].cy) / 2;
+            guides.push({ axis: 'spacing-h', x1: sortedByX[sortedByX.length - 1].r, x2: correctX,
+              y: midY, gap: Math.round(gap) });
+            break;
+          }
+          if (Math.abs(gapToDragFromLeft - gap) < SNAP_THRESHOLD) {
+            const correctX = sortedByX[0].x - gap - (dragMaxX - dragMinX);
+            snapDx += correctX - snappedDragL;
+            const midY = (snappedDragCY + sortedByX[0].cy) / 2;
+            guides.push({ axis: 'spacing-h', x1: correctX + (dragMaxX - dragMinX), x2: sortedByX[0].x,
+              y: midY, gap: Math.round(gap) });
+            break;
+          }
+        }
+
+        // Check vertical equal spacing
+        for (let i = 0; i < sortedByY.length - 1; i++) {
+          const gap = sortedByY[i + 1].y - sortedByY[i].b;
+          if (gap < 5) continue;
+          const gapFromBottom = snappedDragT - sortedByY[sortedByY.length - 1].b;
+          const gapFromTop = sortedByY[0].y - snappedDragB;
+          if (Math.abs(gapFromBottom - gap) < SNAP_THRESHOLD) {
+            const correctY = sortedByY[sortedByY.length - 1].b + gap;
+            snapDy += correctY - snappedDragT;
+            const midX = (snappedDragCX + sortedByY[sortedByY.length - 1].cx) / 2;
+            guides.push({ axis: 'spacing-v', y1: sortedByY[sortedByY.length - 1].b, y2: correctY,
+              x: midX, gap: Math.round(gap) });
+            break;
+          }
+          if (Math.abs(gapFromTop - gap) < SNAP_THRESHOLD) {
+            const correctY = sortedByY[0].y - gap - (dragMaxY - dragMinY);
+            snapDy += correctY - snappedDragT;
+            const midX = (snappedDragCX + sortedByY[0].cx) / 2;
+            guides.push({ axis: 'spacing-v', y1: correctY + (dragMaxY - dragMinY), y2: sortedByY[0].y,
+              x: midX, gap: Math.round(gap) });
+            break;
+          }
+        }
+
+        // ── Draw guide lines ──
+        guides.forEach(g => {
+          if (g.axis === 'v') {
+            // Vertical guide line
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', g.pos); line.setAttribute('x2', g.pos);
+            line.setAttribute('y1', g.min); line.setAttribute('y2', g.max);
+            line.setAttribute('stroke', '#ff4081'); line.setAttribute('stroke-width', '0.8');
+            line.setAttribute('stroke-dasharray', '4,3');
+            snapSvg.appendChild(line);
+          } else if (g.axis === 'h') {
+            // Horizontal guide line
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', g.min); line.setAttribute('x2', g.max);
+            line.setAttribute('y1', g.pos); line.setAttribute('y2', g.pos);
+            line.setAttribute('stroke', '#ff4081'); line.setAttribute('stroke-width', '0.8');
+            line.setAttribute('stroke-dasharray', '4,3');
+            snapSvg.appendChild(line);
+          } else if (g.axis === 'spacing-h') {
+            // Horizontal spacing indicator
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', g.x1); line.setAttribute('x2', g.x2);
+            line.setAttribute('y1', g.y); line.setAttribute('y2', g.y);
+            line.setAttribute('stroke', '#2196f3'); line.setAttribute('stroke-width', '1');
+            line.setAttribute('stroke-dasharray', '3,2');
+            snapSvg.appendChild(line);
+            // Gap label
+            const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            txt.setAttribute('x', (g.x1 + g.x2) / 2); txt.setAttribute('y', g.y - 6);
+            txt.setAttribute('text-anchor', 'middle');
+            txt.setAttribute('fill', '#2196f3'); txt.setAttribute('font-size', '10');
+            txt.setAttribute('font-family', 'Inter, sans-serif');
+            txt.textContent = g.gap + 'px';
+            snapSvg.appendChild(txt);
+          } else if (g.axis === 'spacing-v') {
+            // Vertical spacing indicator
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', g.x); line.setAttribute('x2', g.x);
+            line.setAttribute('y1', g.y1); line.setAttribute('y2', g.y2);
+            line.setAttribute('stroke', '#2196f3'); line.setAttribute('stroke-width', '1');
+            line.setAttribute('stroke-dasharray', '3,2');
+            snapSvg.appendChild(line);
+            const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            txt.setAttribute('x', g.x + 8); txt.setAttribute('y', (g.y1 + g.y2) / 2 + 3);
+            txt.setAttribute('fill', '#2196f3'); txt.setAttribute('font-size', '10');
+            txt.setAttribute('font-family', 'Inter, sans-serif');
+            txt.textContent = g.gap + 'px';
+            snapSvg.appendChild(txt);
+          }
+        });
+      }
+
+      // Apply snapped position
+      const finalDx = dx + snapDx;
+      const finalDy = dy + snapDy;
+      origPositions.forEach((orig, cid) => {
+        const c = (page.miroCards || []).find(x => x.id === cid);
+        if (!c) return;
+        c.x = orig.x + finalDx;
+        c.y = orig.y + finalDy;
         const cardEl = document.querySelector(`[data-cid="${cid}"]`);
         if (cardEl) {
           cardEl.style.left = c.x + 'px';
@@ -418,6 +611,9 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
 
+      // Clear snap guides
+      const snapSvg = document.getElementById('snap-guides');
+      if (snapSvg) snapSvg.innerHTML = '';
       // Cleanup z-indexes
       origPositions.forEach((orig, cid) => {
         const cardEl = document.querySelector(`[data-cid="${cid}"]`);

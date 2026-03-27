@@ -12,8 +12,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1774501888">
-  <link rel="stylesheet" href="css/miro.css?v=1774501888">
+  <link rel="stylesheet" href="css/base.css?v=1774569143">
+  <link rel="stylesheet" href="css/miro.css?v=1774569143">
 </head>
 
 <body>
@@ -113,6 +113,7 @@
     <div id="cw"></div>
     <div id="miro-canvas" class="hidden">
       <div id="miro-board">
+        <svg id="snap-guides" viewBox="-50000 -50000 100000 100000" style="position:absolute;top:-50000px;left:-50000px;width:100000px;height:100000px;pointer-events:none;z-index:9999;"></svg>
         <div id="miro-sel-box"></div>
         <div id="miro-sel-frame">
           <!-- Group resize corner handles -->
@@ -613,11 +614,11 @@
     <div class="ctx-item danger" data-action="delete"><span class="ctx-icon">🗑️</span><span class="ctx-label">Delete</span><span class="ctx-shortcut">Del</span></div>
   </div>
 
-    <script src="js/app.js?v=1774501888"></script>
-    <script src="js/outline.js?v=1774501888"></script>
-    <script src="js/miro-engine.js?v=1774501888"></script>
-    <script src="js/thumbnails.js?v=1774501888"></script>
-    <script src="js/alignment.js?v=1774501888"></script>
+    <script src="js/app.js?v=1774569143"></script>
+    <script src="js/outline.js?v=1774569143"></script>
+    <script src="js/miro-engine.js?v=1774569143"></script>
+    <script src="js/thumbnails.js?v=1774569143"></script>
+    <script src="js/alignment.js?v=1774569143"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});
