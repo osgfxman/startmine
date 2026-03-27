@@ -3290,17 +3290,37 @@ async function placeCalendarWidget() {
   showToast('📅 Calendar widget added');
 }
 
-// ─── Calendar List (cached) ───
+// ─── Calendar List (cached + auto-refresh token) ───
 async function getCalendarList() {
   if (_cachedCalendarList && (Date.now() - _cachedCalendarListTs < CALENDAR_LIST_CACHE_MS)) {
     return _cachedCalendarList;
   }
-  if (!_googleAccessToken) return [];
   try {
+    // Auto-refresh token if expired
+    if (typeof ensureGoogleToken === 'function') {
+      await ensureGoogleToken();
+    }
+    if (!_googleAccessToken) return [];
     const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
       headers: { 'Authorization': 'Bearer ' + _googleAccessToken }
     });
-    if (!res.ok) throw new Error('Calendar list failed');
+    if (res.status === 401) {
+      // Token expired – force refresh and retry once
+      _googleAccessToken = null;
+      if (typeof ensureGoogleToken === 'function') {
+        await ensureGoogleToken();
+      }
+      if (!_googleAccessToken) return _cachedCalendarList || [];
+      const res2 = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
+        headers: { 'Authorization': 'Bearer ' + _googleAccessToken }
+      });
+      if (!res2.ok) throw new Error('Calendar list failed after token refresh');
+      const data2 = await res2.json();
+      _cachedCalendarList = (data2.items || []).filter(c => c.selected !== false);
+      _cachedCalendarListTs = Date.now();
+      return _cachedCalendarList;
+    }
+    if (!res.ok) throw new Error('Calendar list failed: ' + res.status);
     const data = await res.json();
     _cachedCalendarList = (data.items || []).filter(c => c.selected !== false);
     _cachedCalendarListTs = Date.now();
@@ -3311,18 +3331,28 @@ async function getCalendarList() {
   }
 }
 
-// ─── Fetch Events ───
+// ─── Fetch Events (auto-refresh token) ───
 async function fetchCalendarEvents(timeMin, timeMax) {
-  if (!_googleAccessToken) return [];
   try {
+    // Auto-refresh token if expired
+    if (typeof ensureGoogleToken === 'function') {
+      await ensureGoogleToken();
+    }
+    if (!_googleAccessToken) throw new Error('Not authenticated');
+
     const calendars = await getCalendarList();
+    if (!calendars.length) return [];
+
     const allEvents = [];
     const tMin = timeMin.toISOString();
     const tMax = timeMax.toISOString();
+    let gotAuth401 = false;
+
     await Promise.all(calendars.map(async cal => {
       try {
         const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${tMin}&timeMax=${tMax}&singleEvents=true&orderBy=startTime&maxResults=200`;
         const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + _googleAccessToken } });
+        if (res.status === 401) { gotAuth401 = true; return; }
         if (!res.ok) return;
         const data = await res.json();
         (data.items || []).forEach(ev => {
@@ -3338,12 +3368,45 @@ async function fetchCalendarEvents(timeMin, timeMax) {
             allDay: !ev.start.dateTime,
           });
         });
-      } catch (e) { /* skip */ }
+      } catch (e) { /* skip individual calendar errors */ }
     }));
+
+    // If we got 401, try refreshing token and fetching again
+    if (gotAuth401 && allEvents.length === 0) {
+      _googleAccessToken = null;
+      if (typeof ensureGoogleToken === 'function') {
+        await ensureGoogleToken();
+      }
+      if (_googleAccessToken) {
+        // Retry all
+        await Promise.all(calendars.map(async cal => {
+          try {
+            const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${tMin}&timeMax=${tMax}&singleEvents=true&orderBy=startTime&maxResults=200`;
+            const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + _googleAccessToken } });
+            if (!res.ok) return;
+            const data = await res.json();
+            (data.items || []).forEach(ev => {
+              allEvents.push({
+                id: ev.id,
+                calendarId: cal.id,
+                summary: ev.summary || '(No title)',
+                description: ev.description || '',
+                start: ev.start.dateTime || ev.start.date,
+                end: ev.end.dateTime || ev.end.date,
+                color: ev.colorId ? null : (cal.backgroundColor || '#4285f4'),
+                calendarName: cal.summary,
+                allDay: !ev.start.dateTime,
+              });
+            });
+          } catch (e) { /* skip */ }
+        }));
+      }
+    }
+
     return allEvents;
   } catch (e) {
     console.error('Calendar fetch error:', e);
-    return [];
+    throw e; // Propagate error so renderCalendarContent can show it
   }
 }
 
@@ -3718,24 +3781,40 @@ async function renderCalendarContent(el, card) {
   const endDate = new Date(startDate);
   endDate.setDate(startDate.getDate() + days);
 
-  const events = await fetchCalendarEvents(startDate, endDate);
+  let events;
+  try {
+    events = await fetchCalendarEvents(startDate, endDate);
+  } catch (fetchErr) {
+    console.error('Calendar render: fetch failed', fetchErr);
+    container.innerHTML = '';
+    const errDiv = document.createElement('div');
+    errDiv.style.cssText = 'text-align:center;padding:40px 20px;color:#e55;font-size:.75rem;';
+    errDiv.innerHTML = `⚠️ Could not load events<br><span style="color:#888;font-size:.6rem;">${fetchErr.message || 'Token expired'}</span>`;
+    const retryBtn = document.createElement('button');
+    retryBtn.className = 'cal-form-btn cal-form-btn-primary';
+    retryBtn.style.cssText = 'margin-top:12px;';
+    retryBtn.textContent = '🔄 Retry';
+    retryBtn.onclick = (e) => { e.stopPropagation(); renderCalendarContent(el, card); };
+    errDiv.appendChild(document.createElement('br'));
+    errDiv.appendChild(retryBtn);
+    container.appendChild(errDiv);
+    return;
+  }
 
-  // Dynamic HOUR_H: fit 24 hours into the available body height (no scroll)
-  const bodyRect = container.getBoundingClientRect();
-  const headerHeight = 26; // day labels row height
-  const availableH = Math.max(200, (card.h || 500) - 48 - headerHeight); // 48 = widget header
-  const HOUR_H = Math.max(8, Math.floor(availableH / 24));
-  const START_HOUR = 0;
-  const END_HOUR = 24;
+  // Dynamic HOUR_H — fit 24h into available body height (NO scrollbars)
+  const headerHeight = 24;
+  const widgetH = card.h || el.offsetHeight || 800;
+  const availableH = Math.max(200, widgetH - 40 - headerHeight);
+  const HOUR_H = Math.max(6, availableH / 24);
 
   container.innerHTML = '';
 
   // ─── Day Header Row ───
   const headerRow = document.createElement('div');
   headerRow.className = 'cal-header';
-  headerRow.style.cssText = `display:flex;border-bottom:1px solid rgba(255,255,255,.1);flex-shrink:0;height:${headerHeight}px;`;
+  headerRow.style.cssText = `display:flex;border-bottom:1px solid rgba(255,255,255,.1);flex-shrink:0;height:${headerHeight}px;overflow:hidden;`;
   const timeCorner = document.createElement('div');
-  timeCorner.style.cssText = 'width:28px;flex-shrink:0;';
+  timeCorner.style.cssText = 'width:30px;flex-shrink:0;';
   headerRow.appendChild(timeCorner);
 
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -3755,19 +3834,21 @@ async function renderCalendarContent(el, card) {
   }
   container.appendChild(headerRow);
 
-  // ─── Grid (NO scroll — fits full day) ───
+  // ─── Grid (NO scroll, NO overflow, fixed height) ───
   const grid = document.createElement('div');
-  grid.className = 'cal-grid';
-  grid.style.cssText = 'display:flex;flex:1;overflow:hidden;position:relative;';
+  grid.style.cssText = `display:flex;height:${HOUR_H * 24}px;overflow:hidden;position:relative;`;
 
-  // Time column
+  // AM/PM time labels
   const timesCol = document.createElement('div');
-  timesCol.className = 'cal-times';
-  timesCol.style.cssText = 'width:28px;flex-shrink:0;border-right:1px solid rgba(255,255,255,.08);';
-  for (let h = START_HOUR; h < END_HOUR; h++) {
-    const label = h === 0 ? '' : h < 12 ? h + 'a' : h === 12 ? '12p' : (h - 12) + 'p';
+  timesCol.style.cssText = 'width:30px;flex-shrink:0;border-right:1px solid rgba(255,255,255,.08);overflow:hidden;';
+  for (let h = 0; h < 24; h++) {
+    let label = '';
+    if (h === 0) label = '12a';
+    else if (h < 12) label = h + 'a';
+    else if (h === 12) label = '12p';
+    else label = (h - 12) + 'p';
     const cell = document.createElement('div');
-    cell.style.cssText = `height:${HOUR_H}px;font-size:.45rem;color:#666;text-align:right;padding-right:3px;box-sizing:border-box;border-top:1px solid rgba(255,255,255,.04);line-height:${HOUR_H}px;`;
+    cell.style.cssText = `height:${HOUR_H}px;font-size:.42rem;color:#666;text-align:right;padding-right:2px;box-sizing:border-box;border-top:1px solid rgba(255,255,255,.04);line-height:${HOUR_H}px;overflow:hidden;`;
     cell.textContent = label;
     timesCol.appendChild(cell);
   }
@@ -3775,7 +3856,9 @@ async function renderCalendarContent(el, card) {
 
   // Day columns container
   const daysContainer = document.createElement('div');
-  daysContainer.style.cssText = 'display:flex;flex:1;position:relative;';
+  daysContainer.style.cssText = 'display:flex;flex:1;position:relative;overflow:hidden;';
+  // Helper: contentY -> minute
+  function contentYToMin(cy) { return Math.max(0, Math.min(24 * 60, Math.round((cy / (HOUR_H * 24)) * 24 * 60))); }
 
   // ─── Drag-to-select state ───
   let _dragState = null;
@@ -3786,7 +3869,7 @@ async function renderCalendarContent(el, card) {
     day.setDate(startDate.getDate() + d);
     const isToday = day.toDateString() === now.toDateString();
     const dayCol = document.createElement('div');
-    dayCol.style.cssText = `flex:1;min-width:0;border-right:1px solid rgba(255,255,255,.05);position:relative;cursor:crosshair;${isToday ? 'background:rgba(74,122,255,.03);' : ''}`;
+    dayCol.style.cssText = `flex:1;min-width:0;border-right:1px solid rgba(255,255,255,.05);position:relative;cursor:crosshair;overflow:hidden;${isToday ? 'background:rgba(74,122,255,.03);' : ''}`;
     dayCol.className = 'cal-day-col';
     dayCol.dataset.dayIdx = d;
 
@@ -3803,17 +3886,17 @@ async function renderCalendarContent(el, card) {
     // ─── Drag-to-select on day column (zoom-aware) ───
     dayCol.addEventListener('mousedown', (e) => {
       if (e.target.closest('.cal-event-block')) return;
+      if (e.target.closest('.cal-resize-handle')) return;
       if (e.button !== 0) return;
-      e.preventDefault(); // Prevent text selection, but DON'T stopPropagation (keeps canvas zoom working)
+      e.preventDefault();
+      e.stopPropagation();
 
-      const page = cp();
-      const zoom = (page?.zoom || 100) / 100;
       const colRect = dayCol.getBoundingClientRect();
-      const totalH = HOUR_H * 24; // content height in unscaled px
-      const screenToContent = totalH / colRect.height; // ratio to convert screen px to content px
+      const totalH = HOUR_H * 24;
+      const s2c = totalH / colRect.height;
 
       const screenY = e.clientY - colRect.top;
-      const contentY = screenY * screenToContent;
+      const contentY = screenY * s2c;
       const startMinute = Math.max(0, Math.floor((contentY / totalH) * 24 * 60));
 
       // Create drag overlay (positioned in content space)
@@ -3822,12 +3905,12 @@ async function renderCalendarContent(el, card) {
       _dragOverlay.style.cssText = `position:absolute;left:2px;right:2px;top:${contentY}px;height:0px;background:rgba(74,122,255,.25);border:1px solid rgba(74,122,255,.5);border-radius:3px;z-index:8;pointer-events:none;`;
       dayCol.appendChild(_dragOverlay);
 
-      _dragState = { dayCol, day: new Date(day), contentStartY: contentY, startMinute, colRect, screenToContent, totalH };
+      _dragState = { dayCol, day: new Date(day), contentStartY: contentY, startMinute, colRect, s2c, totalH };
 
       const onMouseMove = (ev) => {
         if (!_dragState || !_dragOverlay) return;
         const curScreenY = ev.clientY - _dragState.colRect.top;
-        const curContentY = curScreenY * _dragState.screenToContent;
+        const curContentY = curScreenY * _dragState.s2c;
         const top = Math.min(_dragState.contentStartY, curContentY);
         const bottom = Math.max(_dragState.contentStartY, curContentY);
         _dragOverlay.style.top = top + 'px';
@@ -3840,7 +3923,7 @@ async function renderCalendarContent(el, card) {
         if (!_dragState || !_dragOverlay) return;
 
         const curScreenY = ev.clientY - _dragState.colRect.top;
-        const curContentY = curScreenY * _dragState.screenToContent;
+        const curContentY = curScreenY * _dragState.s2c;
         const endMinute = Math.max(0, Math.min(24 * 60, Math.floor((curContentY / _dragState.totalH) * 24 * 60)));
 
         _dragOverlay.remove();
@@ -3913,7 +3996,7 @@ async function renderCalendarContent(el, card) {
     const totalCols = Math.max(1, columns.length);
 
     dayEvents.forEach(ev => {
-      const topMin = ev._startMin - START_HOUR * 60;
+      const topMin = ev._startMin;
       const durMin = Math.max(15, (ev._end - ev._start) / 60000);
       const top = (topMin / 60) * HOUR_H;
       const height = (durMin / 60) * HOUR_H;
@@ -3928,8 +4011,8 @@ async function renderCalendarContent(el, card) {
       const evEl = document.createElement('div');
       evEl.className = 'cal-event-block';
       const displayH = Math.max(HOUR_H * 0.35, height);
-      evEl.style.cssText = `position:absolute;top:${top}px;left:${leftPct}%;width:${widthPct}%;height:${displayH}px;background:${color};border-radius:3px;padding:1px 3px;font-size:.45rem;color:#fff;overflow:hidden;cursor:pointer;z-index:2;opacity:.85;line-height:1.2;transition:opacity .15s;box-sizing:border-box;`;
-      evEl.title = `${ev.summary}\n${ev.calendarName}\n${ev._start.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} - ${ev._end.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
+      evEl.style.cssText = `position:absolute;top:${top}px;left:${leftPct}%;width:${widthPct}%;height:${displayH}px;background:${color};border-radius:3px;padding:1px 3px;font-size:.42rem;color:#fff;overflow:hidden;cursor:pointer;z-index:2;opacity:.85;line-height:1.15;box-sizing:border-box;`;
+      evEl.title = `${ev.summary}\n${ev.calendarName}\n${ev._start.toLocaleTimeString([], {hour:'numeric',minute:'2-digit',hour12:true})} - ${ev._end.toLocaleTimeString([], {hour:'numeric',minute:'2-digit',hour12:true})}`;
       evEl.textContent = ev.summary;
 
       evEl.addEventListener('mouseenter', () => { evEl.style.opacity = '1'; evEl.style.boxShadow = '0 0 6px rgba(255,255,255,.3)'; });
@@ -3947,8 +4030,49 @@ async function renderCalendarContent(el, card) {
           endTime: ev._end,
         });
       });
-      evEl.addEventListener('mousedown', e => { e.stopPropagation(); });
+      evEl.addEventListener('mousedown', e => { if (!e.target.closest('.cal-resize-handle')) e.stopPropagation(); });
 
+      // ─── Bottom resize handle ───
+      const resizeHandle = document.createElement('div');
+      resizeHandle.className = 'cal-resize-handle';
+      resizeHandle.style.cssText = 'position:absolute;bottom:0;left:0;right:0;height:5px;cursor:ns-resize;background:rgba(255,255,255,.15);border-radius:0 0 3px 3px;opacity:0;transition:opacity .12s;';
+      evEl.addEventListener('mouseenter', () => { resizeHandle.style.opacity = '1'; });
+      evEl.addEventListener('mouseleave', () => { resizeHandle.style.opacity = '0'; });
+
+      resizeHandle.addEventListener('mousedown', (re) => {
+        re.preventDefault();
+        re.stopPropagation();
+        const colRect = dayCol.getBoundingClientRect();
+        const s2c = (HOUR_H * 24) / colRect.height;
+        const origH = displayH;
+
+        const onRMove = (ev2) => {
+          const curY = (ev2.clientY - colRect.top) * s2c;
+          const newEndMin = Math.max(ev._startMin + 5, contentYToMin(curY));
+          const newH = Math.max(HOUR_H * 0.35, ((newEndMin - ev._startMin) / 60) * HOUR_H);
+          evEl.style.height = newH + 'px';
+        };
+        const onRUp = async (ev2) => {
+          document.removeEventListener('mousemove', onRMove);
+          document.removeEventListener('mouseup', onRUp);
+          const curY = (ev2.clientY - colRect.top) * s2c;
+          const newEndMin = Math.max(ev._startMin + 5, contentYToMin(curY));
+          const newEnd = new Date(day);
+          newEnd.setHours(Math.floor(newEndMin / 60), newEndMin % 60, 0, 0);
+          try {
+            await updateCalendarEvent(ev.calendarId, ev.id, { summary: ev.summary, start: ev._start, end: newEnd });
+            showToast('✅ Resized');
+            renderCalendarContent(el, card);
+          } catch (err) {
+            showToast('❌ ' + err.message);
+            evEl.style.height = origH + 'px';
+          }
+        };
+        document.addEventListener('mousemove', onRMove);
+        document.addEventListener('mouseup', onRUp);
+      });
+
+      evEl.appendChild(resizeHandle);
       dayCol.appendChild(evEl);
     });
 
