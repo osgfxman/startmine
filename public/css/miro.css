@@ -3730,3 +3730,243 @@ td.mg-sel {
 .miro-array.is-locked [class^="mc-resize-"] {
   display: none !important;
 }
+
+/* ─── Google Calendar Widget ─── */
+.miro-calendar {
+  font-family: var(--font);
+}
+
+.miro-calendar .mc-del {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
+  background: rgba(0, 0, 0, 0.55);
+  border: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #bbb;
+  cursor: pointer;
+  font-size: 0.7rem;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s;
+}
+.miro-calendar:hover .mc-del { opacity: 1; }
+.miro-calendar .mc-del:hover { color: #e55; }
+
+/* Calendar slot hover */
+.cal-slot {
+  transition: background 0.1s;
+}
+.cal-slot:hover {
+  background: rgba(108, 143, 255, 0.08) !important;
+}
+
+/* Calendar event block */
+.cal-event-block {
+  transition: opacity 0.15s, box-shadow 0.15s;
+  border-left: 2px solid rgba(255,255,255,.25);
+}
+
+/* Now-line pulse */
+.cal-now-line::after {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  background: #e53935;
+  border-radius: 50%;
+  animation: calNowPulse 2s ease-in-out infinite;
+  opacity: 0.4;
+}
+@keyframes calNowPulse {
+  0%, 100% { transform: scale(1); opacity: 0.4; }
+  50% { transform: scale(1.6); opacity: 0; }
+}
+
+/* Calendar grid scrollbar */
+.cal-grid::-webkit-scrollbar {
+  width: 4px;
+}
+.cal-grid::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.15);
+  border-radius: 4px;
+}
+.cal-grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ─── Calendar Event Form ─── */
+.cal-event-form {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: rgba(22, 24, 40, 0.97);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(108, 143, 255, 0.25);
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -4px 24px rgba(0,0,0,.5);
+  animation: calFormSlideUp 0.2s ease-out;
+}
+
+@keyframes calFormSlideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.cal-form-input {
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 6px;
+  color: #eee;
+  font-size: .7rem;
+  padding: 6px 8px;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font);
+  transition: border-color 0.15s;
+}
+.cal-form-input:focus {
+  border-color: rgba(108, 143, 255, 0.5);
+}
+.cal-form-input::placeholder {
+  color: #666;
+}
+
+/* datetime-local dark styling */
+.cal-form-input[type="datetime-local"] {
+  color-scheme: dark;
+}
+
+.cal-form-select {
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 6px;
+  color: #eee;
+  font-size: .7rem;
+  padding: 6px 8px;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font);
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M3 5l3 3 3-3z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+}
+.cal-form-select:focus {
+  border-color: rgba(108, 143, 255, 0.5);
+}
+.cal-form-select option {
+  background: #1a1c2e;
+  color: #eee;
+}
+
+textarea.cal-form-input {
+  resize: vertical;
+  min-height: 32px;
+}
+
+.cal-form-btn {
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 6px;
+  color: #ccc;
+  font-size: .65rem;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all 0.15s;
+}
+.cal-form-btn:hover {
+  background: rgba(255,255,255,.15);
+  color: #fff;
+}
+.cal-form-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cal-form-btn-primary {
+  background: rgba(74, 122, 255, 0.3);
+  border-color: rgba(74, 122, 255, 0.5);
+  color: #8ab4ff;
+  font-weight: 600;
+}
+.cal-form-btn-primary:hover {
+  background: rgba(74, 122, 255, 0.5);
+  color: #fff;
+}
+
+.cal-form-btn-danger {
+  background: rgba(229, 85, 85, 0.15);
+  border-color: rgba(229, 85, 85, 0.3);
+  color: #e55;
+  margin-right: auto;
+}
+.cal-form-btn-danger:hover {
+  background: rgba(229, 85, 85, 0.3);
+  color: #ff7777;
+}
+
+/* Calendar resize handles */
+.miro-calendar .mc-resize-br,
+.miro-calendar .mc-resize-bl,
+.miro-calendar .mc-resize-tr,
+.miro-calendar .mc-resize-tl {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  z-index: 4;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.miro-calendar:hover .mc-resize-br,
+.miro-calendar:hover .mc-resize-bl,
+.miro-calendar:hover .mc-resize-tr,
+.miro-calendar:hover .mc-resize-tl {
+  opacity: 1;
+}
+.miro-calendar .mc-resize-br { right: 0; bottom: 0; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, rgba(255,255,255,.18) 50%); border-radius: 0 0 10px 0; }
+.miro-calendar .mc-resize-tl { left: 0; top: 0; cursor: nwse-resize; background: linear-gradient(315deg, transparent 50%, rgba(255,255,255,.18) 50%); border-radius: 10px 0 0 0; }
+.miro-calendar .mc-resize-tr { right: 0; top: 0; cursor: nesw-resize; background: linear-gradient(225deg, transparent 50%, rgba(255,255,255,.18) 50%); border-radius: 0 10px 0 0; }
+.miro-calendar .mc-resize-bl { left: 0; bottom: 0; cursor: nesw-resize; background: linear-gradient(45deg, transparent 50%, rgba(255,255,255,.18) 50%); border-radius: 0 0 0 10px; }
+
+/* Lock UI */
+.miro-calendar .mc-lock {
+  position: absolute;
+  top: 6px;
+  right: 32px;
+  z-index: 3;
+  background: rgba(0,0,0,.55);
+  border: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #bbb;
+  cursor: pointer;
+  font-size: .7rem;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.miro-calendar:hover .mc-lock { opacity: 1; }
+.miro-calendar.is-locked .mc-lock { opacity: 1; color: var(--tx); background: rgba(108,143,255,.2); }
+.miro-calendar.is-locked .mc-del,
+.miro-calendar.is-locked [class^="mc-resize-"] { display: none !important; }

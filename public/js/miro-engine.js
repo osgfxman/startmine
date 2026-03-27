@@ -373,7 +373,7 @@ function buildMiroCanvas() {
   if (!page.miroCards) page.miroCards = [];
   const board = document.getElementById('miro-board');
   // Remove only card elements, preserve selection overlays
-  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array').forEach((el) => el.remove());
+  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar').forEach((el) => el.remove());
   // Clear selection state
   _miroSelected.clear();
   document.getElementById('miro-sel-frame').style.display = 'none';
@@ -399,6 +399,7 @@ function buildMiroCanvas() {
     else if (card.type === 'trello') board.appendChild(buildMiroTrello(card));
     else if (card.type === 'bwidget') board.appendChild(buildMiroBookmarkWidget(card));
     else if (card.type === 'array') board.appendChild(buildMiroArray(card));
+    else if (card.type === 'calendar') board.appendChild(buildMiroCalendar(card));
     else board.appendChild(buildMiroCard(card));
     } catch (err) { console.error('[RENDER ERROR]', card.type, card.id, err); }
   });
@@ -2951,7 +2952,7 @@ function hideCtxMenu() {
 // ─── Right-click handler for all miro card types ───
 document.getElementById('miro-canvas').addEventListener('contextmenu', (e) => {
   // Find the closest miro card element
-  const cardEl = e.target.closest('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-widget, .miro-array');
+  const cardEl = e.target.closest('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-widget, .miro-array, .miro-calendar');
   if (!cardEl) {
     hideCtxMenu();
     return; // Allow default context menu on empty canvas
@@ -3227,3 +3228,520 @@ document.addEventListener('keydown', (e) => {
     }
   });
 })();
+
+// ─── "+" More Tools Toggle ───
+document.getElementById('mtb-more').onclick = () => {
+  const panel = document.getElementById('mtb-more-panel');
+  const btn = document.getElementById('mtb-more');
+  if (panel.style.display === 'flex') {
+    panel.style.display = 'none';
+    btn.classList.remove('sel');
+  } else {
+    panel.style.display = 'flex';
+    btn.classList.add('sel');
+  }
+};
+
+// ─── Google Calendar Widget ───
+let _calendarCreateMode = false;
+let _cachedCalendarList = null;
+let _cachedCalendarListTs = 0;
+const CALENDAR_LIST_CACHE_MS = 5 * 60 * 1000; // 5 min cache
+
+document.getElementById('mtb-calendar').onclick = () => {
+  if (!_googleAccessToken) {
+    auth.signInWithPopup(provider).then(result => {
+      if (result.credential) {
+        _googleAccessToken = result.credential.accessToken;
+      }
+      placeCalendarWidget();
+    }).catch(e => showToast('❌ Auth failed: ' + e.message));
+    return;
+  }
+  placeCalendarWidget();
+};
+
+async function placeCalendarWidget() {
+  const page = cp();
+  if (!page) return;
+  const zoom = (page.zoom || 100) / 100;
+  const panX = page.panX || 0, panY = page.panY || 0;
+  const board = document.getElementById('miro-board');
+  const rect = board.getBoundingClientRect();
+  const cx = (-panX + (window.innerWidth / 2 - rect.left) / zoom);
+  const cy = (-panY + (window.innerHeight / 2 - rect.top) / zoom);
+
+  const card = {
+    id: 'cal_' + Date.now(),
+    type: 'calendar',
+    x: cx - 350,
+    y: cy - 250,
+    w: 700,
+    h: 500,
+    calView: 'week',
+    calOffset: 0, // week offset for navigation
+  };
+
+  if (!page.miroCards) page.miroCards = [];
+  pushUndo();
+  page.miroCards.push(card);
+  sv();
+  buildMiroCanvas();
+  showToast('📅 Calendar widget added');
+}
+
+// ─── Calendar List (cached) ───
+async function getCalendarList() {
+  if (_cachedCalendarList && (Date.now() - _cachedCalendarListTs < CALENDAR_LIST_CACHE_MS)) {
+    return _cachedCalendarList;
+  }
+  if (!_googleAccessToken) return [];
+  try {
+    const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
+      headers: { 'Authorization': 'Bearer ' + _googleAccessToken }
+    });
+    if (!res.ok) throw new Error('Calendar list failed');
+    const data = await res.json();
+    _cachedCalendarList = (data.items || []).filter(c => c.selected !== false);
+    _cachedCalendarListTs = Date.now();
+    return _cachedCalendarList;
+  } catch (e) {
+    console.error('Calendar list error:', e);
+    return _cachedCalendarList || [];
+  }
+}
+
+// ─── Fetch Events ───
+async function fetchCalendarEvents(timeMin, timeMax) {
+  if (!_googleAccessToken) return [];
+  try {
+    const calendars = await getCalendarList();
+    const allEvents = [];
+    const tMin = timeMin.toISOString();
+    const tMax = timeMax.toISOString();
+    await Promise.all(calendars.map(async cal => {
+      try {
+        const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${tMin}&timeMax=${tMax}&singleEvents=true&orderBy=startTime&maxResults=200`;
+        const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + _googleAccessToken } });
+        if (!res.ok) return;
+        const data = await res.json();
+        (data.items || []).forEach(ev => {
+          allEvents.push({
+            id: ev.id,
+            calendarId: cal.id,
+            summary: ev.summary || '(No title)',
+            description: ev.description || '',
+            start: ev.start.dateTime || ev.start.date,
+            end: ev.end.dateTime || ev.end.date,
+            color: ev.colorId ? null : (cal.backgroundColor || '#4285f4'),
+            calendarName: cal.summary,
+            allDay: !ev.start.dateTime,
+          });
+        });
+      } catch (e) { /* skip */ }
+    }));
+    return allEvents;
+  } catch (e) {
+    console.error('Calendar fetch error:', e);
+    return [];
+  }
+}
+
+// ─── Create Event ───
+async function createCalendarEvent(calendarId, summary, startDateTime, endDateTime, description) {
+  if (!_googleAccessToken) throw new Error('Not authenticated');
+  const body = {
+    summary,
+    description: description || '',
+    start: { dateTime: startDateTime.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+    end: { dateTime: endDateTime.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+  };
+  const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + _googleAccessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) { const err = await res.text(); throw new Error('Create failed: ' + err); }
+  return await res.json();
+}
+
+// ─── Update Event ───
+async function updateCalendarEvent(calendarId, eventId, updates) {
+  if (!_googleAccessToken) throw new Error('Not authenticated');
+  const body = {};
+  if (updates.summary !== undefined) body.summary = updates.summary;
+  if (updates.description !== undefined) body.description = updates.description;
+  if (updates.start) body.start = { dateTime: updates.start.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone };
+  if (updates.end) body.end = { dateTime: updates.end.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone };
+  const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, {
+    method: 'PATCH',
+    headers: { 'Authorization': 'Bearer ' + _googleAccessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) { const err = await res.text(); throw new Error('Update failed: ' + err); }
+  return await res.json();
+}
+
+// ─── Delete Event ───
+async function deleteCalendarEvent(calendarId, eventId) {
+  if (!_googleAccessToken) throw new Error('Not authenticated');
+  const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': 'Bearer ' + _googleAccessToken }
+  });
+  if (!res.ok && res.status !== 204) { const err = await res.text(); throw new Error('Delete failed: ' + err); }
+}
+
+// ─── Event Form (in-widget popup) ───
+function showCalendarEventForm(container, el, card, opts) {
+  // opts: { mode:'create'|'edit', startTime, endTime, calendarId, eventId, summary, description, onDone }
+  // Remove any existing form
+  const oldForm = el.querySelector('.cal-event-form');
+  if (oldForm) oldForm.remove();
+
+  const form = document.createElement('div');
+  form.className = 'cal-event-form';
+
+  const titleLabel = document.createElement('label');
+  titleLabel.textContent = 'Event Title';
+  titleLabel.style.cssText = 'font-size:.65rem;color:#aaa;margin-bottom:2px;';
+  const titleInp = document.createElement('input');
+  titleInp.type = 'text';
+  titleInp.className = 'cal-form-input';
+  titleInp.placeholder = 'Timelog / Event name...';
+  titleInp.value = opts.summary || '';
+
+  const calLabel = document.createElement('label');
+  calLabel.textContent = 'Calendar';
+  calLabel.style.cssText = 'font-size:.65rem;color:#aaa;margin-bottom:2px;margin-top:6px;';
+  const calSel = document.createElement('select');
+  calSel.className = 'cal-form-select';
+
+  // Populate calendar list
+  getCalendarList().then(calendars => {
+    calendars.forEach(cal => {
+      const opt = document.createElement('option');
+      opt.value = cal.id;
+      opt.textContent = cal.summary;
+      opt.style.background = '#1a1c2e';
+      if (cal.id === opts.calendarId) opt.selected = true;
+      calSel.appendChild(opt);
+    });
+    // Default to first if none matched
+    if (!opts.calendarId && calSel.options.length > 0) calSel.selectedIndex = 0;
+  });
+
+  const timeRow = document.createElement('div');
+  timeRow.style.cssText = 'display:flex;gap:6px;margin-top:6px;';
+
+  const startLabel = document.createElement('div');
+  startLabel.style.cssText = 'flex:1;';
+  startLabel.innerHTML = '<label style="font-size:.65rem;color:#aaa;">Start</label>';
+  const startInp = document.createElement('input');
+  startInp.type = 'datetime-local';
+  startInp.className = 'cal-form-input';
+  startInp.value = _toLocalDateTimeStr(opts.startTime || new Date());
+  startLabel.appendChild(startInp);
+
+  const endLabel = document.createElement('div');
+  endLabel.style.cssText = 'flex:1;';
+  endLabel.innerHTML = '<label style="font-size:.65rem;color:#aaa;">End</label>';
+  const endInp = document.createElement('input');
+  endInp.type = 'datetime-local';
+  endInp.className = 'cal-form-input';
+  const defaultEnd = opts.endTime || new Date((opts.startTime || new Date()).getTime() + 30 * 60000);
+  endInp.value = _toLocalDateTimeStr(defaultEnd);
+  endLabel.appendChild(endInp);
+
+  timeRow.appendChild(startLabel);
+  timeRow.appendChild(endLabel);
+
+  const descLabel = document.createElement('label');
+  descLabel.textContent = 'Description (optional)';
+  descLabel.style.cssText = 'font-size:.65rem;color:#aaa;margin-top:6px;margin-bottom:2px;';
+  const descInp = document.createElement('textarea');
+  descInp.className = 'cal-form-input';
+  descInp.style.cssText = 'height:40px;resize:vertical;';
+  descInp.placeholder = 'Notes...';
+  descInp.value = opts.description || '';
+
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:6px;margin-top:8px;justify-content:flex-end;';
+
+  if (opts.mode === 'edit') {
+    const delBtn = document.createElement('button');
+    delBtn.className = 'cal-form-btn cal-form-btn-danger';
+    delBtn.textContent = '🗑 Delete';
+    delBtn.onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm('Delete this event?')) return;
+      delBtn.disabled = true;
+      delBtn.textContent = '...';
+      try {
+        await deleteCalendarEvent(opts.calendarId, opts.eventId);
+        form.remove();
+        showToast('🗑 Event deleted');
+        renderCalendarContent(el, card);
+      } catch (err) {
+        showToast('❌ ' + err.message);
+        delBtn.disabled = false;
+        delBtn.textContent = '🗑 Delete';
+      }
+    };
+    btnRow.appendChild(delBtn);
+  }
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'cal-form-btn';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.onclick = (e) => { e.stopPropagation(); form.remove(); };
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'cal-form-btn cal-form-btn-primary';
+  saveBtn.textContent = opts.mode === 'edit' ? '💾 Update' : '✅ Create';
+  saveBtn.onclick = async (e) => {
+    e.stopPropagation();
+    const title = titleInp.value.trim();
+    if (!title) { titleInp.style.border = '1px solid #e55'; titleInp.focus(); return; }
+    const calId = calSel.value;
+    const start = new Date(startInp.value);
+    const end = new Date(endInp.value);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) { showToast('❌ Invalid date'); return; }
+    if (end <= start) { showToast('❌ End must be after start'); return; }
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = '⏳...';
+    try {
+      if (opts.mode === 'edit') {
+        await updateCalendarEvent(opts.calendarId, opts.eventId, {
+          summary: title,
+          description: descInp.value,
+          start, end
+        });
+        showToast('✅ Event updated');
+      } else {
+        await createCalendarEvent(calId, title, start, end, descInp.value);
+        showToast('✅ Event created');
+      }
+      form.remove();
+      renderCalendarContent(el, card);
+    } catch (err) {
+      showToast('❌ ' + err.message);
+      saveBtn.disabled = false;
+      saveBtn.textContent = opts.mode === 'edit' ? '💾 Update' : '✅ Create';
+    }
+  };
+
+  btnRow.appendChild(cancelBtn);
+  btnRow.appendChild(saveBtn);
+
+  form.appendChild(titleLabel);
+  form.appendChild(titleInp);
+  form.appendChild(calLabel);
+  form.appendChild(calSel);
+  form.appendChild(timeRow);
+  form.appendChild(descLabel);
+  form.appendChild(descInp);
+  form.appendChild(btnRow);
+
+  // Stop event propagation on form interactions
+  ['mousedown', 'click', 'pointerdown'].forEach(evt => {
+    form.addEventListener(evt, e => e.stopPropagation());
+  });
+
+  el.appendChild(form);
+  titleInp.focus();
+}
+
+function _toLocalDateTimeStr(d) {
+  const pad = v => String(v).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// ─── Render Calendar Content (Interactive) ───
+async function renderCalendarContent(el, card) {
+  const container = el.querySelector('.cal-body');
+  if (!container) return;
+
+  container.innerHTML = '<div style="text-align:center;padding:40px;color:#999;font-size:.8rem;">Loading calendar…</div>';
+
+  const now = new Date();
+  const days = card.calView === '3day' ? 3 : 7;
+  const offset = card.calOffset || 0;
+
+  // Start of viewing period
+  let startDate;
+  if (card.calView === 'week') {
+    startDate = new Date(now);
+    startDate.setDate(now.getDate() - now.getDay() + (offset * 7));
+  } else {
+    startDate = new Date(now);
+    startDate.setDate(now.getDate() + (offset * 3));
+  }
+  startDate.setHours(0, 0, 0, 0);
+
+  const endDate = new Date(startDate);
+  endDate.setDate(startDate.getDate() + days);
+
+  const events = await fetchCalendarEvents(startDate, endDate);
+
+  const HOUR_H = 40;
+  const START_HOUR = 0;
+  const END_HOUR = 24;
+
+  container.innerHTML = '';
+
+  // ─── Day Header Row ───
+  const headerRow = document.createElement('div');
+  headerRow.className = 'cal-header';
+  headerRow.style.cssText = 'display:flex;border-bottom:1px solid rgba(255,255,255,.1);flex-shrink:0;';
+  const timeCorner = document.createElement('div');
+  timeCorner.style.cssText = 'width:40px;flex-shrink:0;';
+  headerRow.appendChild(timeCorner);
+
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  for (let d = 0; d < days; d++) {
+    const day = new Date(startDate);
+    day.setDate(startDate.getDate() + d);
+    const isToday = day.toDateString() === now.toDateString();
+    const hdr = document.createElement('div');
+    hdr.style.cssText = `flex:1;text-align:center;padding:4px 0;font-size:.65rem;font-weight:600;color:${isToday ? '#4a7aff' : '#aaa'};`;
+    const dateSpan = document.createElement('span');
+    dateSpan.style.cssText = `font-size:.72rem;${isToday ? 'background:#4a7aff;color:#fff;border-radius:50%;padding:1px 5px;' : ''}`;
+    dateSpan.textContent = day.getDate();
+    hdr.textContent = dayNames[day.getDay()] + ' ';
+    hdr.appendChild(dateSpan);
+    headerRow.appendChild(hdr);
+  }
+  container.appendChild(headerRow);
+
+  // ─── Grid (scrollable) ───
+  const grid = document.createElement('div');
+  grid.className = 'cal-grid';
+  grid.style.cssText = 'display:flex;flex:1;overflow-y:auto;overflow-x:hidden;position:relative;';
+
+  // Time column
+  const timesCol = document.createElement('div');
+  timesCol.className = 'cal-times';
+  timesCol.style.cssText = 'width:40px;flex-shrink:0;border-right:1px solid rgba(255,255,255,.08);';
+  for (let h = START_HOUR; h < END_HOUR; h++) {
+    const label = h === 0 ? '12a' : h < 12 ? h + 'a' : h === 12 ? '12p' : (h - 12) + 'p';
+    const cell = document.createElement('div');
+    cell.style.cssText = `height:${HOUR_H}px;font-size:.55rem;color:#888;text-align:right;padding-right:4px;padding-top:1px;box-sizing:border-box;border-top:1px solid rgba(255,255,255,.05);`;
+    cell.textContent = label;
+    timesCol.appendChild(cell);
+  }
+  grid.appendChild(timesCol);
+
+  // Day columns container
+  const daysContainer = document.createElement('div');
+  daysContainer.style.cssText = 'display:flex;flex:1;';
+
+  for (let d = 0; d < days; d++) {
+    const day = new Date(startDate);
+    day.setDate(startDate.getDate() + d);
+    const isToday = day.toDateString() === now.toDateString();
+    const dayCol = document.createElement('div');
+    dayCol.style.cssText = 'flex:1;min-width:0;border-right:1px solid rgba(255,255,255,.05);position:relative;cursor:crosshair;';
+    dayCol.className = 'cal-day-col';
+
+    // Hour cells (clickable slots)
+    for (let h = START_HOUR; h < END_HOUR; h++) {
+      const slot = document.createElement('div');
+      slot.className = 'cal-slot';
+      slot.style.cssText = `height:${HOUR_H}px;border-top:1px solid rgba(255,255,255,.05);box-sizing:border-box;`;
+      slot.dataset.hour = h;
+      slot.dataset.day = d;
+
+      // Click empty slot → create event
+      slot.addEventListener('click', (e) => {
+        if (e.target.classList.contains('cal-event-block')) return;
+        e.stopPropagation();
+        const clickY = e.offsetY;
+        const mins = Math.floor((clickY / HOUR_H) * 60);
+        const slotTime = new Date(day);
+        slotTime.setHours(h, mins < 30 ? 0 : 30, 0, 0);
+        const endTime = new Date(slotTime.getTime() + 30 * 60000);
+        showCalendarEventForm(container, el, card, {
+          mode: 'create',
+          startTime: slotTime,
+          endTime: endTime,
+        });
+      });
+      slot.addEventListener('mousedown', e => e.stopPropagation());
+
+      dayCol.appendChild(slot);
+    }
+
+    // Render events for this day
+    const dayStart = new Date(day); dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(day); dayEnd.setHours(23, 59, 59, 999);
+
+    events.filter(ev => {
+      if (ev.allDay) return false;
+      const evStart = new Date(ev.start);
+      return evStart >= dayStart && evStart <= dayEnd;
+    }).forEach(ev => {
+      const evStart = new Date(ev.start);
+      const evEnd = new Date(ev.end);
+      const topMin = evStart.getHours() * 60 + evStart.getMinutes() - START_HOUR * 60;
+      const durMin = Math.max(15, (evEnd - evStart) / 60000);
+      const top = (topMin / 60) * HOUR_H;
+      const height = (durMin / 60) * HOUR_H;
+      const color = ev.color || '#4285f4';
+
+      const evEl = document.createElement('div');
+      evEl.className = 'cal-event-block';
+      evEl.style.cssText = `position:absolute;top:${top}px;left:2px;right:2px;height:${Math.max(14, height)}px;background:${color};border-radius:4px;padding:2px 4px;font-size:.55rem;color:#fff;overflow:hidden;cursor:pointer;z-index:2;opacity:.85;line-height:1.2;transition:opacity .15s;`;
+      evEl.title = `${ev.summary}\n${ev.calendarName}\n${evStart.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} - ${evEnd.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
+      evEl.textContent = ev.summary;
+
+      // Hover glow
+      evEl.addEventListener('mouseenter', () => { evEl.style.opacity = '1'; evEl.style.boxShadow = '0 0 8px rgba(255,255,255,.3)'; });
+      evEl.addEventListener('mouseleave', () => { evEl.style.opacity = '.85'; evEl.style.boxShadow = 'none'; });
+
+      // Click event → edit
+      evEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showCalendarEventForm(container, el, card, {
+          mode: 'edit',
+          eventId: ev.id,
+          calendarId: ev.calendarId,
+          summary: ev.summary,
+          description: ev.description,
+          startTime: evStart,
+          endTime: evEnd,
+        });
+      });
+      evEl.addEventListener('mousedown', e => e.stopPropagation());
+
+      dayCol.appendChild(evEl);
+    });
+
+    // ─── Now-line (red line showing current time) ───
+    if (isToday) {
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const nowTop = (nowMin / 60) * HOUR_H;
+      const nowLine = document.createElement('div');
+      nowLine.className = 'cal-now-line';
+      nowLine.style.cssText = `position:absolute;top:${nowTop}px;left:0;right:0;height:2px;background:#e53935;z-index:5;pointer-events:none;`;
+      const nowDot = document.createElement('div');
+      nowDot.style.cssText = 'position:absolute;left:-3px;top:-3px;width:8px;height:8px;background:#e53935;border-radius:50%;';
+      nowLine.appendChild(nowDot);
+      dayCol.appendChild(nowLine);
+    }
+
+    daysContainer.appendChild(dayCol);
+  }
+
+  grid.appendChild(daysContainer);
+  container.appendChild(grid);
+
+  // Auto-scroll to ~7 AM
+  requestAnimationFrame(() => {
+    grid.scrollTop = 7 * HOUR_H;
+  });
+
+  card._weekStart = startDate.getTime();
+}

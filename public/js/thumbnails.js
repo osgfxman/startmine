@@ -389,6 +389,7 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
             else if (c.type === 'trello') el = buildMiroTrello(c);
             else if (c.type === 'bwidget') el = buildMiroBookmarkWidget(c);
             else if (c.type === 'array') el = buildMiroArray(c);
+            else if (c.type === 'calendar') el = buildMiroCalendar(c);
             else el = buildMiroCard(c);
             if (el) board.appendChild(el);
           } catch (err) { console.error('[CLONE RENDER]', err); }
@@ -4242,5 +4243,155 @@ function make2DArray(cardId) {
   card.cols2 = card.cols2 || 1;
   card.gap2 = card.gap2 || 0;
   sv(); buildMiroCanvas();
+}
+
+/* ─── Google Calendar Widget ─── */
+function buildMiroCalendar(card) {
+  const el = document.createElement('div');
+  el.className = 'miro-calendar';
+  el.dataset.cid = card.id;
+  el.style.left = (card.x || 0) + 'px';
+  el.style.top = (card.y || 0) + 'px';
+  el.style.width = (card.w || 700) + 'px';
+  el.style.height = (card.h || 500) + 'px';
+  el.style.position = 'absolute';
+  el.style.background = '#1a1c2e';
+  el.style.borderRadius = '10px';
+  el.style.overflow = 'hidden';
+  el.style.display = 'flex';
+  el.style.flexDirection = 'column';
+  el.style.border = '1px solid rgba(108,143,255,.2)';
+  el.style.boxShadow = '0 4px 24px rgba(0,0,0,.4)';
+  el.style.fontFamily = 'var(--font)';
+
+  // Header
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(108,143,255,.08);border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0;';
+
+  const title = document.createElement('span');
+  title.style.cssText = 'font-weight:700;font-size:.82rem;color:#ccc;';
+  title.textContent = '\u{1F4C5} Google Calendar';
+
+  const controls = document.createElement('div');
+  controls.style.cssText = 'display:flex;align-items:center;gap:4px;';
+
+  // Nav: ◀ Prev
+  const prevBtn = document.createElement('button');
+  prevBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:#aaa;font-size:.65rem;padding:3px 6px;cursor:pointer;font-family:var(--font);';
+  prevBtn.textContent = '◀';
+  prevBtn.title = 'Previous';
+  prevBtn.onclick = (e) => {
+    e.stopPropagation();
+    if (!card.calOffset) card.calOffset = 0;
+    card.calOffset--;
+    sv();
+    if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
+  };
+
+  // Nav: Today
+  const todayBtn = document.createElement('button');
+  todayBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:#aaa;font-size:.6rem;padding:3px 6px;cursor:pointer;font-family:var(--font);';
+  todayBtn.textContent = 'Today';
+  todayBtn.title = 'Go to today';
+  todayBtn.onclick = (e) => {
+    e.stopPropagation();
+    card.calOffset = 0;
+    sv();
+    if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
+  };
+
+  // Nav: ▶ Next
+  const nextBtn = document.createElement('button');
+  nextBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:#aaa;font-size:.65rem;padding:3px 6px;cursor:pointer;font-family:var(--font);';
+  nextBtn.textContent = '▶';
+  nextBtn.title = 'Next';
+  nextBtn.onclick = (e) => {
+    e.stopPropagation();
+    if (!card.calOffset) card.calOffset = 0;
+    card.calOffset++;
+    sv();
+    if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
+  };
+
+  // View toggle
+  const viewBtn = document.createElement('button');
+  viewBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:#aaa;font-size:.65rem;padding:3px 8px;cursor:pointer;font-family:var(--font);';
+  viewBtn.textContent = card.calView === '3day' ? '3 Day' : 'Week';
+  viewBtn.onclick = (e) => {
+    e.stopPropagation();
+    card.calView = card.calView === 'week' ? '3day' : 'week';
+    card.calOffset = 0;
+    viewBtn.textContent = card.calView === '3day' ? '3 Day' : 'Week';
+    sv();
+    if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
+  };
+
+  // Quick Log button
+  const logBtn = document.createElement('button');
+  logBtn.style.cssText = 'background:rgba(74,122,255,.2);border:1px solid rgba(74,122,255,.4);border-radius:6px;color:#6c8fff;font-size:.6rem;padding:3px 8px;cursor:pointer;font-family:var(--font);font-weight:600;';
+  logBtn.textContent = '+ Log';
+  logBtn.title = 'Quick timelog at current time';
+  logBtn.onclick = (e) => {
+    e.stopPropagation();
+    const now = new Date();
+    const start = new Date(now);
+    start.setMinutes(now.getMinutes() >= 30 ? 30 : 0, 0, 0);
+    const end = new Date(start.getTime() + 30 * 60000);
+    if (typeof showCalendarEventForm === 'function') {
+      showCalendarEventForm(el.querySelector('.cal-body'), el, card, {
+        mode: 'create',
+        startTime: start,
+        endTime: end,
+      });
+    }
+  };
+
+  // Refresh button
+  const refBtn = document.createElement('button');
+  refBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:#aaa;font-size:.72rem;padding:3px 8px;cursor:pointer;';
+  refBtn.textContent = '\u21BB';
+  refBtn.title = 'Refresh';
+  refBtn.onclick = (e) => {
+    e.stopPropagation();
+    if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
+  };
+
+  // Delete button
+  const del = document.createElement('button');
+  del.className = 'mc-del';
+  del.textContent = '\u2715';
+  del.onclick = (e) => { e.stopPropagation(); deleteMiroCard(card.id); };
+
+  controls.appendChild(prevBtn);
+  controls.appendChild(todayBtn);
+  controls.appendChild(nextBtn);
+  controls.appendChild(viewBtn);
+  controls.appendChild(logBtn);
+  controls.appendChild(refBtn);
+  hdr.appendChild(title);
+  hdr.appendChild(controls);
+
+  // Body
+  const body = document.createElement('div');
+  body.className = 'cal-body';
+  body.style.cssText = 'flex:1;display:flex;flex-direction:column;overflow:hidden;font-family:var(--font);';
+
+  el.appendChild(del);
+  el.appendChild(hdr);
+  el.appendChild(body);
+
+  // Drag
+  miroSetupCardDrag(el, card, ['.mc-del', '.cal-body', 'button']);
+  // Resize
+  attach8WayResize(el, card, 200, 150);
+  // Lock
+  attachLockUI(el, card);
+
+  // Load events after render
+  requestAnimationFrame(() => {
+    if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
+  });
+
+  return el;
 }
 

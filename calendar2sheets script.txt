@@ -1,0 +1,1392 @@
+// ======= OPTIMIZATION: Set start date to Oct 28, 2025 =======
+const SYNC_START_DATE = new Date('2025-10-28');
+
+
+// Define constants for sheet names
+const FULL_SYNC_SHEET = 'Full Sync';
+const TODAY_SYNC_SHEET = 'Today Sync';
+const CONTROL_SHEET = 'Control';
+const POMOS_SHEET = 'Pomos';
+const POMOS_CALENDAR_ID = 'e306113c70aca4ceab5b0d0d850e63ffdb882c4395b6cf8744241a1d9654bd18@group.calendar.google.com';
+const ZOOPER_SHEET = 'Zooper';
+const SIGNAL2NOISE_SHEET = 'Signal2Noise';
+const SESSION_HOURS = 4;
+const POMODOROS_PER_SESSION = 8;
+const POMODORO_MINUTES = 30;
+const SYNC_DELAY_MINUTES = 3;
+const LAST_SYNC_PROPERTY = 'lastSyncTimestamp';
+const PENDING_SYNC_PROPERTY = 'pendingSyncTimestamp';
+
+
+const H_CELLS = ['H4', 'H6', 'H9', 'H11', 'H13'];
+const O_CELLS = ['O2', 'O4', 'O6', 'O9', 'O11', 'O13'];
+const GREEN_COLOR = '#93c47d';
+const RED_COLOR = '#e06666';
+
+
+const A_CELLS = {
+    'a1': 'C3', 'a2': 'D3', 'a3': 'E3', 'a4': 'F3',
+    'a9': 'C5', 'a10': 'D5', 'a11': 'E5', 'a12': 'F5',
+    'a17': 'C7', 'a18': 'D7', 'a19': 'E7', 'a20': 'F7',
+    'a25': 'C10', 'a26': 'D10', 'a27': 'E10', 'a28': 'F10',
+    'a33': 'C12', 'a34': 'D12', 'a35': 'E12', 'a36': 'F12',
+    'a41': 'C14', 'a42': 'D14', 'a43': 'E14', 'a44': 'F14',
+    'a5': 'J3', 'a6': 'K3', 'a7': 'L3', 'a8': 'M3',
+    'a13': 'J5', 'a14': 'K5', 'a15': 'L5', 'a16': 'M5',
+    'a21': 'J7', 'a22': 'K7', 'a23': 'L7', 'a24': 'M7',
+    'a29': 'J10', 'a30': 'K10', 'a31': 'L10', 'a32': 'M10',
+    'a37': 'J12', 'a38': 'K12', 'a39': 'L12', 'a40': 'M12',
+    'a45': 'J14', 'a46': 'K14', 'a47': 'L14', 'a48': 'M14'
+};
+
+
+const calendarIds = [
+  'osgfxman@gmail.com',
+  '5e9073646b5215991de4e367c79ff39927bf140abb365a16f1205afafa1f01dc@group.calendar.google.com',
+  '5b1591c46f7c76aa501a225a8d3226d81ff72f5310c2436ce992363743547336@group.calendar.google.com',
+  '4b5c19ad5c640fc3817e6c2a165a2b52a64058e81aa52268ccc1a5403a24dfd2@group.calendar.google.com',
+  'e0f941dd0189545f469f40eb1dca775b45cc9b22e79ff9ef83cad8af5d8627ea@group.calendar.google.com',
+  '05e5f1a3c5e5239bdbd1244c970ba45950abec24f188ca08002b6832d4e737f2@group.calendar.google.com',
+  'cea82ba927a17704f365e5b66f33988db3c8fee2cf3b7689e8873d62174f71fb@group.calendar.google.com',
+  '81048df170dd49903cc6ba83759e3d618452813795c8e936e49496cac7ecffce@group.calendar.google.com',
+  '26ef963728ebd757d5d18c67be342c44637792895e4ef1b0fb5ba6760f55e2d9@group.calendar.google.com',
+  '435c2246fb7522a112920cfd24c2d26656793c25363146a5ab31fa20183753a7@group.calendar.google.com',
+  'bb8e949808e8be6b13968f73b7f5185ebfb6a11779c367f850697d4446ac0cc8@group.calendar.google.com',
+  '54bfceff27767cb06571409a0a383ccdd089efc651a076d8db7caa59221cf3f4@group.calendar.google.com',
+  'ebda0509bbee1e065430453029687acb692bc81bd08e071e953a0bd90a17f87f@group.calendar.google.com',
+  'c3e7231e2ebbe8059c2951019997934f828cc16f96d428ba9a19bd5a908b7c75@group.calendar.google.com'
+];
+
+
+const CALENDAR_NAMES = {
+  'osgfxman@gmail.com': '01R',
+  '5e9073646b5215991de4e367c79ff39927bf140abb365a16f1205afafa1f01dc@group.calendar.google.com': '02W',
+  '5b1591c46f7c76aa501a225a8d3226d81ff72f5310c2436ce992363743547336@group.calendar.google.com': '02xO',
+  '4b5c19ad5c640fc3817e6c2a165a2b52a64058e81aa52268ccc1a5403a24dfd2@group.calendar.google.com': '03G',
+  'e0f941dd0189545f469f40eb1dca775b45cc9b22e79ff9ef83cad8af5d8627ea@group.calendar.google.com': '04G2',
+  '05e5f1a3c5e5239bdbd1244c970ba45950abec24f188ca08002b6832d4e737f2@group.calendar.google.com': '05B',
+  'cea82ba927a17704f365e5b66f33988db3c8fee2cf3b7689e8873d62174f71fb@group.calendar.google.com': '06C',
+  '81048df170dd49903cc6ba83759e3d618452813795c8e936e49496cac7ecffce@group.calendar.google.com': '07J',
+  '26ef963728ebd757d5d18c67be342c44637792895e4ef1b0fb5ba6760f55e2d9@group.calendar.google.com': '08M',
+  '435c2246fb7522a112920cfd24c2d26656793c25363146a5ab31fa20183753a7@group.calendar.google.com': '09N',
+  'bb8e949808e8be6b13968f73b7f5185ebfb6a11779c367f850697d4446ac0cc8@group.calendar.google.com': '10Y',
+  '54bfceff27767cb06571409a0a383ccdd089efc651a076d8db7caa59221cf3f4@group.calendar.google.com': '11L',
+  'ebda0509bbee1e065430453029687acb692bc81bd08e071e953a0bd90a17f87f@group.calendar.google.com': '12k',
+  'c3e7231e2ebbe8059c2951019997934f828cc16f96d428ba9a19bd5a908b7c75@group.calendar.google.com': '13S'
+};
+
+
+const EXPECTED_CALENDAR_NAMES = ['01R', '02W', '02xO', '03G', '04G2', '05B', '06C', '07J', '08M', '09N', '10Y', '11L', '12k', '13S'];
+const HEADERS = ['Event Title', 'Start Time', 'End Time', 'Description', 'Calendar Name', 'Duration (Hours)'];
+const SIGNAL2NOISE_HEADERS = ['Date', 'Event Title', 'Duration (Hours)', 'Type', 'Calendar Name'];
+
+
+// ======= Signal-to-Noise Functions =======
+function classifyEventType(title) {
+  if (!title || title === '[No Title]' || title === '[No Events Today]') return 'Other';
+  const titleLower = title.toLowerCase().trim();
+  if (titleLower === 's' || titleLower === 'signal') return 'Signal';
+  if (titleLower === 'n' || titleLower === 'noise') return 'Noise';
+  return 'Other';
+}
+
+
+function getOrCreateSignal2NoiseSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(SIGNAL2NOISE_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(SIGNAL2NOISE_SHEET);
+    sheet.getRange(1, 1, 1, SIGNAL2NOISE_HEADERS.length).setValues([SIGNAL2NOISE_HEADERS]);
+    sheet.setFrozenRows(1);
+    const headerRange = sheet.getRange(1, 1, 1, SIGNAL2NOISE_HEADERS.length);
+    headerRange.setFontWeight('bold').setBackground('#e6e6e6');
+    sheet.setColumnWidth(1, 100);
+    sheet.setColumnWidth(2, 150);
+    sheet.setColumnWidth(3, 120);
+    sheet.setColumnWidth(4, 80);
+    sheet.setColumnWidth(5, 100);
+  }
+  return sheet;
+}
+
+
+function updateSignal2NoiseSheet() {
+  const signal2NoiseSheet = getOrCreateSignal2NoiseSheet();
+  const fullSyncSheet = getOrCreateSheet(FULL_SYNC_SHEET);
+  Logger.log('Starting Signal2Noise update');
+  try {
+    clearSheetData(signal2NoiseSheet);
+    const lastRow = fullSyncSheet.getLastRow();
+    if (lastRow < 2) {
+      Logger.log('No events to process for Signal2Noise');
+      return;
+    }
+    const data = fullSyncSheet.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
+    const signal2NoiseData = [];
+    data.forEach(row => {
+      const title = row[0];
+      const startTime = new Date(row[1]);
+      const duration = parseFloat(row[5]);
+      const calendarName = row[4];
+      if (title === '[No Events Today]' || row[3] === 'Placeholder for missing calendar') return;
+      const eventType = classifyEventType(title);
+      const dateStr = Utilities.formatDate(startTime, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+      signal2NoiseData.push([dateStr, title, duration, eventType, calendarName]);
+    });
+    if (signal2NoiseData.length > 0) {
+      signal2NoiseData.sort((a, b) => new Date(a[0]) - new Date(b[0]));
+      signal2NoiseSheet.getRange(2, 1, signal2NoiseData.length, SIGNAL2NOISE_HEADERS.length).setValues(signal2NoiseData);
+      applySignal2NoiseFormatting(signal2NoiseSheet, signal2NoiseData.length);
+      Logger.log(`Signal2Noise sheet updated with ${signal2NoiseData.length} events`);
+    }
+  } catch (error) {
+    Logger.log(`Error updating Signal2Noise sheet: ${error}`);
+  }
+}
+
+
+function applySignal2NoiseFormatting(sheet, dataRows) {
+  if (dataRows < 1) return;
+  const typeRange = sheet.getRange(2, 4, dataRows, 1);
+  const values = typeRange.getValues();
+  const backgrounds = values.map(row => {
+    switch(row[0]) {
+      case 'Signal': return ['#b7e1cd'];
+      case 'Noise': return ['#f4c7c3'];
+      default: return ['#fff2cc'];
+    }
+  });
+  typeRange.setBackgrounds(backgrounds);
+}
+
+
+function generateSignal2NoiseSummary() {
+  const signal2NoiseSheet = getOrCreateSignal2NoiseSheet();
+  const lastRow = signal2NoiseSheet.getLastRow();
+  if (lastRow < 2) {
+    Logger.log('No data to summarize');
+    return;
+  }
+  const data = signal2NoiseSheet.getRange(2, 1, lastRow - 1, SIGNAL2NOISE_HEADERS.length).getValues();
+  const dailyStats = {};
+  data.forEach(row => {
+    const date = row[0];
+    const duration = parseFloat(row[2]);
+    const type = row[3];
+    if (!dailyStats[date]) {
+      dailyStats[date] = {signal: 0, noise: 0, other: 0, signalCount: 0, noiseCount: 0, otherCount: 0};
+    }
+    if (type === 'Signal') {
+      dailyStats[date].signal += duration;
+      dailyStats[date].signalCount++;
+    } else if (type === 'Noise') {
+      dailyStats[date].noise += duration;
+      dailyStats[date].noiseCount++;
+    } else {
+      dailyStats[date].other += duration;
+      dailyStats[date].otherCount++;
+    }
+  });
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let summarySheet = ss.getSheetByName('Signal2Noise Summary');
+  if (summarySheet) ss.deleteSheet(summarySheet);
+  summarySheet = ss.insertSheet('Signal2Noise Summary');
+  const summaryHeaders = ['Date', 'Signal Hours', 'Signal Count', 'Noise Hours', 'Noise Count', 'Other Hours', 'Other Count', 'Total Hours', 'Signal Ratio'];
+  summarySheet.getRange(1, 1, 1, summaryHeaders.length).setValues([summaryHeaders]);
+  summarySheet.getRange(1, 1, 1, summaryHeaders.length).setFontWeight('bold').setBackground('#e6e6e6');
+  summarySheet.setFrozenRows(1);
+  const summaryData = Object.keys(dailyStats).sort().map(date => {
+    const stats = dailyStats[date];
+    const total = stats.signal + stats.noise + stats.other;
+    const signalRatio = total > 0 ? (stats.signal / total * 100).toFixed(1) : 0;
+    return [date, stats.signal.toFixed(2), stats.signalCount, stats.noise.toFixed(2), stats.noiseCount, stats.other.toFixed(2), stats.otherCount, total.toFixed(2), signalRatio + '%'];
+  });
+  if (summaryData.length > 0) {
+    summarySheet.getRange(2, 1, summaryData.length, summaryHeaders.length).setValues(summaryData);
+  }
+  Logger.log('Signal2Noise summary generated');
+}
+
+
+// ======= Core Sync Functions =======
+function fetchAllCalendarEvents() {
+  const allEvents = [];
+  const START_DATE = SYNC_START_DATE;
+  const END_DATE = new Date();
+  END_DATE.setFullYear(END_DATE.getFullYear() + 1);
+  Logger.log(`Fetching events from ${START_DATE.toISOString()} to ${END_DATE.toISOString()}`);
+  calendarIds.forEach(calendarId => {
+    try {
+      const optionalArgs = {timeMin: START_DATE.toISOString(), timeMax: END_DATE.toISOString(), maxResults: 2500, singleEvents: true, orderBy: 'startTime'};
+      const response = Calendar.Events.list(calendarId, optionalArgs);
+      if (response.items && response.items.length > 0) {
+        response.items.forEach(event => {
+          const startTime = event.start.dateTime ? new Date(event.start.dateTime) : new Date(event.start.date);
+          const endTime = event.end.dateTime ? new Date(event.end.dateTime) : new Date(event.end.date);
+          const durationHours = (endTime - startTime) / (1000 * 60 * 60);
+          allEvents.push([event.summary || '[No Title]', startTime, endTime, event.description || '', CALENDAR_NAMES[calendarId] || calendarId, durationHours.toFixed(2)]);
+        });
+      }
+    } catch (error) {
+      Logger.log(`Error fetching events from calendar ${calendarId}: ${error}`);
+    }
+  });
+  Logger.log(`Fetched ${allEvents.length} total events`);
+  return allEvents;
+}
+
+
+// ======= UPDATED CORE SYNC FUNCTIONS (No Signal2Noise Auto-Run) =======
+
+function syncCalendarToSheet() {
+  const properties = PropertiesService.getScriptProperties();
+  const fullSyncSheet = getOrCreateSheet(FULL_SYNC_SHEET);
+  const statusCell = getControlStatusCell();
+  statusCell.setValue("Full Sync: Syncing...");
+  try {
+    const startTime = new Date().getTime();
+    clearSheetData(fullSyncSheet);
+    const allEvents = fetchAllCalendarEvents();
+    if (allEvents.length > 0) {
+      allEvents.sort((a, b) => a[1] - b[1]);
+      writeEventsInChunks(fullSyncSheet, allEvents);
+    }
+    
+    appendMissingCalendarsBasedOnToday(fullSyncSheet); // موجودة زي ما طلبت
+    syncPomosCalendar();
+    updateZooperSheet(); // دي بقت سريعة دلوقتي (Batch Mode)
+    updatePomoSlots();   // دي كمان سريعة (Batch Mode)
+    updateScoreHighlights(); // ودي كمان
+    updateGodSheet();    // تحديث الداشبورد
+
+    // updateSignal2NoiseSheet(); <--- شلناها من هنا
+
+    const endTime = new Date().getTime();
+    const duration = ((endTime - startTime) / 1000).toFixed(2);
+    SpreadsheetApp.getActiveSpreadsheet().toast(`Full Sync Completed in ${duration}s`, "Sync Status", 5);
+    statusCell.setValue(`Full Sync: Last updated: ${new Date().toLocaleString()} (${duration}s)`);
+    properties.setProperty('lastSuccessfulSync', endTime.toString());
+    Logger.log(`Full Sync completed in ${duration}s with ${allEvents.length} events`);
+  } catch (error) {
+    statusCell.setValue("Full Sync Error: " + error.message);
+    Logger.log("Full Sync Error: " + error);
+    SpreadsheetApp.getActiveSpreadsheet().toast("Full Sync Encountered an Error.", "Sync Status", 5);
+  }
+}
+
+function syncTodayEvents() {
+  const todaySyncSheet = getOrCreateSheet(TODAY_SYNC_SHEET);
+  const statusCell = getControlStatusCell();
+  statusCell.setValue("Today Sync: Syncing...");
+  
+  try {
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+    
+    // 1. مسح شيت Today Sync فقط
+    clearSheetData(todaySyncSheet);
+    
+    // 2. سحب إيفنتات اليوم للكالندرات العادية
+    let todayEvents = [];
+    calendarIds.forEach(calendarId => {
+       try {
+        const optionalArgs = {timeMin: startOfDay.toISOString(), timeMax: endOfDay.toISOString(), maxResults: 2500, singleEvents: true, orderBy: 'startTime'};
+        const response = Calendar.Events.list(calendarId, optionalArgs);
+        if (response.items) {
+          response.items.forEach(event => {
+            const startTime = event.start.dateTime ? new Date(event.start.dateTime) : new Date(event.start.date);
+            const endTime = event.end.dateTime ? new Date(event.end.dateTime) : new Date(event.end.date);
+            const durationHours = (endTime - startTime) / (1000 * 60 * 60);
+            todayEvents.push([event.summary || '[No Title]', startTime, endTime, event.description || '', CALENDAR_NAMES[calendarId] || calendarId, durationHours.toFixed(2)]);
+          });
+        }
+       } catch (e) { Logger.log(e); }
+    });
+    
+    // 3. الكتابة في شيت Today Sync
+    if (todayEvents.length > 0) {
+      todayEvents.sort((a, b) => a[1] - b[1]);
+      writeEventsInChunks(todaySyncSheet, todayEvents);
+    }
+
+    // 4. تحديث شيت Pomos بذكاء
+    smartSyncPomos(startOfDay, endOfDay); 
+
+    // 5. التحديثات المعتمدة على الذاكرة
+    updateZooperSheet(todayEvents); 
+    
+    // تحديث Pomo Slots
+    updatePomoSlots(); 
+    
+    // === التعديل هنا ===
+    const zooperSheet = setupZooperSheet();
+    applyZooperColors(zooperSheet); // دي كانت بتمسح الـ Highlight
+    
+    // ضفنا السطر ده عشان يرجع الـ Highlight الأصفر تاني بعد التلوين
+    highlightCurrentTimeSlots(zooperSheet); 
+    // ==================
+    
+    updateGodSheet();
+
+    SpreadsheetApp.getActiveSpreadsheet().toast("Today Sync Completed Successfully.", "Sync Status", 5);
+    statusCell.setValue("Today Sync: Last updated: " + new Date().toLocaleString());
+    mergeTodayToFullSync();
+
+  } catch (error) {
+    statusCell.setValue("Today Sync Error: " + error.message);
+    Logger.log("Today Sync Error: " + error);
+  }
+}
+function syncLast4Days() {
+  const fourDaysSheet = getOrCreateSheet('4 Days');
+  const statusCell = getControlStatusCell();
+  statusCell.setValue("4 Days Sync: Syncing...");
+  
+  try {
+    const now = new Date();
+    const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 3);
+    const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    
+    clearSheetData(fourDaysSheet);
+    // شلنا clearSheetData(pomosSheet) من هنا
+
+    let allEvents = [];
+    calendarIds.forEach(calendarId => {
+      try {
+        const optionalArgs = {timeMin: startDate.toISOString(), timeMax: endDate.toISOString(), maxResults: 2500, singleEvents: true, orderBy: 'startTime'};
+        const response = Calendar.Events.list(calendarId, optionalArgs);
+        if (response.items && response.items.length > 0) {
+          response.items.forEach(event => {
+            const startTime = event.start.dateTime ? new Date(event.start.dateTime) : new Date(event.start.date);
+            const endTime = event.end.dateTime ? new Date(event.end.dateTime) : new Date(event.end.date);
+            const durationHours = (endTime - startTime) / (1000 * 60 * 60);
+            allEvents.push([event.summary || '[No Title]', startTime, endTime, event.description || '', CALENDAR_NAMES[calendarId] || calendarId, durationHours.toFixed(2)]);
+          });
+        }
+      } catch (error) {
+        Logger.log(`Error fetching events from calendar ${calendarId}: ${error}`);
+      }
+    });
+    
+    if (allEvents.length > 0) {
+      allEvents.sort((a, b) => a[1] - b[1]);
+      writeEventsInChunks(fourDaysSheet, allEvents);
+    }
+    
+    // استخدام الدالة الذكية للدمج
+    smartSyncPomos(startDate, endDate);
+    
+    updateZooperSheet();
+    updatePomoSlots();
+    updateGodSheet();
+
+    SpreadsheetApp.getActiveSpreadsheet().toast("4 Days Sync Completed Successfully.", "Sync Status", 5);
+    statusCell.setValue("4 Days Sync: Last updated: " + new Date().toLocaleString());
+    merge4DaysToFullSync();
+  } catch (error) {
+    statusCell.setValue("4 Days Sync Error: " + error.message);
+    Logger.log("4 Days Sync Error: " + error);
+    SpreadsheetApp.getActiveSpreadsheet().toast("4 Days Sync Encountered an Error.", "Sync Status", 5);
+  }
+}
+
+
+// ======= SMART POMOS SYNC (Merge instead of Wipe) =======
+function smartSyncPomos(startDate, endDate) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const pomosSheet = getOrCreateSheet(POMOS_SHEET);
+  
+  // 1. سحب داتا البومودورو للفترة المطلوبة فقط (اليوم أو 4 أيام)
+  const optionalArgs = {timeMin: startDate.toISOString(), timeMax: endDate.toISOString(), maxResults: 2500, singleEvents: true, orderBy: 'startTime'};
+  let newPomos = [];
+  try {
+    const response = Calendar.Events.list(POMOS_CALENDAR_ID, optionalArgs);
+    if (response.items) {
+      response.items.forEach(event => {
+        const startTime = event.start.dateTime ? new Date(event.start.dateTime) : new Date(event.start.date);
+        const endTime = event.end.dateTime ? new Date(event.end.dateTime) : new Date(event.end.date);
+        const durationHours = (endTime - startTime) / (1000 * 60 * 60);
+        newPomos.push([event.summary || '[No Title]', startTime, endTime, event.description || '', "!40's Fruit", durationHours.toFixed(2)]);
+      });
+    }
+  } catch (e) { Logger.log("Error fetching pomos: " + e); }
+
+  // 2. قراءة الشيت الحالي كله (التاريخ)
+  const lastRow = pomosSheet.getLastRow();
+  let existingData = [];
+  if (lastRow > 1) {
+    existingData = pomosSheet.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
+  }
+
+  // 3. الفلترة: احتفظ بكل حاجة *خارج* نطاق التحديث
+  const keptData = existingData.filter(row => {
+    const rowDate = new Date(row[1]); 
+    // احتفظ بالصف لو التاريخ قبل البداية أو بعد النهاية
+    return rowDate < startDate || rowDate >= endDate;
+  });
+
+  // 4. الدمج: القديم (المحافظ عليه) + الجديد (المحدث)
+  let finalData = keptData.concat(newPomos);
+  
+  // 5. الترتيب والكتابة
+  finalData.sort((a, b) => new Date(a[1]) - new Date(b[1]));
+
+  if (finalData.length > 0) {
+    // هنا بنمسح القديم ونكتب الجديد المدمج، فكأننا معملناش مسح للتاريخ
+    pomosSheet.getRange(2, 1, pomosSheet.getLastRow(), HEADERS.length).clearContent();
+    writeEventsInChunks(pomosSheet, finalData); // بنكتب بـ chunks عشان لو الداتا كبيرة
+  } else {
+     // لو مفيش داتا خالص (نادرة الحدوث)، بننظف الشيت
+     clearSheetData(pomosSheet);
+  }
+  
+  Logger.log("Smart Pomos Sync completed. History preserved.");
+}
+
+
+
+
+
+// ======= Helper Functions =======
+function getOrCreateSheet(sheetName) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+    sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+    sheet.setFrozenRows(1);
+  } else {
+    const currentHeaders = sheet.getRange(1, 1, 1, HEADERS.length).getValues()[0];
+    const headersMatch = HEADERS.every((header, index) => header === currentHeaders[index]);
+    if (!headersMatch) {
+      sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+    }
+  }
+  return sheet;
+}
+
+
+function clearSheetData(sheet) {
+  const lastRow = sheet.getLastRow();
+  const lastColumn = sheet.getLastColumn();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, lastColumn).clearContent();
+  }
+}
+
+
+function writeEventsInChunks(sheet, events) {
+  const CHUNK_SIZE = 500;
+  let currentRow = sheet.getLastRow() + 1;
+  for (let i = 0; i < events.length; i += CHUNK_SIZE) {
+    const chunk = events.slice(i, i + CHUNK_SIZE);
+    sheet.getRange(currentRow, 1, chunk.length, HEADERS.length).setValues(chunk);
+    currentRow += chunk.length;
+  }
+}
+
+
+function syncPomosCalendar(startDate, endDate) {
+  const pomosSheet = getOrCreateSheet(POMOS_SHEET);
+  const statusCell = getControlStatusCell();
+  statusCell.setValue("Pomos Sync: Syncing...");
+  try {
+    clearSheetData(pomosSheet);
+    if (!startDate) {
+      const now = new Date();
+      startDate = new Date(now.getFullYear(), 0, 1);
+    }
+    if (!endDate) {
+      endDate = new Date();
+      endDate.setFullYear(endDate.getFullYear() + 1);
+    }
+    const optionalArgs = {timeMin: startDate.toISOString(), timeMax: endDate.toISOString(), maxResults: 2500, singleEvents: true, orderBy: 'startTime'};
+    const pomosEvents = [];
+    try {
+      const response = Calendar.Events.list(POMOS_CALENDAR_ID, optionalArgs);
+      if (response.items && response.items.length > 0) {
+        response.items.forEach(event => {
+          const startTime = event.start.dateTime ? new Date(event.start.dateTime) : new Date(event.start.date);
+          const endTime = event.end.dateTime ? new Date(event.end.dateTime) : new Date(event.end.date);
+          const durationHours = (endTime - startTime) / (1000 * 60 * 60);
+          pomosEvents.push([event.summary || '[No Title]', startTime, endTime, event.description || '', "!40's Fruit", durationHours.toFixed(2)]);
+        });
+      }
+      Logger.log(`Fetched ${pomosEvents.length} events from !40's Fruit`);
+    } catch (error) {
+      Logger.log(`Error fetching Pomos events: ${error}`);
+    }
+    if (pomosEvents.length > 0) {
+      pomosEvents.sort((a, b) => a[1] - b[1]);
+      writeEventsInChunks(pomosSheet, pomosEvents);
+    }
+    statusCell.setValue("Pomos Sync: Last updated: " + new Date().toLocaleString());
+  } catch (error) {
+    statusCell.setValue("Pomos Sync Error: " + error.message);
+    Logger.log("Pomos Sync Error: " + error);
+  }
+}
+
+
+
+
+
+function setupZooperSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(ZOOPER_SHEET);
+  if (!sheet) {
+    throw new Error('Zooper sheet not found. Please create it manually first.');
+  }
+  return sheet;
+}
+
+
+// ======= UPDATED FUNCTION: Highlights Time Slots + A1:P1 Progress Bar (Black Background Mode) =======
+function highlightCurrentTimeSlots(sheet) {
+  const now = new Date();
+  const hour = now.getHours();
+  const minutes = now.getMinutes();
+  
+  // === Existing Logic Constants ===
+  const sessionCells = {1: "A2", 2: "A4", 3: "A6", 4: "A9", 5: "A11", 6: "A13"};
+  const flightCells = {1: "B2", 2: "N2", 3: "B4", 4: "N4", 5: "B6", 6: "N6", 7: "B9", 8: "N9", 9: "B11", 10: "N11", 11: "B13", 12: "N13"};
+  const pomodoroCells = {1: "C8", 2: "D8", 3: "E8", 4: "F8", 5: "J8", 6: "K8", 7: "L8", 8: "M8"};
+  
+  const highlightColor = '#ffeb3b';
+  const passedColor = '#e0e0e0';
+
+  try {
+    // 1. Resetting standard cells
+    [...Object.values(sessionCells), ...Object.values(flightCells), ...Object.values(pomodoroCells)].forEach(cell => {
+      sheet.getRange(cell).setBackground('white').setFontWeight('normal');
+    });
+
+    // 2. Calculation for Standard Logic
+    const currentSession = Math.floor(hour / 4) + 1;
+    const currentFlight = Math.floor(hour / 2) + 1;
+    const minutesIntoSession = (hour % 4) * 60 + minutes;
+    const currentPomodoro = Math.floor(minutesIntoSession / 30) + 1;
+
+    // 3. Applying Standard Highlights
+    for (let s = 1; s <= 6; s++) {
+      const sessionRange = sheet.getRange(sessionCells[s]);
+      if (s < currentSession) {
+        sessionRange.setBackground(passedColor);
+      } else if (s === currentSession) {
+        sessionRange.setBackground(highlightColor).setFontWeight('bold');
+      }
+    }
+    for (let f = 1; f <= 12; f++) {
+      const flightRange = sheet.getRange(flightCells[f]);
+      if (f < currentFlight) {
+        flightRange.setBackground(passedColor);
+      } else if (f === currentFlight) {
+        flightRange.setBackground(highlightColor).setFontWeight('bold');
+      }
+    }
+    if (currentSession <= 6 && currentPomodoro <= 8) {
+      const pomodoroRange = sheet.getRange(pomodoroCells[currentPomodoro]);
+      pomodoroRange.setBackground(highlightColor).setFontWeight('bold');
+    }
+
+    // ============================================================
+    // NEW FEATURE: A1:P1 Progress Bar (Time vs P3 vs Future)
+    // ============================================================
+    
+    // A. Time Layer (Red) - Starts at 8:00 AM, 1 cell per 30 mins
+    const startHour = 8;
+    const currentTotalMinutes = hour * 60 + minutes;
+    const startTotalMinutes = startHour * 60;
+    const timeCellsCount = Math.max(0, Math.floor((currentTotalMinutes - startTotalMinutes) / 30));
+
+    // B. P3 Score Layer (Green) - 1 cell per 5 points
+    const p3Value = sheet.getRange("P3").getValue();
+    const p3CellsCount = Math.floor(p3Value / 5);
+
+    // C. Apply Colors (Layering)
+    const row1Colors = [];
+    const row1TextColors = [];
+
+    for (let i = 1; i <= 16; i++) {
+      let cellColor;
+      let textColor;
+
+      if (i <= p3CellsCount) {
+        // Priority 1: P3 Score (Green) overrides everything
+        cellColor = GREEN_COLOR; 
+        textColor = 'black';
+      } else if (i <= timeCellsCount) {
+        // Priority 2: Time Progress (Red)
+        cellColor = RED_COLOR;   
+        textColor = 'black';
+      } else {
+        // Priority 3: Future/Empty (Black Background, White Text)
+        cellColor = '#000000';
+        textColor = '#ffffff';
+      }
+
+      row1Colors.push(cellColor);
+      row1TextColors.push(textColor);
+    }
+
+    // D. Batch Update A1:P1
+    sheet.getRange(1, 1, 1, 16)
+         .setBackgrounds([row1Colors])
+         .setFontColors([row1TextColors]);
+
+    Logger.log('Highlights and A1:P1 Progress Bar (Black Mode) applied successfully');
+
+  } catch (error) {
+    Logger.log('Error applying highlights: ' + error);
+  }
+}
+// =========================================================================
+
+
+// ======= OPTIMIZED ZOOPER UPDATE (Split Write Mode - Protects G:I) =======
+function updateZooperSheet(providedEvents) {
+  const sheet = setupZooperSheet();
+  
+  // 1. قراءة Grid الذاكرة (C2:M14) للحسابات
+  const gridRange = sheet.getRange("C2:M14");
+  let gridValues = gridRange.getValues(); 
+
+  // دالة الكتابة في الذاكرة (زي ما هي)
+  function writeToMemory(cellA1, value) {
+    if (!cellA1) return;
+    const colLetter = cellA1.match(/[A-Z]+/)[0];
+    const rowNum = parseInt(cellA1.match(/\d+/)[0]);
+    let colIndex = 0;
+    for (let i = 0; i < colLetter.length; i++) colIndex = colIndex * 26 + (colLetter.charCodeAt(i) - 64);
+    const cIdx = colIndex - 3; 
+    const rIdx = rowNum - 2;   
+    if (rIdx >= 0 && rIdx < gridValues.length && cIdx >= 0 && cIdx < gridValues[0].length) {
+      gridValues[rIdx][cIdx] = value;
+    }
+  }
+
+  // 2. مسح T_CELLS في الذاكرة
+  const T_CELLS = {
+    't1': 'C2', 't2': 'D2', 't3': 'E2', 't4': 'F2', 't9': 'C4', 't10': 'D4', 't11': 'E4', 't12': 'F4',
+    't17': 'C6', 't18': 'D6', 't19': 'E6', 't20': 'F6', 't25': 'C9', 't26': 'D9', 't27': 'E9', 't28': 'F9',
+    't33': 'C11', 't34': 'D11', 't35': 'E11', 't36': 'F11', 't41': 'C13', 't42': 'D13', 't43': 'E13', 't44': 'F13',
+    't5': 'J2', 't6': 'K2', 't7': 'L2', 't8': 'M2', 't13': 'J4', 't14': 'K4', 't15': 'L4', 't16': 'M4',
+    't21': 'J6', 't22': 'K6', 't23': 'L6', 't24': 'M6', 't29': 'J9', 't30': 'K9', 't31': 'L9', 't32': 'M9',
+    't37': 'J11', 't38': 'K11', 't39': 'L11', 't40': 'M11', 't45': 'J13', 't46': 'K13', 't47': 'L13', 't48': 'M13'
+  };
+  Object.values(T_CELLS).forEach(cell => writeToMemory(cell, ""));
+
+  // 3. تجهيز البيانات
+  let sourceEvents = providedEvents;
+  if (!sourceEvents) {
+     const fullSyncSheet = getOrCreateSheet(FULL_SYNC_SHEET);
+     sourceEvents = fullSyncSheet.getDataRange().getValues();
+  }
+
+  const today = new Date();
+  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const endOfDay = new Date(startOfDay.getTime() + 24*60*60*1000);
+
+  const todayEvents = sourceEvents.filter(row => {
+    const eventDate = new Date(row[1]); 
+    const title = row[0];
+    const calName = row[4]; 
+    return eventDate >= startOfDay && eventDate < endOfDay && title !== '[No Events Today]' && calName !== 'Placeholder for missing calendar';
+  });
+
+  // 4. الملء في الذاكرة
+  todayEvents.forEach(event => {
+    const startTime = new Date(event[1]);
+    const endTime = new Date(event[2]);
+    const calendarLabel = event[4].match(/[a-zA-Z]\d*$/)?.[0] || event[4];
+    
+    const startSlot = Math.floor((startTime.getHours() * 60 + startTime.getMinutes()) / 30) + 1;
+    const endSlot = Math.ceil((endTime.getHours() * 60 + endTime.getMinutes()) / 30) + 1;
+    
+    for (let slot = startSlot; slot < endSlot; slot++) {
+      const tCell = `t${slot}`;
+      if (T_CELLS[tCell]) {
+        writeToMemory(T_CELLS[tCell], calendarLabel.toLowerCase());
+      }
+    }
+  });
+
+  // 5. الكتابة المنفصلة (Split Write) - دي التريكه اللي هتحمي G,H,I
+  // C:F هم الأعمدة 0,1,2,3 في المصفوفة
+  // J:M هم الأعمدة 7,8,9,10 في المصفوفة
+  
+  const leftBlock = gridValues.map(row => row.slice(0, 4));  // C, D, E, F
+  const rightBlock = gridValues.map(row => row.slice(7, 11)); // J, K, L, M
+
+  // الكتابة في الجوانب فقط وترك القلب (G:I) سليماً
+  sheet.getRange("C2:F14").setValues(leftBlock);
+  sheet.getRange("J2:M14").setValues(rightBlock);
+  
+  highlightCurrentTimeSlots(sheet);
+  Logger.log('Zooper Sheet Updated (Split Write Mode).');
+}
+
+// دالة fillPomodoroSlots القديمة مبقاش ليها لازمة لأن اللوجيك بتاعها دخل جوه updateZooperSheet
+// ممكن تمسحها أو تسيبها فاضية لو خايف
+function fillPomodoroSlots() {}
+
+
+// ======= OPTIMIZED POMO SLOTS (Batch Write) =======
+// ======= OPTIMIZED POMO SLOTS (Memory Driven) =======
+// ======= OPTIMIZED POMO SLOTS (Split Write Mode) =======
+function updatePomoSlots(providedPomosEvents) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const zooperSheet = ss.getSheetByName('Zooper');
+  if (!zooperSheet) return;
+
+  const gridRange = zooperSheet.getRange("C2:M14");
+  let gridValues = gridRange.getValues();
+
+  function writeToGrid(cellA1, value) {
+    if (!cellA1) return;
+    const colLetter = cellA1.match(/[A-Z]+/)[0];
+    const rowNum = parseInt(cellA1.match(/\d+/)[0]);
+    let colIndex = 0;
+    for (let i = 0; i < colLetter.length; i++) colIndex = colIndex * 26 + (colLetter.charCodeAt(i) - 64);
+    const cIdx = colIndex - 3; 
+    const rIdx = rowNum - 2;   
+    if (rIdx >= 0 && rIdx < gridValues.length && cIdx >= 0 && cIdx < gridValues[0].length) {
+      gridValues[rIdx][cIdx] = value;
+    }
+  }
+
+  // مسح A_CELLS في الذاكرة
+  Object.values(A_CELLS).forEach(cell => writeToGrid(cell, ""));
+
+  try {
+    let pomosRows = providedPomosEvents;
+    if (!pomosRows) {
+        const pomosSheet = ss.getSheetByName('Pomos');
+        if (pomosSheet && pomosSheet.getLastRow() > 1) {
+            pomosRows = pomosSheet.getDataRange().getValues().slice(1);
+        } else {
+            pomosRows = [];
+        }
+    }
+
+    const today = new Date();
+    const todayStr = Utilities.formatDate(today, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+
+    pomosRows.forEach(row => {
+      const startTime = new Date(row[1]);
+      const endTime = new Date(row[2]);
+      const title = row[0];
+      const eventDateStr = Utilities.formatDate(startTime, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+      
+      if (eventDateStr === todayStr) {
+          const startSlot = (startTime.getHours() * 2) + (startTime.getMinutes() >= 30 ? 1 : 0) + 1;
+          const endSlot = (endTime.getHours() * 2) + (endTime.getMinutes() > 0 ? 1 : 0);
+
+          for (let slot = startSlot; slot <= endSlot; slot++) {
+            const aCellKey = `a${slot}`;
+            if (A_CELLS[aCellKey]) {
+              writeToGrid(A_CELLS[aCellKey], title);
+            }
+          }
+      }
+    });
+
+    // الكتابة المنفصلة (Split Write)
+    const leftBlock = gridValues.map(row => row.slice(0, 4)); 
+    const rightBlock = gridValues.map(row => row.slice(7, 11));
+
+    zooperSheet.getRange("C2:F14").setValues(leftBlock);
+    zooperSheet.getRange("J2:M14").setValues(rightBlock);
+    
+    Logger.log('Pomo Slots Updated (Split Write Mode).');
+
+  } catch (error) {
+    Logger.log(`Error updating pomo slots: ${error}`);
+  }
+}
+
+// ======= OPTIMIZED SCORE HIGHLIGHTS (Batch Color) =======
+function updateScoreHighlights() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ZOOPER_SHEET);
+  if (!sheet) return;
+  const fullSyncSheet = getOrCreateSheet(FULL_SYNC_SHEET);
+  const data = fullSyncSheet.getDataRange().getValues();
+  const today = new Date();
+  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const endOfDay = new Date(startOfDay.getTime() + 24*60*60*1000);
+  
+  let hScore = 0;
+  let oScore = 0;
+  
+  // الحسابات زي ما هي (سريعة في الذاكرة)
+  data.forEach(row => {
+    const eventDate = new Date(row[1]);
+    const calendarName = row[4];
+    const duration = parseFloat(row[5]);
+    if (eventDate >= startOfDay && eventDate < endOfDay) {
+      const pomodoros = Math.round(duration * 2);
+      if (calendarName === '03G' || calendarName === '04G2') {
+        hScore += pomodoros;
+      } else if (calendarName === '02W' || calendarName === '02xO') {
+        oScore += pomodoros;
+      }
+    }
+  });
+
+  // التنفيذ الذكي: تجميع الخلايا وتلوينها مرة واحدة
+  const allScoreCells = [...H_CELLS, ...O_CELLS];
+  sheet.getRangeList(allScoreCells).setBackground('white'); // تصفير الكل
+
+  const greenCells = [];
+  const redCells = [];
+
+  const hPomodoros = Math.min(hScore, H_CELLS.length);
+  for (let i = 0; i < hPomodoros; i++) {
+    greenCells.push(H_CELLS[i]);
+  }
+
+  const oPomodoros = Math.min(oScore, O_CELLS.length);
+  for (let i = 0; i < oPomodoros; i++) {
+    redCells.push(O_CELLS[i]);
+  }
+
+  // تطبيق الألوان (خبطتين بس للسيرفر)
+  if (greenCells.length > 0) {
+    sheet.getRangeList(greenCells).setBackground(GREEN_COLOR);
+  }
+  if (redCells.length > 0) {
+    sheet.getRangeList(redCells).setBackground(RED_COLOR);
+  }
+
+  Logger.log(`Updated score highlights (Batch Mode) - H: ${hScore}, O: ${oScore}`);
+}
+
+
+
+
+function appendMissingCalendarsBasedOnToday(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    Logger.log("Full Sync sheet has no events to process for missing calendars.");
+    return;
+  }
+  const dataRange = sheet.getRange(2, 1, lastRow - 1, HEADERS.length);
+  const data = dataRange.getValues();
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const endOfToday = new Date(startOfToday.getTime() + 24*60*60*1000);
+  const todaysEventCalendars = new Set();
+  data.forEach(row => {
+    const startTime = row[1];
+    if (startTime >= startOfToday && startTime < endOfToday) {
+      const calendarName = row[4];
+      if (calendarName) {
+        todaysEventCalendars.add(calendarName.trim());
+      }
+    }
+  });
+  Logger.log(`Today's Event Calendars in Full Sync: ${Array.from(todaysEventCalendars).join(", ")}`);
+  const missingCalendars = EXPECTED_CALENDAR_NAMES.filter(name => !todaysEventCalendars.has(name));
+  Logger.log(`Missing Calendars Based on Today's Events in Full Sync: ${missingCalendars.join(", ")}`);
+  if (missingCalendars.length > 0) {
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    const appendData = missingCalendars.map(name => ['[No Events Today]', midnight, midnight, 'Placeholder for missing calendar', name, 0]);
+    sheet.getRange(lastRow + 1, 1, appendData.length, HEADERS.length).setValues(appendData);
+    Logger.log(`Appended Missing Calendars to Full Sync: ${missingCalendars.join(", ")}`);
+  } else {
+    Logger.log("No missing calendars to append in Full Sync.");
+  }
+}
+
+
+// ======= OPTIMIZED MERGE FUNCTIONS (Smart Overwrite) =======
+
+function mergeTodayToFullSync() {
+  // 1. تحديد النطاق الزمني لليوم
+  const now = new Date();
+  const startOfPeriod = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endOfPeriod = new Date(startOfPeriod.getTime() + 24 * 60 * 60 * 1000); // نهاية اليوم
+
+  performSmartMerge(TODAY_SYNC_SHEET, startOfPeriod, endOfPeriod);
+}
+
+function merge4DaysToFullSync() {
+  // 1. تحديد النطاق الزمني (من 3 أيام فاتوا لبكرة)
+  const now = new Date();
+  const startOfPeriod = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 3);
+  const endOfPeriod = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2); // +2 عشان يغطي اليوم اللي جاي بالكامل
+
+  performSmartMerge('4 Days', startOfPeriod, endOfPeriod);
+}
+
+// === الدالة الجراحية الجديدة (الموتور الجديد) ===
+function performSmartMerge(sourceSheetName, startDate, endDate) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const fullSyncSheet = getOrCreateSheet(FULL_SYNC_SHEET);
+  const sourceSheet = getOrCreateSheet(sourceSheetName);
+
+  // 1. قراءة البيانات الجديدة (Fresh Data)
+  const sourceLastRow = sourceSheet.getLastRow();
+  let newEvents = [];
+  if (sourceLastRow > 1) {
+    newEvents = sourceSheet.getRange(2, 1, sourceLastRow - 1, HEADERS.length).getValues();
+  }
+
+  // 2. قراءة البيانات القديمة كلها (Existing Data)
+  const fullLastRow = fullSyncSheet.getLastRow();
+  let existingData = [];
+  if (fullLastRow > 1) {
+    existingData = fullSyncSheet.getRange(2, 1, fullLastRow - 1, HEADERS.length).getValues();
+  }
+
+  // 3. التنظيف (Filtering) - دي أهم خطوة!
+  // هنحتفظ بأي إيفنت خارج النطاق الزمني بتاع التحديث
+  // يعني: الإيفينتات القديمة جداً، أو اللي لسه جاية في المستقبل البعيد
+  const cleanData = existingData.filter(row => {
+    const rowDate = new Date(row[1]); // Start Time column
+    // احتفظ بالصف لو التاريخ *قبل* البداية أو *بعد* النهاية
+    return rowDate < startDate || rowDate >= endDate;
+  });
+
+  // 4. الدمج (Combining)
+  // حط الداتا النضيفة + الداتا الجديدة الطازة
+  let finalData = cleanData.concat(newEvents);
+
+  // 5. الترتيب (Sorting)
+  // عشان التواريخ تبقى مظبوطة ورا بعض
+  finalData.sort((a, b) => new Date(a[1]) - new Date(b[1]));
+
+  // 6. الكتابة (Writing Back) - خبطة واحدة سريعة
+  // بنمسح القديم ونكتب الجديد كله مرة واحدة
+  if (finalData.length > 0) {
+    fullSyncSheet.getRange(2, 1, fullSyncSheet.getLastRow(), HEADERS.length).clearContent(); // تنظيف آمن
+    
+    // كتابة الداتا الجديدة (Batch Write)
+    fullSyncSheet.getRange(2, 1, finalData.length, HEADERS.length).setValues(finalData);
+    
+    Logger.log(`Smart Merge for ${sourceSheetName} completed. Total Rows: ${finalData.length}`);
+  }
+}
+
+
+
+
+
+// ======= Control Sheet Functions =======
+function getOrCreateControlSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(CONTROL_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONTROL_SHEET);
+    createSyncButtons(sheet);
+  }
+  return sheet;
+}
+
+
+// ======= UPDATED CONTROL SHEET FUNCTIONS (With Signal2Noise Button) =======
+
+function createSyncButtons(sheet) {
+  sheet.clear();
+  // العناوين
+  sheet.getRange("C2").setValue("Full Sync");
+  sheet.getRange("D2").setValue("4 Days Sync");
+  sheet.getRange("E2").setValue("Today Sync");
+  sheet.getRange("F2").setValue("Update S2N"); // زرار جديد
+
+  // Checkboxes
+  const rule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+  sheet.getRange("C3:F3").setDataValidation(rule); // وسعنا النطاق ليشمل F
+
+  // Status
+  sheet.getRange("C4").setValue("Status: Ready");
+  sheet.getRange("D4").setValue("Status: Ready");
+  sheet.getRange("E4").setValue("Status: Ready");
+  sheet.getRange("F4").setValue("Status: Ready");
+
+  // التنسيق
+  sheet.getRange("C2:F2").setHorizontalAlignment("center").setFontWeight("bold").setBackground("#e6e6e6");
+  sheet.getRange("C3:F3").setHorizontalAlignment("center");
+  
+  // عرض الأعمدة
+  sheet.setColumnWidth(3, 100);
+  sheet.setColumnWidth(4, 100);
+  sheet.setColumnWidth(5, 100);
+  sheet.setColumnWidth(6, 100);
+}
+
+function onEditTrigger(e) {
+  if (!e) return;
+  const range = e.range;
+  const sheet = range.getSheet();
+  if (sheet.getName() !== CONTROL_SHEET) return;
+  
+  const col = range.getColumn();
+  const row = range.getRow();
+  
+  // التأكد إننا في صف الـ Checkboxes (الصف 3)
+  if (row !== 3) return;
+
+  const value = range.getValue();
+  if (value !== true) return; // لو شال العلامة ميعملش حاجة
+
+  // العمود C: Full Sync
+  if (col === 3) {
+    const statusCell = sheet.getRange("C4");
+    statusCell.setValue("Status: Starting Full Sync...");
+    try {
+      syncCalendarToSheet();
+      SpreadsheetApp.getActiveSpreadsheet().setActiveSheet(getOrCreateSheet(FULL_SYNC_SHEET));
+      SpreadsheetApp.flush();
+      range.setValue(false);
+      statusCell.setValue("Status: Full Sync complete");
+    } catch (error) {
+      statusCell.setValue("Status: Error - " + error.message);
+      range.setValue(false);
+    }
+  }
+  
+  // العمود D: 4 Days Sync
+  if (col === 4) {
+    const statusCell = sheet.getRange("D4");
+    statusCell.setValue("Status: Starting 4 Days Sync...");
+    try {
+      syncLast4Days();
+      SpreadsheetApp.getActiveSpreadsheet().setActiveSheet(getOrCreateSheet('4 Days'));
+      SpreadsheetApp.flush();
+      range.setValue(false);
+      statusCell.setValue("Status: 4 Days Sync complete");
+    } catch (error) {
+      statusCell.setValue("Status: Error - " + error.message);
+      range.setValue(false);
+    }
+  }
+  
+  // العمود E: Today Sync
+  if (col === 5) {
+    const statusCell = sheet.getRange("E4");
+    statusCell.setValue("Status: Starting Today Sync...");
+    try {
+      syncTodayEvents();
+      SpreadsheetApp.getActiveSpreadsheet().setActiveSheet(getOrCreateSheet(TODAY_SYNC_SHEET));
+      SpreadsheetApp.flush();
+      range.setValue(false);
+      statusCell.setValue("Status: Today Sync complete");
+    } catch (error) {
+      statusCell.setValue("Status: Error - " + error.message);
+      range.setValue(false);
+    }
+  }
+
+  // العمود F: Signal2Noise (الزرار الجديد)
+  if (col === 6) {
+    const statusCell = sheet.getRange("F4");
+    statusCell.setValue("Status: Updating Signal2Noise...");
+    try {
+      updateSignal2NoiseSheet(); // تشغيل عند الطلب فقط
+      SpreadsheetApp.getActiveSpreadsheet().setActiveSheet(getOrCreateSheet(SIGNAL2NOISE_SHEET));
+      SpreadsheetApp.flush();
+      range.setValue(false);
+      statusCell.setValue("Status: S2N Updated");
+    } catch (error) {
+      statusCell.setValue("Status: Error - " + error.message);
+      range.setValue(false);
+    }
+  }
+}
+
+// تعديل بسيط في دالة resetControlSheet عشان لما تعمل Reset الزرار الجديد يظهر
+function resetControlSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const existingSheet = ss.getSheetByName(CONTROL_SHEET);
+  if (existingSheet) {
+    ss.deleteSheet(existingSheet);
+    SpreadsheetApp.flush();
+  }
+  const sheet = ss.insertSheet(CONTROL_SHEET);
+  createSyncButtons(sheet); // هتنده الدالة الجديدة اللي فيها الزرار الرابع
+  return sheet;
+}
+
+
+function getControlStatusCell() {
+  const controlSheet = getOrCreateControlSheet();
+  return controlSheet.getRange("A3");
+}
+
+
+
+
+
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('Calendar Sync')
+    .addItem('Full Sync', 'syncCalendarToSheet')
+    .addItem('4 Days Sync', 'syncLast4Days')
+    .addItem('Today Sync', 'syncTodayEvents')
+    .addSeparator()
+    .addItem('Generate Signal2Noise Summary', 'generateSignal2NoiseSummary')
+    .addSeparator()
+    .addItem('Reset/Repair System', 'resetAndRepairSystem')
+    .addToUi();
+  getOrCreateControlSheet();
+  setupAllTriggers();
+}
+
+
+function setupAllTriggers() {
+  // 1. مسح أي منبهات قديمة عشان ميعملش تكرار
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(trigger => ScriptApp.deleteTrigger(trigger));
+
+  // 2. إنشاء منبه الـ Full Sync كل 15 دقيقة
+  ScriptApp.newTrigger('syncCalendarToSheet')
+           .timeBased()
+           .everyMinutes(15)
+           .create();
+
+  // 3. إنشاء منبه التعديل (عشان زراير الشيت تشتغل)
+  ScriptApp.newTrigger('onEditTrigger')
+           .forSpreadsheet(SpreadsheetApp.getActive())
+           .onEdit()
+           .create();
+
+  // 4. منبه صيانة يومي (إحتياطي لو الـ 15 دقيقة وقف)
+  ScriptApp.newTrigger('verifyAndRepairTriggers')
+           .timeBased()
+           .everyDays(1)
+           .atHour(1)
+           .create();
+           
+  Logger.log('All triggers set up successfully');
+}
+
+// دالة الصيانة (عشان لو المنبه فصل يرجعه تاني لوحده)
+function verifyAndRepairTriggers() {
+  const triggers = ScriptApp.getProjectTriggers();
+  const has15MinTrigger = triggers.some(trigger => trigger.getHandlerFunction() === 'syncCalendarToSheet');
+  
+  if (!has15MinTrigger) {
+    ScriptApp.newTrigger('syncCalendarToSheet').timeBased().everyMinutes(15).create();
+    Logger.log('Repaired missing 15-min trigger');
+  }
+}
+
+
+function verifyAndRepairTriggers() {
+  const triggers = ScriptApp.getProjectTriggers();
+  const has15MinTrigger = triggers.some(trigger => trigger.getHandlerFunction() === 'syncCalendarToSheet' && trigger.getEventType() === ScriptApp.EventType.CLOCK);
+  const hasEditTrigger = triggers.some(trigger => trigger.getHandlerFunction() === 'onEditTrigger' && trigger.getEventType() === ScriptApp.EventType.ON_EDIT);
+  if (!has15MinTrigger) {
+    Logger.log('15-minute sync trigger missing. Recreating...');
+    ScriptApp.newTrigger('syncCalendarToSheet').timeBased().everyMinutes(15).create();
+  }
+  if (!hasEditTrigger) {
+    Logger.log('Edit trigger missing. Recreating...');
+    ScriptApp.newTrigger('onEditTrigger').forSpreadsheet(SpreadsheetApp.getActive()).onEdit().create();
+  }
+  const properties = PropertiesService.getScriptProperties();
+  const lastSync = properties.getProperty('lastSuccessfulSync');
+  Logger.log(`Last successful sync: ${new Date(parseInt(lastSync || '0')).toLocaleString()}`);
+}
+
+
+function resetAndRepairSystem() {
+  try {
+    resetControlSheet();
+    setupAllTriggers();
+    syncCalendarToSheet();
+    SpreadsheetApp.getActiveSpreadsheet().toast('System reset and repair completed successfully', 'Success', 5);
+  } catch (error) {
+    SpreadsheetApp.getActiveSpreadsheet().toast('Error during system reset: ' + error.message, 'Error', 5);
+  }
+}
+
+
+function resetControlSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const existingSheet = ss.getSheetByName(CONTROL_SHEET);
+  if (existingSheet) {
+    ss.deleteSheet(existingSheet);
+    SpreadsheetApp.flush();
+  }
+  const sheet = ss.insertSheet(CONTROL_SHEET);
+  sheet.getRange("C2").setValue("Full Sync");
+  sheet.getRange("D2").setValue("4 Days Sync");
+  sheet.getRange("E2").setValue("Today Sync");
+  const rule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+  sheet.getRange("C3:E3").setDataValidation(rule);
+  sheet.getRange("C4").setValue("Status: Ready");
+  sheet.getRange("D4").setValue("Status: Ready");
+  sheet.getRange("E4").setValue("Status: Ready");
+  sheet.setColumnWidth(3, 140);
+  sheet.setColumnWidth(4, 140);
+  sheet.setColumnWidth(5, 140);
+  sheet.getRange("C2:E2").setFontWeight("bold").setFontSize(13).setHorizontalAlignment("center").setBackground("#e6e6e6");
+  sheet.getRange("C3:E3").setHorizontalAlignment("center");
+  sheet.getRange("C4:E4").setHorizontalAlignment("left");
+  return sheet;
+}
+
+// ======= GOD DASHBOARD FUNCTION (Safe Mode: Updates A & B Only) =======
+function updateGodSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const pomosSheet = ss.getSheetByName('Pomos'); 
+  
+  // 1. التأكد من وجود شيت god
+  let godSheet = ss.getSheetByName('god');
+  if (!godSheet) {
+    godSheet = ss.insertSheet('god');
+    // لو لسه جديد بنحط العناوين، غير كده مش هنلمس العناوين عشان منبوظش تنسيقك
+    godSheet.getRange("A1").setValue("Date");
+    godSheet.getRange("B1").setValue("Progress Bar");
+  }
+
+  // 2. تجميع البيانات من Pomos
+  const lastRow = pomosSheet.getLastRow();
+  if (lastRow < 2) return; 
+
+  // بنقرأ الداتا عشان نطلع التواريخ بس
+  const data = pomosSheet.getRange(2, 1, lastRow - 1, 6).getValues();
+  const dailyStats = {};
+
+  data.forEach(row => {
+    const date = new Date(row[1]); 
+    const dateStr = Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    const duration = parseFloat(row[5]) || 0; 
+    
+    if (!dailyStats[dateStr]) {
+      dailyStats[dateStr] = 0;
+    }
+    dailyStats[dateStr] += duration;
+  });
+
+  // 3. تجهيز البيانات (Date & Bar ONLY)
+  const outputRows = [];
+  const dates = Object.keys(dailyStats).sort((a, b) => new Date(b) - new Date(a)); 
+
+  dates.forEach(dateStr => {
+    const totalHours = dailyStats[dateStr];
+    
+    // حساب الـ Bar فقط (بدون عمود الساعات C)
+    const filledSlots = Math.min(16, Math.round(totalHours * 2)); 
+    const emptySlots = Math.max(0, 16 - filledSlots);
+    const visualBar = "✅".repeat(filledSlots) + "⬜".repeat(emptySlots);
+    
+    // بنجهز صف من عمودين بس: [التاريخ، البار]
+    outputRows.push([dateStr, visualBar]);
+  });
+
+  // 4. الكتابة الآمنة (Surgical Write)
+  
+  // أ. تنظيف العمودين A و B فقط من الصف الثاني لنهاية الشيت
+  // بنستخدم getMaxRows عشان نضمن إننا بنمسح لحد آخر الشيت حتى لو الداتا القديمة كانت أطول
+  const maxRows = godSheet.getMaxRows();
+  if (maxRows > 1) {
+    godSheet.getRange(2, 1, maxRows - 1, 2).clearContent(); 
+  }
+
+  // ب. كتابة البيانات الجديدة في A و B
+  if (outputRows.length > 0) {
+    godSheet.getRange(2, 1, outputRows.length, 2).setValues(outputRows);
+  }
+  
+  // ملحوظة: شلنا أي أوامر تنسيق (Formatting) بتمسح شغلك
+  // لو عايز تثبت عرض الأعمدة ممكن تسيب السطرين دول، لو مش عايز شيلهم
+  godSheet.setColumnWidth(1, 100); // Date Width
+  godSheet.setColumnWidth(2, 350); // Bar Width
+  
+  Logger.log("Updated god sheet (Columns A & B only). Manual formulas preserved.");
+}
+
+
+function installZooperFinalFix() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('Zooper');
+  
+  if (!sheet) {
+    Logger.log("Zooper sheet not found!");
+    return;
+  }
+
+  // 1. مسح القديم تماماً (Clean Slate)
+  sheet.clearConditionalFormatRules();
+
+  // 2. القواعد والألوان
+  const rulesConfig = [
+    {text: "G2", bg: "#274e13", color: "white"}, 
+    {text: "R",  bg: "#ff0000", color: "black"}, 
+    {text: "G",  bg: "#00ff00", color: "black"}, 
+    {text: "B",  bg: "#0000ff", color: "white"}, 
+    {text: "C",  bg: "#00ffff", color: "black"}, 
+    {text: "J",  bg: "#f9cb9c", color: "black"}, 
+    {text: "Y",  bg: "#FFFF00", color: "black"}, 
+    {text: "M",  bg: "#ff00ff", color: "black"}, 
+    {text: "K",  bg: "#666666", color: "white"}, 
+    {text: "S",  bg: "#000000", color: "white"}, 
+    {text: "W",  bg: "#85200c", color: "white"}, 
+    {text: "O",  bg: "#85200c", color: "white"}, 
+    {text: "N",  bg: "#8e7cc3", color: "white"}, 
+    {text: "L",  bg: "#bf9000", color: "black"}
+  ];
+
+  // 3. تعريف الرينجات (فوق وتحت)
+  
+  // أ) القادة (Source): 2, 4, 6, 9, 11, 13
+  // دول هيتطبق عليهم "Text Contains"
+  const sourceRows = [2, 4, 6, 9, 11, 13];
+
+  // ب) التابعين (Target): 3, 5, 7, 10, 12, 14
+  // دول هيتطبق عليهم المعادلة النسبية
+  const targetRows = [3, 5, 7, 10, 12, 14];
+
+  // دالة تجميع النطاقات (C:F و J:M)
+  function getRanges(rowsList) {
+    const ranges = [];
+    rowsList.forEach(r => {
+      ranges.push(sheet.getRange(`C${r}:F${r}`)); // اليسار
+      ranges.push(sheet.getRange(`J${r}:M${r}`)); // اليمين
+    });
+    return ranges;
+  }
+
+  const sourceRanges = getRanges(sourceRows);
+  const targetRanges = getRanges(targetRows);
+
+  const rules = [];
+
+  rulesConfig.forEach(config => {
+    
+    // === القاعدة 1: القادة (Direct Text) ===
+    const ruleSource = SpreadsheetApp.newConditionalFormatRule()
+      .whenTextContains(config.text)
+      .setBackground(config.bg)
+      .setFontColor(config.color)
+      .setRanges(sourceRanges)
+      .build();
+    rules.push(ruleSource);
+
+    // === القاعدة 2: التابعين (Relative Formula) ===
+    // اللغز هنا: إحنا بنكتب معادلة بالنسبة لأول خلية في الرينج (اللي هي C3)
+    // المعادلة بتقول: بصي على C2 (اللي فوقك)
+    // جوجل شيت لوحده هيطبق نفس المنطق على باقي الخلايا (J3 هتبص على J2، و C5 هتبص على C4)
+    
+    // (?i) = ignore case (عشان R تشتغل زي r)
+    const formula = `=REGEXMATCH(TO_TEXT(C2), "(?i)${config.text}")`;
+    
+    const ruleTarget = SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied(formula)
+      .setBackground(config.bg)
+      .setFontColor(config.color)
+      .setRanges(targetRanges)
+      .build();
+    rules.push(ruleTarget);
+  });
+
+  // 4. التطبيق
+  sheet.setConditionalFormatRules(rules);
+  
+  SpreadsheetApp.getActiveSpreadsheet().toast("تم تطبيق المنطق النسبي (Relative Logic) بنجاح", "Zooper Success");
+}
