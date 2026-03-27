@@ -19,6 +19,34 @@ let USER_ID = null;
 let DB_REF = null;
 let _googleAccessToken = null;
 
+// ─── Token Persistence ───
+const LS_G_TOKEN = 'sm_google_token';
+const LS_G_TOKEN_TS = 'sm_google_token_ts';
+const G_TOKEN_TTL = 50 * 60 * 1000; // 50 minutes (tokens expire at 60)
+
+function cacheGoogleToken(token) {
+  _googleAccessToken = token;
+  try {
+    localStorage.setItem(LS_G_TOKEN, token || '');
+    localStorage.setItem(LS_G_TOKEN_TS, String(Date.now()));
+  } catch (e) {}
+}
+
+function restoreGoogleToken() {
+  try {
+    const t = localStorage.getItem(LS_G_TOKEN);
+    const ts = parseInt(localStorage.getItem(LS_G_TOKEN_TS) || '0');
+    if (t && ts && (Date.now() - ts < G_TOKEN_TTL)) {
+      _googleAccessToken = t;
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+// Restore on load
+restoreGoogleToken();
+
 const ENGINES = [
   { k: 'bm', ic: '🔖', name: 'Bookmarks (local)', url: '' },
   { k: 'g', ic: '🔍', name: 'Google', url: 'https://www.google.com/search?q=' },
@@ -329,9 +357,8 @@ function getCachedPageData(pid) { try { return JSON.parse(localStorage.getItem(l
 
 document.getElementById('login-btn').onclick = () =>
   auth.signInWithPopup(provider).then((result) => {
-    // Store Google access token for Drive API
     if (result.credential) {
-      _googleAccessToken = result.credential.accessToken;
+      cacheGoogleToken(result.credential.accessToken);
     }
   }).catch((e) => alert(e.message));
 document.getElementById('logout-btn').onclick = () => auth.signOut();
@@ -343,13 +370,9 @@ auth.onAuthStateChanged((user) => {
     document.getElementById('user-email').textContent = '👤 ' + user.email;
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('root').style.display = 'flex';
-    // Re-authenticate silently to get a fresh access token for Drive API
-    user.getIdToken(true).catch(() => {});
-    // Try to get the access token from the credential if available
+    // Restore Google access token from cache if we don't have one
     if (!_googleAccessToken) {
-      auth.currentUser.getIdToken().then(() => {
-        // Access token will be refreshed via re-auth when needed
-      }).catch(() => {});
+      restoreGoogleToken();
     }
     initDB();
   } else {
@@ -1322,27 +1345,34 @@ function closeSnapshotModal() {
 const GDRIVE_FOLDER_NAME = 'Startmine Backups';
 const GDRIVE_BACKUP_PREFIX = 'startmine_backup_';
 
-// Ensure we have a valid Google access token (re-auth if needed)
+// Ensure we have a valid Google access token (NO auto-popup — returns null if expired)
 async function ensureGoogleToken() {
+  // Try restoring from localStorage first
+  if (!_googleAccessToken) restoreGoogleToken();
   if (_googleAccessToken) {
-    // Test if token is still valid
+    // Quick validity check
     try {
-      const resp = await fetch('https://www.googleapis.com/drive/v3/about?fields=user', {
-        headers: { 'Authorization': 'Bearer ' + _googleAccessToken }
-      });
+      const resp = await fetch('https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=' + _googleAccessToken);
       if (resp.ok) return _googleAccessToken;
-    } catch (e) { /* token expired */ }
+    } catch (e) { /* token invalid */ }
+    // Token expired — clear it
+    _googleAccessToken = null;
+    try { localStorage.removeItem(LS_G_TOKEN); } catch (e) {}
   }
-  // Re-authenticate to get a fresh token
-  showToast('🔑 Signing in to Google Drive…');
+  // DON'T auto-popup — return null. Callers will show a "Sign in" button.
+  return null;
+}
+
+// Manual re-auth (only called from user click)
+async function manualGoogleReAuth() {
   try {
     const result = await auth.signInWithPopup(provider);
     if (result.credential) {
-      _googleAccessToken = result.credential.accessToken;
+      cacheGoogleToken(result.credential.accessToken);
       return _googleAccessToken;
     }
   } catch (e) {
-    showToast('❌ Google Drive auth failed: ' + e.message, 4000);
+    showToast('❌ Auth failed: ' + e.message, 4000);
     throw e;
   }
   throw new Error('Could not get Google access token');

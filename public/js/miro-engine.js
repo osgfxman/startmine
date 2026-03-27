@@ -3252,7 +3252,7 @@ document.getElementById('mtb-calendar').onclick = () => {
   if (!_googleAccessToken) {
     auth.signInWithPopup(provider).then(result => {
       if (result.credential) {
-        _googleAccessToken = result.credential.accessToken;
+        cacheGoogleToken(result.credential.accessToken);
       }
       placeCalendarWidget();
     }).catch(e => showToast('❌ Auth failed: ' + e.message));
@@ -3278,7 +3278,7 @@ async function placeCalendarWidget() {
     y: cy - 250,
     w: 700,
     h: 500,
-    calView: 'week',
+    calView: '3day',
     calOffset: 0, // week offset for navigation
   };
 
@@ -3290,124 +3290,64 @@ async function placeCalendarWidget() {
   showToast('📅 Calendar widget added');
 }
 
-// ─── Calendar List (cached + auto-refresh token) ───
+// ─── Calendar List (cached) ───
 async function getCalendarList() {
   if (_cachedCalendarList && (Date.now() - _cachedCalendarListTs < CALENDAR_LIST_CACHE_MS)) {
     return _cachedCalendarList;
   }
-  try {
-    // Auto-refresh token if expired
-    if (typeof ensureGoogleToken === 'function') {
-      await ensureGoogleToken();
-    }
-    if (!_googleAccessToken) return [];
-    const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
-      headers: { 'Authorization': 'Bearer ' + _googleAccessToken }
-    });
-    if (res.status === 401) {
-      // Token expired – force refresh and retry once
-      _googleAccessToken = null;
-      if (typeof ensureGoogleToken === 'function') {
-        await ensureGoogleToken();
-      }
-      if (!_googleAccessToken) return _cachedCalendarList || [];
-      const res2 = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
-        headers: { 'Authorization': 'Bearer ' + _googleAccessToken }
-      });
-      if (!res2.ok) throw new Error('Calendar list failed after token refresh');
-      const data2 = await res2.json();
-      _cachedCalendarList = (data2.items || []).filter(c => c.selected !== false);
-      _cachedCalendarListTs = Date.now();
-      return _cachedCalendarList;
-    }
-    if (!res.ok) throw new Error('Calendar list failed: ' + res.status);
-    const data = await res.json();
-    _cachedCalendarList = (data.items || []).filter(c => c.selected !== false);
-    _cachedCalendarListTs = Date.now();
-    return _cachedCalendarList;
-  } catch (e) {
-    console.error('Calendar list error:', e);
-    return _cachedCalendarList || [];
+  if (typeof ensureGoogleToken === 'function') await ensureGoogleToken();
+  if (!_googleAccessToken) { const e = new Error('NEEDS_AUTH'); e.needsAuth = true; throw e; }
+  const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
+    headers: { 'Authorization': 'Bearer ' + _googleAccessToken }
+  });
+  if (res.status === 401) {
+    _googleAccessToken = null;
+    try { localStorage.removeItem('sm_google_token'); } catch (e) {}
+    const e = new Error('NEEDS_AUTH'); e.needsAuth = true; throw e;
   }
+  if (!res.ok) throw new Error('Calendar list failed: ' + res.status);
+  const data = await res.json();
+  _cachedCalendarList = (data.items || []).filter(c => c.selected !== false);
+  _cachedCalendarListTs = Date.now();
+  return _cachedCalendarList;
 }
 
-// ─── Fetch Events (auto-refresh token) ───
+// ─── Fetch Events ───
 async function fetchCalendarEvents(timeMin, timeMax) {
-  try {
-    // Auto-refresh token if expired
-    if (typeof ensureGoogleToken === 'function') {
-      await ensureGoogleToken();
-    }
-    if (!_googleAccessToken) throw new Error('Not authenticated');
+  if (typeof ensureGoogleToken === 'function') await ensureGoogleToken();
+  if (!_googleAccessToken) { const e = new Error('NEEDS_AUTH'); e.needsAuth = true; throw e; }
 
-    const calendars = await getCalendarList();
-    if (!calendars.length) return [];
+  const calendars = await getCalendarList();
+  if (!calendars.length) return [];
 
-    const allEvents = [];
-    const tMin = timeMin.toISOString();
-    const tMax = timeMax.toISOString();
-    let gotAuth401 = false;
+  const allEvents = [];
+  const tMin = timeMin.toISOString();
+  const tMax = timeMax.toISOString();
 
-    await Promise.all(calendars.map(async cal => {
-      try {
-        const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${tMin}&timeMax=${tMax}&singleEvents=true&orderBy=startTime&maxResults=200`;
-        const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + _googleAccessToken } });
-        if (res.status === 401) { gotAuth401 = true; return; }
-        if (!res.ok) return;
-        const data = await res.json();
-        (data.items || []).forEach(ev => {
-          allEvents.push({
-            id: ev.id,
-            calendarId: cal.id,
-            summary: ev.summary || '(No title)',
-            description: ev.description || '',
-            start: ev.start.dateTime || ev.start.date,
-            end: ev.end.dateTime || ev.end.date,
-            color: ev.colorId ? null : (cal.backgroundColor || '#4285f4'),
-            calendarName: cal.summary,
-            allDay: !ev.start.dateTime,
-          });
+  await Promise.all(calendars.map(async cal => {
+    try {
+      const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${tMin}&timeMax=${tMax}&singleEvents=true&orderBy=startTime&maxResults=200`;
+      const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + _googleAccessToken } });
+      if (res.status === 401) return; // will be caught by getCalendarList on next call
+      if (!res.ok) return;
+      const data = await res.json();
+      (data.items || []).forEach(ev => {
+        allEvents.push({
+          id: ev.id,
+          calendarId: cal.id,
+          summary: ev.summary || '(No title)',
+          description: ev.description || '',
+          start: ev.start.dateTime || ev.start.date,
+          end: ev.end.dateTime || ev.end.date,
+          color: ev.colorId ? null : (cal.backgroundColor || '#4285f4'),
+          calendarName: cal.summary,
+          allDay: !ev.start.dateTime,
         });
-      } catch (e) { /* skip individual calendar errors */ }
-    }));
+      });
+    } catch (e) { /* skip individual calendar */ }
+  }));
 
-    // If we got 401, try refreshing token and fetching again
-    if (gotAuth401 && allEvents.length === 0) {
-      _googleAccessToken = null;
-      if (typeof ensureGoogleToken === 'function') {
-        await ensureGoogleToken();
-      }
-      if (_googleAccessToken) {
-        // Retry all
-        await Promise.all(calendars.map(async cal => {
-          try {
-            const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${tMin}&timeMax=${tMax}&singleEvents=true&orderBy=startTime&maxResults=200`;
-            const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + _googleAccessToken } });
-            if (!res.ok) return;
-            const data = await res.json();
-            (data.items || []).forEach(ev => {
-              allEvents.push({
-                id: ev.id,
-                calendarId: cal.id,
-                summary: ev.summary || '(No title)',
-                description: ev.description || '',
-                start: ev.start.dateTime || ev.start.date,
-                end: ev.end.dateTime || ev.end.date,
-                color: ev.colorId ? null : (cal.backgroundColor || '#4285f4'),
-                calendarName: cal.summary,
-                allDay: !ev.start.dateTime,
-              });
-            });
-          } catch (e) { /* skip */ }
-        }));
-      }
-    }
-
-    return allEvents;
-  } catch (e) {
-    console.error('Calendar fetch error:', e);
-    throw e; // Propagate error so renderCalendarContent can show it
-  }
+  return allEvents;
 }
 
 // ─── Create Event ───
@@ -3667,9 +3607,13 @@ function _buildAnalogTimePicker(initialDate) {
   let minutes = initialDate.getMinutes();
 
   const wrap = document.createElement('div');
-  wrap.style.cssText = 'display:flex;align-items:center;gap:6px;';
+  wrap.style.cssText = 'display:flex;align-items:center;gap:4px;';
 
-  // Digital display (clickable)
+  // AM/PM helper
+  function to12(h) { const hr = h % 12; return hr === 0 ? 12 : hr; }
+  function ampm(h) { return h < 12 ? 'AM' : 'PM'; }
+
+  // Digital display
   const display = document.createElement('div');
   display.style.cssText = 'display:flex;align-items:center;gap:2px;cursor:pointer;user-select:none;';
 
@@ -3680,16 +3624,24 @@ function _buildAnalogTimePicker(initialDate) {
   sep.style.cssText = 'color:#aaa;font-size:.8rem;font-weight:700;';
   const mDisp = document.createElement('span');
   mDisp.className = 'cal-time-digit';
+  const ampmDisp = document.createElement('span');
+  ampmDisp.style.cssText = 'color:#6c8fff;font-size:.55rem;font-weight:700;cursor:pointer;margin-left:2px;user-select:none;';
+  ampmDisp.title = 'Toggle AM/PM';
 
   function updateDisplay() {
-    hDisp.textContent = String(hours).padStart(2, '0');
+    hDisp.textContent = String(to12(hours));
     mDisp.textContent = String(minutes).padStart(2, '0');
+    ampmDisp.textContent = ampm(hours);
   }
   updateDisplay();
+
+  // Toggle AM/PM on click
+  ampmDisp.onclick = (e) => { e.stopPropagation(); hours = (hours + 12) % 24; updateDisplay(); };
 
   display.appendChild(hDisp);
   display.appendChild(sep);
   display.appendChild(mDisp);
+  display.appendChild(ampmDisp);
 
   // Up/Down arrows for hours
   const hCol = document.createElement('div');
@@ -3707,23 +3659,23 @@ function _buildAnalogTimePicker(initialDate) {
   hCol.appendChild(hUp);
   hCol.appendChild(hDn);
 
-  // Up/Down arrows for minutes (step 5)
+  // Up/Down arrows for minutes (step 1 for precision)
   const mCol = document.createElement('div');
   mCol.style.cssText = 'display:flex;flex-direction:column;gap:1px;';
   const mUp = document.createElement('button');
   mUp.type = 'button';
   mUp.className = 'cal-time-arrow';
   mUp.textContent = '▲';
-  mUp.onclick = (e) => { e.stopPropagation(); minutes = (minutes + 5) % 60; updateDisplay(); };
+  mUp.onclick = (e) => { e.stopPropagation(); minutes = (minutes + 1) % 60; updateDisplay(); };
   const mDn = document.createElement('button');
   mDn.type = 'button';
   mDn.className = 'cal-time-arrow';
   mDn.textContent = '▼';
-  mDn.onclick = (e) => { e.stopPropagation(); minutes = (minutes - 5 + 60) % 60; updateDisplay(); };
+  mDn.onclick = (e) => { e.stopPropagation(); minutes = (minutes - 1 + 60) % 60; updateDisplay(); };
   mCol.appendChild(mUp);
   mCol.appendChild(mDn);
 
-  // Scroll on digits to change time
+  // Scroll on digits
   hDisp.addEventListener('wheel', (e) => {
     e.preventDefault(); e.stopPropagation();
     hours = (hours + (e.deltaY < 0 ? 1 : -1) + 24) % 24;
@@ -3731,7 +3683,7 @@ function _buildAnalogTimePicker(initialDate) {
   });
   mDisp.addEventListener('wheel', (e) => {
     e.preventDefault(); e.stopPropagation();
-    minutes = (minutes + (e.deltaY < 0 ? 5 : -5) + 60) % 60;
+    minutes = (minutes + (e.deltaY < 0 ? 1 : -1) + 60) % 60;
     updateDisplay();
   });
 
@@ -3788,15 +3740,36 @@ async function renderCalendarContent(el, card) {
     console.error('Calendar render: fetch failed', fetchErr);
     container.innerHTML = '';
     const errDiv = document.createElement('div');
-    errDiv.style.cssText = 'text-align:center;padding:40px 20px;color:#e55;font-size:.75rem;';
-    errDiv.innerHTML = `⚠️ Could not load events<br><span style="color:#888;font-size:.6rem;">${fetchErr.message || 'Token expired'}</span>`;
-    const retryBtn = document.createElement('button');
-    retryBtn.className = 'cal-form-btn cal-form-btn-primary';
-    retryBtn.style.cssText = 'margin-top:12px;';
-    retryBtn.textContent = '🔄 Retry';
-    retryBtn.onclick = (e) => { e.stopPropagation(); renderCalendarContent(el, card); };
-    errDiv.appendChild(document.createElement('br'));
-    errDiv.appendChild(retryBtn);
+    errDiv.style.cssText = 'text-align:center;padding:40px 20px;color:#aaa;font-size:.75rem;';
+
+    if (fetchErr.needsAuth) {
+      // Token expired — show sign-in button (user-initiated = no popup block)
+      errDiv.innerHTML = '🔑 Session expired<br><span style="color:#666;font-size:.6rem;">Click below to reconnect</span>';
+      const signBtn = document.createElement('button');
+      signBtn.className = 'cal-form-btn cal-form-btn-primary';
+      signBtn.style.cssText = 'margin-top:12px;font-size:.7rem;padding:6px 14px;';
+      signBtn.textContent = '🔐 Sign in to Google';
+      signBtn.onclick = async (e) => {
+        e.stopPropagation();
+        try {
+          await manualGoogleReAuth();
+          renderCalendarContent(el, card);
+        } catch (err) { /* toast shown by manualGoogleReAuth */ }
+      };
+      errDiv.appendChild(document.createElement('br'));
+      errDiv.appendChild(signBtn);
+    } else {
+      errDiv.style.color = '#e55';
+      errDiv.innerHTML = `⚠️ Could not load events<br><span style="color:#888;font-size:.6rem;">${fetchErr.message || 'Unknown error'}</span>`;
+      const retryBtn = document.createElement('button');
+      retryBtn.className = 'cal-form-btn cal-form-btn-primary';
+      retryBtn.style.cssText = 'margin-top:12px;';
+      retryBtn.textContent = '🔄 Retry';
+      retryBtn.onclick = (e) => { e.stopPropagation(); renderCalendarContent(el, card); };
+      errDiv.appendChild(document.createElement('br'));
+      errDiv.appendChild(retryBtn);
+    }
+
     container.appendChild(errDiv);
     return;
   }
@@ -4046,19 +4019,38 @@ async function renderCalendarContent(el, card) {
         const s2c = (HOUR_H * 24) / colRect.height;
         const origH = displayH;
 
+        // Tooltip for resize feedback
+        const tip = document.createElement('div');
+        tip.style.cssText = 'position:fixed;background:#222;color:#6c8fff;font-size:.65rem;padding:3px 8px;border-radius:4px;pointer-events:none;z-index:9999;font-weight:600;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.5);';
+        document.body.appendChild(tip);
+        function fmtMin(m) {
+          const h = Math.floor(m / 60) % 24;
+          const mm = m % 60;
+          const hr = h % 12 === 0 ? 12 : h % 12;
+          return `${hr}:${String(mm).padStart(2,'0')} ${h < 12 ? 'AM' : 'PM'}`;
+        }
+
         const onRMove = (ev2) => {
           const curY = (ev2.clientY - colRect.top) * s2c;
-          const newEndMin = Math.max(ev._startMin + 5, contentYToMin(curY));
-          const newH = Math.max(HOUR_H * 0.35, ((newEndMin - ev._startMin) / 60) * HOUR_H);
+          let rawEndMin = Math.max(ev._startMin + 15, contentYToMin(curY));
+          // Snap to 15 minutes
+          rawEndMin = Math.round(rawEndMin / 15) * 15;
+          const newH = Math.max(HOUR_H * 0.35, ((rawEndMin - ev._startMin) / 60) * HOUR_H);
           evEl.style.height = newH + 'px';
+          // Update tooltip
+          tip.textContent = `${fmtMin(ev._startMin)} → ${fmtMin(rawEndMin)}`;
+          tip.style.left = (ev2.clientX + 12) + 'px';
+          tip.style.top = (ev2.clientY - 10) + 'px';
         };
         const onRUp = async (ev2) => {
           document.removeEventListener('mousemove', onRMove);
           document.removeEventListener('mouseup', onRUp);
+          tip.remove();
           const curY = (ev2.clientY - colRect.top) * s2c;
-          const newEndMin = Math.max(ev._startMin + 5, contentYToMin(curY));
+          let rawEndMin = Math.max(ev._startMin + 15, contentYToMin(curY));
+          rawEndMin = Math.round(rawEndMin / 15) * 15;
           const newEnd = new Date(day);
-          newEnd.setHours(Math.floor(newEndMin / 60), newEndMin % 60, 0, 0);
+          newEnd.setHours(Math.floor(rawEndMin / 60), rawEndMin % 60, 0, 0);
           try {
             await updateCalendarEvent(ev.calendarId, ev.id, { summary: ev.summary, start: ev._start, end: newEnd });
             showToast('✅ Resized');
