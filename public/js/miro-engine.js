@@ -3592,10 +3592,9 @@ function showCalendarEventForm(container, el, card, opts) {
   form.appendChild(descInp);
   form.appendChild(btnRow);
 
-  // Stop event propagation on form interactions (but NOT wheel — let canvas zoom work)
-  ['mousedown', 'click', 'pointerdown'].forEach(evt => {
-    form.addEventListener(evt, e => e.stopPropagation());
-  });
+  // Stop propagation only for left-click interactions (not middle button = pan, not wheel = zoom)
+  form.addEventListener('mousedown', e => { if (e.button === 0) e.stopPropagation(); });
+  form.addEventListener('click', e => e.stopPropagation());
 
   el.appendChild(form);
   titleInp.focus();
@@ -4025,7 +4024,7 @@ async function renderCalendarContent(el, card) {
           endTime: ev._end,
         });
       });
-      evEl.addEventListener('mousedown', e => { if (!e.target.closest('.cal-resize-handle')) e.stopPropagation(); });
+      evEl.addEventListener('mousedown', e => { if (e.button === 0 && !e.target.closest('.cal-resize-handle')) e.stopPropagation(); });
 
       // ─── Bottom resize handle ───
       const resizeHandle = document.createElement('div');
