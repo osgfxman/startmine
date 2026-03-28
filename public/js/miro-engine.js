@@ -3592,8 +3592,8 @@ function showCalendarEventForm(container, el, card, opts) {
   form.appendChild(descInp);
   form.appendChild(btnRow);
 
-  // Stop event propagation on form interactions (including wheel to prevent canvas zoom)
-  ['mousedown', 'click', 'pointerdown', 'wheel'].forEach(evt => {
+  // Stop event propagation on form interactions (but NOT wheel — let canvas zoom work)
+  ['mousedown', 'click', 'pointerdown'].forEach(evt => {
     form.addEventListener(evt, e => e.stopPropagation());
   });
 
@@ -3878,6 +3878,14 @@ async function renderCalendarContent(el, card) {
       _dragOverlay.style.cssText = `position:absolute;left:2px;right:2px;top:${contentY}px;height:0px;background:rgba(74,122,255,.25);border:1px solid rgba(74,122,255,.5);border-radius:3px;z-index:8;pointer-events:none;`;
       dayCol.appendChild(_dragOverlay);
 
+      // Floating tooltip showing time range
+      const _dragTip = document.createElement('div');
+      _dragTip.style.cssText = 'position:fixed;background:#222;color:#6c8fff;font-size:.65rem;padding:3px 8px;border-radius:4px;pointer-events:none;z-index:9999;font-weight:600;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.5);';
+      document.body.appendChild(_dragTip);
+      function _fmtM(m) { const h=Math.floor(m/60)%24,mm=m%60,hr=h%12===0?12:h%12; return `${hr}:${String(mm).padStart(2,'0')} ${h<12?'AM':'PM'}`; }
+      _dragTip.textContent = _fmtM(startMinute);
+      _dragTip.style.left = (e.clientX+12)+'px'; _dragTip.style.top = (e.clientY-10)+'px';
+
       _dragState = { dayCol, day: new Date(day), contentStartY: contentY, startMinute, colRect, s2c, totalH };
 
       const onMouseMove = (ev) => {
@@ -3888,11 +3896,17 @@ async function renderCalendarContent(el, card) {
         const bottom = Math.max(_dragState.contentStartY, curContentY);
         _dragOverlay.style.top = top + 'px';
         _dragOverlay.style.height = (bottom - top) + 'px';
+        // Update time tooltip
+        const curMin = Math.max(0, Math.min(24*60, Math.floor((curContentY / _dragState.totalH)*24*60)));
+        const lo = Math.min(_dragState.startMinute, curMin), hi = Math.max(_dragState.startMinute, curMin);
+        _dragTip.textContent = `${_fmtM(lo)} → ${_fmtM(hi)}`;
+        _dragTip.style.left = (ev.clientX+12)+'px'; _dragTip.style.top = (ev.clientY-10)+'px';
       };
 
       const onMouseUp = (ev) => {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
+        _dragTip.remove();
         if (!_dragState || !_dragOverlay) return;
 
         const curScreenY = ev.clientY - _dragState.colRect.top;
@@ -3984,7 +3998,15 @@ async function renderCalendarContent(el, card) {
       const evEl = document.createElement('div');
       evEl.className = 'cal-event-block';
       const displayH = Math.max(HOUR_H * 0.35, height);
-      evEl.style.cssText = `position:absolute;top:${top}px;left:${leftPct}%;width:${widthPct}%;height:${displayH}px;background:${color};border-radius:3px;padding:1px 3px;font-size:.42rem;color:#fff;overflow:hidden;cursor:pointer;z-index:2;opacity:.85;line-height:1.15;box-sizing:border-box;`;
+      // Auto-contrast text color based on background luminance
+      function _textColor(bg) {
+        const m = bg.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i);
+        if (!m) return '#fff';
+        const lum = (parseInt(m[1],16)*299 + parseInt(m[2],16)*587 + parseInt(m[3],16)*114) / 1000;
+        return lum > 160 ? '#1a1a1a' : '#fff';
+      }
+      const txtColor = _textColor(color);
+      evEl.style.cssText = `position:absolute;top:${top}px;left:${leftPct}%;width:${widthPct}%;height:${displayH}px;background:${color};border-radius:3px;padding:1px 3px;font-size:.42rem;color:${txtColor};overflow:hidden;cursor:pointer;z-index:2;opacity:.9;line-height:1.15;box-sizing:border-box;font-weight:600;text-shadow:${txtColor==='#fff'?'0 1px 2px rgba(0,0,0,.4)':'none'};`;
       evEl.title = `${ev.summary}\n${ev.calendarName}\n${ev._start.toLocaleTimeString([], {hour:'numeric',minute:'2-digit',hour12:true})} - ${ev._end.toLocaleTimeString([], {hour:'numeric',minute:'2-digit',hour12:true})}`;
       evEl.textContent = ev.summary;
 

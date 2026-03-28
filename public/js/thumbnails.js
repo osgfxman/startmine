@@ -4388,15 +4388,20 @@ function buildMiroCalendar(card) {
   // Lock
   attachLockUI(el, card);
 
-  // Re-render on resize (debounced)
+  // Re-render on resize (heavily debounced to avoid flicker during zoom)
   let _resizeTimer = null;
+  let _lastW = el.offsetWidth, _lastH = el.offsetHeight;
   const resObs = new ResizeObserver(() => {
     clearTimeout(_resizeTimer);
     _resizeTimer = setTimeout(() => {
-      card.h = el.offsetHeight;
-      card.w = el.offsetWidth;
+      const w = el.offsetWidth, h = el.offsetHeight;
+      if (w < 50 || h < 50) return; // too small (mid-zoom), skip
+      if (Math.abs(w - _lastW) < 5 && Math.abs(h - _lastH) < 5) return;
+      _lastW = w; _lastH = h;
+      card.h = h;
+      card.w = w;
       if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
-    }, 200);
+    }, 500);
   });
   resObs.observe(el);
 
