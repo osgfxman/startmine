@@ -19,27 +19,18 @@ let USER_ID = null;
 let DB_REF = null;
 let _googleAccessToken = null;
 
-// ─── Token Persistence ───
+// ─── Token Persistence (stored forever, used until 401) ───
 const LS_G_TOKEN = 'sm_google_token';
-const LS_G_TOKEN_TS = 'sm_google_token_ts';
-const G_TOKEN_TTL = 50 * 60 * 1000; // 50 minutes (tokens expire at 60)
 
 function cacheGoogleToken(token) {
   _googleAccessToken = token;
-  try {
-    localStorage.setItem(LS_G_TOKEN, token || '');
-    localStorage.setItem(LS_G_TOKEN_TS, String(Date.now()));
-  } catch (e) {}
+  try { localStorage.setItem(LS_G_TOKEN, token || ''); } catch (e) {}
 }
 
 function restoreGoogleToken() {
   try {
     const t = localStorage.getItem(LS_G_TOKEN);
-    const ts = parseInt(localStorage.getItem(LS_G_TOKEN_TS) || '0');
-    if (t && ts && (Date.now() - ts < G_TOKEN_TTL)) {
-      _googleAccessToken = t;
-      return true;
-    }
+    if (t) { _googleAccessToken = t; return true; }
   } catch (e) {}
   return false;
 }
@@ -1345,22 +1336,12 @@ function closeSnapshotModal() {
 const GDRIVE_FOLDER_NAME = 'Startmine Backups';
 const GDRIVE_BACKUP_PREFIX = 'startmine_backup_';
 
-// Ensure we have a valid Google access token (NO auto-popup — returns null if expired)
+// Ensure we have a valid Google access token (NO validation, NO popup)
+// Just restore from cache. If it's expired, the API will return 401
+// and the calendar will show a "Sign in" button.
 async function ensureGoogleToken() {
-  // Try restoring from localStorage first
   if (!_googleAccessToken) restoreGoogleToken();
-  if (_googleAccessToken) {
-    // Quick validity check
-    try {
-      const resp = await fetch('https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=' + _googleAccessToken);
-      if (resp.ok) return _googleAccessToken;
-    } catch (e) { /* token invalid */ }
-    // Token expired — clear it
-    _googleAccessToken = null;
-    try { localStorage.removeItem(LS_G_TOKEN); } catch (e) {}
-  }
-  // DON'T auto-popup — return null. Callers will show a "Sign in" button.
-  return null;
+  return _googleAccessToken || null;
 }
 
 // Manual re-auth (only called from user click)
