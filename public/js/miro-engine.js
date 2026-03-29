@@ -373,7 +373,7 @@ function buildMiroCanvas() {
   if (!page.miroCards) page.miroCards = [];
   const board = document.getElementById('miro-board');
   // Remove only card elements, preserve selection overlays
-  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar').forEach((el) => el.remove());
+  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-embed').forEach((el) => el.remove());
   // Clear selection state
   _miroSelected.clear();
   document.getElementById('miro-sel-frame').style.display = 'none';
@@ -3420,8 +3420,9 @@ async function deleteCalendarEvent(calendarId, eventId) {
 // ─── Event Form (in-widget popup) ───
 function showCalendarEventForm(container, el, card, opts) {
   // opts: { mode:'create'|'edit', startTime, endTime, calendarId, eventId, summary, description, onDone }
-  const oldForm = el.querySelector('.cal-event-form');
-  if (oldForm) oldForm.remove();
+  // Remove any existing form overlay
+  const oldOverlay = document.querySelector('.cal-event-form')?.closest('[style*="position:fixed"]');
+  if (oldOverlay) oldOverlay.remove();
 
   const form = document.createElement('div');
   form.className = 'cal-event-form';
@@ -3614,15 +3615,33 @@ function showCalendarEventForm(container, el, card, opts) {
   form.appendChild(descInp);
   form.appendChild(btnRow);
 
-  // Stop propagation only for left-click interactions (not middle button = pan, not wheel = zoom)
+  // ─── Render as fixed overlay (centered on screen, unaffected by zoom) ───
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);';
+  overlay.addEventListener('mousedown', (e) => {
+    if (e.target === overlay) { overlay.remove(); document.removeEventListener('keydown', _onEscForm); }
+  });
+
+  form.style.cssText = 'background:var(--s2,#1e1e2e);border:1px solid var(--bd,#333);border-radius:14px;padding:18px 22px;min-width:340px;max-width:420px;width:90vw;box-shadow:0 12px 48px rgba(0,0,0,.7);display:flex;flex-direction:column;gap:4px;color:var(--tx,#eee);font-family:var(--font,Inter,sans-serif);';
   form.addEventListener('mousedown', e => { if (e.button === 0) e.stopPropagation(); });
   form.addEventListener('click', e => e.stopPropagation());
+  form.addEventListener('wheel', e => e.stopPropagation());
 
   // ESC closes the form
-  const _onEscForm = (e) => { if (e.key === 'Escape') { form.remove(); document.removeEventListener('keydown', _onEscForm); } };
+  const _onEscForm = (e) => {
+    if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', _onEscForm); }
+  };
   document.addEventListener('keydown', _onEscForm);
 
-  el.appendChild(form);
+  // Override cancel to remove overlay
+  cancelBtn.onclick = (e) => { e.stopPropagation(); overlay.remove(); document.removeEventListener('keydown', _onEscForm); };
+
+  // Override form.remove in save/delete to remove overlay
+  const _origFormRemove = form.remove.bind(form);
+  form.remove = () => { overlay.remove(); document.removeEventListener('keydown', _onEscForm); };
+
+  overlay.appendChild(form);
+  document.body.appendChild(overlay);
   titleInp.focus();
 }
 

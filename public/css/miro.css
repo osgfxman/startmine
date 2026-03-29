@@ -3894,27 +3894,15 @@ td.mg-sel {
   background: transparent;
 }
 
-/* ─── Calendar Event Form ─── */
+/* ─── Calendar Event Form (modal overlay) ─── */
 .cal-event-form {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
   z-index: 20;
-  background: rgba(22, 24, 40, 0.97);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(108, 143, 255, 0.25);
-  padding: 12px 14px 14px;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 -4px 24px rgba(0,0,0,.5);
-  animation: calFormSlideUp 0.2s ease-out;
+  animation: calFormFadeIn 0.2s ease-out;
 }
 
-@keyframes calFormSlideUp {
-  from { transform: translateY(100%); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+@keyframes calFormFadeIn {
+  from { transform: translateY(12px) scale(0.97); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
 }
 
 .cal-form-input {
