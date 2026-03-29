@@ -388,8 +388,8 @@
 .miro-embed .mc-resize-bl,
 .miro-embed .mc-resize-tr,
 .miro-embed .mc-resize-tl {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .miro-card:hover .mc-resize-br,
@@ -418,85 +418,109 @@
 .miro-card .mc-resize-br,
 .miro-widget .mc-resize-br,
 .miro-embed .mc-resize-br {
-  right: 0;
-  bottom: 0;
+  right: -3px;
+  bottom: -3px;
   cursor: nwse-resize;
-  background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.18) 50%);
-  border-radius: 0 0 12px 0;
+  background: #4a7aff;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 3px rgba(0,0,0,.4);
 }
 
 .miro-card .mc-resize-tl,
 .miro-widget .mc-resize-tl,
 .miro-embed .mc-resize-tl {
-  left: 0;
-  top: 0;
+  left: -3px;
+  top: -3px;
   cursor: nwse-resize;
-  background: linear-gradient(315deg, transparent 50%, rgba(255, 255, 255, 0.18) 50%);
-  border-radius: 12px 0 0 0;
+  background: #4a7aff;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 3px rgba(0,0,0,.4);
 }
 
 .miro-card .mc-resize-tr,
 .miro-widget .mc-resize-tr,
 .miro-embed .mc-resize-tr {
-  right: 0;
-  top: 0;
+  right: -3px;
+  top: -3px;
   cursor: nesw-resize;
-  background: linear-gradient(225deg, transparent 50%, rgba(255, 255, 255, 0.18) 50%);
-  border-radius: 0 12px 0 0;
+  background: #4a7aff;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 3px rgba(0,0,0,.4);
 }
 
 .miro-card .mc-resize-bl,
 .miro-widget .mc-resize-bl,
 .miro-embed .mc-resize-bl {
-  left: 0;
-  bottom: 0;
+  left: -3px;
+  bottom: -3px;
   cursor: nesw-resize;
-  background: linear-gradient(45deg, transparent 50%, rgba(255, 255, 255, 0.18) 50%);
-  border-radius: 0 0 0 12px;
+  background: #4a7aff;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 3px rgba(0,0,0,.4);
 }
 
 .miro-widget .mc-resize-t,
 .miro-embed .mc-resize-t {
-  top: -4px;
-  left: 12px;
-  right: 12px;
-  height: 8px;
+  top: -3px;
+  left: 16px;
+  right: 16px;
+  height: 6px;
   width: auto;
   cursor: ns-resize;
   background: transparent;
+  border-top: 2px solid transparent;
+}
+.miro-embed:hover .mc-resize-t {
+  border-top-color: #4a7aff;
 }
 
 .miro-widget .mc-resize-b,
 .miro-embed .mc-resize-b {
-  bottom: -4px;
-  left: 12px;
-  right: 12px;
-  height: 8px;
+  bottom: -3px;
+  left: 16px;
+  right: 16px;
+  height: 6px;
   width: auto;
   cursor: ns-resize;
   background: transparent;
+  border-bottom: 2px solid transparent;
+}
+.miro-embed:hover .mc-resize-b {
+  border-bottom-color: #4a7aff;
 }
 
 .miro-widget .mc-resize-l,
 .miro-embed .mc-resize-l {
-  left: -4px;
-  top: 12px;
-  bottom: 12px;
-  width: 8px;
+  left: -3px;
+  top: 16px;
+  bottom: 16px;
+  width: 6px;
   height: auto;
   cursor: ew-resize;
   background: transparent;
+  border-left: 2px solid transparent;
+}
+.miro-embed:hover .mc-resize-l {
+  border-left-color: #4a7aff;
 }
 
 .miro-widget .mc-resize-r,
 .miro-embed .mc-resize-r {
-  right: -4px;
-  top: 12px;
-  bottom: 12px;
-  width: 8px;
+  right: -3px;
+  top: 16px;
+  bottom: 16px;
+  width: 6px;
   height: auto;
   cursor: ew-resize;
   background: transparent;
+  border-right: 2px solid transparent;
+}
+.miro-embed:hover .mc-resize-r {
+  border-right-color: #4a7aff;
 }
 
 .miro-card .mc-open {

@@ -4530,17 +4530,10 @@ function buildMiroEmbed(card) {
   iframeWrap.appendChild(iframe);
   el.appendChild(iframeWrap);
 
-  // ─── Glass overlay — hidden by default (interact mode ON) ───
+  // ─── Glass overlay — shown by default (interact OFF) ───
   const glass = document.createElement('div');
-  glass.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:5;cursor:grab;display:none;';
+  glass.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:5;cursor:grab;';
   el.appendChild(glass);
-
-  // ─── Drag strip at top — always visible for moving widget even in interact mode ───
-  const dragStrip = document.createElement('div');
-  dragStrip.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:8px;z-index:6;cursor:grab;background:transparent;';
-  dragStrip.addEventListener('mouseenter', () => { dragStrip.style.background = 'rgba(74,122,255,.3)'; });
-  dragStrip.addEventListener('mouseleave', () => { dragStrip.style.background = 'transparent'; });
-  el.appendChild(dragStrip);
 
   // ─── Hover toolbar (appears on hover) ───
   const toolbar = document.createElement('div');
@@ -4582,39 +4575,27 @@ function buildMiroEmbed(card) {
   resetCropBtn.style.display = card.cropRect ? 'inline-block' : 'none';
   toolbar.appendChild(resetCropBtn);
 
-  // Interact toggle (ON by default)
-  let _interacting = true;
-  // Start with native iframe sizing (no scale) for correct click coordinates
-  iframe.style.width = (card.w || 600) + 'px';
-  iframe.style.height = (card.h || 400) + 'px';
-  iframe.style.transform = 'none';
-
-  function _setInteractMode(on) {
-    _interacting = on;
-    glass.style.display = on ? 'none' : 'block';
-    interactBtn.style.background = on ? 'rgba(74,122,255,.5)' : 'rgba(0,0,0,.6)';
-    interactBtn.textContent = on ? '🖱️' : '🔒';
-    interactBtn.title = on ? 'Interact ON (click to lock)' : 'Locked (click to interact)';
-    if (on) {
-      // Interact: remove scale, set iframe to element size for correct click coords
-      iframe.style.width = el.offsetWidth + 'px';
-      iframe.style.height = el.offsetHeight + 'px';
-      iframe.style.transform = 'none';
-      iframe.style.transformOrigin = '';
-    } else {
-      // Locked: re-apply scale transform for visual scaling
-      applyIframeTransform();
-    }
-  }
-  const interactBtn = _tbBtn('🖱️', 'Interact ON', () => {
-    _setInteractMode(!_interacting);
+  // Interact toggle (OFF by default)
+  let _interacting = false;
+  const interactBtn = _tbBtn('🖱️', 'Interact (click inside iframe)', () => {
+    _interacting = !_interacting;
+    glass.style.display = _interacting ? 'none' : 'block';
+    interactBtn.style.background = _interacting ? 'rgba(74,122,255,.5)' : 'rgba(0,0,0,.6)';
   });
-  interactBtn.style.background = 'rgba(74,122,255,.5)';
   toolbar.appendChild(interactBtn);
 
-  // Refresh
+  // Refresh this widget
   toolbar.appendChild(_tbBtn('🔄', 'Refresh', () => {
     iframe.src = card.embedUrl + (card.embedUrl.includes('?') ? '&' : '?') + '_t=' + Date.now();
+  }));
+
+  // Refresh ALL embed widgets on this page
+  toolbar.appendChild(_tbBtn('🔄⭐', 'Refresh All Embeds', () => {
+    document.querySelectorAll('.miro-embed iframe').forEach(f => {
+      const src = f.src.split(/[?&]_t=/)[0];
+      f.src = src + (src.includes('?') ? '&' : '?') + '_t=' + Date.now();
+    });
+    showToast('🔄 All embeds refreshed');
   }));
 
   // Delete
@@ -4651,15 +4632,7 @@ function buildMiroEmbed(card) {
       card.origW = card.w;
       card.origH = card.h;
     }
-    if (_interacting) {
-      // Interact mode: match iframe to element size (no scale = correct clicks)
-      iframe.style.width = card.w + 'px';
-      iframe.style.height = card.h + 'px';
-      iframe.style.transform = 'none';
-    } else {
-      // Locked mode: apply scale transform
-      applyIframeTransform();
-    }
+    applyIframeTransform();
   });
   resObs.observe(el);
 
