@@ -12,8 +12,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1774753337">
-  <link rel="stylesheet" href="css/miro.css?v=1774753337">
+  <link rel="stylesheet" href="css/base.css?v=1774755295">
+  <link rel="stylesheet" href="css/miro.css?v=1774755295">
 </head>
 
 <body>
@@ -597,6 +597,11 @@
   <div class="mo" id="m-settings">
     <div class="mc">
       <h3>⚙️ Settings</h3>
+      <div class="fg"><label>Startup Environment</label>
+        <select class="fi" id="set-def-env">
+          <option value="__last__">🕐 Remember last</option>
+        </select>
+      </div>
       <div class="fg"><label>Startup Group</label>
         <select class="fi" id="set-def-grp">
           <option value="__last__">🕐 Remember last</option>
@@ -606,21 +611,21 @@
         <select class="fi" id="set-def-pg">
           <option value="__last__">🕐 Remember last</option>
         </select>
-        <div class="fg"><label>Accent Color</label>
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <span id="ac-dot"
-              style="width:18px;height:18px;border-radius:50%;display:inline-block;border:2px solid rgba(255,255,255,.3)"></span>
-            <div id="ac-pop"></div>
-          </div>
+      </div>
+      <div class="fg"><label>Accent Color</label>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span id="ac-dot"
+            style="width:18px;height:18px;border-radius:50%;display:inline-block;border:2px solid rgba(255,255,255,.3)"></span>
+          <div id="ac-pop"></div>
         </div>
-        <div class="ma" style="justify-content:space-between">
-          <button class="btn" id="logout-btn"
-            style="color:var(--red);background:rgba(255,80,80,.1);border:1px solid rgba(255,80,80,.2)">🚪 Sign
-            Out</button>
-          <div style="display:flex;gap:6px">
-            <button class="btn bg-btn" onclick="closeM('m-settings')">Cancel</button>
-            <button class="btn ba" id="ok-settings">Save</button>
-          </div>
+      </div>
+      <div class="ma" style="justify-content:space-between">
+        <button class="btn" id="logout-btn"
+          style="color:var(--red);background:rgba(255,80,80,.1);border:1px solid rgba(255,80,80,.2)">🚪 Sign
+          Out</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn bg-btn" onclick="closeM('m-settings')">Cancel</button>
+          <button class="btn ba" id="ok-settings">Save</button>
         </div>
       </div>
     </div>
@@ -639,11 +644,11 @@
     <div class="ctx-item danger" data-action="delete"><span class="ctx-icon">🗑️</span><span class="ctx-label">Delete</span><span class="ctx-shortcut">Del</span></div>
   </div>
 
-    <script src="js/app.js?v=1774753337"></script>
-    <script src="js/outline.js?v=1774753337"></script>
-    <script src="js/miro-engine.js?v=1774753337"></script>
-    <script src="js/thumbnails.js?v=1774753337"></script>
-    <script src="js/alignment.js?v=1774753337"></script>
+    <script src="js/app.js?v=1774755295"></script>
+    <script src="js/outline.js?v=1774755295"></script>
+    <script src="js/miro-engine.js?v=1774755295"></script>
+    <script src="js/thumbnails.js?v=1774755295"></script>
+    <script src="js/alignment.js?v=1774755295"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});

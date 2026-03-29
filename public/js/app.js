@@ -497,6 +497,11 @@ function initDB() {
         } catch(e) {}
       }
       if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
+      // Ensure curGroup matches the restored page
+      const restoredPage = D.pages.find(p => p.id === D.cur);
+      if (restoredPage && restoredPage.groupId) {
+        D.curGroup = restoredPage.groupId;
+      }
       const cachedPage = getCachedPageData(D.cur);
       const pg = cp();
       if (pg && cachedPage) {
@@ -606,6 +611,9 @@ function setupShardedListeners() {
         } catch(e) {}
       }
       if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
+      // Ensure curGroup matches the restored page
+      const rp2 = D.pages.find(p => p.id === D.cur);
+      if (rp2 && rp2.groupId) D.curGroup = rp2.groupId;
       // Load cached page data for instant render
       const cachedPage = getCachedPageData(D.cur);
       const pg = cp();
@@ -687,6 +695,9 @@ function setupShardedListeners() {
         } catch(e) {}
       }
       if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
+      // Ensure curGroup matches the restored page
+      const rp3 = D.pages.find(p => p.id === D.cur);
+      if (rp3 && rp3.groupId) D.curGroup = rp3.groupId;
       isFirstLoad = false;
       switchActivePage(D.cur); // This will render All
     } else {
@@ -3037,8 +3048,16 @@ function posLivePv(ev) {
 
 // Settings
 document.getElementById('settings-btn').onclick = () => {
+  const envSel = document.getElementById('set-def-env');
   const grpSel = document.getElementById('set-def-grp');
   const pgSel = document.getElementById('set-def-pg');
+  envSel.innerHTML = '<option value="__last__">🕐 Remember last</option>';
+  (D.environments || []).forEach((e) => {
+    const o = document.createElement('option');
+    o.value = e.id;
+    o.textContent = e.name;
+    envSel.appendChild(o);
+  });
   grpSel.innerHTML = '<option value="__last__">🕐 Remember last</option>';
   D.groups.forEach((g) => {
     const o = document.createElement('option');
@@ -3053,11 +3072,13 @@ document.getElementById('settings-btn').onclick = () => {
     o.textContent = p.name;
     pgSel.appendChild(o);
   });
+  envSel.value = D.settings.defaultEnv || '__last__';
   grpSel.value = D.settings.defaultGroup || '__last__';
   pgSel.value = D.settings.defaultPage || '__last__';
   openM('m-settings');
 };
 document.getElementById('ok-settings').onclick = () => {
+  D.settings.defaultEnv = document.getElementById('set-def-env').value;
   D.settings.defaultGroup = document.getElementById('set-def-grp').value;
   D.settings.defaultPage = document.getElementById('set-def-pg').value;
   sv();

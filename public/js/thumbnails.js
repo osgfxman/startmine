@@ -4402,24 +4402,27 @@ function buildMiroCalendar(card) {
 
   // ─── Theme system ───
   function _applyCalTheme(el, theme) {
+    const btns = hdr.querySelectorAll('button');
     if (theme === 'light') {
       el.style.background = '#f5f6fa';
       el.style.border = '1px solid #d0d5dd';
       el.style.boxShadow = '0 4px 16px rgba(0,0,0,.12)';
       el.style.color = '#222';
-      hdr.style.background = 'rgba(66,133,244,.08)';
+      hdr.style.background = 'rgba(66,133,244,.06)';
       hdr.style.borderBottom = '1px solid #d0d5dd';
       title.style.color = '#333';
       body.style.color = '#222';
+      btns.forEach(b => { b.style.color = '#444'; b.style.background = 'rgba(0,0,0,.05)'; b.style.borderColor = '#ccc'; });
     } else if (theme === 'transparent') {
-      el.style.background = 'rgba(26,28,46,.35)';
-      el.style.border = '1px solid rgba(108,143,255,.15)';
-      el.style.boxShadow = '0 4px 24px rgba(0,0,0,.2)';
+      el.style.background = 'transparent';
+      el.style.border = '1px solid rgba(255,255,255,.08)';
+      el.style.boxShadow = 'none';
       el.style.color = '#ddd';
-      hdr.style.background = 'rgba(108,143,255,.05)';
+      hdr.style.background = 'transparent';
       hdr.style.borderBottom = '1px solid rgba(255,255,255,.06)';
       title.style.color = '#aaa';
       body.style.color = '#ccc';
+      btns.forEach(b => { b.style.color = '#aaa'; b.style.background = 'rgba(255,255,255,.05)'; b.style.borderColor = 'rgba(255,255,255,.1)'; });
     } else {
       // dark (default)
       el.style.background = '#1a1c2e';
@@ -4430,6 +4433,7 @@ function buildMiroCalendar(card) {
       hdr.style.borderBottom = '1px solid rgba(255,255,255,.08)';
       title.style.color = '#ccc';
       body.style.color = '#eee';
+      btns.forEach(b => { b.style.color = '#aaa'; b.style.background = 'rgba(255,255,255,.08)'; b.style.borderColor = 'rgba(255,255,255,.12)'; });
     }
   }
   _applyCalTheme(el, card.calTheme || 'dark');

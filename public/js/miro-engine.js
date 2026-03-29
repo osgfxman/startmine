@@ -3818,6 +3818,14 @@ async function renderCalendarContent(el, card) {
 // ─── Pure UI render (no fetch) ───
 function _renderCalGrid(container, el, card, events, startDate, days, now) {
   const START_HOUR = 0, END_HOUR = 24;
+  const theme = card.calTheme || 'dark';
+  const isLight = theme === 'light';
+  const dayNameColor = isLight ? '#555' : '#aaa';
+  const hourColor = isLight ? '#888' : '#666';
+  const gridBorder = isLight ? 'rgba(0,0,0,.08)' : 'rgba(255,255,255,.04)';
+  const headerBorder = isLight ? 'rgba(0,0,0,.12)' : 'rgba(255,255,255,.1)';
+  const todayBg = isLight ? 'rgba(66,133,244,.05)' : 'rgba(74,122,255,.03)';
+  const colBorder = isLight ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.05)';
 
   // Dynamic HOUR_H — fit 24h into available body height (NO scrollbars)
   const headerHeight = 24;
@@ -3830,7 +3838,7 @@ function _renderCalGrid(container, el, card, events, startDate, days, now) {
   // ─── Day Header Row ───
   const headerRow = document.createElement('div');
   headerRow.className = 'cal-header';
-  headerRow.style.cssText = `display:flex;border-bottom:1px solid rgba(255,255,255,.1);flex-shrink:0;height:${headerHeight}px;overflow:hidden;`;
+  headerRow.style.cssText = `display:flex;border-bottom:1px solid ${headerBorder};flex-shrink:0;height:${headerHeight}px;overflow:hidden;`;
   const timeCorner = document.createElement('div');
   timeCorner.style.cssText = 'width:30px;flex-shrink:0;';
   headerRow.appendChild(timeCorner);
@@ -3842,7 +3850,7 @@ function _renderCalGrid(container, el, card, events, startDate, days, now) {
     day.setDate(startDate.getDate() + d);
     const isToday = day.toDateString() === now.toDateString();
     const hdr = document.createElement('div');
-    hdr.style.cssText = `flex:1;text-align:center;padding:3px 0;font-size:.58rem;font-weight:600;color:${isToday ? '#4a7aff' : '#aaa'};`;
+    hdr.style.cssText = `flex:1;text-align:center;padding:3px 0;font-size:.58rem;font-weight:600;color:${isToday ? '#4a7aff' : dayNameColor};`;
     const dateSpan = document.createElement('span');
     dateSpan.style.cssText = `font-size:.65rem;${isToday ? 'background:#4a7aff;color:#fff;border-radius:50%;padding:1px 4px;' : ''}`;
     dateSpan.textContent = day.getDate();
@@ -3866,7 +3874,7 @@ function _renderCalGrid(container, el, card, events, startDate, days, now) {
     else if (h === 12) label = '12p';
     else label = (h - 12) + 'p';
     const cell = document.createElement('div');
-    cell.style.cssText = `height:${HOUR_H}px;font-size:.42rem;color:#666;text-align:right;padding-right:2px;box-sizing:border-box;border-top:1px solid rgba(255,255,255,.04);line-height:${HOUR_H}px;overflow:hidden;`;
+    cell.style.cssText = `height:${HOUR_H}px;font-size:.42rem;color:${hourColor};text-align:right;padding-right:2px;box-sizing:border-box;border-top:1px solid ${gridBorder};line-height:${HOUR_H}px;overflow:hidden;`;
     cell.textContent = label;
     timesCol.appendChild(cell);
   }
@@ -3887,7 +3895,7 @@ function _renderCalGrid(container, el, card, events, startDate, days, now) {
     day.setDate(startDate.getDate() + d);
     const isToday = day.toDateString() === now.toDateString();
     const dayCol = document.createElement('div');
-    dayCol.style.cssText = `flex:1;min-width:0;border-right:1px solid rgba(255,255,255,.05);position:relative;cursor:crosshair;overflow:hidden;${isToday ? 'background:rgba(74,122,255,.03);' : ''}`;
+    dayCol.style.cssText = `flex:1;min-width:0;border-right:1px solid ${colBorder};position:relative;cursor:crosshair;overflow:hidden;${isToday ? 'background:'+todayBg+';' : ''}`;
     dayCol.className = 'cal-day-col';
     dayCol.dataset.dayIdx = d;
 
@@ -3895,13 +3903,14 @@ function _renderCalGrid(container, el, card, events, startDate, days, now) {
     for (let h = START_HOUR; h < END_HOUR; h++) {
       const slot = document.createElement('div');
       slot.className = 'cal-slot';
-      slot.style.cssText = `height:${HOUR_H}px;border-top:1px solid rgba(255,255,255,.04);box-sizing:border-box;`;
+      slot.style.cssText = `height:${HOUR_H}px;border-top:1px solid ${gridBorder};box-sizing:border-box;`;
       slot.dataset.hour = h;
       slot.dataset.day = d;
       dayCol.appendChild(slot);
     }
 
     // ─── Drag-to-select on day column (zoom-aware) ───
+    // Snap: default=30min, Ctrl=15min, Alt=free(1min)
     dayCol.addEventListener('mousedown', (e) => {
       if (e.target.closest('.cal-event-block')) return;
       if (e.target.closest('.cal-resize-handle')) return;
@@ -3913,17 +3922,24 @@ function _renderCalGrid(container, el, card, events, startDate, days, now) {
       const totalH = HOUR_H * 24;
       const s2c = totalH / colRect.height;
 
+      function snapMin(rawMin, ev) {
+        const step = ev.altKey ? 1 : ev.ctrlKey ? 15 : 30;
+        return Math.round(rawMin / step) * step;
+      }
+      function rawMinFromY(cy) { return Math.max(0, Math.min(24*60, Math.floor((cy / totalH)*24*60))); }
+
       const screenY = e.clientY - colRect.top;
       const contentY = screenY * s2c;
-      const startMinute = Math.max(0, Math.round(Math.floor((contentY / totalH) * 24 * 60) / 15) * 15); // snap to 15 min
+      const startMinute = snapMin(rawMinFromY(contentY), e);
+      const startContentY = (startMinute / (24*60)) * totalH;
 
-      // Create drag overlay (positioned in content space)
+      // Create drag overlay
       _dragOverlay = document.createElement('div');
       _dragOverlay.className = 'cal-drag-overlay';
-      _dragOverlay.style.cssText = `position:absolute;left:2px;right:2px;top:${contentY}px;height:0px;background:rgba(74,122,255,.25);border:1px solid rgba(74,122,255,.5);border-radius:3px;z-index:8;pointer-events:none;`;
+      _dragOverlay.style.cssText = `position:absolute;left:2px;right:2px;top:${startContentY}px;height:0px;background:rgba(74,122,255,.25);border:1px solid rgba(74,122,255,.5);border-radius:3px;z-index:8;pointer-events:none;`;
       dayCol.appendChild(_dragOverlay);
 
-      // Floating tooltip showing time range
+      // Tooltip
       const _dragTip = document.createElement('div');
       _dragTip.style.cssText = 'position:fixed;background:#222;color:#6c8fff;font-size:.65rem;padding:3px 8px;border-radius:4px;pointer-events:none;z-index:9999;font-weight:600;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.5);';
       document.body.appendChild(_dragTip);
@@ -3931,19 +3947,19 @@ function _renderCalGrid(container, el, card, events, startDate, days, now) {
       _dragTip.textContent = _fmtM(startMinute);
       _dragTip.style.left = (e.clientX+12)+'px'; _dragTip.style.top = (e.clientY-10)+'px';
 
-      _dragState = { dayCol, day: new Date(day), contentStartY: contentY, startMinute, colRect, s2c, totalH };
+      _dragState = { dayCol, day: new Date(day), startMinute, colRect, s2c, totalH };
 
       const onMouseMove = (ev) => {
         if (!_dragState || !_dragOverlay) return;
-        const curScreenY = ev.clientY - _dragState.colRect.top;
-        const curContentY = curScreenY * _dragState.s2c;
-        const top = Math.min(_dragState.contentStartY, curContentY);
-        const bottom = Math.max(_dragState.contentStartY, curContentY);
+        const curContentY = (ev.clientY - _dragState.colRect.top) * _dragState.s2c;
+        const curSnapped = snapMin(rawMinFromY(curContentY), ev);
+        const startCY = (_dragState.startMinute / (24*60)) * _dragState.totalH;
+        const endCY = (curSnapped / (24*60)) * _dragState.totalH;
+        const top = Math.min(startCY, endCY);
+        const bottom = Math.max(startCY, endCY);
         _dragOverlay.style.top = top + 'px';
         _dragOverlay.style.height = (bottom - top) + 'px';
-        // Update time tooltip
-        const curMin = Math.max(0, Math.min(24*60, Math.floor((curContentY / _dragState.totalH)*24*60)));
-        const lo = Math.min(_dragState.startMinute, curMin), hi = Math.max(_dragState.startMinute, curMin);
+        const lo = Math.min(_dragState.startMinute, curSnapped), hi = Math.max(_dragState.startMinute, curSnapped);
         _dragTip.textContent = `${_fmtM(lo)} → ${_fmtM(hi)}`;
         _dragTip.style.left = (ev.clientX+12)+'px'; _dragTip.style.top = (ev.clientY-10)+'px';
       };
@@ -3954,25 +3970,19 @@ function _renderCalGrid(container, el, card, events, startDate, days, now) {
         _dragTip.remove();
         if (!_dragState || !_dragOverlay) return;
 
-        const curScreenY = ev.clientY - _dragState.colRect.top;
-        const curContentY = curScreenY * _dragState.s2c;
-        const endMinute = Math.max(0, Math.min(24 * 60, Math.floor((curContentY / _dragState.totalH) * 24 * 60)));
+        const curContentY = (ev.clientY - _dragState.colRect.top) * _dragState.s2c;
+        const endSnapped = snapMin(rawMinFromY(curContentY), ev);
 
         _dragOverlay.remove();
         _dragOverlay = null;
 
-        const minM = Math.min(_dragState.startMinute, endMinute);
-        const maxM = Math.max(_dragState.startMinute, endMinute);
+        let slotStartM = Math.min(_dragState.startMinute, endSnapped);
+        let slotEndM = Math.max(_dragState.startMinute, endSnapped);
 
-        // If drag was less than 10 minutes, treat as click (30 min default)
-        const dragDuration = maxM - minM;
-        let slotStartM, slotEndM;
-        if (dragDuration < 10) {
-          slotStartM = Math.floor(minM / 15) * 15;
+        // If drag was tiny (click), create 30-min slot at clicked position
+        if (slotEndM - slotStartM < 10) {
+          slotStartM = snapMin(_dragState.startMinute, { altKey: false, ctrlKey: false }); // force 30-min snap
           slotEndM = slotStartM + 30;
-        } else {
-          slotStartM = Math.floor(minM / 5) * 5;
-          slotEndM = Math.ceil(maxM / 5) * 5;
         }
 
         const slotStart = new Date(_dragState.day);
