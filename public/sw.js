@@ -1,15 +1,15 @@
 /* ─── Startmine Service Worker ─── */
-const CACHE_NAME = 'startmine-1774777178';
+const CACHE_NAME = 'startmine-1774789832';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
-  '/css/base.css?v=1774777178',
-  '/css/miro.css?v=1774777178',
-  '/js/app.js?v=1774777178',
-  '/js/miro-engine.js?v=1774777178',
-  '/js/thumbnails.js?v=1774777178',
-  '/js/outline.js?v=1774777178',
-  '/js/alignment.js?v=1774777178',
+  '/css/base.css?v=1774789832',
+  '/css/miro.css?v=1774789832',
+  '/js/app.js?v=1774789832',
+  '/js/miro-engine.js?v=1774789832',
+  '/js/thumbnails.js?v=1774789832',
+  '/js/outline.js?v=1774789832',
+  '/js/alignment.js?v=1774789832',
 ];
 
 // External CDN assets to cache

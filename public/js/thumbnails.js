@@ -4475,6 +4475,10 @@ function buildMiroCalendar(card) {
 // ─── Embed Web View Widget ───
 // ══════════════════════════════════════════════════════════
 function buildMiroEmbed(card) {
+  // Ensure origW/origH are set (full iframe dimensions before any crop)
+  if (!card.origW) card.origW = card.w || 600;
+  if (!card.origH) card.origH = card.h || 400;
+
   const el = document.createElement('div');
   el.className = 'miro-embed';
   el.dataset.cid = card.id;
@@ -4491,30 +4495,36 @@ function buildMiroEmbed(card) {
   iframe.setAttribute('loading', 'lazy');
   iframe.style.cssText = 'border:none;background:transparent;';
 
-  function applyCrop() {
+  // ─── Scale-based rendering: iframe stays at origW×origH, CSS scale fills element ───
+  function applyIframeTransform() {
+    const origW = card.origW || 600;
+    const origH = card.origH || 400;
+    const elW = card.w || origW;
+    const elH = card.h || origH;
+    iframe.style.width = origW + 'px';
+    iframe.style.height = origH + 'px';
+    iframe.style.transformOrigin = '0 0';
     const cr = card.cropRect;
-    const elW = el.offsetWidth || card.w || 600;
-    const elH = el.offsetHeight || card.h || 400;
     if (cr && cr.w > 0 && cr.h > 0) {
-      // Scale: how much bigger the iframe needs to be
-      const scaleX = 100 / cr.w;
-      const scaleY = 100 / cr.h;
-      // Iframe dimensions in pixels
-      const iW = elW * scaleX;
-      const iH = elH * scaleY;
-      // Translate: offset to show only the crop region
-      const tx = -(cr.x / 100) * iW;
-      const ty = -(cr.y / 100) * iH;
-      iframe.style.width = iW + 'px';
-      iframe.style.height = iH + 'px';
-      iframe.style.transform = `translate(${tx}px, ${ty}px)`;
-      iframe.style.transformOrigin = '0 0';
+      // Crop: scale so the crop region fills the element
+      const cropW_px = origW * cr.w / 100;
+      const cropH_px = origH * cr.h / 100;
+      const cropX_px = origW * cr.x / 100;
+      const cropY_px = origH * cr.y / 100;
+      const sx = elW / cropW_px;
+      const sy = elH / cropH_px;
+      const tx = -cropX_px * sx;
+      const ty = -cropY_px * sy;
+      iframe.style.transform = `translate(${tx}px,${ty}px) scale(${sx},${sy})`;
     } else {
-      iframe.style.width = '100%';
-      iframe.style.height = '100%';
-      iframe.style.transform = 'none';
+      // No crop: scale entire page to fit element
+      const sx = elW / origW;
+      const sy = elH / origH;
+      iframe.style.transform = `scale(${sx},${sy})`;
     }
   }
+  // Alias for crop mode compatibility
+  function applyCrop() { applyIframeTransform(); }
   applyCrop();
 
   iframeWrap.appendChild(iframe);
@@ -4546,25 +4556,24 @@ function buildMiroEmbed(card) {
     if (newUrl && newUrl.trim()) {
       card.embedUrl = newUrl.trim();
       iframe.src = card.embedUrl;
-      applyCrop();
       sv();
     }
   }));
 
   // Crop mode
   toolbar.appendChild(_tbBtn('✂️', 'Crop visible area', () => {
-    _startCropMode(el, card, iframe, iframeWrap, applyCrop, glass);
+    _startCropMode(el, card, iframe, iframeWrap, applyCrop, glass, resetCropBtn);
   }));
 
-  // Clear crop
-  if (card.cropRect) {
-    toolbar.appendChild(_tbBtn('↺', 'Reset crop', () => {
-      card.cropRect = null;
-      applyCrop();
-      sv();
-      buildMiroCanvas();
-    }));
-  }
+  // Clear crop (always present, hidden when no crop)
+  const resetCropBtn = _tbBtn('↺', 'Reset crop', () => {
+    card.cropRect = null;
+    applyCrop();
+    resetCropBtn.style.display = 'none';
+    sv();
+  });
+  resetCropBtn.style.display = card.cropRect ? 'inline-block' : 'none';
+  toolbar.appendChild(resetCropBtn);
 
   // Interact toggle
   let _interacting = false;
@@ -4598,24 +4607,60 @@ function buildMiroEmbed(card) {
   miroSetupCardDrag(el, card, ['button', 'input', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.mc-resize-t', '.mc-resize-b', '.mc-resize-l', '.mc-resize-r', '.mc-lock']);
   attach8WayResize(el, card, 100, 80);
   attachLockUI(el, card);
+  // ─── Dual resize: Normal = scale content, Ctrl = change frame viewport ───
+  let _embedCtrlHeld = false;
+  const _ctrlDown = (e) => { if (e.key === 'Control') _embedCtrlHeld = true; };
+  const _ctrlUp = (e) => { if (e.key === 'Control') _embedCtrlHeld = false; };
+  document.addEventListener('keydown', _ctrlDown);
+  document.addEventListener('keyup', _ctrlUp);
 
-  // Re-apply crop on resize (safe: only updates iframe, no canvas rebuild)
-  if (card.cropRect) {
-    const resObs = new ResizeObserver(() => applyCrop());
-    resObs.observe(el);
-  }
+  // Re-apply transform when element is resized via handles
+  const resObs = new ResizeObserver(() => {
+    card.w = el.offsetWidth || card.w;
+    card.h = el.offsetHeight || card.h;
+    if (_embedCtrlHeld) {
+      // Ctrl+resize: change the iframe viewport (origW/origH)
+      // This reveals more/less of the page without scaling
+      card.origW = card.w;
+      card.origH = card.h;
+    }
+    // Normal resize: origW/origH stay fixed, content scales
+    applyIframeTransform();
+  });
+  resObs.observe(el);
+
+  // Cleanup Ctrl listeners when element is removed
+  const _cleanupObs = new MutationObserver(() => {
+    if (!document.body.contains(el)) {
+      document.removeEventListener('keydown', _ctrlDown);
+      document.removeEventListener('keyup', _ctrlUp);
+      _cleanupObs.disconnect();
+      resObs.disconnect();
+    }
+  });
+  _cleanupObs.observe(document.body, { childList: true, subtree: true });
 
   return el;
 }
 
 // ─── Crop Mode for Embed Widget ───
-function _startCropMode(el, card, iframe, iframeWrap, applyCrop, glass) {
-  // Temporarily show full iframe for crop selection
+function _startCropMode(el, card, iframe, iframeWrap, applyCrop, glass, resetCropBtn) {
+  // Save current crop for cancel
   const savedCrop = card.cropRect;
-  card.cropRect = null;
-  applyCrop();
+  const origW = card.origW || card.w || 600;
+  const origH = card.origH || card.h || 400;
+
+  // Temporarily expand element to full original size so user sees everything (1:1 scale)
+  el.style.width = origW + 'px';
+  el.style.height = origH + 'px';
+  card.w = origW;
+  card.h = origH;
+  iframe.style.width = origW + 'px';
+  iframe.style.height = origH + 'px';
+  iframe.style.transform = 'scale(1,1)';
+  iframe.style.transformOrigin = '0 0';
   iframe.style.pointerEvents = 'none';
-  if (glass) glass.style.display = 'none'; // hide glass during crop
+  if (glass) glass.style.display = 'none';
 
   // Overlay for drawing crop rectangle
   const overlay = document.createElement('div');
@@ -4634,12 +4679,23 @@ function _startCropMode(el, card, iframe, iframeWrap, applyCrop, glass) {
 
   let startX, startY, dragging = false;
 
+  // Convert screen coords to overlay's local coords (accounts for board zoom)
+  function screenToLocal(e) {
+    const r = overlay.getBoundingClientRect();
+    const sx = overlay.offsetWidth / r.width;   // = 1/zoom
+    const sy = overlay.offsetHeight / r.height;
+    return {
+      x: (e.clientX - r.left) * sx,
+      y: (e.clientY - r.top) * sy
+    };
+  }
+
   const onMouseDown = (e) => {
     if (e.button !== 0) return;
     e.preventDefault(); e.stopPropagation();
-    const r = overlay.getBoundingClientRect();
-    startX = e.clientX - r.left;
-    startY = e.clientY - r.top;
+    const p = screenToLocal(e);
+    startX = p.x;
+    startY = p.y;
     dragging = true;
     hint.style.display = 'none';
     cropBox.style.display = 'block';
@@ -4651,11 +4707,9 @@ function _startCropMode(el, card, iframe, iframeWrap, applyCrop, glass) {
 
   const onMouseMove = (e) => {
     if (!dragging) return;
-    const r = overlay.getBoundingClientRect();
-    const curX = e.clientX - r.left;
-    const curY = e.clientY - r.top;
-    const x = Math.min(startX, curX), y = Math.min(startY, curY);
-    const w = Math.abs(curX - startX), h = Math.abs(curY - startY);
+    const p = screenToLocal(e);
+    const x = Math.min(startX, p.x), y = Math.min(startY, p.y);
+    const w = Math.abs(p.x - startX), h = Math.abs(p.y - startY);
     cropBox.style.left = x + 'px'; cropBox.style.top = y + 'px';
     cropBox.style.width = w + 'px'; cropBox.style.height = h + 'px';
   };
@@ -4663,12 +4717,11 @@ function _startCropMode(el, card, iframe, iframeWrap, applyCrop, glass) {
   const onMouseUp = (e) => {
     if (!dragging) return;
     dragging = false;
-    const r = overlay.getBoundingClientRect();
-    const curX = e.clientX - r.left;
-    const curY = e.clientY - r.top;
-    const totalW = r.width, totalH = r.height;
-    const x = Math.min(startX, curX), y = Math.min(startY, curY);
-    const w = Math.abs(curX - startX), h = Math.abs(curY - startY);
+    const p = screenToLocal(e);
+    // Use LOCAL dimensions for percentage calculations
+    const totalW = overlay.offsetWidth, totalH = overlay.offsetHeight;
+    const x = Math.min(startX, p.x), y = Math.min(startY, p.y);
+    const w = Math.abs(p.x - startX), h = Math.abs(p.y - startY);
 
     overlay.remove();
     document.removeEventListener('mousemove', onMouseMove);
@@ -4679,21 +4732,31 @@ function _startCropMode(el, card, iframe, iframeWrap, applyCrop, glass) {
     if (w < 20 || h < 20) {
       card.cropRect = savedCrop;
       applyCrop();
+      if (glass) glass.style.display = 'block';
+      iframe.style.pointerEvents = '';
       return;
     }
 
-    // Save as percentages
+    // Save as percentages of origW/origH
     card.cropRect = {
       x: (x / totalW) * 100,
       y: (y / totalH) * 100,
       w: (w / totalW) * 100,
       h: (h / totalH) * 100,
     };
+    // Shrink element to match crop region (1:1 initial scale)
+    const cropW = origW * (w / totalW);
+    const cropH = origH * (h / totalH);
+    card.w = cropW;
+    card.h = cropH;
+    el.style.width = cropW + 'px';
+    el.style.height = cropH + 'px';
     applyCrop();
+    if (glass) glass.style.display = 'block';
+    iframe.style.pointerEvents = '';
+    if (resetCropBtn) resetCropBtn.style.display = 'inline-block';
     sv();
     showToast('✂️ Crop applied');
-    // Rebuild to show reset button
-    buildMiroCanvas();
   };
 
   const onEscape = (e) => {
@@ -4704,6 +4767,8 @@ function _startCropMode(el, card, iframe, iframeWrap, applyCrop, glass) {
       document.removeEventListener('keydown', onEscape);
       card.cropRect = savedCrop;
       applyCrop();
+      if (glass) glass.style.display = 'block';
+      iframe.style.pointerEvents = '';
     }
   };
 

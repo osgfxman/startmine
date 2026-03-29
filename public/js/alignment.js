@@ -95,9 +95,6 @@
       pushUndo();
       arrangeGrid(cols, null, gH, gV);
       sv();
-      const savedSel = [..._miroSelected];
-      buildMiroCanvas();
-      savedSel.forEach(cid => addMiroSelect(cid));
       updateMiroSelFrame();
 
       popup.remove();
@@ -306,9 +303,6 @@
     document.removeEventListener('mousemove', onAlignMove);
     document.removeEventListener('mouseup', onAlignUp);
     sv();
-    const savedSel = [..._miroSelected];
-    buildMiroCanvas();
-    savedSel.forEach(cid => addMiroSelect(cid));
     updateMiroSelFrame();
   }
 
@@ -329,7 +323,7 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
     !_alignDragging &&
     !_justRubberBanded
   ) {
-    if (_stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode) return;
+    if (_stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _embedCreateMode || _calendarCreateMode) return;
     if (typeof closeOpenGroup === 'function') closeOpenGroup();
     clearMiroSelection();
   }
@@ -413,11 +407,10 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
         sv();
-        const savedSel = [..._miroSelected];
-        buildMiroCanvas();
-        savedSel.forEach(cid => addMiroSelect(cid));
         updateMiroSelFrame();
+        // Auto-size sticky text after group resize
         const curPage = cp();
+        const savedSel = [..._miroSelected];
         savedSel.forEach(cid => {
           const c = (curPage.miroCards || []).find(x => x.id === cid);
           if (c && c.type === 'sticky' && c.fontSizeMode === 'auto') {
