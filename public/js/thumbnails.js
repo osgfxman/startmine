@@ -861,6 +861,106 @@ function attachLockUI(el, card) {
   btn.addEventListener('click', onClick);
 
   el.appendChild(btn);
+
+  // ─── Pin/Unpin Button ───
+  const pinBtn = document.createElement('button');
+  pinBtn.className = 'mc-lock'; // reuse lock button styling
+  pinBtn.style.cssText = 'right:28px;background:rgba(0,0,0,.55);';
+  pinBtn.title = card.pinned ? 'Unpin from screen' : 'Pin to screen';
+  const pinIcon = document.createElement('span');
+  pinIcon.textContent = card.pinned ? '📌' : '📍';
+  pinBtn.appendChild(pinIcon);
+
+  // Pin indicator badge
+  let pinBadge = null;
+  function showPinBadge() {
+    if (pinBadge) return;
+    pinBadge = document.createElement('div');
+    pinBadge.className = 'miro-pinned-indicator';
+    pinBadge.textContent = '📌 Pinned';
+    el.appendChild(pinBadge);
+  }
+  function hidePinBadge() {
+    if (pinBadge) { pinBadge.remove(); pinBadge = null; }
+  }
+
+  function pinElement() {
+    const pinnedLayer = document.getElementById('miro-pinned-layer');
+    if (!pinnedLayer) return;
+    // Get current screen position
+    const rect = el.getBoundingClientRect();
+    card.pinned = true;
+    card._pinScreenX = rect.left;
+    card._pinScreenY = rect.top;
+    // Move to pinned layer
+    pinnedLayer.appendChild(el);
+    el.style.position = 'fixed';
+    el.style.left = rect.left + 'px';
+    el.style.top = rect.top + 'px';
+    pinIcon.textContent = '📌';
+    pinBtn.title = 'Unpin from screen';
+    pinBtn.style.background = 'rgba(255,107,53,.6)';
+    showPinBadge();
+    sv();
+  }
+
+  function unpinElement() {
+    const board = document.getElementById('miro-board');
+    if (!board) return;
+    // Calculate canvas position from screen position
+    const page = typeof cp === 'function' ? cp() : {};
+    const zoom = (page.zoom || 100) / 100;
+    const panX = page.panX || 0;
+    const panY = page.panY || 0;
+    const screenX = parseFloat(el.style.left) || 0;
+    const screenY = parseFloat(el.style.top) || 0;
+    // Reverse transform: screenPos = canvasPos * zoom + pan
+    // So: canvasPos = (screenPos - pan) / zoom
+    const canvasX = (screenX - panX) / zoom;
+    const canvasY = (screenY - panY) / zoom;
+    card.pinned = false;
+    card.x = canvasX;
+    card.y = canvasY;
+    delete card._pinScreenX;
+    delete card._pinScreenY;
+    // Move back to board
+    board.appendChild(el);
+    el.style.position = 'absolute';
+    el.style.left = canvasX + 'px';
+    el.style.top = canvasY + 'px';
+    pinIcon.textContent = '📍';
+    pinBtn.title = 'Pin to screen';
+    pinBtn.style.background = 'rgba(0,0,0,.55)';
+    hidePinBadge();
+    sv();
+  }
+
+  pinBtn.addEventListener('mousedown', e => e.stopPropagation());
+  pinBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (card.pinned) {
+      unpinElement();
+    } else {
+      pinElement();
+    }
+  });
+
+  el.appendChild(pinBtn);
+
+  // If card was saved as pinned, re-apply on load
+  if (card.pinned) {
+    requestAnimationFrame(() => {
+      const pinnedLayer = document.getElementById('miro-pinned-layer');
+      if (pinnedLayer) {
+        pinnedLayer.appendChild(el);
+        el.style.position = 'fixed';
+        el.style.left = (card._pinScreenX || 100) + 'px';
+        el.style.top = (card._pinScreenY || 100) + 'px';
+        pinBtn.style.background = 'rgba(255,107,53,.6)';
+        showPinBadge();
+      }
+    });
+  }
 }
 
 function buildMiroSticky(card) {
@@ -4581,6 +4681,18 @@ function buildMiroEmbed(card) {
     _interacting = !_interacting;
     glass.style.display = _interacting ? 'none' : 'block';
     interactBtn.style.background = _interacting ? 'rgba(74,122,255,.5)' : 'rgba(0,0,0,.6)';
+    if (_interacting) {
+      // Native mode: iframe matches element size, no scale → clicks work correctly
+      iframe.style.width = el.offsetWidth + 'px';
+      iframe.style.height = el.offsetHeight + 'px';
+      iframe.style.transform = 'none';
+      iframe.style.transformOrigin = '';
+      iframe.setAttribute('scrolling', 'no');
+    } else {
+      // Scale mode: re-apply visual scaling
+      iframe.removeAttribute('scrolling');
+      applyIframeTransform();
+    }
   });
   toolbar.appendChild(interactBtn);
 
@@ -4628,11 +4740,17 @@ function buildMiroEmbed(card) {
     card.w = el.offsetWidth || card.w;
     card.h = el.offsetHeight || card.h;
     if (_embedCtrlHeld) {
-      // Ctrl+resize: change the iframe viewport (origW/origH)
       card.origW = card.w;
       card.origH = card.h;
     }
-    applyIframeTransform();
+    if (_interacting) {
+      // Native mode during interaction
+      iframe.style.width = card.w + 'px';
+      iframe.style.height = card.h + 'px';
+      iframe.style.transform = 'none';
+    } else {
+      applyIframeTransform();
+    }
   });
   resObs.observe(el);
 

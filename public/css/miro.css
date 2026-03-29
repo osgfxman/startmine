@@ -35,6 +35,36 @@
   transform-origin: 0 0;
 }
 
+/* ── Pinned layer: elements stay fixed on screen regardless of zoom/pan ── */
+#miro-pinned-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 9998;
+  overflow: visible;
+}
+#miro-pinned-layer > * {
+  pointer-events: auto;
+}
+.miro-pinned-indicator {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #ff6b35;
+  color: #fff;
+  font-size: 8px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 20;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0,0,0,.3);
+}
+
 /* ── Zoom-aware floating UI: stays constant screen size at any zoom ── */
 #miro-board .mc-del,
 #miro-board .mc-lock {
