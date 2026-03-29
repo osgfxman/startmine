@@ -4493,7 +4493,7 @@ function buildMiroEmbed(card) {
   iframe.setAttribute('frameborder', '0');
   iframe.setAttribute('allowfullscreen', 'true');
   iframe.setAttribute('loading', 'lazy');
-  iframe.style.cssText = 'border:none;background:transparent;';
+  iframe.style.cssText = 'border:none;background:transparent;pointer-events:auto;';
 
   // ─── Scale-based rendering: iframe stays at origW×origH, CSS scale fills element ───
   function applyIframeTransform() {
@@ -4530,10 +4530,17 @@ function buildMiroEmbed(card) {
   iframeWrap.appendChild(iframe);
   el.appendChild(iframeWrap);
 
-  // ─── Glass overlay — CRITICAL for drag/resize (iframe eats events otherwise) ───
+  // ─── Glass overlay — hidden by default (interact mode ON) ───
   const glass = document.createElement('div');
-  glass.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:5;cursor:grab;';
+  glass.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:5;cursor:grab;display:none;';
   el.appendChild(glass);
+
+  // ─── Drag strip at top — always visible for moving widget even in interact mode ───
+  const dragStrip = document.createElement('div');
+  dragStrip.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:8px;z-index:6;cursor:grab;background:transparent;';
+  dragStrip.addEventListener('mouseenter', () => { dragStrip.style.background = 'rgba(74,122,255,.3)'; });
+  dragStrip.addEventListener('mouseleave', () => { dragStrip.style.background = 'transparent'; });
+  el.appendChild(dragStrip);
 
   // ─── Hover toolbar (appears on hover) ───
   const toolbar = document.createElement('div');
@@ -4575,13 +4582,34 @@ function buildMiroEmbed(card) {
   resetCropBtn.style.display = card.cropRect ? 'inline-block' : 'none';
   toolbar.appendChild(resetCropBtn);
 
-  // Interact toggle
-  let _interacting = false;
-  const interactBtn = _tbBtn('🖱️', 'Interact', () => {
-    _interacting = !_interacting;
-    glass.style.display = _interacting ? 'none' : 'block';
-    interactBtn.style.background = _interacting ? 'rgba(74,122,255,.5)' : 'rgba(0,0,0,.6)';
+  // Interact toggle (ON by default)
+  let _interacting = true;
+  // Start with native iframe sizing (no scale) for correct click coordinates
+  iframe.style.width = (card.w || 600) + 'px';
+  iframe.style.height = (card.h || 400) + 'px';
+  iframe.style.transform = 'none';
+
+  function _setInteractMode(on) {
+    _interacting = on;
+    glass.style.display = on ? 'none' : 'block';
+    interactBtn.style.background = on ? 'rgba(74,122,255,.5)' : 'rgba(0,0,0,.6)';
+    interactBtn.textContent = on ? '🖱️' : '🔒';
+    interactBtn.title = on ? 'Interact ON (click to lock)' : 'Locked (click to interact)';
+    if (on) {
+      // Interact: remove scale, set iframe to element size for correct click coords
+      iframe.style.width = el.offsetWidth + 'px';
+      iframe.style.height = el.offsetHeight + 'px';
+      iframe.style.transform = 'none';
+      iframe.style.transformOrigin = '';
+    } else {
+      // Locked: re-apply scale transform for visual scaling
+      applyIframeTransform();
+    }
+  }
+  const interactBtn = _tbBtn('🖱️', 'Interact ON', () => {
+    _setInteractMode(!_interacting);
   });
+  interactBtn.style.background = 'rgba(74,122,255,.5)';
   toolbar.appendChild(interactBtn);
 
   // Refresh
@@ -4620,12 +4648,18 @@ function buildMiroEmbed(card) {
     card.h = el.offsetHeight || card.h;
     if (_embedCtrlHeld) {
       // Ctrl+resize: change the iframe viewport (origW/origH)
-      // This reveals more/less of the page without scaling
       card.origW = card.w;
       card.origH = card.h;
     }
-    // Normal resize: origW/origH stay fixed, content scales
-    applyIframeTransform();
+    if (_interacting) {
+      // Interact mode: match iframe to element size (no scale = correct clicks)
+      iframe.style.width = card.w + 'px';
+      iframe.style.height = card.h + 'px';
+      iframe.style.transform = 'none';
+    } else {
+      // Locked mode: apply scale transform
+      applyIframeTransform();
+    }
   });
   resObs.observe(el);
 
