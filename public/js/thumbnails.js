@@ -390,6 +390,7 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
             else if (c.type === 'bwidget') el = buildMiroBookmarkWidget(c);
             else if (c.type === 'array') el = buildMiroArray(c);
             else if (c.type === 'calendar') el = buildMiroCalendar(c);
+            else if (c.type === 'embed') el = buildMiroEmbed(c);
             else el = buildMiroCard(c);
             if (el) board.appendChild(el);
           } catch (err) { console.error('[CLONE RENDER]', err); }
@@ -4468,5 +4469,247 @@ function buildMiroCalendar(card) {
   });
 
   return el;
+}
+
+// ══════════════════════════════════════════════════════════
+// ─── Embed Web View Widget ───
+// ══════════════════════════════════════════════════════════
+function buildMiroEmbed(card) {
+  const el = document.createElement('div');
+  el.className = 'miro-embed';
+  el.dataset.cid = card.id;
+  el.style.cssText = `position:absolute;left:${card.x||0}px;top:${card.y||0}px;width:${card.w||600}px;height:${card.h||400}px;overflow:hidden;background:transparent;border:none;box-shadow:none;z-index:${card.zIndex||1};`;
+
+  // ─── Iframe container (clips the view) ───
+  const iframeWrap = document.createElement('div');
+  iframeWrap.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;overflow:hidden;';
+  
+  const iframe = document.createElement('iframe');
+  iframe.src = card.embedUrl || '';
+  iframe.setAttribute('frameborder', '0');
+  iframe.setAttribute('allowfullscreen', 'true');
+  iframe.setAttribute('loading', 'lazy');
+  iframe.style.cssText = 'border:none;background:transparent;';
+
+  function applyCrop() {
+    const cr = card.cropRect;
+    const elW = el.offsetWidth || card.w || 600;
+    const elH = el.offsetHeight || card.h || 400;
+    if (cr && cr.w > 0 && cr.h > 0) {
+      // Scale: how much bigger the iframe needs to be
+      const scaleX = 100 / cr.w;
+      const scaleY = 100 / cr.h;
+      // Iframe dimensions in pixels
+      const iW = elW * scaleX;
+      const iH = elH * scaleY;
+      // Translate: offset to show only the crop region
+      const tx = -(cr.x / 100) * iW;
+      const ty = -(cr.y / 100) * iH;
+      iframe.style.width = iW + 'px';
+      iframe.style.height = iH + 'px';
+      iframe.style.transform = `translate(${tx}px, ${ty}px)`;
+      iframe.style.transformOrigin = '0 0';
+    } else {
+      iframe.style.width = '100%';
+      iframe.style.height = '100%';
+      iframe.style.transform = 'none';
+    }
+  }
+  applyCrop();
+
+  iframeWrap.appendChild(iframe);
+  el.appendChild(iframeWrap);
+
+  // ─── Glass overlay — CRITICAL for drag/resize (iframe eats events otherwise) ───
+  const glass = document.createElement('div');
+  glass.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:5;cursor:grab;';
+  el.appendChild(glass);
+
+  // ─── Hover toolbar (appears on hover) ───
+  const toolbar = document.createElement('div');
+  toolbar.style.cssText = 'position:absolute;top:4px;right:4px;display:flex;gap:3px;opacity:0;transition:opacity .15s;z-index:10;';
+  el.addEventListener('mouseenter', () => { toolbar.style.opacity = '1'; });
+  el.addEventListener('mouseleave', () => { toolbar.style.opacity = '0'; });
+
+  function _tbBtn(text, tip, fn) {
+    const b = document.createElement('button');
+    b.style.cssText = 'background:rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.15);border-radius:4px;color:#fff;font-size:.55rem;padding:2px 5px;cursor:pointer;backdrop-filter:blur(4px);';
+    b.textContent = text; b.title = tip;
+    b.onclick = (e) => { e.stopPropagation(); fn(); };
+    b.addEventListener('mousedown', e => e.stopPropagation());
+    return b;
+  }
+
+  // Edit URL
+  toolbar.appendChild(_tbBtn('🔗', 'Edit URL', () => {
+    const newUrl = prompt('🌐 Enter new URL:', card.embedUrl || '');
+    if (newUrl && newUrl.trim()) {
+      card.embedUrl = newUrl.trim();
+      iframe.src = card.embedUrl;
+      applyCrop();
+      sv();
+    }
+  }));
+
+  // Crop mode
+  toolbar.appendChild(_tbBtn('✂️', 'Crop visible area', () => {
+    _startCropMode(el, card, iframe, iframeWrap, applyCrop, glass);
+  }));
+
+  // Clear crop
+  if (card.cropRect) {
+    toolbar.appendChild(_tbBtn('↺', 'Reset crop', () => {
+      card.cropRect = null;
+      applyCrop();
+      sv();
+      buildMiroCanvas();
+    }));
+  }
+
+  // Interact toggle
+  let _interacting = false;
+  const interactBtn = _tbBtn('🖱️', 'Interact', () => {
+    _interacting = !_interacting;
+    glass.style.display = _interacting ? 'none' : 'block';
+    interactBtn.style.background = _interacting ? 'rgba(74,122,255,.5)' : 'rgba(0,0,0,.6)';
+  });
+  toolbar.appendChild(interactBtn);
+
+  // Refresh
+  toolbar.appendChild(_tbBtn('🔄', 'Refresh', () => {
+    iframe.src = card.embedUrl + (card.embedUrl.includes('?') ? '&' : '?') + '_t=' + Date.now();
+  }));
+
+  // Delete
+  toolbar.appendChild(_tbBtn('✕', 'Delete', () => {
+    if (typeof deleteMiroCard === 'function') deleteMiroCard(card.id);
+  }));
+
+  el.appendChild(toolbar);
+
+  // ─── Auto-refresh every N minutes ───
+  const refreshMs = (card.refreshMin || 15) * 60 * 1000;
+  const _refreshTimer = setInterval(() => {
+    if (!document.body.contains(el)) { clearInterval(_refreshTimer); return; }
+    iframe.src = card.embedUrl + (card.embedUrl.includes('?') ? '&' : '?') + '_t=' + Date.now();
+  }, refreshMs);
+
+  // ─── Miro integration ───
+  miroSetupCardDrag(el, card, ['button', 'input', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.mc-resize-t', '.mc-resize-b', '.mc-resize-l', '.mc-resize-r', '.mc-lock']);
+  attach8WayResize(el, card, 100, 80);
+  attachLockUI(el, card);
+
+  // Re-apply crop on resize (safe: only updates iframe, no canvas rebuild)
+  if (card.cropRect) {
+    const resObs = new ResizeObserver(() => applyCrop());
+    resObs.observe(el);
+  }
+
+  return el;
+}
+
+// ─── Crop Mode for Embed Widget ───
+function _startCropMode(el, card, iframe, iframeWrap, applyCrop, glass) {
+  // Temporarily show full iframe for crop selection
+  const savedCrop = card.cropRect;
+  card.cropRect = null;
+  applyCrop();
+  iframe.style.pointerEvents = 'none';
+  if (glass) glass.style.display = 'none'; // hide glass during crop
+
+  // Overlay for drawing crop rectangle
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:20;cursor:crosshair;background:rgba(0,0,0,.15);';
+
+  const hint = document.createElement('div');
+  hint.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.7);color:#fff;font-size:.7rem;padding:8px 14px;border-radius:6px;pointer-events:none;text-align:center;white-space:nowrap;';
+  hint.textContent = '✂️ Drag to select the visible area • ESC to cancel';
+  overlay.appendChild(hint);
+
+  const cropBox = document.createElement('div');
+  cropBox.style.cssText = 'position:absolute;border:2px dashed #4a7aff;background:rgba(74,122,255,.1);display:none;pointer-events:none;z-index:21;';
+  overlay.appendChild(cropBox);
+
+  el.appendChild(overlay);
+
+  let startX, startY, dragging = false;
+
+  const onMouseDown = (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    const r = overlay.getBoundingClientRect();
+    startX = e.clientX - r.left;
+    startY = e.clientY - r.top;
+    dragging = true;
+    hint.style.display = 'none';
+    cropBox.style.display = 'block';
+    cropBox.style.left = startX + 'px';
+    cropBox.style.top = startY + 'px';
+    cropBox.style.width = '0px';
+    cropBox.style.height = '0px';
+  };
+
+  const onMouseMove = (e) => {
+    if (!dragging) return;
+    const r = overlay.getBoundingClientRect();
+    const curX = e.clientX - r.left;
+    const curY = e.clientY - r.top;
+    const x = Math.min(startX, curX), y = Math.min(startY, curY);
+    const w = Math.abs(curX - startX), h = Math.abs(curY - startY);
+    cropBox.style.left = x + 'px'; cropBox.style.top = y + 'px';
+    cropBox.style.width = w + 'px'; cropBox.style.height = h + 'px';
+  };
+
+  const onMouseUp = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    const r = overlay.getBoundingClientRect();
+    const curX = e.clientX - r.left;
+    const curY = e.clientY - r.top;
+    const totalW = r.width, totalH = r.height;
+    const x = Math.min(startX, curX), y = Math.min(startY, curY);
+    const w = Math.abs(curX - startX), h = Math.abs(curY - startY);
+
+    overlay.remove();
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+    document.removeEventListener('keydown', onEscape);
+
+    // Min crop size: 20px
+    if (w < 20 || h < 20) {
+      card.cropRect = savedCrop;
+      applyCrop();
+      return;
+    }
+
+    // Save as percentages
+    card.cropRect = {
+      x: (x / totalW) * 100,
+      y: (y / totalH) * 100,
+      w: (w / totalW) * 100,
+      h: (h / totalH) * 100,
+    };
+    applyCrop();
+    sv();
+    showToast('✂️ Crop applied');
+    // Rebuild to show reset button
+    buildMiroCanvas();
+  };
+
+  const onEscape = (e) => {
+    if (e.key === 'Escape') {
+      overlay.remove();
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('keydown', onEscape);
+      card.cropRect = savedCrop;
+      applyCrop();
+    }
+  };
+
+  overlay.addEventListener('mousedown', onMouseDown);
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+  document.addEventListener('keydown', onEscape);
 }
 

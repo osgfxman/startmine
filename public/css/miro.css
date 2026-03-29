@@ -81,6 +81,34 @@
   box-shadow: 0 6px 28px rgba(0, 0, 0, 0.6);
 }
 
+.miro-embed {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.miro-embed .mc-lock {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 9;
+  background: rgba(0, 0, 0, 0.55);
+  border: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mu);
+  cursor: pointer;
+  font-size: 0.7rem;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s;
+  overflow: hidden;
+}
+.miro-embed:hover .mc-lock { opacity: 1; }
+.miro-embed .mc-lock:hover { color: var(--tx); background: rgba(0,0,0,.75); }
+
 .miro-widget .wb::-webkit-scrollbar {
   width: 6px;
 }
@@ -213,7 +241,9 @@
 .miro-card.is-locked [class^="sn-toolbar"],
 .miro-card.is-locked .ms-shape-toggle,
 .miro-card.is-locked .mt-toolbar,
-.miro-card.is-locked .mc-open {
+.miro-card.is-locked .mc-open,
+.miro-embed.is-locked [class^="mc-resize-"],
+.miro-embed.is-locked .mc-del {
   display: none !important;
 }
 
@@ -331,9 +361,17 @@
 .miro-widget .mc-resize-t,
 .miro-widget .mc-resize-b,
 .miro-widget .mc-resize-l,
-.miro-widget .mc-resize-r {
+.miro-widget .mc-resize-r,
+.miro-embed .mc-resize-br,
+.miro-embed .mc-resize-bl,
+.miro-embed .mc-resize-tr,
+.miro-embed .mc-resize-tl,
+.miro-embed .mc-resize-t,
+.miro-embed .mc-resize-b,
+.miro-embed .mc-resize-l,
+.miro-embed .mc-resize-r {
   position: absolute;
-  z-index: 4;
+  z-index: 8;
   opacity: 0;
   transition: opacity 0.12s;
 }
@@ -345,7 +383,11 @@
 .miro-widget .mc-resize-br,
 .miro-widget .mc-resize-bl,
 .miro-widget .mc-resize-tr,
-.miro-widget .mc-resize-tl {
+.miro-widget .mc-resize-tl,
+.miro-embed .mc-resize-br,
+.miro-embed .mc-resize-bl,
+.miro-embed .mc-resize-tr,
+.miro-embed .mc-resize-tl {
   width: 14px;
   height: 14px;
 }
@@ -361,12 +403,21 @@
 .miro-widget:hover .mc-resize-t,
 .miro-widget:hover .mc-resize-b,
 .miro-widget:hover .mc-resize-l,
-.miro-widget:hover .mc-resize-r {
+.miro-widget:hover .mc-resize-r,
+.miro-embed:hover .mc-resize-br,
+.miro-embed:hover .mc-resize-bl,
+.miro-embed:hover .mc-resize-tr,
+.miro-embed:hover .mc-resize-tl,
+.miro-embed:hover .mc-resize-t,
+.miro-embed:hover .mc-resize-b,
+.miro-embed:hover .mc-resize-l,
+.miro-embed:hover .mc-resize-r {
   opacity: 1;
 }
 
 .miro-card .mc-resize-br,
-.miro-widget .mc-resize-br {
+.miro-widget .mc-resize-br,
+.miro-embed .mc-resize-br {
   right: 0;
   bottom: 0;
   cursor: nwse-resize;
@@ -375,7 +426,8 @@
 }
 
 .miro-card .mc-resize-tl,
-.miro-widget .mc-resize-tl {
+.miro-widget .mc-resize-tl,
+.miro-embed .mc-resize-tl {
   left: 0;
   top: 0;
   cursor: nwse-resize;
@@ -384,7 +436,8 @@
 }
 
 .miro-card .mc-resize-tr,
-.miro-widget .mc-resize-tr {
+.miro-widget .mc-resize-tr,
+.miro-embed .mc-resize-tr {
   right: 0;
   top: 0;
   cursor: nesw-resize;
@@ -393,7 +446,8 @@
 }
 
 .miro-card .mc-resize-bl,
-.miro-widget .mc-resize-bl {
+.miro-widget .mc-resize-bl,
+.miro-embed .mc-resize-bl {
   left: 0;
   bottom: 0;
   cursor: nesw-resize;
@@ -401,7 +455,8 @@
   border-radius: 0 0 0 12px;
 }
 
-.miro-widget .mc-resize-t {
+.miro-widget .mc-resize-t,
+.miro-embed .mc-resize-t {
   top: -4px;
   left: 12px;
   right: 12px;
@@ -411,7 +466,8 @@
   background: transparent;
 }
 
-.miro-widget .mc-resize-b {
+.miro-widget .mc-resize-b,
+.miro-embed .mc-resize-b {
   bottom: -4px;
   left: 12px;
   right: 12px;
@@ -421,7 +477,8 @@
   background: transparent;
 }
 
-.miro-widget .mc-resize-l {
+.miro-widget .mc-resize-l,
+.miro-embed .mc-resize-l {
   left: -4px;
   top: 12px;
   bottom: 12px;
@@ -431,7 +488,8 @@
   background: transparent;
 }
 
-.miro-widget .mc-resize-r {
+.miro-widget .mc-resize-r,
+.miro-embed .mc-resize-r {
   right: -4px;
   top: 12px;
   bottom: 12px;
@@ -2449,6 +2507,40 @@
 
 #miro-shape-panel.show {
   display: flex;
+}
+
+/* ─── More Tools Side Panel ─── */
+#mtb-more-panel {
+  position: fixed;
+  top: 50%;
+  left: 60px;
+  transform: translateY(-50%);
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 14px;
+  padding: 14px 10px;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, .5);
+  backdrop-filter: blur(12px);
+  z-index: 601;
+  width: 120px;
+}
+#mtb-more-panel.show {
+  display: flex;
+}
+.mtb-more-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.mtb-more-grid .mtb-btn {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .msp-title {

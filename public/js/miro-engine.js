@@ -400,6 +400,7 @@ function buildMiroCanvas() {
     else if (card.type === 'bwidget') board.appendChild(buildMiroBookmarkWidget(card));
     else if (card.type === 'array') board.appendChild(buildMiroArray(card));
     else if (card.type === 'calendar') board.appendChild(buildMiroCalendar(card));
+    else if (card.type === 'embed') board.appendChild(buildMiroEmbed(card));
     else board.appendChild(buildMiroCard(card));
     } catch (err) { console.error('[RENDER ERROR]', card.type, card.id, err); }
   });
@@ -1385,7 +1386,7 @@ let _penDrawing = false;
 function setActiveTool(tool) {
   _activeTool = tool;
   document.querySelectorAll('.mtb-btn').forEach(b => b.classList.remove('sel'));
-  const btnMap = { select: 'mtb-select', sticky: 'mtb-sticky', text: 'mtb-text', shape: 'mtb-shape', pen: 'mtb-pen', grid: 'mtb-grid', mindmap: 'mtb-mindmap', image: 'mtb-image', card: 'mtb-card', widget: 'mtb-widget', trello: 'mtb-trello' };
+  const btnMap = { select: 'mtb-select', sticky: 'mtb-sticky', text: 'mtb-text', shape: 'mtb-shape', pen: 'mtb-pen', grid: 'mtb-grid', mindmap: 'mtb-mindmap', image: 'mtb-image', card: 'mtb-card', widget: 'mtb-widget', trello: 'mtb-trello', embed: 'mtb-embed' };
   const btn = document.getElementById(btnMap[tool]);
   if (btn) btn.classList.add('sel');
   _penMode = tool === 'pen';
@@ -1396,6 +1397,7 @@ function setActiveTool(tool) {
   _mindmapCreateMode = tool === 'mindmap';
   _widgetCreateMode = tool === 'widget';
   _trelloCreateMode = tool === 'trello';
+  _embedCreateMode = tool === 'embed';
 
   const hint = document.getElementById('sn-create-hint');
   if (_stickyCreateMode) { hint.textContent = '📝 Click anywhere to place a sticky note • Press Esc to cancel'; hint.style.display = 'block'; }
@@ -1404,10 +1406,11 @@ function setActiveTool(tool) {
   else if (_mindmapCreateMode) { hint.textContent = '🧠 Click anywhere to place a mind map • Press Esc to cancel'; hint.style.display = 'block'; }
   else if (_widgetCreateMode) { hint.textContent = '🗂️ Click anywhere to place a bookmark widget • Press Esc to cancel'; hint.style.display = 'block'; }
   else if (_trelloCreateMode) { hint.textContent = '📋 Click anywhere to place Trello lists • Press Esc to cancel'; hint.style.display = 'block'; }
+  else if (_embedCreateMode) { hint.textContent = '🌐 Click anywhere to place an embed web view • Press Esc to cancel'; hint.style.display = 'block'; }
   else { hint.style.display = 'none'; }
 
   document.getElementById('miro-pen-toolbar').classList.toggle('show', _penMode);
-  const cursor = (_penMode || _shapeMode || _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode) ? 'crosshair' : 'grab';
+  const cursor = (_penMode || _shapeMode || _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode || _embedCreateMode) ? 'crosshair' : 'grab';
   document.getElementById('miro-canvas').style.cursor = cursor;
   if (!_shapeMode) document.getElementById('miro-shape-panel').classList.remove('show');
 }
@@ -1417,6 +1420,7 @@ let _gridCreateMode = false;
 let _mindmapCreateMode = false;
 let _widgetCreateMode = false;
 let _trelloCreateMode = false;
+let _embedCreateMode = false;
 
 document.getElementById('mtb-select').onclick = () => setActiveTool('select');
 document.getElementById('mtb-sticky').onclick = () => setActiveTool('sticky');
@@ -1429,7 +1433,7 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
   if (e.button !== 0 && e.type !== 'touchstart') return;
 
   // Check if ANY creation mode is active
-  const anyCreateMode = _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode;
+  const anyCreateMode = _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode || _embedCreateMode;
   if (!anyCreateMode) return;
 
   // Only block clicks on toolbar controls themselves
@@ -1512,6 +1516,12 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
         page.miroCards.push({ id: uid(), type: 'trello', title: l.title, listColor: l.color, cards: [], x: startX + i * (lw + gap), y: by - lh / 2, w: lw, h: lh });
       });
       sv(); buildMiroCanvas(); buildOutline();
+    } else if (_embedCreateMode) {
+      const url = prompt('🌐 Enter published URL (Google Sheets chart, web page, etc.):');
+      if (url && url.trim()) {
+        page.miroCards.push({ id: uid(), type: 'embed', embedUrl: url.trim(), cropRect: null, refreshMin: 15, x: bx - 300, y: by - 200, w: 600, h: 400 });
+        sv(); buildMiroCanvas(); buildOutline();
+      }
     }
   } catch (err) {
     console.error('[TOOL CREATE ERROR]', err);
@@ -1602,6 +1612,15 @@ document.addEventListener('keydown', (e) => {
   if (isCmd && (key === 'z' || e.code === 'KeyZ')) {
     e.preventDefault();
     performUndo();
+    return;
+  }
+
+  // Select All: Ctrl+A / Ctrl+ش — select every card on canvas
+  if (isCmd && (key === 'a' || key === 'ش' || e.code === 'KeyA')) {
+    e.preventDefault();
+    clearMiroSelection();
+    (page.miroCards || []).forEach(c => addMiroSelect(c.id));
+    updateMiroSelFrame();
     return;
   }
 
@@ -1713,6 +1732,7 @@ document.addEventListener('keydown', (e) => {
       case 'k': case 'ن': e.preventDefault(); document.getElementById('mtb-trello').click(); break;
       case 'i': case 'ه': e.preventDefault(); document.getElementById('mtb-image').click(); break;
       case 'b': case 'لا': e.preventDefault(); document.getElementById('mtb-card').click(); break;
+      case 'e': case 'ث': e.preventDefault(); document.getElementById('mtb-embed').click(); break;
       case 'escape':
         setActiveTool('select');
         document.getElementById('miro-shape-panel').classList.remove('show');
@@ -3233,13 +3253,12 @@ document.addEventListener('keydown', (e) => {
 document.getElementById('mtb-more').onclick = () => {
   const panel = document.getElementById('mtb-more-panel');
   const btn = document.getElementById('mtb-more');
-  if (panel.style.display === 'flex') {
-    panel.style.display = 'none';
-    btn.classList.remove('sel');
-  } else {
-    panel.style.display = 'flex';
-    btn.classList.add('sel');
-  }
+  panel.classList.toggle('show');
+  btn.classList.toggle('sel', panel.classList.contains('show'));
+};
+document.getElementById('mtb-more-close').onclick = () => {
+  document.getElementById('mtb-more-panel').classList.remove('show');
+  document.getElementById('mtb-more').classList.remove('sel');
 };
 
 // ─── Google Calendar Widget ───
@@ -3289,6 +3308,9 @@ async function placeCalendarWidget() {
   buildMiroCanvas();
   showToast('📅 Calendar widget added');
 }
+
+// ─── Embed Web View Widget ───
+document.getElementById('mtb-embed').onclick = () => setActiveTool('embed');
 
 // ─── Calendar List (cached) ───
 async function getCalendarList() {
