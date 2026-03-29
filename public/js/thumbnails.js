@@ -4266,51 +4266,57 @@ function buildMiroCalendar(card) {
 
   // Header — all buttons in one row, no overlap
   const hdr = document.createElement('div');
-  hdr.style.cssText = 'display:flex;align-items:center;padding:6px 8px;background:rgba(108,143,255,.08);border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0;gap:4px;';
+  hdr.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:4px 6px;background:rgba(108,143,255,.08);border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0;gap:3px;flex-wrap:wrap;';
 
   const title = document.createElement('span');
-  title.style.cssText = 'font-weight:700;font-size:.72rem;color:#ccc;margin-right:auto;white-space:nowrap;';
-  title.textContent = '\u{1F4C5} Cal';
+  title.style.cssText = 'font-weight:700;font-size:.72rem;color:#ccc;white-space:nowrap;';
+  title.textContent = '\u{1F4C5}';
 
-  // Nav: ◀ Prev
-  const prevBtn = document.createElement('button');
-  prevBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;color:#aaa;font-size:.6rem;padding:2px 5px;cursor:pointer;font-family:var(--font);';
-  prevBtn.textContent = '◀';
-  prevBtn.title = 'Previous';
-  prevBtn.onclick = (e) => {
-    e.stopPropagation();
+  // ─── Btn helper ───
+  const _cb = (text, tip, fn) => {
+    const b = document.createElement('button');
+    b.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;color:#aaa;font-size:.55rem;padding:2px 5px;cursor:pointer;font-family:var(--font);';
+    b.textContent = text; b.title = tip;
+    b.onclick = (e) => { e.stopPropagation(); fn(); };
+    return b;
+  };
+  const _days = () => card.calView === '3day' ? 3 : 7;
+
+  // ◀ Prev period
+  const prevBtn = _cb('◀', 'Previous period', () => {
     if (!card.calOffset) card.calOffset = 0;
-    card.calOffset--;
-    sv();
+    card.calOffset -= _days(); sv();
     if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
-  };
+  });
 
-  // Nav: Today
-  const todayBtn = document.createElement('button');
-  todayBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;color:#aaa;font-size:.55rem;padding:2px 5px;cursor:pointer;font-family:var(--font);';
-  todayBtn.textContent = 'Today';
-  todayBtn.title = 'Go to today';
-  todayBtn.onclick = (e) => {
-    e.stopPropagation();
-    card.calOffset = 0;
-    sv();
-    if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
-  };
-
-  // Nav: ▶ Next
-  const nextBtn = document.createElement('button');
-  nextBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;color:#aaa;font-size:.6rem;padding:2px 5px;cursor:pointer;font-family:var(--font);';
-  nextBtn.textContent = '▶';
-  nextBtn.title = 'Next';
-  nextBtn.onclick = (e) => {
-    e.stopPropagation();
+  // ‹ Prev day
+  const prevDayBtn = _cb('‹', 'Previous day', () => {
     if (!card.calOffset) card.calOffset = 0;
-    card.calOffset++;
-    sv();
+    card.calOffset--; sv();
     if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
-  };
+  });
 
-  // View toggle
+  // Today
+  const todayBtn = _cb('Today', 'Go to today', () => {
+    card.calOffset = 0; sv();
+    if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
+  });
+
+  // › Next day
+  const nextDayBtn = _cb('›', 'Next day', () => {
+    if (!card.calOffset) card.calOffset = 0;
+    card.calOffset++; sv();
+    if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
+  });
+
+  // ▶ Next period
+  const nextBtn = _cb('▶', 'Next period', () => {
+    if (!card.calOffset) card.calOffset = 0;
+    card.calOffset += _days(); sv();
+    if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
+  });
+
+  // View toggle (3-day / week)
   const viewBtn = document.createElement('button');
   viewBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;color:#aaa;font-size:.55rem;padding:2px 6px;cursor:pointer;font-family:var(--font);';
   viewBtn.textContent = card.calView === '3day' ? '3D' : 'Wk';
@@ -4324,10 +4330,29 @@ function buildMiroCalendar(card) {
     if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
   };
 
-  // Quick Log button
+  // Theme toggle (dark → light → transparent)
+  const _themes = ['dark', 'light', 'transparent'];
+  const _themeIcons = { dark: '🌙', light: '☀️', transparent: '👁' };
+  const _themeTips = { dark: 'Dark theme', light: 'Light theme', transparent: 'Transparent' };
+  if (!card.calTheme) card.calTheme = 'dark';
+  const themeBtn = document.createElement('button');
+  themeBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;color:#aaa;font-size:.55rem;padding:2px 5px;cursor:pointer;font-family:var(--font);';
+  themeBtn.textContent = _themeIcons[card.calTheme] || '🌙';
+  themeBtn.title = _themeTips[card.calTheme] || 'Theme';
+  themeBtn.onclick = (e) => {
+    e.stopPropagation();
+    const idx = _themes.indexOf(card.calTheme);
+    card.calTheme = _themes[(idx + 1) % _themes.length];
+    themeBtn.textContent = _themeIcons[card.calTheme];
+    themeBtn.title = _themeTips[card.calTheme];
+    _applyCalTheme(el, card.calTheme);
+    sv();
+  };
+
+  // Quick Log
   const logBtn = document.createElement('button');
   logBtn.style.cssText = 'background:rgba(74,122,255,.2);border:1px solid rgba(74,122,255,.4);border-radius:5px;color:#6c8fff;font-size:.55rem;padding:2px 6px;cursor:pointer;font-family:var(--font);font-weight:600;';
-  logBtn.textContent = '+ Log';
+  logBtn.textContent = '+';
   logBtn.title = 'Quick timelog at current time';
   logBtn.onclick = (e) => {
     e.stopPropagation();
@@ -4336,25 +4361,16 @@ function buildMiroCalendar(card) {
     start.setMinutes(now.getMinutes() >= 30 ? 30 : 0, 0, 0);
     const end = new Date(start.getTime() + 30 * 60000);
     if (typeof showCalendarEventForm === 'function') {
-      showCalendarEventForm(el.querySelector('.cal-body'), el, card, {
-        mode: 'create',
-        startTime: start,
-        endTime: end,
-      });
+      showCalendarEventForm(el.querySelector('.cal-body'), el, card, { mode: 'create', startTime: start, endTime: end });
     }
   };
 
-  // Refresh button
-  const refBtn = document.createElement('button');
-  refBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;color:#aaa;font-size:.65rem;padding:2px 5px;cursor:pointer;';
-  refBtn.textContent = '\u21BB';
-  refBtn.title = 'Refresh';
-  refBtn.onclick = (e) => {
-    e.stopPropagation();
+  // Refresh
+  const refBtn = _cb('\u21BB', 'Refresh', () => {
     if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
-  };
+  });
 
-  // Delete button (in header, not overlapping)
+  // Delete widget
   const del = document.createElement('button');
   del.style.cssText = 'background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:5px;color:#888;font-size:.6rem;padding:2px 5px;cursor:pointer;opacity:.6;transition:opacity .12s,color .12s;';
   del.textContent = '\u2715';
@@ -4363,12 +4379,15 @@ function buildMiroCalendar(card) {
   del.onmouseleave = () => { del.style.opacity = '.6'; del.style.color = '#888'; };
   del.onclick = (e) => { e.stopPropagation(); deleteMiroCard(card.id); };
 
-  // Assemble header
+  // Assemble header — all centered
   hdr.appendChild(title);
   hdr.appendChild(prevBtn);
+  hdr.appendChild(prevDayBtn);
   hdr.appendChild(todayBtn);
+  hdr.appendChild(nextDayBtn);
   hdr.appendChild(nextBtn);
   hdr.appendChild(viewBtn);
+  hdr.appendChild(themeBtn);
   hdr.appendChild(logBtn);
   hdr.appendChild(refBtn);
   hdr.appendChild(del);
@@ -4380,6 +4399,40 @@ function buildMiroCalendar(card) {
 
   el.appendChild(hdr);
   el.appendChild(body);
+
+  // ─── Theme system ───
+  function _applyCalTheme(el, theme) {
+    if (theme === 'light') {
+      el.style.background = '#f5f6fa';
+      el.style.border = '1px solid #d0d5dd';
+      el.style.boxShadow = '0 4px 16px rgba(0,0,0,.12)';
+      el.style.color = '#222';
+      hdr.style.background = 'rgba(66,133,244,.08)';
+      hdr.style.borderBottom = '1px solid #d0d5dd';
+      title.style.color = '#333';
+      body.style.color = '#222';
+    } else if (theme === 'transparent') {
+      el.style.background = 'rgba(26,28,46,.35)';
+      el.style.border = '1px solid rgba(108,143,255,.15)';
+      el.style.boxShadow = '0 4px 24px rgba(0,0,0,.2)';
+      el.style.color = '#ddd';
+      hdr.style.background = 'rgba(108,143,255,.05)';
+      hdr.style.borderBottom = '1px solid rgba(255,255,255,.06)';
+      title.style.color = '#aaa';
+      body.style.color = '#ccc';
+    } else {
+      // dark (default)
+      el.style.background = '#1a1c2e';
+      el.style.border = '1px solid rgba(108,143,255,.2)';
+      el.style.boxShadow = '0 4px 24px rgba(0,0,0,.4)';
+      el.style.color = '#eee';
+      hdr.style.background = 'rgba(108,143,255,.08)';
+      hdr.style.borderBottom = '1px solid rgba(255,255,255,.08)';
+      title.style.color = '#ccc';
+      body.style.color = '#eee';
+    }
+  }
+  _applyCalTheme(el, card.calTheme || 'dark');
 
   // Drag — exclude header buttons and body
   miroSetupCardDrag(el, card, ['.cal-body', 'button', 'input', 'select', 'textarea']);

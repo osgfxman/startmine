@@ -3596,6 +3596,10 @@ function showCalendarEventForm(container, el, card, opts) {
   form.addEventListener('mousedown', e => { if (e.button === 0) e.stopPropagation(); });
   form.addEventListener('click', e => e.stopPropagation());
 
+  // ESC closes the form
+  const _onEscForm = (e) => { if (e.key === 'Escape') { form.remove(); document.removeEventListener('keydown', _onEscForm); } };
+  document.addEventListener('keydown', _onEscForm);
+
   el.appendChild(form);
   titleInp.focus();
 }
@@ -3712,54 +3716,76 @@ async function renderCalendarContent(el, card) {
   const container = el.querySelector('.cal-body');
   if (!container) return;
 
-  container.innerHTML = '<div style="text-align:center;padding:40px;color:#999;font-size:.8rem;">Loading calendar…</div>';
+  // Don't show "Loading..." if we have cached events — they'll render instantly
 
   const now = new Date();
   const days = card.calView === '3day' ? 3 : 7;
-  const offset = card.calOffset || 0;
+  const offset = card.calOffset || 0; // now in DAYS
 
-  // Start of viewing period
+  // Start of viewing period (offset is in days)
   let startDate;
   if (card.calView === 'week') {
     startDate = new Date(now);
-    startDate.setDate(now.getDate() - now.getDay() + (offset * 7));
+    startDate.setDate(now.getDate() - now.getDay() + offset);
   } else {
     startDate = new Date(now);
-    startDate.setDate(now.getDate() + (offset * 3));
+    startDate.setDate(now.getDate() + offset);
   }
   startDate.setHours(0, 0, 0, 0);
 
   const endDate = new Date(startDate);
   endDate.setDate(startDate.getDate() + days);
 
-  let events;
+  // ─── Local Cache for events ───
+  const cacheKey = `sm_cal_${startDate.toISOString().slice(0,10)}_${days}`;
+  function _cacheCalEvents(evts) {
+    try { localStorage.setItem(cacheKey, JSON.stringify(evts)); } catch(e) {}
+  }
+  function _getCachedCalEvents() {
+    try { const d = localStorage.getItem(cacheKey); return d ? JSON.parse(d) : null; } catch(e) { return null; }
+  }
+
+  // Get cached events to show IMMEDIATELY (never show empty calendar)
+  const cachedEvents = _getCachedCalEvents();
+
+  // If we have cached events, render them right away (no "Loading..." screen)
+  if (cachedEvents && cachedEvents.length > 0) {
+    _renderCalGrid(container, el, card, cachedEvents, startDate, days, now);
+  }
+
+  // Try to fetch fresh events in background
+  let freshEvents = null;
+  let fetchError = null;
   try {
-    events = await fetchCalendarEvents(startDate, endDate);
-  } catch (fetchErr) {
-    console.error('Calendar render: fetch failed', fetchErr);
+    freshEvents = await fetchCalendarEvents(startDate, endDate);
+  } catch (err) {
+    fetchError = err;
+  }
+
+  if (freshEvents) {
+    // Got fresh data — cache it and re-render
+    _cacheCalEvents(freshEvents);
+    _renderCalGrid(container, el, card, freshEvents, startDate, days, now);
+  } else if (!cachedEvents || cachedEvents.length === 0) {
+    // No fresh data AND no cache — show error/sign-in
     container.innerHTML = '';
     const errDiv = document.createElement('div');
     errDiv.style.cssText = 'text-align:center;padding:40px 20px;color:#aaa;font-size:.75rem;';
 
-    if (fetchErr.needsAuth) {
-      // Token expired — show sign-in button (user-initiated = no popup block)
-      errDiv.innerHTML = '🔑 Session expired<br><span style="color:#666;font-size:.6rem;">Click below to reconnect</span>';
+    if (fetchError && fetchError.needsAuth) {
+      errDiv.innerHTML = '🔑 Sign in to load calendar<br><span style="color:#666;font-size:.6rem;">One-time setup</span>';
       const signBtn = document.createElement('button');
       signBtn.className = 'cal-form-btn cal-form-btn-primary';
       signBtn.style.cssText = 'margin-top:12px;font-size:.7rem;padding:6px 14px;';
       signBtn.textContent = '🔐 Sign in to Google';
       signBtn.onclick = async (e) => {
         e.stopPropagation();
-        try {
-          await manualGoogleReAuth();
-          renderCalendarContent(el, card);
-        } catch (err) { /* toast shown by manualGoogleReAuth */ }
+        try { await manualGoogleReAuth(); renderCalendarContent(el, card); } catch (err) {}
       };
       errDiv.appendChild(document.createElement('br'));
       errDiv.appendChild(signBtn);
     } else {
-      errDiv.style.color = '#e55';
-      errDiv.innerHTML = `⚠️ Could not load events<br><span style="color:#888;font-size:.6rem;">${fetchErr.message || 'Unknown error'}</span>`;
+      errDiv.innerHTML = `⚠️ No events found<br><span style="color:#666;font-size:.6rem;">${(fetchError && fetchError.message) || 'Try refreshing'}</span>`;
       const retryBtn = document.createElement('button');
       retryBtn.className = 'cal-form-btn cal-form-btn-primary';
       retryBtn.style.cssText = 'margin-top:12px;';
@@ -3768,10 +3794,30 @@ async function renderCalendarContent(el, card) {
       errDiv.appendChild(document.createElement('br'));
       errDiv.appendChild(retryBtn);
     }
-
     container.appendChild(errDiv);
     return;
+  } else if (fetchError && fetchError.needsAuth) {
+    // Have cached data but token expired — show small sign-in indicator overlay
+    const indicator = document.createElement('div');
+    indicator.style.cssText = 'position:absolute;top:2px;right:4px;z-index:15;cursor:pointer;font-size:.55rem;color:#f90;opacity:.7;transition:opacity .15s;';
+    indicator.textContent = '🔑';
+    indicator.title = 'Session expired — click to reconnect';
+    indicator.onmouseenter = () => { indicator.style.opacity = '1'; };
+    indicator.onmouseleave = () => { indicator.style.opacity = '.7'; };
+    indicator.onclick = async (e) => {
+      e.stopPropagation();
+      try { await manualGoogleReAuth(); renderCalendarContent(el, card); } catch (err) {}
+    };
+    container.style.position = 'relative';
+    container.appendChild(indicator);
   }
+
+  card._weekStart = startDate.getTime();
+}
+
+// ─── Pure UI render (no fetch) ───
+function _renderCalGrid(container, el, card, events, startDate, days, now) {
+  const START_HOUR = 0, END_HOUR = 24;
 
   // Dynamic HOUR_H — fit 24h into available body height (NO scrollbars)
   const headerHeight = 24;
@@ -3869,7 +3915,7 @@ async function renderCalendarContent(el, card) {
 
       const screenY = e.clientY - colRect.top;
       const contentY = screenY * s2c;
-      const startMinute = Math.max(0, Math.floor((contentY / totalH) * 24 * 60));
+      const startMinute = Math.max(0, Math.round(Math.floor((contentY / totalH) * 24 * 60) / 15) * 15); // snap to 15 min
 
       // Create drag overlay (positioned in content space)
       _dragOverlay = document.createElement('div');
