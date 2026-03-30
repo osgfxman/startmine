@@ -2,17 +2,26 @@
   "name": "Startmine",
   "short_name": "Startmine",
   "description": "Your personal bookmark & productivity hub",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0d0f18",
   "theme_color": "#6c8fff",
   "orientation": "any",
+  "categories": ["productivity", "utilities"],
   "icons": [
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "share_target": {
