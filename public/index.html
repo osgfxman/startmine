@@ -18,8 +18,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1774854351">
-  <link rel="stylesheet" href="css/miro.css?v=1774854351">
+  <link rel="stylesheet" href="css/base.css?v=1774855684">
+  <link rel="stylesheet" href="css/miro.css?v=1774855684">
 </head>
 
 <body>
@@ -168,7 +168,16 @@
 
   <div id="inbox-side">
     <div id="inbox-resize"></div>
-    <div class="inbox-hdr"><span>📥 Inbox</span><button id="inbox-close">✕</button></div>
+    <div class="inbox-hdr">
+      <span>📥 Inbox</span>
+      <div style="display:flex;gap:3px;margin-left:auto;margin-right:6px">
+        <button class="inbox-hdr-btn" id="inbox-save-btn" title="Save Inbox Backup">💾</button>
+        <button class="inbox-hdr-btn" id="inbox-restore-btn" title="Restore Inbox Backup">🔄</button>
+        <button class="inbox-hdr-btn" id="inbox-export-btn" title="Export Inbox as JSON">📤</button>
+        <label class="inbox-hdr-btn" title="Import Inbox JSON" style="cursor:pointer">📥<input type="file" id="inbox-import-file" accept=".json" style="display:none"></label>
+      </div>
+      <button id="inbox-close">✕</button>
+    </div>
     <div class="inbox-add">
       <textarea id="inbox-input" placeholder="Type text, paste URL, or drop image…" rows="2" style="flex:1;background:rgba(255,255,255,.06);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:.7rem;padding:4px 6px;outline:none;resize:none;font-family:var(--font)"></textarea>
       <div style="display:flex;flex-direction:column;gap:3px">
@@ -667,11 +676,11 @@
     <div class="ctx-item danger" data-action="delete"><span class="ctx-icon">🗑️</span><span class="ctx-label">Delete</span><span class="ctx-shortcut">Del</span></div>
   </div>
 
-    <script src="js/app.js?v=1774854351"></script>
-    <script src="js/outline.js?v=1774854351"></script>
-    <script src="js/miro-engine.js?v=1774854351"></script>
-    <script src="js/thumbnails.js?v=1774854351"></script>
-    <script src="js/alignment.js?v=1774854351"></script>
+    <script src="js/app.js?v=1774855684"></script>
+    <script src="js/outline.js?v=1774855684"></script>
+    <script src="js/miro-engine.js?v=1774855684"></script>
+    <script src="js/thumbnails.js?v=1774855684"></script>
+    <script src="js/alignment.js?v=1774855684"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});

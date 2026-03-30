@@ -3979,6 +3979,146 @@ document.getElementById('qi').addEventListener('keydown', (e) => {
   }
 })();
 
+// ─── Inbox Save / Restore / Export / Import ───
+const INBOX_BACKUP_KEY = 'startmine_inbox_backup';
+
+// 💾 Save Inbox - saves to localStorage AND Firebase dedicated node
+document.getElementById('inbox-save-btn').onclick = () => {
+  if (!D.inbox || !D.inbox.length) {
+    showToast('📥 Inbox is empty — nothing to save', 'warn');
+    return;
+  }
+  // Save to localStorage
+  try {
+    localStorage.setItem(INBOX_BACKUP_KEY, JSON.stringify(D.inbox));
+    localStorage.setItem(INBOX_BACKUP_KEY + '_ts', Date.now().toString());
+  } catch(e) {}
+
+  // Save to Firebase dedicated inbox backup
+  if (USER_ID) {
+    db.ref(`users/${USER_ID}/startmine_inbox_backup`).set({
+      inbox: D.inbox,
+      ts: Date.now()
+    }).catch(e => console.warn('Inbox backup to Firebase failed:', e));
+  }
+
+  const count = D.inbox.length;
+  showToast(`💾 Inbox saved! (${count} item${count > 1 ? 's' : ''})`, 'ok');
+};
+
+// 🔄 Restore Inbox - from localStorage or Firebase
+document.getElementById('inbox-restore-btn').onclick = async () => {
+  // Try localStorage first
+  let restored = null;
+  let source = '';
+  const localBackup = localStorage.getItem(INBOX_BACKUP_KEY);
+  const localTs = parseInt(localStorage.getItem(INBOX_BACKUP_KEY + '_ts') || '0');
+
+  if (localBackup) {
+    try { restored = JSON.parse(localBackup); source = 'local'; } catch(e) {}
+  }
+
+  // Also try Firebase backup
+  if (USER_ID) {
+    try {
+      const snap = await db.ref(`users/${USER_ID}/startmine_inbox_backup`).once('value');
+      const fbBackup = snap.val();
+      if (fbBackup && fbBackup.inbox && fbBackup.inbox.length) {
+        // Use whichever is newer
+        if (!restored || (fbBackup.ts && fbBackup.ts > localTs)) {
+          restored = fbBackup.inbox;
+          source = 'cloud';
+        }
+      }
+    } catch(e) {}
+  }
+
+  if (!restored || !restored.length) {
+    showToast('🔄 No inbox backup found', 'warn');
+    return;
+  }
+
+  // Merge: don't replace, add missing items
+  if (!D.inbox) D.inbox = [];
+  const existingIds = new Set(D.inbox.map(x => x.id));
+  let added = 0;
+  restored.forEach(item => {
+    if (!existingIds.has(item.id)) {
+      D.inbox.push(item);
+      added++;
+    }
+  });
+
+  if (added === 0) {
+    showToast(`🔄 All ${restored.length} items already in inbox (from ${source})`, 'ok');
+  } else {
+    sv();
+    buildInbox();
+    showToast(`🔄 Restored ${added} items from ${source} backup!`, 'ok');
+  }
+};
+
+// 📤 Export Inbox as JSON file
+document.getElementById('inbox-export-btn').onclick = () => {
+  if (!D.inbox || !D.inbox.length) {
+    showToast('📥 Inbox is empty — nothing to export', 'warn');
+    return;
+  }
+  const data = {
+    type: 'startmine_inbox',
+    version: 1,
+    exported: new Date().toISOString(),
+    count: D.inbox.length,
+    inbox: D.inbox
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `startmine-inbox-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast(`📤 Exported ${D.inbox.length} inbox items`, 'ok');
+};
+
+// 📥 Import Inbox from JSON file
+document.getElementById('inbox-import-file').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      let items = [];
+      if (data.type === 'startmine_inbox' && Array.isArray(data.inbox)) {
+        items = data.inbox;
+      } else if (Array.isArray(data)) {
+        items = data;
+      } else {
+        showToast('❌ Invalid inbox file format', 'err');
+        return;
+      }
+
+      if (!D.inbox) D.inbox = [];
+      const existingIds = new Set(D.inbox.map(x => x.id));
+      let added = 0;
+      items.forEach(item => {
+        if (item.id && !existingIds.has(item.id)) {
+          D.inbox.push(item);
+          added++;
+        }
+      });
+
+      sv();
+      buildInbox();
+      showToast(`📥 Imported ${added} new items (${items.length - added} duplicates skipped)`, 'ok');
+    } catch(err) {
+      showToast('❌ Error reading file: ' + err.message, 'err');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
 // Duplicate link detection
 let _dupScope = 'page'; // 'page' or 'all'
 document.getElementById('dup-btn').onclick = () => {

@@ -269,7 +269,7 @@
 
         try {
           // Read current metadata
-          const metaRef = db.ref(`users/${user.uid}/startmine/meta`);
+          const metaRef = db.ref(`users/${user.uid}/startmine_meta`);
           const snap = await metaRef.once('value');
           const meta = snap.val() || {};
           const inbox = meta.inbox || [];

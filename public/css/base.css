@@ -806,6 +806,27 @@ body {
   font-size: 0.9rem;
 }
 
+.inbox-hdr-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.08);
+  color: var(--mu);
+  cursor: pointer;
+  font-size: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .15s;
+}
+
+.inbox-hdr-btn:hover {
+  background: rgba(108,143,255,.15);
+  border-color: var(--ac);
+  color: var(--tx);
+}
+
 .inbox-add {
   display: flex;
   gap: 4px;
