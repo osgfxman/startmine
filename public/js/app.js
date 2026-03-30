@@ -443,6 +443,130 @@ function getLsCapacity() {
   return { used, max, pct: Math.round(used / max * 100) };
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ██  LAYER 6: beforeunload — verify ALL data is cached before tab closes  ██
+// ═══════════════════════════════════════════════════════════════
+window.addEventListener('beforeunload', () => {
+  // Emergency: cache EVERY page that has data in memory
+  if (typeof D !== 'undefined' && D.pages) {
+    D.pages.forEach(p => {
+      const wc = (p.widgets || []).length;
+      const mc = (p.miroCards || []).length;
+      if (wc > 0 || mc > 0) {
+        try {
+          localStorage.setItem(lsPageKey(p.id), JSON.stringify({ widgets: p.widgets, miroCards: p.miroCards }));
+        } catch(e) { /* localStorage full, IDB already has it */ }
+        // IndexedDB async — browser WILL finish this even after tab close
+        idbSet('page_' + p.id, { widgets: p.widgets, miroCards: p.miroCards });
+      }
+    });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// ██  LAYER 7: Auto-Snapshot — full backup to IndexedDB every 15 min  ██
+// ═══════════════════════════════════════════════════════════════
+let _lastSnapshotTime = 0;
+function autoSnapshot() {
+  if (!USER_ID || typeof D === 'undefined') return;
+  const now = Date.now();
+  if (now - _lastSnapshotTime < 15 * 60 * 1000) return; // Skip if < 15 min
+  _lastSnapshotTime = now;
+  
+  const snapshot = {
+    timestamp: now,
+    userId: USER_ID,
+    meta: { settings: D.settings, curEnv: D.curEnv, curGroup: D.curGroup, environments: D.environments, groups: D.groups },
+    pagesMeta: D.pages.map(p => ({ id: p.id, name: p.name, groupId: p.groupId, pageType: p.pageType })),
+    activePage: D.cur,
+    pages: {}
+  };
+  
+  // Save ALL pages: from memory + cache
+  D.pages.forEach(p => {
+    const wc = (p.widgets || []).length;
+    const mc = (p.miroCards || []).length;
+    if (wc > 0 || mc > 0) {
+      snapshot.pages[p.id] = { widgets: p.widgets, miroCards: p.miroCards };
+    } else {
+      // Try cache
+      const cached = getCachedPageData(p.id);
+      if (cached && ((cached.widgets || []).length > 0 || (cached.miroCards || []).length > 0)) {
+        snapshot.pages[p.id] = cached;
+      }
+    }
+  });
+  
+  // Keep last 5 snapshots (rotating)
+  idbSet('snapshot_' + (now % 5), snapshot).then(() => {
+    console.log(`[AUTO-SNAPSHOT ✅] Full backup saved (${Object.keys(snapshot.pages).length} pages, ${new Date(now).toLocaleTimeString()})`);
+  });
+}
+// Run every 5 minutes (snapshot logic internally checks 15-min cooldown)
+setInterval(autoSnapshot, 5 * 60 * 1000);
+
+// ═══════════════════════════════════════════════════════════════
+// ██  LAYER 8: Page Version Tracking — never go backwards  ██
+// ═══════════════════════════════════════════════════════════════
+const _pageVersions = {}; // { pageId: { count, timestamp } }
+function trackPageVersion(pageId, widgets, miroCards) {
+  const count = (widgets || []).length + (miroCards || []).length;
+  _pageVersions[pageId] = { count, ts: Date.now() };
+}
+function isVersionRegression(pageId, newWidgets, newMiroCards) {
+  const prev = _pageVersions[pageId];
+  if (!prev) return false; // No previous version — ok
+  const newCount = (newWidgets || []).length + (newMiroCards || []).length;
+  // Regression = new count is 0 while previous was > 0
+  if (newCount === 0 && prev.count > 0) {
+    console.error(`[VERSION GUARD ⛔] Page ${pageId}: count went from ${prev.count} → ${newCount} — REGRESSION BLOCKED!`);
+    return true;
+  }
+  // Big drop (lost >50% of items in < 5 seconds) — suspicious
+  if (newCount < prev.count * 0.5 && Date.now() - prev.ts < 5000) {
+    console.error(`[VERSION GUARD ⚠️] Page ${pageId}: sudden drop from ${prev.count} → ${newCount} items in ${Date.now() - prev.ts}ms — suspicious!`);
+    return true;
+  }
+  return false;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ██  LAYER 9: Periodic Integrity Check  ██
+// ═══════════════════════════════════════════════════════════════
+function runIntegrityCheck() {
+  if (!USER_ID || typeof D === 'undefined') return;
+  const pg = typeof cp === 'function' ? cp() : null;
+  if (!pg) return;
+  const localW = (pg.widgets || []).length;
+  const localC = (pg.miroCards || []).length;
+  // Check if cache agrees with memory
+  const cached = getCachedPageData(pg.id);
+  if (cached) {
+    const cacheW = (cached.widgets || []).length;
+    const cacheC = (cached.miroCards || []).length;
+    if (localW > 0 && cacheW === 0) {
+      console.warn(`[INTEGRITY ⚠️] "${pg.name}": Memory has ${localW}w but cache has 0w!`);
+      cachePageData(pg.id, { widgets: pg.widgets, miroCards: pg.miroCards });
+    }
+    if (localC > 0 && cacheC === 0) {
+      console.warn(`[INTEGRITY ⚠️] "${pg.name}": Memory has ${localC}c but cache has 0c!`);
+      cachePageData(pg.id, { widgets: pg.widgets, miroCards: pg.miroCards });
+    }
+  }
+  // Track version
+  trackPageVersion(pg.id, pg.widgets, pg.miroCards);
+  // Storage capacity check
+  const cap = getLsCapacity();
+  if (cap.pct > 85) {
+    console.warn(`[STORAGE ⚠️] localStorage ${cap.pct}% full (${(cap.used/1024).toFixed(0)}KB / ${(cap.max/1024).toFixed(0)}KB)`);
+    if (cap.pct > 95 && typeof showToast === 'function') {
+      showToast('⚠️ Browser storage 95%+ full — consider clearing old data', 6000);
+    }
+  }
+}
+// Run every 2 minutes
+setInterval(runIntegrityCheck, 2 * 60 * 1000);
+
 document.getElementById('login-btn').onclick = () =>
   auth.signInWithPopup(provider).then((result) => {
     if (result.credential) {
@@ -1090,6 +1214,14 @@ function sv(saveAll = false, immediate = false) {
             return;
           }
         }
+        // ─── VERSION REGRESSION GUARD ───
+        if (isVersionRegression(activePg.id, activePg.widgets, activePg.miroCards)) {
+          console.error(`[SV GUARD] 🚨 Version regression on "${activePg.name}" — save blocked!`);
+          if (typeof showToast === 'function') showToast('⚠️ Suspicious data drop detected — save blocked', 5000);
+          setOwnWrite(false);
+          return;
+        }
+        trackPageVersion(activePg.id, activePg.widgets, activePg.miroCards);
         if (_lastSyncedPageData) {
           const curWidgetsStr = JSON.stringify(activePg.widgets || []);
           const curCardsStr = JSON.stringify(activePg.miroCards || []);
