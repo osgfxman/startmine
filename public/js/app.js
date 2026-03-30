@@ -334,17 +334,114 @@ function syncNow() {
     });
 }
 
-/* ─── LocalStorage Cache ─── */
+/* ─── LocalStorage + IndexedDB Cache ─── */
 const LS_META = 'sm_meta';
 const LS_PAGES_META = 'sm_pages_meta';
 const LS_CUR_PAGE = 'sm_cur_page';
 function lsPageKey(pid) { return 'sm_page_' + pid; }
 function cacheMeta(meta) { try { localStorage.setItem(LS_META, JSON.stringify(meta)); } catch (e) { } }
 function cachePagesMeta(pm) { try { localStorage.setItem(LS_PAGES_META, JSON.stringify(pm)); } catch (e) { } }
-function cachePageData(pid, data) { try { localStorage.setItem(lsPageKey(pid), JSON.stringify(data)); } catch (e) { } }
 function getCachedMeta() { try { return JSON.parse(localStorage.getItem(LS_META)); } catch (e) { return null; } }
 function getCachedPagesMeta() { try { return JSON.parse(localStorage.getItem(LS_PAGES_META)); } catch (e) { return null; } }
-function getCachedPageData(pid) { try { return JSON.parse(localStorage.getItem(lsPageKey(pid))); } catch (e) { return null; } }
+
+// ─── IndexedDB (primary page cache — much larger than localStorage) ───
+let _idb = null;
+const IDB_NAME = 'startmine_cache';
+const IDB_STORE = 'pages';
+function openIDB() {
+  return new Promise((resolve, reject) => {
+    if (_idb) return resolve(_idb);
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(IDB_STORE); };
+    req.onsuccess = () => { _idb = req.result; resolve(_idb); };
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbSet(key, val) {
+  try {
+    const db = await openIDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(val, key);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) { return false; }
+}
+async function idbGet(key) {
+  try {
+    const db = await openIDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  } catch (e) { return null; }
+}
+
+// ─── Safe Page Data Cache (writes to BOTH IndexedDB + localStorage with verification) ───
+function cachePageDataSafe(pid, data) {
+  const itemCount = (data.widgets || []).length + (data.miroCards || []).length;
+  let lsOk = false;
+  // 1. Try localStorage (fast, synchronous)
+  try {
+    const json = JSON.stringify(data);
+    localStorage.setItem(lsPageKey(pid), json);
+    // Verify write
+    const verify = localStorage.getItem(lsPageKey(pid));
+    lsOk = (verify && verify.length === json.length);
+    if (!lsOk) console.error(`[CACHE LS VERIFY FAIL] Page ${pid} — written ${json.length} chars, read back ${verify ? verify.length : 0}`);
+  } catch (e) {
+    console.error(`[CACHE LS FAIL] Page ${pid} — ${e.message}`);
+    lsOk = false;
+  }
+  // 2. Always write to IndexedDB (async, much larger limit)
+  idbSet('page_' + pid, data).then(ok => {
+    if (!ok) console.error(`[CACHE IDB FAIL] Page ${pid}`);
+  });
+  if (!lsOk && itemCount > 0) {
+    console.warn(`[CACHE WARNING] Page ${pid} has ${itemCount} items but localStorage write FAILED. IndexedDB is backup.`);
+    if (typeof showToast === 'function') showToast('⚠️ Storage nearly full — data safe in backup cache', 4000);
+  }
+  return lsOk;
+}
+
+// Legacy compat wrapper
+function cachePageData(pid, data) {
+  cachePageDataSafe(pid, data);
+}
+
+// ─── Read from IndexedDB first, fallback to localStorage ───
+async function getCachedPageDataAsync(pid) {
+  // Try IndexedDB first (more reliable, larger)
+  const idbData = await idbGet('page_' + pid);
+  if (idbData) return idbData;
+  // Fallback to localStorage
+  return getCachedPageDataSync(pid);
+}
+function getCachedPageDataSync(pid) {
+  try { return JSON.parse(localStorage.getItem(lsPageKey(pid))); } catch (e) { return null; }
+}
+// Keep sync version as default for backward compat 
+function getCachedPageData(pid) { return getCachedPageDataSync(pid); }
+
+// ─── Storage Usage Monitor ───
+function getLsUsage() {
+  let total = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      total += key.length + (localStorage.getItem(key) || '').length;
+    }
+  } catch(e) {}
+  return total;
+}
+function getLsCapacity() {
+  const used = getLsUsage();
+  const max = 5 * 1024 * 1024; // ~5MB typical
+  return { used, max, pct: Math.round(used / max * 100) };
+}
 
 document.getElementById('login-btn').onclick = () =>
   auth.signInWithPopup(provider).then((result) => {
@@ -729,15 +826,28 @@ function renderMeta() {
 
 // Switch the active synchronized payload
 function switchActivePage(pageId) {
-  // ─── Evict previous page heavy data from memory ───
+  // ─── Safe Eviction: ONLY clear memory after verified cache write ───
   const prevPg = cp();
   if (prevPg && prevPg.id !== pageId) {
-    // Save current heavy data to cache before evicting
-    if ((prevPg.widgets && prevPg.widgets.length > 0) || (prevPg.miroCards && prevPg.miroCards.length > 0)) {
-      cachePageData(prevPg.id, { widgets: prevPg.widgets || [], miroCards: prevPg.miroCards || [] });
+    const prevItemCount = (prevPg.widgets || []).length + (prevPg.miroCards || []).length;
+    if (prevItemCount > 0) {
+      // Save to cache and VERIFY before evicting from memory
+      const cacheOk = cachePageDataSafe(prevPg.id, { widgets: prevPg.widgets || [], miroCards: prevPg.miroCards || [] });
+      if (cacheOk) {
+        // Cache verified — safe to evict
+        prevPg.widgets = [];
+        prevPg.miroCards = [];
+      } else {
+        // Cache FAILED! Keep data in memory — DO NOT evict!
+        console.error(`[EVICTION BLOCKED] Page "${prevPg.name}" (${prevPg.id}) has ${prevItemCount} items but cache write failed. Keeping in memory!`);
+        if (typeof showToast === 'function') showToast('⚠️ Cache full — keeping page data in memory (safe)', 5000);
+        // Still write to IndexedDB asynchronously (already done in cachePageDataSafe)
+      }
+    } else {
+      // Empty page — safe to evict (nothing to lose)
+      prevPg.widgets = [];
+      prevPg.miroCards = [];
     }
-    prevPg.widgets = [];
-    prevPg.miroCards = [];
   }
   D.cur = pageId;
   try { localStorage.setItem(LS_CUR_PAGE, pageId); } catch(e) {}
@@ -750,9 +860,9 @@ function switchActivePage(pageId) {
   const pageDataRef = `users/${USER_ID}/startmine_pages/${pageId}`;
   _activePageListener = pageDataRef;
 
-  // ─── Instant render from localStorage cache ───
+  // ─── Instant render from localStorage cache, IndexedDB fallback ───
   const cachedPage = getCachedPageData(pageId);
-  if (cachedPage) {
+  if (cachedPage && ((cachedPage.widgets || []).length > 0 || (cachedPage.miroCards || []).length > 0)) {
     const pg = cp();
     if (pg) {
       pg.widgets = cachedPage.widgets || [];
@@ -766,6 +876,24 @@ function switchActivePage(pageId) {
     }
     buildCols();
   } else {
+    // Try IndexedDB async (larger, more reliable cache)
+    getCachedPageDataAsync(pageId).then(idbCached => {
+      if (idbCached && ((idbCached.widgets || []).length > 0 || (idbCached.miroCards || []).length > 0)) {
+        const pg = cp();
+        if (pg && pg.id === pageId) { // Make sure we're still on same page
+          pg.widgets = idbCached.widgets || [];
+          pg.miroCards = idbCached.miroCards || [];
+          const fakeD = { pages: [pg] };
+          sanitizeData(fakeD);
+          _lastSyncedPageData = {
+            widgets: JSON.stringify(pg.widgets),
+            miroCards: JSON.stringify(pg.miroCards)
+          };
+          buildCols();
+          console.log(`[IDB RESTORE] Page "${pg.name}" loaded from IndexedDB (${(pg.widgets||[]).length}w + ${(pg.miroCards||[]).length}c)`);
+        }
+      }
+    });
     document.getElementById('cw').innerHTML = '<div style="padding: 2rem; color: var(--mu); text-align: center;">Loading page data...</div>';
   }
 
@@ -780,17 +908,25 @@ function switchActivePage(pageId) {
     const pData = snap.val() || { widgets: [], miroCards: [] };
     const pg = cp();
     if (pg) {
+      const incomingW = (pData.widgets || []).length;
+      const incomingC = (pData.miroCards || []).length;
+      const localW = (pg.widgets || []).length;
+      const localC = (pg.miroCards || []).length;
+      // ⛔ GUARD: If Firebase sends empty but we have local data, refuse the overwrite 
+      if (incomingW === 0 && incomingC === 0 && (localW > 0 || localC > 0)) {
+        console.error(`[FIREBASE GUARD ⛔] Incoming data for "${pg.name}" is EMPTY but local has ${localW}w+${localC}c — IGNORING Firebase update!`);
+        if (typeof showToast === 'function') showToast('⚠️ Empty data from server ignored — local data preserved', 4000);
+        return; // Don't apply empty data
+      }
       pg.widgets = pData.widgets || [];
       pg.miroCards = pData.miroCards || [];
-      // Clean loaded data using original logic wrapper
       const fakeD = { pages: [pg] };
       sanitizeData(fakeD);
-      // Store baseline for delta diffing
       _lastSyncedPageData = {
         widgets: JSON.stringify(pg.widgets),
         miroCards: JSON.stringify(pg.miroCards)
       };
-      // Cache to localStorage
+      // Cache to BOTH localStorage and IndexedDB
       cachePageData(pageId, { widgets: pg.widgets, miroCards: pg.miroCards });
     }
     buildCols();
@@ -902,6 +1038,7 @@ function sv(saveAll = false, immediate = false) {
     }
 
     if (saveAll) {
+      let _savedCount = 0, _skippedCount = 0;
       D.pages.forEach(p => {
         let widgets, miroCards;
         if (p.id === D.cur) {
@@ -909,7 +1046,7 @@ function sv(saveAll = false, immediate = false) {
           widgets = p.widgets || [];
           miroCards = p.miroCards || [];
         } else {
-          // NON-ACTIVE page — MUST load from cache, NOT from evicted memory!
+          // NON-ACTIVE page — try cache, then memory
           const cached = getCachedPageData(p.id);
           if (cached && (cached.widgets?.length > 0 || cached.miroCards?.length > 0)) {
             widgets = cached.widgets || [];
@@ -918,14 +1055,25 @@ function sv(saveAll = false, immediate = false) {
             widgets = p.widgets || [];
             miroCards = p.miroCards || [];
           } else {
-            // SAFETY: Skip pages with no data in cache AND no data in memory
-            // to avoid overwriting good Firebase data with empty arrays
-            console.warn(`[SV GUARD] Skipping page "${p.name}" (${p.id}) — no data in memory or cache, refusing to overwrite Firebase`);
+            // ⛔ ABSOLUTE GUARD: NEVER write empty data to Firebase
+            // This page has no data anywhere — skip it entirely
+            console.warn(`[SV GUARD ⛔] Skipping page "${p.name}" (${p.id}) — EMPTY. Firebase data preserved.`);
+            _skippedCount++;
             return;
           }
         }
+        // ⛔ DOUBLE CHECK: Even after loading from cache, if still empty → skip
+        if (widgets.length === 0 && miroCards.length === 0) {
+          console.warn(`[SV GUARD ⛔] Page "${p.name}" resolved to 0 items — refusing to write.`);
+          _skippedCount++;
+          return;
+        }
         updates[`users/${USER_ID}/startmine_pages/${p.id}`] = { widgets, miroCards };
+        _savedCount++;
       });
+      if (_skippedCount > 0) {
+        console.warn(`[SV SUMMARY] Saved: ${_savedCount} pages, Skipped (protected): ${_skippedCount} pages`);
+      }
     } else {
       // Only upload the heavy data for the active page
       const activePg = cp();
