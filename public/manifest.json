@@ -1,0 +1,27 @@
+{
+  "name": "Startmine",
+  "short_name": "Startmine",
+  "description": "Your personal bookmark & productivity hub",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d0f18",
+  "theme_color": "#6c8fff",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "share_target": {
+    "action": "/inbox",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
+}

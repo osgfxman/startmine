@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Startmine — Inbox</title>
+  <meta name="theme-color" content="#6c8fff">
+  <link rel="manifest" href="/manifest.json">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: #0d0f18;
+      color: #e4e4e4;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      background: linear-gradient(145deg, rgba(30,33,50,.95), rgba(18,20,32,.98));
+      border: 1px solid rgba(108,143,255,.15);
+      border-radius: 20px;
+      padding: 32px 28px;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 24px 80px rgba(0,0,0,.6), 0 0 60px rgba(108,143,255,.08);
+      text-align: center;
+    }
+    .icon { font-size: 3rem; margin-bottom: 12px; }
+    h1 {
+      font-size: 1.3rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+      background: linear-gradient(135deg, #6c8fff, #a278ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .sub { color: #888; font-size: .8rem; margin-bottom: 20px; }
+    
+    .status {
+      padding: 16px;
+      border-radius: 12px;
+      margin: 16px 0;
+      font-size: .85rem;
+      line-height: 1.5;
+    }
+    .status.loading {
+      background: rgba(108,143,255,.1);
+      border: 1px solid rgba(108,143,255,.2);
+      color: #8ab4ff;
+    }
+    .status.success {
+      background: rgba(52,211,153,.1);
+      border: 1px solid rgba(52,211,153,.2);
+      color: #34d399;
+    }
+    .status.error {
+      background: rgba(255,80,80,.1);
+      border: 1px solid rgba(255,80,80,.2);
+      color: #ff6b6b;
+    }
+    .status.empty {
+      background: rgba(255,191,36,.1);
+      border: 1px solid rgba(255,191,36,.2);
+      color: #fbbf24;
+    }
+
+    .preview {
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin: 12px 0;
+      text-align: left;
+      font-size: .75rem;
+      word-break: break-all;
+    }
+    .preview-label { color: #666; font-size: .65rem; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
+    .preview-value { color: #bbb; }
+    .preview-value a { color: #6c8fff; text-decoration: none; }
+
+    .btn {
+      display: inline-block;
+      padding: 10px 24px;
+      border-radius: 10px;
+      border: none;
+      font-family: inherit;
+      font-size: .8rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      margin: 4px;
+      transition: transform .15s, opacity .15s;
+    }
+    .btn:active { transform: scale(.96); }
+    .btn-primary {
+      background: linear-gradient(135deg, #6c8fff, #a278ff);
+      color: #fff;
+    }
+    .btn-secondary {
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.1);
+      color: #aaa;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 18px; height: 18px;
+      border: 2px solid rgba(108,143,255,.3);
+      border-top-color: #6c8fff;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .login-section {
+      display: none;
+      margin-top: 16px;
+    }
+    .login-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.15);
+      background: rgba(255,255,255,.06);
+      color: #e4e4e4;
+      font-family: inherit;
+      font-size: .8rem;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    .login-btn:hover { background: rgba(255,255,255,.1); }
+    .login-btn svg { width: 18px; height: 18px; }
+
+    .actions { margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">📥</div>
+    <h1>Startmine Inbox</h1>
+    <div class="sub">Save shared content to your inbox</div>
+
+    <div id="preview-section"></div>
+    <div id="status" class="status loading"><span class="spinner"></span> Connecting...</div>
+    <div id="login-section" class="login-section">
+      <p style="color:#888;font-size:.75rem;margin-bottom:12px">Sign in to save to your inbox</p>
+      <button class="login-btn" id="login-btn">
+        <svg viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
+        Sign in with Google
+      </button>
+    </div>
+    <div class="actions" id="actions" style="display:none">
+      <a href="/" class="btn btn-primary">Open Startmine</a>
+      <button class="btn btn-secondary" onclick="window.close()">Close</button>
+    </div>
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+  <script>
+    // ─── Firebase Config (same as main app) ───
+    const firebaseConfig = {
+      apiKey: 'AIzaSyB-CeazTspR22753qVHzMlmgePPGVLhYdk',
+      authDomain: 'quran-gfx.firebaseapp.com',
+      databaseURL: 'https://quran-gfx-default-rtdb.asia-southeast1.firebasedatabase.app',
+      projectId: 'quran-gfx',
+      storageBucket: 'quran-gfx.firebasestorage.app',
+      messagingSenderId: '117000797680',
+      appId: '1:117000797680:web:8c3cb92817c79510e63135',
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const auth = firebase.auth();
+
+    // ─── Parse shared content from URL params ───
+    const params = new URLSearchParams(window.location.search);
+    const sharedTitle = params.get('title') || '';
+    const sharedText = params.get('text') || '';
+    const sharedUrl = params.get('url') || '';
+
+    // Android often sends URL inside the "text" field mixed with description
+    function extractUrl(text) {
+      const urlRegex = /(https?:\/\/[^\s]+)/gi;
+      const matches = text.match(urlRegex);
+      return matches ? matches[0] : null;
+    }
+
+    // Determine the actual URL and label
+    let finalUrl = sharedUrl || extractUrl(sharedText) || '';
+    let finalLabel = sharedTitle || '';
+
+    // If no explicit URL but text contains one, extract it
+    if (!finalUrl && sharedText) {
+      const extracted = extractUrl(sharedText);
+      if (extracted) finalUrl = extracted;
+    }
+
+    // If still no label, try to get domain from URL
+    if (!finalLabel && finalUrl) {
+      try {
+        finalLabel = new URL(finalUrl).hostname.replace('www.', '').split('.')[0];
+        finalLabel = finalLabel.charAt(0).toUpperCase() + finalLabel.slice(1);
+      } catch(e) { finalLabel = finalUrl; }
+    }
+
+    // Plain text (no URL found)
+    let finalText = '';
+    if (!finalUrl && sharedText) {
+      finalText = sharedText;
+      if (!finalLabel) finalLabel = sharedText.substring(0, 50);
+    }
+
+    // ─── Show preview ───
+    const previewEl = document.getElementById('preview-section');
+    if (finalUrl || finalText) {
+      let html = '<div class="preview">';
+      if (finalLabel) {
+        html += `<div class="preview-label">Title</div><div class="preview-value">${escHtml(finalLabel)}</div>`;
+      }
+      if (finalUrl) {
+        html += `<div class="preview-label" style="margin-top:8px">URL</div><div class="preview-value"><a href="${escHtml(finalUrl)}" target="_blank">${escHtml(finalUrl)}</a></div>`;
+      }
+      if (finalText && !finalUrl) {
+        html += `<div class="preview-label" style="margin-top:8px">Text</div><div class="preview-value">${escHtml(finalText)}</div>`;
+      }
+      html += '</div>';
+      previewEl.innerHTML = html;
+    }
+
+    function escHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    // ─── Check if there's anything to save ───
+    if (!finalUrl && !finalText) {
+      document.getElementById('status').className = 'status empty';
+      document.getElementById('status').innerHTML = '⚠️ No content received. Open Startmine to add items manually.';
+      document.getElementById('actions').style.display = '';
+    } else {
+      // ─── Auth & Save ───
+      auth.onAuthStateChanged(async (user) => {
+        if (!user) {
+          document.getElementById('status').className = 'status loading';
+          document.getElementById('status').innerHTML = '🔐 Please sign in to save...';
+          document.getElementById('login-section').style.display = '';
+          return;
+        }
+
+        document.getElementById('login-section').style.display = 'none';
+        document.getElementById('status').className = 'status loading';
+        document.getElementById('status').innerHTML = '<span class="spinner"></span> Saving to inbox...';
+
+        try {
+          // Read current metadata
+          const metaRef = db.ref(`users/${user.uid}/startmine/meta`);
+          const snap = await metaRef.once('value');
+          const meta = snap.val() || {};
+          const inbox = meta.inbox || [];
+
+          // Create inbox item
+          const newItem = {
+            id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+            ts: Date.now(),
+          };
+
+          if (finalUrl) {
+            newItem.type = 'url';
+            newItem.url = finalUrl;
+            newItem.label = finalLabel || finalUrl;
+          } else {
+            newItem.type = 'text';
+            newItem.text = finalText;
+            newItem.label = finalLabel || finalText.substring(0, 50);
+          }
+
+          // Add to inbox and save
+          inbox.push(newItem);
+          await metaRef.update({ inbox: inbox });
+
+          document.getElementById('status').className = 'status success';
+          document.getElementById('status').innerHTML = '✅ Saved to inbox! You can organize it later on your laptop.';
+          document.getElementById('actions').style.display = '';
+
+          // Auto-close after 3 seconds (if opened as share target)
+          setTimeout(() => {
+            if (window.opener || window.history.length <= 1) {
+              window.close();
+            }
+          }, 3000);
+
+        } catch (err) {
+          console.error('Inbox save error:', err);
+          document.getElementById('status').className = 'status error';
+          document.getElementById('status').innerHTML = '❌ Error saving: ' + err.message;
+          document.getElementById('actions').style.display = '';
+        }
+      });
+    }
+
+    // ─── Login button ───
+    document.getElementById('login-btn').onclick = () => {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithPopup(provider).catch(err => {
+        // If popup blocked, try redirect
+        auth.signInWithRedirect(provider);
+      });
+    };
+  </script>
+</body>
+</html>

@@ -1,29 +1,17 @@
 /* ─── Startmine Service Worker ─── */
-<<<<<<< HEAD
-const CACHE_NAME = 'startmine-1774846189';
+const CACHE_NAME = 'startmine-1774854351';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
-  '/css/base.css?v=1774846189',
-  '/css/miro.css?v=1774846189',
-  '/js/app.js?v=1774846189',
-  '/js/miro-engine.js?v=1774846189',
-  '/js/thumbnails.js?v=1774846189',
-  '/js/outline.js?v=1774846189',
-  '/js/alignment.js?v=1774846189',
-=======
-const CACHE_NAME = 'startmine-1774846189';
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/css/base.css?v=1774846189',
-  '/css/miro.css?v=1774846189',
-  '/js/app.js?v=1774846189',
-  '/js/miro-engine.js?v=1774846189',
-  '/js/thumbnails.js?v=1774846189',
-  '/js/outline.js?v=1774846189',
-  '/js/alignment.js?v=1774846189',
->>>>>>> 439b8b80cf99f97bf4d65e3c6206aa7e1d4f171b
+  '/inbox.html',
+  '/manifest.json',
+  '/css/base.css?v=1774854351',
+  '/css/miro.css?v=1774854351',
+  '/js/app.js?v=1774854351',
+  '/js/miro-engine.js?v=1774854351',
+  '/js/thumbnails.js?v=1774854351',
+  '/js/outline.js?v=1774854351',
+  '/js/alignment.js?v=1774854351',
 ];
 
 // External CDN assets to cache
@@ -67,7 +55,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Skip non-GET requests
+  // Skip non-GET requests (allow share target POST etc.)
   if (event.request.method !== 'GET') return;
 
   // Skip Firebase Realtime Database websocket / REST calls
@@ -137,6 +125,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // For /inbox with query params (share target): network-first (must hit the page)
+  if (url.origin === self.location.origin && url.pathname === '/inbox' && url.search) {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match('/inbox.html'))
+    );
+    return;
+  }
+
   // For local static assets: cache-first, fallback to network
   if (url.origin === self.location.origin) {
     event.respondWith(
@@ -152,6 +148,9 @@ self.addEventListener('fetch', (event) => {
           // Fallback: if offline and requesting root, serve cached index
           if (url.pathname === '/') {
             return caches.match('/index.html');
+          }
+          if (url.pathname === '/inbox') {
+            return caches.match('/inbox.html');
           }
           return new Response('Offline', { status: 503 });
         });
