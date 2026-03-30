@@ -12,13 +12,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-<<<<<<< HEAD
-  <link rel="stylesheet" href="css/base.css?v=1774813496">
-  <link rel="stylesheet" href="css/miro.css?v=1774813496">
-=======
-  <link rel="stylesheet" href="css/base.css?v=1774813496">
-  <link rel="stylesheet" href="css/miro.css?v=1774813496">
->>>>>>> 439b8b80cf99f97bf4d65e3c6206aa7e1d4f171b
+  <link rel="stylesheet" href="css/base.css?v=1774840401">
+  <link rel="stylesheet" href="css/miro.css?v=1774840401">
 </head>
 
 <body>
@@ -117,7 +112,6 @@
 
     <div id="cw"></div>
     <div id="miro-canvas" class="hidden">
-      <div id="miro-pinned-layer"></div>
       <div id="miro-board">
         <svg id="snap-guides" viewBox="-50000 -50000 100000 100000" style="position:absolute;top:-50000px;left:-50000px;width:100000px;height:100000px;pointer-events:none;z-index:9999;"></svg>
         <div id="miro-sel-box"></div>
@@ -429,6 +423,7 @@
         </svg></button>
         <button class="mtb-btn" id="mtb-undo" title="Undo (Ctrl+Z)" onclick="performUndo()"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M7 7h8a5 5 0 0 1 0 10H9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="3,11 7,7 11,11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <button class="mtb-btn" id="mtb-snapshot" title="Snapshots (Ctrl+S)" onclick="openSnapshotModal()">📸</button>
+        <button class="mtb-btn" id="mtb-unpin-all" title="Unpin All Elements" onclick="if(typeof unpinAll==='function')unpinAll()">📍</button>
       </div>
       <button class="msp-close" id="mtb-more-close">✕</button>
     </div>
@@ -659,27 +654,22 @@
     <div class="ctx-item" data-action="make-array"><span class="ctx-icon">🔲</span><span class="ctx-label">Make Array</span><span class="ctx-shortcut"></span></div>
     <div class="ctx-item" data-action="make-2d-array"><span class="ctx-icon">🔳</span><span class="ctx-label">2D Array</span><span class="ctx-shortcut"></span></div>
     <div class="ctx-sep"></div>
+    <div class="ctx-item" data-action="pin-toggle"><span class="ctx-icon">📌</span><span class="ctx-label">Pin / Unpin</span><span class="ctx-shortcut"></span></div>
+    <div class="ctx-sep"></div>
     <div class="ctx-item danger" data-action="delete"><span class="ctx-icon">🗑️</span><span class="ctx-label">Delete</span><span class="ctx-shortcut">Del</span></div>
   </div>
 
-<<<<<<< HEAD
-    <script src="js/app.js?v=1774813496"></script>
-    <script src="js/outline.js?v=1774813496"></script>
-    <script src="js/miro-engine.js?v=1774813496"></script>
-    <script src="js/thumbnails.js?v=1774813496"></script>
-    <script src="js/alignment.js?v=1774813496"></script>
-=======
-    <script src="js/app.js?v=1774813496"></script>
-    <script src="js/outline.js?v=1774813496"></script>
-    <script src="js/miro-engine.js?v=1774813496"></script>
-    <script src="js/thumbnails.js?v=1774813496"></script>
-    <script src="js/alignment.js?v=1774813496"></script>
->>>>>>> 439b8b80cf99f97bf4d65e3c6206aa7e1d4f171b
+    <script src="js/app.js?v=1774840401"></script>
+    <script src="js/outline.js?v=1774840401"></script>
+    <script src="js/miro-engine.js?v=1774840401"></script>
+    <script src="js/thumbnails.js?v=1774840401"></script>
+    <script src="js/alignment.js?v=1774840401"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});
       }
     </script>
+  <div id="miro-pinned-layer"></div>
 </body>
 
 </html>

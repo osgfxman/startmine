@@ -862,10 +862,10 @@ function attachLockUI(el, card) {
 
   el.appendChild(btn);
 
-  // ─── Pin/Unpin Button ───
+  // ─── Pin/Unpin Button (bottom-right, separate from lock at top-left) ───
   const pinBtn = document.createElement('button');
-  pinBtn.className = 'mc-lock'; // reuse lock button styling
-  pinBtn.style.cssText = 'right:28px;background:rgba(0,0,0,.55);';
+  pinBtn.className = 'mc-pin';
+  pinBtn.style.cssText = 'position:absolute;bottom:4px;right:4px;z-index:9;background:rgba(0,0,0,.55);border:none;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;cursor:pointer;font-size:0.7rem;opacity:0;transition:opacity .12s;';
   pinBtn.title = card.pinned ? 'Unpin from screen' : 'Pin to screen';
   const pinIcon = document.createElement('span');
   pinIcon.textContent = card.pinned ? '📌' : '📍';
@@ -887,65 +887,91 @@ function attachLockUI(el, card) {
   function pinElement() {
     const pinnedLayer = document.getElementById('miro-pinned-layer');
     if (!pinnedLayer) return;
-    // Get current screen position
+    // Save original canvas position & size for restore on unpin
+    card._savedX = card.x;
+    card._savedY = card.y;
+    card._savedW = card.w;
+    card._savedH = card.h;
+    // Get EXACT screen-rendered position & size (includes zoom effect)
     const rect = el.getBoundingClientRect();
     card.pinned = true;
     card._pinScreenX = rect.left;
     card._pinScreenY = rect.top;
-    // Move to pinned layer
+    card._pinScreenW = rect.width;
+    card._pinScreenH = rect.height;
+    // Move to pinned layer — set BOTH position AND size to screen values
+    // This ensures ZERO visual change
     pinnedLayer.appendChild(el);
     el.style.position = 'fixed';
     el.style.left = rect.left + 'px';
     el.style.top = rect.top + 'px';
+    el.style.width = rect.width + 'px';
+    el.style.height = rect.height + 'px';
     pinIcon.textContent = '📌';
     pinBtn.title = 'Unpin from screen';
     pinBtn.style.background = 'rgba(255,107,53,.6)';
+    pinBtn.style.opacity = '1';
     showPinBadge();
     sv();
+    if (typeof showToast === 'function') showToast('📌 Pinned');
   }
 
   function unpinElement() {
     const board = document.getElementById('miro-board');
     if (!board) return;
-    // Calculate canvas position from screen position
-    const page = typeof cp === 'function' ? cp() : {};
-    const zoom = (page.zoom || 100) / 100;
-    const panX = page.panX || 0;
-    const panY = page.panY || 0;
-    const screenX = parseFloat(el.style.left) || 0;
-    const screenY = parseFloat(el.style.top) || 0;
-    // Reverse transform: screenPos = canvasPos * zoom + pan
-    // So: canvasPos = (screenPos - pan) / zoom
-    const canvasX = (screenX - panX) / zoom;
-    const canvasY = (screenY - panY) / zoom;
+    // Restore EXACT original canvas position & size
+    const origX = card._savedX != null ? card._savedX : (card.x || 0);
+    const origY = card._savedY != null ? card._savedY : (card.y || 0);
+    const origW = card._savedW != null ? card._savedW : (card.w || 200);
+    const origH = card._savedH != null ? card._savedH : (card.h || 150);
     card.pinned = false;
-    card.x = canvasX;
-    card.y = canvasY;
+    card.x = origX;
+    card.y = origY;
+    card.w = origW;
+    card.h = origH;
     delete card._pinScreenX;
     delete card._pinScreenY;
-    // Move back to board
+    delete card._pinScreenW;
+    delete card._pinScreenH;
+    delete card._savedX;
+    delete card._savedY;
+    delete card._savedW;
+    delete card._savedH;
+    // Move back to board at original canvas coords & size
     board.appendChild(el);
     el.style.position = 'absolute';
-    el.style.left = canvasX + 'px';
-    el.style.top = canvasY + 'px';
+    el.style.left = origX + 'px';
+    el.style.top = origY + 'px';
+    el.style.width = origW + 'px';
+    el.style.height = origH + 'px';
     pinIcon.textContent = '📍';
     pinBtn.title = 'Pin to screen';
     pinBtn.style.background = 'rgba(0,0,0,.55)';
+    pinBtn.style.opacity = '0';
     hidePinBadge();
     sv();
+    if (typeof showToast === 'function') showToast('📍 Unpinned');
   }
+
+  // Store toggle function on el for global access
+  el._togglePin = () => {
+    if (card.pinned) unpinElement();
+    else pinElement();
+  };
 
   pinBtn.addEventListener('mousedown', e => e.stopPropagation());
   pinBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (card.pinned) {
-      unpinElement();
-    } else {
-      pinElement();
-    }
+    el._togglePin();
   });
 
   el.appendChild(pinBtn);
+
+  // Show pin button on hover (like lock button)
+  el.addEventListener('mouseenter', () => { pinBtn.style.opacity = '1'; });
+  el.addEventListener('mouseleave', () => { if (!card.pinned) pinBtn.style.opacity = '0'; });
+  // If already pinned, keep it visible
+  if (card.pinned) pinBtn.style.opacity = '1';
 
   // If card was saved as pinned, re-apply on load
   if (card.pinned) {
@@ -956,10 +982,21 @@ function attachLockUI(el, card) {
         el.style.position = 'fixed';
         el.style.left = (card._pinScreenX || 100) + 'px';
         el.style.top = (card._pinScreenY || 100) + 'px';
+        el.style.width = (card._pinScreenW || card.w || 200) + 'px';
+        el.style.height = (card._pinScreenH || card.h || 150) + 'px';
         pinBtn.style.background = 'rgba(255,107,53,.6)';
         showPinBadge();
       }
     });
+  }
+}
+
+// ─── Global Pin Toggle (called from context menu) ───
+function togglePinElement(cid) {
+  // Find the DOM element by card ID
+  const el = document.querySelector(`[data-cid="${cid}"]`);
+  if (el && el._togglePin) {
+    el._togglePin();
   }
 }
 
@@ -4592,8 +4629,16 @@ function buildMiroEmbed(card) {
   iframe.src = card.embedUrl || '';
   iframe.setAttribute('frameborder', '0');
   iframe.setAttribute('allowfullscreen', 'true');
-  iframe.setAttribute('loading', 'lazy');
+  iframe.setAttribute('loading', 'eager');
+  iframe.setAttribute('allow', 'clipboard-write; autoplay; encrypted-media');
   iframe.style.cssText = 'border:none;background:transparent;pointer-events:auto;';
+
+  // Loading placeholder — shows skeleton while iframe loads
+  const loadingOverlay = document.createElement('div');
+  loadingOverlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:4;display:flex;align-items:center;justify-content:center;background:rgba(13,15,24,.85);color:#6c8fff;font-size:.75rem;font-family:var(--font);flex-direction:column;gap:6px;';
+  loadingOverlay.innerHTML = '<div style="width:24px;height:24px;border:2px solid rgba(108,143,255,.3);border-top-color:#6c8fff;border-radius:50%;animation:spin 1s linear infinite"></div><span>Loading...</span>';
+  iframeWrap.appendChild(loadingOverlay);
+  iframe.addEventListener('load', () => { loadingOverlay.remove(); }, { once: true });
 
   // ─── Scale-based rendering: iframe stays at origW×origH, CSS scale fills element ───
   function applyIframeTransform() {

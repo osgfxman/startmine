@@ -1,28 +1,28 @@
 /* ─── Startmine Service Worker ─── */
 <<<<<<< HEAD
-const CACHE_NAME = 'startmine-1774813496';
+const CACHE_NAME = 'startmine-1774840401';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
-  '/css/base.css?v=1774813496',
-  '/css/miro.css?v=1774813496',
-  '/js/app.js?v=1774813496',
-  '/js/miro-engine.js?v=1774813496',
-  '/js/thumbnails.js?v=1774813496',
-  '/js/outline.js?v=1774813496',
-  '/js/alignment.js?v=1774813496',
+  '/css/base.css?v=1774840401',
+  '/css/miro.css?v=1774840401',
+  '/js/app.js?v=1774840401',
+  '/js/miro-engine.js?v=1774840401',
+  '/js/thumbnails.js?v=1774840401',
+  '/js/outline.js?v=1774840401',
+  '/js/alignment.js?v=1774840401',
 =======
-const CACHE_NAME = 'startmine-1774813496';
+const CACHE_NAME = 'startmine-1774840401';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
-  '/css/base.css?v=1774813496',
-  '/css/miro.css?v=1774813496',
-  '/js/app.js?v=1774813496',
-  '/js/miro-engine.js?v=1774813496',
-  '/js/thumbnails.js?v=1774813496',
-  '/js/outline.js?v=1774813496',
-  '/js/alignment.js?v=1774813496',
+  '/css/base.css?v=1774840401',
+  '/css/miro.css?v=1774840401',
+  '/js/app.js?v=1774840401',
+  '/js/miro-engine.js?v=1774840401',
+  '/js/thumbnails.js?v=1774840401',
+  '/js/outline.js?v=1774840401',
+  '/js/alignment.js?v=1774840401',
 >>>>>>> 439b8b80cf99f97bf4d65e3c6206aa7e1d4f171b
 ];
 

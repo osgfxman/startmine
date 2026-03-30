@@ -7,6 +7,8 @@
   font-display: swap;
 }
 
+@keyframes spin { to { transform: rotate(360deg); } }
+
 #miro-canvas {
   position: relative;
   flex: 1;

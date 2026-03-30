@@ -372,6 +372,9 @@ function buildMiroCanvas() {
   const page = cp();
   if (!page.miroCards) page.miroCards = [];
   const board = document.getElementById('miro-board');
+  // Clear pinned layer (elements from previous page)
+  const _pl = document.getElementById('miro-pinned-layer');
+  if (_pl) _pl.innerHTML = '';
   // Remove only card elements, preserve selection overlays
   board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-embed').forEach((el) => el.remove());
   // Clear selection state
@@ -2970,12 +2973,13 @@ function hideCtxMenu() {
 }
 
 // ─── Right-click handler for all miro card types ───
-document.getElementById('miro-canvas').addEventListener('contextmenu', (e) => {
-  // Find the closest miro card element
-  const cardEl = e.target.closest('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-widget, .miro-array, .miro-calendar');
+const _miroCardSelector = '.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-widget, .miro-array, .miro-calendar, .miro-embed';
+
+function _handleContextMenu(e) {
+  const cardEl = e.target.closest(_miroCardSelector);
   if (!cardEl) {
     hideCtxMenu();
-    return; // Allow default context menu on empty canvas
+    return;
   }
   e.preventDefault();
   e.stopPropagation();
@@ -2993,8 +2997,76 @@ document.getElementById('miro-canvas').addEventListener('contextmenu', (e) => {
     addMiroSelect(cid);
   }
 
+  // Update pin-toggle label based on current state
+  const pinItem = document.querySelector('[data-action="pin-toggle"]');
+  if (pinItem) {
+    const page = typeof cp === 'function' ? cp() : {};
+    const cards = page.cards || [];
+    const cardData = cards.find(c => c.id === cid);
+    const isPinned = cardData && cardData.pinned;
+    const label = pinItem.querySelector('.ctx-label');
+    const icon = pinItem.querySelector('.ctx-icon');
+    if (label) label.textContent = isPinned ? 'Unpin from Screen' : 'Pin to Screen';
+    if (icon) icon.textContent = isPinned ? '📍' : '📌';
+  }
+
   showCtxMenu(e.clientX, e.clientY);
-});
+}
+
+document.getElementById('miro-canvas').addEventListener('contextmenu', _handleContextMenu);
+
+// Also listen on pinned layer (elements are outside canvas when pinned)
+const _pinnedLayer = document.getElementById('miro-pinned-layer');
+if (_pinnedLayer) {
+  _pinnedLayer.addEventListener('contextmenu', _handleContextMenu);
+}
+
+// ─── Unpin All — emergency escape for stuck pinned elements ───
+function unpinAll() {
+  const pinnedLayer = document.getElementById('miro-pinned-layer');
+  if (!pinnedLayer) return;
+  const board = document.getElementById('miro-board');
+  const page = typeof cp === 'function' ? cp() : {};
+  const cards = page.cards || [];
+  // Move all children back to board
+  while (pinnedLayer.firstChild) {
+    const el = pinnedLayer.firstChild;
+    const cid = el.dataset && el.dataset.cid;
+    if (cid) {
+      const cardData = cards.find(c => c.id === cid);
+      if (cardData) {
+        const origX = cardData._savedX != null ? cardData._savedX : (cardData.x || 0);
+        const origY = cardData._savedY != null ? cardData._savedY : (cardData.y || 0);
+        const origW = cardData._savedW != null ? cardData._savedW : (cardData.w || 200);
+        const origH = cardData._savedH != null ? cardData._savedH : (cardData.h || 150);
+        cardData.pinned = false;
+        cardData.x = origX;
+        cardData.y = origY;
+        cardData.w = origW;
+        cardData.h = origH;
+        delete cardData._pinScreenX; delete cardData._pinScreenY;
+        delete cardData._pinScreenW; delete cardData._pinScreenH;
+        delete cardData._savedX; delete cardData._savedY;
+        delete cardData._savedW; delete cardData._savedH;
+        el.style.position = 'absolute';
+        el.style.left = origX + 'px';
+        el.style.top = origY + 'px';
+        el.style.width = origW + 'px';
+        el.style.height = origH + 'px';
+      }
+    }
+    if (board) board.appendChild(el);
+    else pinnedLayer.removeChild(el);
+  }
+  if (typeof sv === 'function') sv();
+  if (typeof showToast === 'function') showToast('📍 All elements unpinned');
+}
+
+// Clean pinned layer when switching pages/tabs
+if (typeof window._onPageSwitch === 'undefined') {
+  window._onPageSwitch = [];
+}
+window._onPageSwitch.push(unpinAll);
 
 // ─── Context menu item clicks ───
 document.getElementById('miro-ctx-menu').addEventListener('click', (e) => {
@@ -3017,6 +3089,11 @@ document.getElementById('miro-ctx-menu').addEventListener('click', (e) => {
       break;
     case 'make-2d-array':
       cids.forEach(cid => make2DArray(cid));
+      break;
+    case 'pin-toggle':
+      cids.forEach(cid => {
+        if (typeof togglePinElement === 'function') togglePinElement(cid);
+      });
       break;
   }
   hideCtxMenu();
