@@ -1627,12 +1627,24 @@ function closeSnapshotModal() {
 const GDRIVE_FOLDER_NAME = 'Startmine Backups';
 const GDRIVE_BACKUP_PREFIX = 'startmine_backup_';
 
-// Ensure we have a valid Google access token (NO validation, NO popup)
-// Just restore from cache. If it's expired, the API will return 401
-// and the calendar will show a "Sign in" button.
+// Ensure we have a valid Google access token
+// Uses cached token first. If API calls fail with 401, callers should use ensureGoogleTokenFresh().
 async function ensureGoogleToken() {
   if (!_googleAccessToken) restoreGoogleToken();
-  return _googleAccessToken || null;
+  if (!_googleAccessToken) {
+    // No cached token at all — must authenticate
+    return await manualGoogleReAuth();
+  }
+  return _googleAccessToken;
+}
+// Force-refresh token (called after 401 error)
+async function ensureGoogleTokenFresh() {
+  try {
+    return await manualGoogleReAuth();
+  } catch(e) {
+    showToast('❌ Google authentication required', 4000);
+    return null;
+  }
 }
 
 // Manual re-auth (only called from user click)
@@ -1710,41 +1722,364 @@ function buildFullExportData() {
   return exportData;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ██  SELECTIVE EXPORT / IMPORT SYSTEM  ██
+// ═══════════════════════════════════════════════════════════════
+
+let _selIOData = null; // Holds import data when importing
+let _selIOMode = 'export'; // 'export' or 'import'
+
+function openSelIO(mode = 'export', data = null) {
+  _selIOMode = mode;
+  _selIOData = data;
+  const modal = document.getElementById('sel-io-modal');
+  const title = document.getElementById('sel-io-title');
+  const expBtn = document.getElementById('sel-io-export-btn');
+  const impBtn = document.getElementById('sel-io-import-btn');
+  const drvBtn = document.getElementById('sel-io-drive-btn');
+  
+  if (mode === 'export') {
+    title.textContent = '📤 Export Data';
+    expBtn.style.display = '';
+    impBtn.style.display = '';
+    drvBtn.style.display = '';
+    buildSelIOTree(D);
+  } else {
+    title.textContent = '📥 Import Data — Select items to add';
+    expBtn.style.display = 'none';
+    impBtn.style.display = 'none';
+    drvBtn.style.display = 'none';
+    // Add confirm button
+    const footer = drvBtn.parentNode;
+    let confirmBtn = document.getElementById('sel-io-confirm');
+    if (!confirmBtn) {
+      confirmBtn = document.createElement('button');
+      confirmBtn.id = 'sel-io-confirm';
+      confirmBtn.style.cssText = 'flex:1;padding:8px;border-radius:8px;border:none;background:linear-gradient(135deg,#34d399,#10b981);color:#fff;font-weight:600;font-size:.75rem;cursor:pointer';
+      confirmBtn.textContent = '✅ Import Selected';
+      confirmBtn.onclick = () => doMergeImport();
+      footer.appendChild(confirmBtn);
+    }
+    confirmBtn.style.display = '';
+    buildSelIOTree(data);
+  }
+  modal.style.display = 'flex';
+}
+
+function closeSelIO() {
+  document.getElementById('sel-io-modal').style.display = 'none';
+  const c = document.getElementById('sel-io-confirm');
+  if (c) c.style.display = 'none';
+}
+
+function buildSelIOTree(data) {
+  const tree = document.getElementById('sel-io-tree');
+  tree.innerHTML = '';
+  if (!data || !data.environments) return;
+  
+  const envs = data.environments || [];
+  const groups = data.groups || [];
+  const pages = data.pages || [];
+  
+  envs.forEach(env => {
+    const envDiv = document.createElement('div');
+    envDiv.style.cssText = 'margin-bottom:8px;';
+    
+    const envLabel = document.createElement('label');
+    envLabel.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:.8rem;color:#e4e4e4;cursor:pointer;padding:4px 0';
+    const envCb = document.createElement('input');
+    envCb.type = 'checkbox';
+    envCb.checked = true;
+    envCb.dataset.type = 'env';
+    envCb.dataset.id = env.id;
+    envCb.onchange = () => {
+      // Cascade to children
+      envDiv.querySelectorAll('input[type=checkbox]').forEach(c => c.checked = envCb.checked);
+    };
+    envLabel.appendChild(envCb);
+    envLabel.appendChild(document.createTextNode('🌍 ' + (env.name || 'Environment')));
+    envDiv.appendChild(envLabel);
+    
+    const envGroups = groups.filter(g => g.envId === env.id);
+    envGroups.forEach(grp => {
+      const grpDiv = document.createElement('div');
+      grpDiv.style.cssText = 'margin-left:20px;';
+      
+      const grpLabel = document.createElement('label');
+      grpLabel.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:.75rem;color:#bbb;cursor:pointer;padding:3px 0';
+      const grpCb = document.createElement('input');
+      grpCb.type = 'checkbox';
+      grpCb.checked = true;
+      grpCb.dataset.type = 'group';
+      grpCb.dataset.id = grp.id;
+      grpCb.onchange = () => {
+        grpDiv.querySelectorAll('input[data-type=page]').forEach(c => c.checked = grpCb.checked);
+      };
+      grpLabel.appendChild(grpCb);
+      grpLabel.appendChild(document.createTextNode('📁 ' + (grp.name || 'Group')));
+      grpDiv.appendChild(grpLabel);
+      
+      const grpPages = pages.filter(p => p.groupId === grp.id);
+      grpPages.forEach(pg => {
+        const wc = (pg.widgets || []).length;
+        const mc = (pg.miroCards || []).length;
+        // Try cache for evicted pages
+        let count = wc + mc;
+        if (count === 0 && _selIOMode === 'export') {
+          const cached = getCachedPageData(pg.id);
+          if (cached) count = (cached.widgets || []).length + (cached.miroCards || []).length;
+        }
+        const pgLabel = document.createElement('label');
+        pgLabel.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:.7rem;color:#999;cursor:pointer;padding:2px 0;margin-left:40px';
+        const pgCb = document.createElement('input');
+        pgCb.type = 'checkbox';
+        pgCb.checked = true;
+        pgCb.dataset.type = 'page';
+        pgCb.dataset.id = pg.id;
+        pgLabel.appendChild(pgCb);
+        pgLabel.appendChild(document.createTextNode('📄 ' + (pg.name || 'Page') + (count > 0 ? ` (${count} items)` : '')));
+        grpDiv.appendChild(pgLabel);
+      });
+      
+      envDiv.appendChild(grpDiv);
+    });
+    
+    tree.appendChild(envDiv);
+  });
+}
+
+function selIOSelectAll(checked) {
+  document.querySelectorAll('#sel-io-tree input[type=checkbox]').forEach(c => c.checked = checked);
+}
+
+function getSelIOChecked() {
+  const envIds = new Set(), groupIds = new Set(), pageIds = new Set();
+  document.querySelectorAll('#sel-io-tree input[type=checkbox]:checked').forEach(c => {
+    if (c.dataset.type === 'env') envIds.add(c.dataset.id);
+    if (c.dataset.type === 'group') groupIds.add(c.dataset.id);
+    if (c.dataset.type === 'page') pageIds.add(c.dataset.id);
+  });
+  return { envIds, groupIds, pageIds };
+}
+
+function doSelectiveExport() {
+  const { envIds, groupIds, pageIds } = getSelIOChecked();
+  if (pageIds.size === 0 && groupIds.size === 0 && envIds.size === 0) {
+    showToast('⚠️ Nothing selected to export', 3000);
+    return;
+  }
+  
+  const exportData = {
+    _selectiveExport: true,
+    exportDate: new Date().toISOString(),
+    settings: D.settings,
+    environments: D.environments.filter(e => envIds.has(e.id)),
+    groups: D.groups.filter(g => groupIds.has(g.id)),
+    pages: D.pages.filter(p => pageIds.has(p.id)).map(p => {
+      let widgets = p.widgets || [];
+      let miroCards = p.miroCards || [];
+      if (widgets.length === 0 && miroCards.length === 0) {
+        const cached = getCachedPageData(p.id);
+        if (cached) { widgets = cached.widgets || []; miroCards = cached.miroCards || []; }
+      }
+      return { ...p, widgets, miroCards };
+    })
+  };
+  
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const envNames = exportData.environments.map(e => e.name).join('_') || 'selected';
+  a.download = `startmine_${envNames}_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  closeSelIO();
+  showToast(`📤 Exported ${exportData.pages.length} pages, ${exportData.groups.length} groups`, 3000);
+}
+
+function handleSelIOImport(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = (ev) => {
+    try {
+      const raw = JSON.parse(ev.target.result);
+      const parsed = _parseImport(raw);
+      if (!parsed) { showToast('❌ Could not read file', 3000); return; }
+      openSelIO('import', parsed);
+    } catch (err) {
+      showToast('❌ Parse error: ' + err.message, 4000);
+    }
+  };
+  r.readAsText(file);
+  e.target.value = '';
+}
+
+async function doImportFromDrive() {
+  try {
+    showToast('☁️ Loading backups from Google Drive…');
+    let token = await ensureGoogleToken();
+    if (!token) { showToast('❌ No Google token', 3000); return; }
+    const folderId = await getOrCreateDriveFolder(token);
+    let listResp = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent("'" + folderId + "' in parents and trashed=false")}&orderBy=createdTime desc&fields=files(id,name,createdTime,size)&pageSize=20`,
+      { headers: { 'Authorization': 'Bearer ' + token } }
+    );
+    if (listResp.status === 401) {
+      token = await ensureGoogleTokenFresh();
+      if (!token) return;
+      listResp = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent("'" + folderId + "' in parents and trashed=false")}&orderBy=createdTime desc&fields=files(id,name,createdTime,size)&pageSize=20`,
+        { headers: { 'Authorization': 'Bearer ' + token } }
+      );
+    }
+    const listData = await listResp.json();
+    const files = (listData.files || []).filter(f => f.name.endsWith('.json'));
+    if (files.length === 0) { showToast('No backups found on Google Drive', 3000); return; }
+    
+    // Show file picker
+    const pick = prompt('Available backups:\\n' + files.map((f, i) => `${i+1}. ${f.name}`).join('\\n') + '\\n\\nEnter number:');
+    const idx = parseInt(pick) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= files.length) return;
+    
+    showToast('⬇️ Downloading ' + files[idx].name + '…');
+    const dlResp = await fetch(`https://www.googleapis.com/drive/v3/files/${files[idx].id}?alt=media`, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const raw = await dlResp.json();
+    const parsed = _parseImport(raw);
+    if (!parsed) { showToast('❌ Could not parse backup', 3000); return; }
+    openSelIO('import', parsed);
+  } catch(err) {
+    showToast('❌ ' + err.message, 4000);
+  }
+}
+
+function doMergeImport() {
+  if (!_selIOData) return;
+  const mode = document.querySelector('input[name="sel-io-mode"]:checked')?.value || 'merge';
+  const { envIds, groupIds, pageIds } = getSelIOChecked();
+  
+  if (mode === 'replace') {
+    if (!confirm('⚠️ Replace ALL will delete existing data. Are you sure?')) return;
+    D = JSON.parse(JSON.stringify(_selIOData));
+    sanitizeData(D);
+    sv(true, true);
+    switchActivePage(D.cur);
+    closeSelIO();
+    showToast('✅ Data replaced', 3000);
+    return;
+  }
+  
+  // MERGE mode — add without deleting
+  const importEnvs = (_selIOData.environments || []).filter(e => envIds.has(e.id));
+  const importGrps = (_selIOData.groups || []).filter(g => groupIds.has(g.id));
+  const importPages = (_selIOData.pages || []).filter(p => pageIds.has(p.id));
+  
+  if (importPages.length === 0) { showToast('⚠️ Nothing selected', 3000); return; }
+  
+  // Map old IDs → new IDs to avoid conflicts
+  const envIdMap = {}, grpIdMap = {}, pageIdMap = {};
+  
+  importEnvs.forEach(e => {
+    const newId = uid();
+    envIdMap[e.id] = newId;
+    D.environments.push({ ...e, id: newId });
+  });
+  
+  importGrps.forEach(g => {
+    const newId = uid();
+    grpIdMap[g.id] = newId;
+    const newEnvId = envIdMap[g.envId] || g.envId;
+    // If env doesn't exist, create one
+    if (!D.environments.find(e => e.id === newEnvId)) {
+      const orig = (_selIOData.environments || []).find(e => e.id === g.envId);
+      const fallbackId = uid();
+      envIdMap[g.envId] = fallbackId;
+      D.environments.push({ id: fallbackId, name: (orig ? orig.name : 'Imported') });
+    }
+    D.groups.push({ ...g, id: newId, envId: envIdMap[g.envId] || newEnvId });
+  });
+  
+  let importedCount = 0;
+  importPages.forEach(p => {
+    const newId = uid();
+    pageIdMap[p.id] = newId;
+    let newGroupId = grpIdMap[p.groupId] || p.groupId;
+    // If group doesn't exist, create one
+    if (!D.groups.find(g => g.id === newGroupId)) {
+      const origGrp = (_selIOData.groups || []).find(g => g.id === p.groupId);
+      const fallbackGid = uid();
+      grpIdMap[p.groupId] = fallbackGid;
+      // Find parent env
+      const origEnvId = origGrp ? origGrp.envId : 'e0';
+      let newEnvId = envIdMap[origEnvId] || origEnvId;
+      if (!D.environments.find(e => e.id === newEnvId)) {
+        newEnvId = D.environments[0]?.id || 'e0';
+      }
+      D.groups.push({ id: fallbackGid, name: origGrp ? origGrp.name : 'Imported', envId: newEnvId });
+      newGroupId = fallbackGid;
+    }
+    
+    let widgets = p.widgets || [];
+    let miroCards = p.miroCards || [];
+    if (widgets.length === 0 && miroCards.length === 0 && _selIOData.pages) {
+      const orig = _selIOData.pages.find(op => op.id === p.id);
+      if (orig) { widgets = orig.widgets || []; miroCards = orig.miroCards || []; }
+    }
+    
+    D.pages.push({
+      ...p,
+      id: newId,
+      groupId: newGroupId,
+      widgets: JSON.parse(JSON.stringify(widgets)),
+      miroCards: JSON.parse(JSON.stringify(miroCards))
+    });
+    importedCount++;
+  });
+  
+  sanitizeData(D);
+  sv(true, true);
+  renderMeta();
+  buildCols();
+  closeSelIO();
+  showToast(`✅ Merged ${importedCount} pages, ${importEnvs.length} envs`, 3000);
+}
+
 // Export to Google Drive
 async function exportToGoogleDrive() {
-  try {
-    showToast('☁️ Exporting to Google Drive…');
-    const token = await ensureGoogleToken();
+  async function _doUpload(token) {
     const folderId = await getOrCreateDriveFolder(token);
-
     const exportData = buildFullExportData();
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 19).replace(/[T:]/g, '-');
     const fileName = GDRIVE_BACKUP_PREFIX + dateStr + '.json';
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-
-    // Multipart upload to Google Drive
-    const metadata = {
-      name: fileName,
-      parents: [folderId],
-      mimeType: 'application/json'
-    };
-
+    const metadata = { name: fileName, parents: [folderId], mimeType: 'application/json' };
     const form = new FormData();
     form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
     form.append('file', blob);
-
     const uploadResp = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token },
-      body: form
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: form
     });
-
+    return { uploadResp, fileName };
+  }
+  try {
+    showToast('☁️ Exporting to Google Drive…');
+    let token = await ensureGoogleToken();
+    if (!token) throw new Error('No Google token');
+    let { uploadResp, fileName } = await _doUpload(token);
+    // Auto-retry on 401 (expired token)
+    if (uploadResp.status === 401) {
+      showToast('🔄 Token expired — re-authenticating…');
+      token = await ensureGoogleTokenFresh();
+      if (!token) throw new Error('Re-authentication failed');
+      ({ uploadResp, fileName } = await _doUpload(token));
+    }
     if (!uploadResp.ok) {
       const errText = await uploadResp.text();
       throw new Error('Upload failed: ' + errText);
     }
-
     const uploadResult = await uploadResp.json();
     showToast('✅ Saved to Google Drive: ' + fileName, 3000);
     console.log('[GDRIVE] Backup uploaded:', uploadResult);
@@ -3098,6 +3433,20 @@ function buildEnvs() {
     tab.appendChild(cd);
     tab.appendChild(nm);
     if (D.environments.length > 1) tab.appendChild(x);
+    // Right-click: export/import this environment
+    tab.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Build subset data for this env
+      const envGroups = D.groups.filter(g => g.envId === env.id);
+      const envPages = D.pages.filter(p => envGroups.some(g => g.id === p.groupId));
+      openSelIO('export', {
+        settings: D.settings,
+        environments: [env],
+        groups: envGroups,
+        pages: envPages
+      });
+    });
     bar.insertBefore(tab, addBtn);
   });
 }
@@ -3217,6 +3566,19 @@ function buildGroups() {
     tab.appendChild(cd);
     tab.appendChild(nm);
     if (envGroups.length > 1) tab.appendChild(x);
+    // Right-click: export this group
+    tab.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const env = D.environments.find(ev => ev.id === g.envId);
+      const grpPages = D.pages.filter(p => p.groupId === g.id);
+      openSelIO('export', {
+        settings: D.settings,
+        environments: env ? [env] : [],
+        groups: [g],
+        pages: grpPages
+      });
+    });
     bar.insertBefore(tab, addBtn);
   });
   // Update ALL button style
@@ -3867,6 +4229,19 @@ function buildTabs() {
     tab.appendChild(cd);
     tab.appendChild(nm);
     if (groupPages.length > 1) tab.appendChild(x);
+    // Right-click: export this page
+    tab.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const grp = D.groups.find(g => g.id === pg.groupId);
+      const env = grp ? D.environments.find(ev => ev.id === grp.envId) : null;
+      openSelIO('export', {
+        settings: D.settings,
+        environments: env ? [env] : [],
+        groups: grp ? [grp] : [],
+        pages: [pg]
+      });
+    });
     bar.insertBefore(tab, addBtn);
   });
 }
