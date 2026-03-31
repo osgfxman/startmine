@@ -2920,6 +2920,13 @@ function buildMiroGridCard(card) {
       if (cellBg) td.style.background = cellBg;
       else td.style.background = 'transparent';
 
+      // Text color default black; apply saved cell style
+      const cellKey = `${r},${c}`;
+      const cStyle = (card.cellStyles && card.cellStyles[cellKey]) || {};
+      td.style.color = cStyle.color || (r === 0 && card.headerColor && card.headerColor !== 'none' ? '#fff' : '#000');
+      if (cStyle.textAlign) td.style.textAlign = cStyle.textAlign;
+      if (cStyle.verticalAlign) td.style.verticalAlign = cStyle.verticalAlign;
+
       td.textContent = card.cells[r]?.[c] || '';
       td.style.borderColor = card.borderColor;
       td.style.borderWidth = card.borderWidth + 'px';
@@ -2985,19 +2992,19 @@ function buildMiroGridCard(card) {
   });
   cleanupObserver.observe(document.body, { childList: true, subtree: true });
 
-  /* ── Edge + Buttons (Add Row/Col at edges) ── */
+  /* ── Edge + Buttons (inherit neighbor size) ── */
   const addRowTop = document.createElement('button');
   addRowTop.className = 'mg-edge-btn mg-edge-top'; addRowTop.innerHTML = '+';
-  addRowTop.onclick = (e) => { e.stopPropagation(); pushUndo(); card.rows++; card.cells.unshift(Array(card.cols).fill('')); card.rowHeights.unshift(40); sv(); buildMiroCanvas(); };
+  addRowTop.onclick = (e) => { e.stopPropagation(); pushUndo(); card.rows++; card.cells.unshift(Array(card.cols).fill('')); card.rowHeights.unshift(card.rowHeights[0] || 40); sv(); buildMiroCanvas(); };
   const addRowBot = document.createElement('button');
   addRowBot.className = 'mg-edge-btn mg-edge-bot'; addRowBot.innerHTML = '+';
-  addRowBot.onclick = (e) => { e.stopPropagation(); pushUndo(); card.rows++; card.cells.push(Array(card.cols).fill('')); card.rowHeights.push(40); sv(); buildMiroCanvas(); };
+  addRowBot.onclick = (e) => { e.stopPropagation(); pushUndo(); card.rows++; card.cells.push(Array(card.cols).fill('')); card.rowHeights.push(card.rowHeights[card.rowHeights.length - 1] || 40); sv(); buildMiroCanvas(); };
   const addColLeft = document.createElement('button');
   addColLeft.className = 'mg-edge-btn mg-edge-left'; addColLeft.innerHTML = '+';
-  addColLeft.onclick = (e) => { e.stopPropagation(); pushUndo(); card.cols++; card.cells.forEach(r => r.unshift('')); card.colWidths.unshift(120); sv(); buildMiroCanvas(); };
+  addColLeft.onclick = (e) => { e.stopPropagation(); pushUndo(); card.cols++; card.cells.forEach(r => r.unshift('')); card.colWidths.unshift(card.colWidths[0] || 120); sv(); buildMiroCanvas(); };
   const addColRight = document.createElement('button');
   addColRight.className = 'mg-edge-btn mg-edge-right'; addColRight.innerHTML = '+';
-  addColRight.onclick = (e) => { e.stopPropagation(); pushUndo(); card.cols++; card.cells.forEach(r => r.push('')); card.colWidths.push(120); sv(); buildMiroCanvas(); };
+  addColRight.onclick = (e) => { e.stopPropagation(); pushUndo(); card.cols++; card.cells.forEach(r => r.push('')); card.colWidths.push(card.colWidths[card.colWidths.length - 1] || 120); sv(); buildMiroCanvas(); };
 
   /* ── Per-Column Hover Controls (3 buttons at each internal col border) ── */
   const svgPlus = `<svg viewBox="0 0 12 12"><line x1="6" y1="2" x2="6" y2="10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="2" y1="6" x2="10" y2="6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
@@ -3007,92 +3014,99 @@ function buildMiroGridCard(card) {
   for (let c = 0; c < cols; c++) {
     colCtrlX += card.colWidths[c];
     if (c < cols - 1) {
-      const ctrl = document.createElement('div');
-      ctrl.className = 'mg-col-ctrl';
-      ctrl.style.left = colCtrlX + 'px';
-
-      // Insert col before
-      const btnBefore = document.createElement('button');
-      btnBefore.className = 'mg-ctrl-btn'; btnBefore.innerHTML = svgPlus; btnBefore.title = 'Insert column before';
-      btnBefore.onclick = (ev) => { ev.stopPropagation(); pushUndo(); card.cols++; card.cells.forEach(r => r.splice(c + 1, 0, '')); card.colWidths.splice(c + 1, 0, 120); sv(); buildMiroCanvas(); };
-
-      // Select column
-      const btnSelect = document.createElement('button');
-      btnSelect.className = 'mg-ctrl-btn mg-ctrl-select'; btnSelect.innerHTML = svgBar; btnSelect.title = 'Select column';
-      btnSelect.onclick = (ev) => {
-        ev.stopPropagation();
-        selectedCells.clear();
-        el.querySelectorAll('td.mg-sel').forEach(t => t.classList.remove('mg-sel'));
-        for (let rr = 0; rr < rows; rr++) {
-          selectedCells.add(`${rr},${c}`);
-          const cellEl = el.querySelector(`td[data-row="${rr}"][data-col="${c}"]`);
-          if (cellEl) cellEl.classList.add('mg-sel');
-        }
+      const inheritW = card.colWidths[c] || 120;
+      // Top controls
+      const ctrlTop = document.createElement('div');
+      ctrlTop.className = 'mg-col-ctrl mg-col-ctrl-top';
+      ctrlTop.style.left = colCtrlX + 'px';
+      ctrlTop.style.top = '-32px';
+      const btnBeforeT = document.createElement('button');
+      btnBeforeT.className = 'mg-ctrl-btn'; btnBeforeT.innerHTML = svgPlus; btnBeforeT.title = 'Insert column before';
+      btnBeforeT.onclick = (ev) => { ev.stopPropagation(); pushUndo(); card.cols++; card.cells.forEach(r => r.splice(c + 1, 0, '')); card.colWidths.splice(c + 1, 0, inheritW); sv(); buildMiroCanvas(); };
+      const btnSelectT = document.createElement('button');
+      btnSelectT.className = 'mg-ctrl-btn mg-ctrl-select'; btnSelectT.innerHTML = svgBar; btnSelectT.title = 'Select column';
+      btnSelectT.onclick = (ev) => {
+        ev.stopPropagation(); selectedCells.clear(); el.querySelectorAll('td.mg-sel').forEach(t => t.classList.remove('mg-sel'));
+        for (let rr = 0; rr < rows; rr++) { selectedCells.add(`${rr},${c}`); const ce = el.querySelector(`td[data-row="${rr}"][data-col="${c}"]`); if (ce) ce.classList.add('mg-sel'); }
         updateMergeFloat();
       };
-
-      // Insert col after
-      const btnAfter = document.createElement('button');
-      btnAfter.className = 'mg-ctrl-btn'; btnAfter.innerHTML = svgPlus; btnAfter.title = 'Insert column after';
-      btnAfter.onclick = (ev) => { ev.stopPropagation(); pushUndo(); card.cols++; card.cells.forEach(r => r.splice(c + 2, 0, '')); card.colWidths.splice(c + 2, 0, 120); sv(); buildMiroCanvas(); };
-
-      ctrl.appendChild(btnBefore);
-      ctrl.appendChild(btnSelect);
-      ctrl.appendChild(btnAfter);
-      el.appendChild(ctrl);
-
-      // Show on hover near this column border
-      const resizerZone = document.createElement('div');
-      resizerZone.style.cssText = `position:absolute;top:-36px;left:${colCtrlX - 15}px;width:30px;height:36px;z-index:7;`;
-      resizerZone.addEventListener('mouseenter', () => ctrl.classList.add('visible'));
-      resizerZone.addEventListener('mouseleave', (e) => { if (!ctrl.contains(e.relatedTarget)) ctrl.classList.remove('visible'); });
-      ctrl.addEventListener('mouseleave', (e) => { if (!resizerZone.contains(e.relatedTarget)) ctrl.classList.remove('visible'); });
-      el.appendChild(resizerZone);
+      const btnAfterT = document.createElement('button');
+      btnAfterT.className = 'mg-ctrl-btn'; btnAfterT.innerHTML = svgPlus; btnAfterT.title = 'Insert column after';
+      btnAfterT.onclick = (ev) => { ev.stopPropagation(); pushUndo(); card.cols++; card.cells.forEach(r => r.splice(c + 2, 0, '')); card.colWidths.splice(c + 2, 0, inheritW); sv(); buildMiroCanvas(); };
+      ctrlTop.appendChild(btnBeforeT); ctrlTop.appendChild(btnSelectT); ctrlTop.appendChild(btnAfterT);
+      el.appendChild(ctrlTop);
+      // Bottom controls
+      const ctrlBot = document.createElement('div');
+      ctrlBot.className = 'mg-col-ctrl mg-col-ctrl-bot';
+      ctrlBot.style.left = colCtrlX + 'px';
+      ctrlBot.style.top = 'auto'; ctrlBot.style.bottom = '-32px';
+      ctrlBot.appendChild(btnBeforeT.cloneNode(true)); ctrlBot.appendChild(btnSelectT.cloneNode(true)); ctrlBot.appendChild(btnAfterT.cloneNode(true));
+      ctrlBot.querySelectorAll('.mg-ctrl-btn').forEach((btn, i) => {
+        if (i === 0) btn.onclick = btnBeforeT.onclick;
+        else if (i === 1) btn.onclick = btnSelectT.onclick;
+        else btn.onclick = btnAfterT.onclick;
+      });
+      el.appendChild(ctrlBot);
+      // Hover zones top & bottom
+      const zoneTop = document.createElement('div');
+      zoneTop.style.cssText = `position:absolute;top:-36px;left:${colCtrlX - 15}px;width:30px;height:36px;z-index:7;`;
+      zoneTop.addEventListener('mouseenter', () => ctrlTop.classList.add('visible'));
+      zoneTop.addEventListener('mouseleave', (e) => { if (!ctrlTop.contains(e.relatedTarget)) ctrlTop.classList.remove('visible'); });
+      ctrlTop.addEventListener('mouseleave', (e) => { if (!zoneTop.contains(e.relatedTarget)) ctrlTop.classList.remove('visible'); });
+      el.appendChild(zoneTop);
+      const zoneBot = document.createElement('div');
+      zoneBot.style.cssText = `position:absolute;bottom:-36px;left:${colCtrlX - 15}px;width:30px;height:36px;z-index:7;`;
+      zoneBot.addEventListener('mouseenter', () => ctrlBot.classList.add('visible'));
+      zoneBot.addEventListener('mouseleave', (e) => { if (!ctrlBot.contains(e.relatedTarget)) ctrlBot.classList.remove('visible'); });
+      ctrlBot.addEventListener('mouseleave', (e) => { if (!zoneBot.contains(e.relatedTarget)) ctrlBot.classList.remove('visible'); });
+      el.appendChild(zoneBot);
     }
   }
 
-  /* ── Per-Row Hover Controls ── */
+  /* ── Per-Row Hover Controls (Left + Right) ── */
   let rowCtrlY = 0;
   for (let r = 0; r < rows; r++) {
     rowCtrlY += card.rowHeights[r];
     if (r < rows - 1) {
-      const ctrl = document.createElement('div');
-      ctrl.className = 'mg-row-ctrl';
-      ctrl.style.top = rowCtrlY + 'px';
-
-      const btnBefore = document.createElement('button');
-      btnBefore.className = 'mg-ctrl-btn'; btnBefore.innerHTML = svgPlus; btnBefore.title = 'Insert row before';
-      btnBefore.onclick = (ev) => { ev.stopPropagation(); pushUndo(); card.rows++; card.cells.splice(r + 1, 0, Array(card.cols).fill('')); card.rowHeights.splice(r + 1, 0, 40); sv(); buildMiroCanvas(); };
-
-      const btnSelect = document.createElement('button');
-      btnSelect.className = 'mg-ctrl-btn mg-ctrl-select'; btnSelect.innerHTML = svgBar; btnSelect.title = 'Select row';
-      btnSelect.onclick = (ev) => {
-        ev.stopPropagation();
-        selectedCells.clear();
-        el.querySelectorAll('td.mg-sel').forEach(t => t.classList.remove('mg-sel'));
-        for (let cc = 0; cc < cols; cc++) {
-          selectedCells.add(`${r},${cc}`);
-          const cellEl = el.querySelector(`td[data-row="${r}"][data-col="${cc}"]`);
-          if (cellEl) cellEl.classList.add('mg-sel');
-        }
+      const inheritH = card.rowHeights[r] || 40;
+      const selRowFn = (ev) => {
+        ev.stopPropagation(); selectedCells.clear(); el.querySelectorAll('td.mg-sel').forEach(t => t.classList.remove('mg-sel'));
+        for (let cc = 0; cc < cols; cc++) { selectedCells.add(`${r},${cc}`); const ce = el.querySelector(`td[data-row="${r}"][data-col="${cc}"]`); if (ce) ce.classList.add('mg-sel'); }
         updateMergeFloat();
       };
-
-      const btnAfter = document.createElement('button');
-      btnAfter.className = 'mg-ctrl-btn'; btnAfter.innerHTML = svgPlus; btnAfter.title = 'Insert row after';
-      btnAfter.onclick = (ev) => { ev.stopPropagation(); pushUndo(); card.rows++; card.cells.splice(r + 2, 0, Array(card.cols).fill('')); card.rowHeights.splice(r + 2, 0, 40); sv(); buildMiroCanvas(); };
-
-      ctrl.appendChild(btnBefore);
-      ctrl.appendChild(btnSelect);
-      ctrl.appendChild(btnAfter);
-      el.appendChild(ctrl);
-
-      const resizerZone = document.createElement('div');
-      resizerZone.style.cssText = `position:absolute;left:-36px;top:${rowCtrlY - 15}px;width:36px;height:30px;z-index:7;`;
-      resizerZone.addEventListener('mouseenter', () => ctrl.classList.add('visible'));
-      resizerZone.addEventListener('mouseleave', (e) => { if (!ctrl.contains(e.relatedTarget)) ctrl.classList.remove('visible'); });
-      ctrl.addEventListener('mouseleave', (e) => { if (!resizerZone.contains(e.relatedTarget)) ctrl.classList.remove('visible'); });
-      el.appendChild(resizerZone);
+      const insBeforeFn = (ev) => { ev.stopPropagation(); pushUndo(); card.rows++; card.cells.splice(r + 1, 0, Array(card.cols).fill('')); card.rowHeights.splice(r + 1, 0, inheritH); sv(); buildMiroCanvas(); };
+      const insAfterFn = (ev) => { ev.stopPropagation(); pushUndo(); card.rows++; card.cells.splice(r + 2, 0, Array(card.cols).fill('')); card.rowHeights.splice(r + 2, 0, inheritH); sv(); buildMiroCanvas(); };
+      // Left controls
+      const ctrlL = document.createElement('div');
+      ctrlL.className = 'mg-row-ctrl mg-row-ctrl-left';
+      ctrlL.style.top = rowCtrlY + 'px'; ctrlL.style.left = '-32px';
+      const b1L = document.createElement('button'); b1L.className = 'mg-ctrl-btn'; b1L.innerHTML = svgPlus; b1L.title = 'Insert row before'; b1L.onclick = insBeforeFn;
+      const b2L = document.createElement('button'); b2L.className = 'mg-ctrl-btn mg-ctrl-select'; b2L.innerHTML = svgBar; b2L.title = 'Select row'; b2L.onclick = selRowFn;
+      const b3L = document.createElement('button'); b3L.className = 'mg-ctrl-btn'; b3L.innerHTML = svgPlus; b3L.title = 'Insert row after'; b3L.onclick = insAfterFn;
+      ctrlL.appendChild(b1L); ctrlL.appendChild(b2L); ctrlL.appendChild(b3L);
+      el.appendChild(ctrlL);
+      // Right controls
+      const ctrlR = document.createElement('div');
+      ctrlR.className = 'mg-row-ctrl mg-row-ctrl-right';
+      ctrlR.style.top = rowCtrlY + 'px'; ctrlR.style.left = 'auto'; ctrlR.style.right = '-32px';
+      const b1R = document.createElement('button'); b1R.className = 'mg-ctrl-btn'; b1R.innerHTML = svgPlus; b1R.title = 'Insert row before'; b1R.onclick = insBeforeFn;
+      const b2R = document.createElement('button'); b2R.className = 'mg-ctrl-btn mg-ctrl-select'; b2R.innerHTML = svgBar; b2R.title = 'Select row'; b2R.onclick = selRowFn;
+      const b3R = document.createElement('button'); b3R.className = 'mg-ctrl-btn'; b3R.innerHTML = svgPlus; b3R.title = 'Insert row after'; b3R.onclick = insAfterFn;
+      ctrlR.appendChild(b1R); ctrlR.appendChild(b2R); ctrlR.appendChild(b3R);
+      el.appendChild(ctrlR);
+      // Hover zones
+      const zoneL = document.createElement('div');
+      zoneL.style.cssText = `position:absolute;left:-36px;top:${rowCtrlY - 15}px;width:36px;height:30px;z-index:7;`;
+      zoneL.addEventListener('mouseenter', () => ctrlL.classList.add('visible'));
+      zoneL.addEventListener('mouseleave', (e) => { if (!ctrlL.contains(e.relatedTarget)) ctrlL.classList.remove('visible'); });
+      ctrlL.addEventListener('mouseleave', (e) => { if (!zoneL.contains(e.relatedTarget)) ctrlL.classList.remove('visible'); });
+      el.appendChild(zoneL);
+      const zoneR = document.createElement('div');
+      zoneR.style.cssText = `position:absolute;right:-36px;top:${rowCtrlY - 15}px;width:36px;height:30px;z-index:7;`;
+      zoneR.addEventListener('mouseenter', () => ctrlR.classList.add('visible'));
+      zoneR.addEventListener('mouseleave', (e) => { if (!ctrlR.contains(e.relatedTarget)) ctrlR.classList.remove('visible'); });
+      ctrlR.addEventListener('mouseleave', (e) => { if (!zoneR.contains(e.relatedTarget)) ctrlR.classList.remove('visible'); });
+      el.appendChild(zoneR);
     }
   }
 
@@ -3181,15 +3195,15 @@ function buildMiroGridCard(card) {
     return s;
   }
 
-  // Add Row
-  toolbar.appendChild(mkBtn(icons.addRow, 'Add Row', () => { pushUndo(); card.rows++; card.cells.push(Array(card.cols).fill('')); card.rowHeights.push(40); sv(); buildMiroCanvas(); }));
+  // Add Row (inherit last row height)
+  toolbar.appendChild(mkBtn(icons.addRow, 'Add Row', () => { pushUndo(); card.rows++; card.cells.push(Array(card.cols).fill('')); card.rowHeights.push(card.rowHeights[card.rowHeights.length - 1] || 40); sv(); buildMiroCanvas(); }));
   // Remove Row
   toolbar.appendChild(mkBtn(icons.removeRow, 'Remove Row', () => { if (card.rows <= 1) return; pushUndo(); card.rows--; card.cells.pop(); card.rowHeights.pop(); sv(); buildMiroCanvas(); }));
 
   toolbar.appendChild(mkSep());
 
-  // Add Col
-  toolbar.appendChild(mkBtn(icons.addCol, 'Add Column', () => { pushUndo(); card.cols++; card.cells.forEach(r => r.push('')); card.colWidths.push(120); sv(); buildMiroCanvas(); }));
+  // Add Col (inherit last col width)
+  toolbar.appendChild(mkBtn(icons.addCol, 'Add Column', () => { pushUndo(); card.cols++; card.cells.forEach(r => r.push('')); card.colWidths.push(card.colWidths[card.colWidths.length - 1] || 120); sv(); buildMiroCanvas(); }));
   // Remove Col
   toolbar.appendChild(mkBtn(icons.removeCol, 'Remove Column', () => { if (card.cols <= 1) return; pushUndo(); card.cols--; card.cells.forEach(r => r.pop()); card.colWidths.pop(); sv(); buildMiroCanvas(); }));
 
@@ -3217,12 +3231,12 @@ function buildMiroGridCard(card) {
   resizeWrap.className = 'mg-resize-wrap';
   const resizeBtn = document.createElement('button');
   resizeBtn.className = 'mg-resize-btn';
-  resizeBtn.innerHTML = `Cell resize <span style="margin-left:2px">${card.cellResize === 'manual' ? 'Manual' : 'Auto'}</span> ${icons.chevron}`;
+  resizeBtn.innerHTML = `Cell resize <span style="margin-left:2px">${(card.cellResize || 'manual') === 'manual' ? 'Manual' : 'Auto'}</span> ${icons.chevron}`;
   const resizeDrop = document.createElement('div');
   resizeDrop.className = 'mg-resize-drop';
   ['Auto', 'Manual'].forEach(opt => {
     const b = document.createElement('button');
-    b.className = 'mg-resize-opt' + (((card.cellResize || 'auto') === opt.toLowerCase()) ? ' sel' : '');
+    b.className = 'mg-resize-opt' + (((card.cellResize || 'manual') === opt.toLowerCase()) ? ' sel' : '');
     b.textContent = opt;
     b.onclick = (e) => {
       e.stopPropagation();
@@ -3256,15 +3270,14 @@ function buildMiroGridCard(card) {
   borderClr.oninput = function() { card.borderColor = this.value; if (card.borderWidth === 0) card.borderWidth = 1; sv(); buildMiroCanvas(); };
   toolbar.appendChild(borderClr);
 
-  // Border Width
-  const bwLabel = document.createElement('label');
-  bwLabel.title = 'Border Width';
+  // Border Width (number input)
   const bwInput = document.createElement('input');
-  bwInput.type = 'range'; bwInput.min = 0; bwInput.max = 10; bwInput.value = card.borderWidth || 1;
-  bwInput.style.width = '40px';
-  bwInput.oninput = function() { card.borderWidth = parseInt(this.value); sv(); buildMiroCanvas(); };
-  bwLabel.appendChild(bwInput);
-  toolbar.appendChild(bwLabel);
+  bwInput.type = 'number'; bwInput.min = 0; bwInput.max = 20; bwInput.value = card.borderWidth || 1;
+  bwInput.className = 'mg-tb-num';
+  bwInput.title = 'Border Width';
+  bwInput.oninput = function() { card.borderWidth = parseInt(this.value) || 0; sv(); buildMiroCanvas(); };
+  bwInput.onclick = (e) => e.stopPropagation();
+  toolbar.appendChild(bwInput);
 
   // No Stroke
   toolbar.appendChild(mkBtn(icons.noStroke, 'No Border', () => { card.borderWidth = 0; card.borderColor = 'none'; sv(); buildMiroCanvas(); }, (card.borderWidth === 0 || card.borderColor === 'none') ? 'active' : ''));
@@ -3317,6 +3330,53 @@ function buildMiroGridCard(card) {
     card.headerColor = this.value; sv(); buildMiroCanvas();
   };
   toolbar.appendChild(hdrClr);
+
+  toolbar.appendChild(mkSep());
+
+  // ── Text Formatting Tools ──
+  // Text Color
+  const txtClr = document.createElement('input');
+  txtClr.type = 'color';
+  txtClr.className = 'mg-tb-clr';
+  txtClr.value = '#000000';
+  txtClr.title = 'Text Color';
+  txtClr.oninput = function() {
+    if (!card.cellStyles) card.cellStyles = {};
+    selectedCells.forEach(key => {
+      if (!card.cellStyles[key]) card.cellStyles[key] = {};
+      card.cellStyles[key].color = this.value;
+    });
+    sv(); buildMiroCanvas();
+  };
+  toolbar.appendChild(txtClr);
+
+  toolbar.appendChild(mkSep());
+
+  // Horizontal Alignment icons
+  const svgAlignL = `<svg viewBox="0 0 16 16"><line x1="2" y1="4" x2="14" y2="4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="2" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="2" y1="12" x2="12" y2="12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+  const svgAlignC = `<svg viewBox="0 0 16 16"><line x1="2" y1="4" x2="14" y2="4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="4" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="3" y1="12" x2="13" y2="12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+  const svgAlignR = `<svg viewBox="0 0 16 16"><line x1="2" y1="4" x2="14" y2="4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="6" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="4" y1="12" x2="14" y2="12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+  const svgVTop = `<svg viewBox="0 0 16 16"><line x1="2" y1="2" x2="14" y2="2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="8" y1="5" x2="8" y2="14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><polyline points="5,8 8,5 11,8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const svgVMid = `<svg viewBox="0 0 16 16"><line x1="2" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="8" y1="2" x2="8" y2="6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="8" y1="10" x2="8" y2="14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+  const svgVBot = `<svg viewBox="0 0 16 16"><line x1="2" y1="14" x2="14" y2="14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="8" y1="2" x2="8" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><polyline points="5,8 8,11 11,8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+  function setAlign(prop, val) {
+    if (!card.cellStyles) card.cellStyles = {};
+    selectedCells.forEach(key => {
+      if (!card.cellStyles[key]) card.cellStyles[key] = {};
+      card.cellStyles[key][prop] = val;
+    });
+    sv(); buildMiroCanvas();
+  }
+  toolbar.appendChild(mkBtn(svgAlignL, 'Align Left', () => setAlign('textAlign', 'left')));
+  toolbar.appendChild(mkBtn(svgAlignC, 'Align Center', () => setAlign('textAlign', 'center')));
+  toolbar.appendChild(mkBtn(svgAlignR, 'Align Right', () => setAlign('textAlign', 'right')));
+
+  toolbar.appendChild(mkSep());
+
+  toolbar.appendChild(mkBtn(svgVTop, 'Vertical Top', () => setAlign('verticalAlign', 'top')));
+  toolbar.appendChild(mkBtn(svgVMid, 'Vertical Middle', () => setAlign('verticalAlign', 'middle')));
+  toolbar.appendChild(mkBtn(svgVBot, 'Vertical Bottom', () => setAlign('verticalAlign', 'bottom')));
 
   /* ── Toolbar Click Toggle ── */
   el.addEventListener('click', (e) => {
@@ -3382,6 +3442,74 @@ function buildMiroGridCard(card) {
 
   // Lock UI
   attachLockUI(el, card);
+
+  /* ── Corner Resize Handles (whole table) ── */
+  ['br','bl','tr','tl'].forEach(corner => {
+    const handle = document.createElement('div');
+    handle.className = `mc-resize-${corner}`;
+    handle.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      const startX = e.clientX, startY = e.clientY;
+      const startW = card.w, startH = card.h;
+      const startColWidths = [...card.colWidths], startRowHeights = [...card.rowHeights];
+      const pg = cp(); const zoom = (pg.zoom || 100) / 100;
+      function onMove(ev) {
+        let dx = (ev.clientX - startX) / zoom, dy = (ev.clientY - startY) / zoom;
+        if (corner === 'tl' || corner === 'bl') dx = -dx;
+        if (corner === 'tl' || corner === 'tr') dy = -dy;
+        const scaleX = Math.max(0.2, (startW + dx) / startW);
+        const scaleY = Math.max(0.2, (startH + dy) / startH);
+        card.colWidths = startColWidths.map(w => Math.max(30, Math.round(w * scaleX)));
+        card.rowHeights = startRowHeights.map(h => Math.max(20, Math.round(h * scaleY)));
+        card.w = card.colWidths.reduce((a, b) => a + b, 0);
+        card.h = card.rowHeights.reduce((a, b) => a + b, 0);
+        if (corner === 'tl' || corner === 'bl') card.x = (card.x || 0) + startW - card.w;
+        if (corner === 'tl' || corner === 'tr') card.y = (card.y || 0) + startH - card.h;
+        el.style.left = card.x + 'px'; el.style.top = card.y + 'px';
+        el.style.width = card.w + 'px'; el.style.height = card.h + 'px';
+        table.style.width = card.w + 'px'; table.style.height = card.h + 'px';
+      }
+      function onUp() { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); sv(); buildMiroCanvas(); }
+      document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+    });
+    el.appendChild(handle);
+  });
+
+  /* ── Edge Resize Handles (sides) ── */
+  ['top','bottom','left','right'].forEach(side => {
+    const edge = document.createElement('div');
+    edge.className = `mc-edge-resize mc-edge-resize-${side}`;
+    edge.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      const startX = e.clientX, startY = e.clientY;
+      const startW = card.w, startH = card.h;
+      const startColWidths = [...card.colWidths], startRowHeights = [...card.rowHeights];
+      const pg = cp(); const zoom = (pg.zoom || 100) / 100;
+      function onMove(ev) {
+        if (side === 'right' || side === 'left') {
+          let dx = (ev.clientX - startX) / zoom;
+          if (side === 'left') dx = -dx;
+          const scaleX = Math.max(0.2, (startW + dx) / startW);
+          card.colWidths = startColWidths.map(w => Math.max(30, Math.round(w * scaleX)));
+          card.w = card.colWidths.reduce((a, b) => a + b, 0);
+          if (side === 'left') card.x = (card.x || 0) + startW - card.w;
+        } else {
+          let dy = (ev.clientY - startY) / zoom;
+          if (side === 'top') dy = -dy;
+          const scaleY = Math.max(0.2, (startH + dy) / startH);
+          card.rowHeights = startRowHeights.map(h => Math.max(20, Math.round(h * scaleY)));
+          card.h = card.rowHeights.reduce((a, b) => a + b, 0);
+          if (side === 'top') card.y = (card.y || 0) + startH - card.h;
+        }
+        el.style.left = (card.x || 0) + 'px'; el.style.top = (card.y || 0) + 'px';
+        el.style.width = card.w + 'px'; el.style.height = card.h + 'px';
+        table.style.width = card.w + 'px'; table.style.height = card.h + 'px';
+      }
+      function onUp() { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); sv(); buildMiroCanvas(); }
+      document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+    });
+    el.appendChild(edge);
+  });
 
   el.appendChild(del);
   el.appendChild(toolbar);
