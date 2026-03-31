@@ -18,8 +18,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1774861224">
-  <link rel="stylesheet" href="css/miro.css?v=1774861224">
+  <link rel="stylesheet" href="css/base.css?v=1774923925">
+  <link rel="stylesheet" href="css/miro.css?v=1774923925">
 </head>
 
 <body>
@@ -508,6 +508,16 @@
     <button class="msp-close" id="msp-close">✕</button>
   </div>
 
+  <!-- Grid Size Picker Panel -->
+  <div id="miro-grid-picker">
+    <div class="mgp-header">
+      <span class="mgp-title">Table</span>
+      <button class="msp-close" id="mgp-close">✕</button>
+    </div>
+    <div class="mgp-grid" id="mgp-grid"></div>
+    <div class="mgp-dim" id="mgp-dim"></div>
+  </div>
+
   <!-- Sticky create hint -->
   <div class="sn-create-hint" id="sn-create-hint">📝 Click anywhere to place a sticky note • Press Esc to cancel</div>
 
@@ -676,11 +686,11 @@
     <div class="ctx-item danger" data-action="delete"><span class="ctx-icon">🗑️</span><span class="ctx-label">Delete</span><span class="ctx-shortcut">Del</span></div>
   </div>
 
-    <script src="js/app.js?v=1774861224"></script>
-    <script src="js/outline.js?v=1774861224"></script>
-    <script src="js/miro-engine.js?v=1774861224"></script>
-    <script src="js/thumbnails.js?v=1774861224"></script>
-    <script src="js/alignment.js?v=1774861224"></script>
+    <script src="js/app.js?v=1774923925"></script>
+    <script src="js/outline.js?v=1774923925"></script>
+    <script src="js/miro-engine.js?v=1774923925"></script>
+    <script src="js/thumbnails.js?v=1774923925"></script>
+    <script src="js/alignment.js?v=1774923925"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});

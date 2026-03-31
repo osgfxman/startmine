@@ -1482,7 +1482,7 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
         }
       }, 100);
     } else if (_gridCreateMode) {
-      const rows = 3, cols = 3;
+      const rows = _gridPickerRows || 3, cols = _gridPickerCols || 3;
       const cells = [];
       for (let r = 0; r < rows; r++) { const row = []; for (let c = 0; c < cols; c++) row.push(''); cells.push(row); }
       const w = cols * 120, h = rows * 40;
@@ -1546,8 +1546,68 @@ document.querySelectorAll('.msp-item').forEach(item => {
   });
 });
 document.getElementById('mtb-pen').onclick = () => setActiveTool('pen');
+/* ─── Grid Size Picker ─── */
+let _gridPickerRows = 3, _gridPickerCols = 3;
+(function initGridPicker() {
+  const panel = document.getElementById('miro-grid-picker');
+  const grid = document.getElementById('mgp-grid');
+  const dimLabel = document.getElementById('mgp-dim');
+  const MAXR = 15, MAXC = 10;
+  // Build cells
+  for (let r = 0; r < MAXR; r++) {
+    for (let c = 0; c < MAXC; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'mgp-cell';
+      cell.dataset.r = r; cell.dataset.c = c;
+      grid.appendChild(cell);
+    }
+  }
+  const cells = grid.querySelectorAll('.mgp-cell');
+  function highlight(hr, hc) {
+    cells.forEach(cell => {
+      const cr = +cell.dataset.r, cc = +cell.dataset.c;
+      cell.classList.toggle('active', cr <= hr && cc <= hc);
+    });
+    dimLabel.textContent = `${hr + 1} × ${hc + 1}`;
+    dimLabel.classList.add('visible');
+  }
+  grid.addEventListener('mousemove', (e) => {
+    const cell = e.target.closest('.mgp-cell');
+    if (!cell) return;
+    highlight(+cell.dataset.r, +cell.dataset.c);
+  });
+  grid.addEventListener('mouseleave', () => {
+    cells.forEach(c => c.classList.remove('active'));
+    dimLabel.classList.remove('visible');
+  });
+  grid.addEventListener('click', (e) => {
+    const cell = e.target.closest('.mgp-cell');
+    if (!cell) return;
+    _gridPickerRows = +cell.dataset.r + 1;
+    _gridPickerCols = +cell.dataset.c + 1;
+    panel.classList.remove('show');
+    setActiveTool('grid');
+  });
+  document.getElementById('mgp-close').onclick = () => {
+    panel.classList.remove('show');
+    setActiveTool('select');
+  };
+})();
 document.getElementById('mtb-grid').onclick = () => {
-  setActiveTool('grid');
+  const panel = document.getElementById('miro-grid-picker');
+  const isOpen = panel.classList.contains('show');
+  // Close other panels
+  document.getElementById('miro-shape-panel').classList.remove('show');
+  document.getElementById('mtb-more-panel').classList.remove('show');
+  if (isOpen) {
+    panel.classList.remove('show');
+    setActiveTool('select');
+  } else {
+    panel.classList.add('show');
+    // Highlight button but don't enter create mode yet
+    document.querySelectorAll('.mtb-btn').forEach(b => b.classList.remove('sel'));
+    document.getElementById('mtb-grid').classList.add('sel');
+  }
 };
 document.getElementById('mtb-image').onclick = () => {
   document.getElementById('miro-opt-image').click();

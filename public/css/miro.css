@@ -2814,6 +2814,77 @@
   color: var(--red);
 }
 
+/* ─── Grid Size Picker Panel ─── */
+#miro-grid-picker {
+  position: fixed;
+  top: 50%;
+  left: 60px;
+  transform: translateY(-50%);
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  padding: 14px 16px 12px;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, .12), 0 1px 4px rgba(0, 0, 0, .06);
+  z-index: 601;
+  width: auto;
+}
+#miro-grid-picker.show {
+  display: flex;
+}
+.mgp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+.mgp-title {
+  font-size: .8rem;
+  font-weight: 600;
+  color: #333;
+  font-family: var(--font);
+}
+.mgp-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 18px);
+  grid-template-rows: repeat(15, 18px);
+  gap: 2px;
+  cursor: pointer;
+}
+.mgp-cell {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  background: #e8eaed;
+  transition: background .06s ease;
+  border: 1px solid transparent;
+}
+.mgp-cell.active {
+  background: #4a7aff;
+  border-color: #3a6aef;
+}
+.mgp-cell:hover {
+  border-color: rgba(0, 0, 0, .1);
+}
+.mgp-dim {
+  text-align: center;
+  font-size: .72rem;
+  font-weight: 600;
+  color: #fff;
+  background: #333;
+  border-radius: 6px;
+  padding: 4px 10px;
+  min-height: 20px;
+  font-family: var(--font);
+  opacity: 0;
+  transition: opacity .12s;
+}
+.mgp-dim.visible {
+  opacity: 1;
+}
+
 /* ─── Grid/Table Widget ─── */
 .miro-grid {
   position: absolute;
@@ -2906,54 +2977,6 @@
   display: none !important;
 }
 
-/* Grid resize handles */
-.miro-grid .mc-resize-br,
-.miro-grid .mc-resize-bl,
-.miro-grid .mc-resize-tr,
-.miro-grid .mc-resize-tl {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  z-index: 4;
-  opacity: 0;
-  transition: opacity .12s;
-}
-
-.miro-grid:hover .mc-resize-br,
-.miro-grid:hover .mc-resize-bl,
-.miro-grid:hover .mc-resize-tr,
-.miro-grid:hover .mc-resize-tl {
-  opacity: 1;
-}
-
-.miro-grid .mc-resize-br {
-  right: -6px;
-  bottom: -6px;
-  cursor: nwse-resize;
-  background: linear-gradient(135deg, transparent 50%, rgba(108, 143, 255, .6) 50%);
-}
-
-.miro-grid .mc-resize-tl {
-  left: -6px;
-  top: -6px;
-  cursor: nwse-resize;
-  background: linear-gradient(315deg, transparent 50%, rgba(108, 143, 255, .6) 50%);
-}
-
-.miro-grid .mc-resize-tr {
-  right: -6px;
-  top: -6px;
-  cursor: nesw-resize;
-  background: linear-gradient(225deg, transparent 50%, rgba(108, 143, 255, .6) 50%);
-}
-
-.miro-grid .mc-resize-bl {
-  left: -6px;
-  bottom: -6px;
-  cursor: nesw-resize;
-  background: linear-gradient(45deg, transparent 50%, rgba(108, 143, 255, .6) 50%);
-}
-
 /* Grid Column / Row internal resizers */
 .mg-col-resizer {
   position: absolute;
@@ -3003,6 +3026,8 @@
   outline: none;
   min-width: 40px;
   transition: background .1s, box-shadow .1s;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .mg-table td.mg-sel {
@@ -3019,20 +3044,20 @@
   font-weight: 600;
 }
 
+/* ─── Modern Grid Toolbar ─── */
 .mg-toolbar {
   position: absolute;
-  bottom: calc(100% + 6px);
+  bottom: calc(100% + 8px);
   left: 50%;
   transform: translateX(-50%);
-  background: var(--s2);
-  border: 1px solid var(--bd);
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, .08);
   border-radius: 10px;
-  padding: 5px 8px;
+  padding: 4px 6px;
   display: none;
   align-items: center;
-  gap: 5px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
-  backdrop-filter: blur(12px);
+  gap: 2px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .1), 0 1px 3px rgba(0, 0, 0, .06);
   z-index: 10;
   white-space: nowrap;
 }
@@ -3041,12 +3066,85 @@
   display: flex;
 }
 
+.mg-toolbar .mg-tb-sep {
+  width: 1px;
+  height: 20px;
+  background: rgba(0, 0, 0, .08);
+  margin: 0 3px;
+  flex-shrink: 0;
+}
+
+.mg-toolbar .mg-tb-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #555;
+  cursor: pointer;
+  transition: all .12s;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.mg-toolbar .mg-tb-btn:hover {
+  background: #f0f1f5;
+  color: #333;
+}
+
+.mg-toolbar .mg-tb-btn:active {
+  background: #e0e1e5;
+}
+
+.mg-toolbar .mg-tb-btn.active {
+  background: rgba(108, 143, 255, .12);
+  color: var(--ac);
+}
+
+.mg-toolbar .mg-tb-btn svg {
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+
+.mg-toolbar .mg-tb-clr {
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgba(0, 0, 0, .1);
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: border-color .12s;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.mg-toolbar .mg-tb-clr::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.mg-toolbar .mg-tb-clr::-webkit-color-swatch {
+  border: none;
+  border-radius: 50%;
+}
+
+.mg-toolbar .mg-tb-clr:hover {
+  border-color: var(--ac);
+}
+
 .mg-toolbar label {
   display: flex;
   align-items: center;
   gap: 3px;
-  color: var(--mu);
+  color: #888;
   font-family: var(--font);
+  font-size: .6rem;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .mg-toolbar input[type="color"] {
@@ -3056,6 +3154,269 @@
   border-radius: 4px;
   cursor: pointer;
   padding: 0;
+}
+
+.mg-toolbar input[type="range"] {
+  width: 40px;
+  height: 3px;
+  accent-color: var(--ac);
+}
+
+/* Cell Resize dropdown */
+.mg-resize-wrap {
+  position: relative;
+}
+
+.mg-resize-btn {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, .08);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: .6rem;
+  font-family: var(--font);
+  color: #555;
+  cursor: pointer;
+  transition: all .12s;
+  white-space: nowrap;
+}
+
+.mg-resize-btn:hover {
+  background: #f0f1f5;
+  border-color: rgba(0, 0, 0, .15);
+}
+
+.mg-resize-drop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, .08);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
+  display: none;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 80px;
+  z-index: 20;
+}
+
+.mg-resize-drop.show {
+  display: flex;
+}
+
+.mg-resize-opt {
+  padding: 6px 10px;
+  font-size: .68rem;
+  font-family: var(--font);
+  color: #444;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  cursor: pointer;
+  text-align: left;
+  transition: background .1s;
+}
+
+.mg-resize-opt:hover {
+  background: #f0f1f5;
+}
+
+.mg-resize-opt.sel {
+  color: var(--ac);
+  font-weight: 600;
+}
+
+/* ─── Per-Row/Column Hover Controls ─── */
+.mg-col-ctrl {
+  position: absolute;
+  top: -32px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  transform: translateX(-50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s;
+  z-index: 8;
+}
+
+.mg-row-ctrl {
+  position: absolute;
+  left: -32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s;
+  z-index: 8;
+}
+
+.mg-col-ctrl.visible,
+.mg-row-ctrl.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mg-ctrl-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, .08);
+  background: #fff;
+  color: #888;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .12s;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .08);
+  padding: 0;
+}
+
+.mg-ctrl-btn:hover {
+  background: var(--ac);
+  color: #fff;
+  border-color: var(--ac);
+  box-shadow: 0 2px 8px rgba(108, 143, 255, .3);
+}
+
+.mg-ctrl-btn svg {
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+}
+
+.mg-ctrl-btn.mg-ctrl-select {
+  background: rgba(108, 143, 255, .08);
+  border-color: rgba(108, 143, 255, .2);
+  color: var(--ac);
+}
+
+.mg-ctrl-btn.mg-ctrl-select:hover {
+  background: var(--ac);
+  color: #fff;
+}
+
+/* Grid edge + buttons */
+.mg-edge-btn {
+  position: absolute;
+  background: #fff;
+  color: #888;
+  border: 1px solid rgba(0, 0, 0, .08);
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: .75rem;
+  line-height: 1;
+  opacity: 0;
+  transition: all .15s;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .08);
+  z-index: 5;
+}
+
+.miro-grid:hover .mg-edge-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mg-edge-btn:hover {
+  background: var(--ac);
+  color: #fff;
+  border-color: var(--ac);
+  box-shadow: 0 3px 10px rgba(108, 143, 255, .3);
+}
+
+.mg-edge-top {
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.mg-edge-bot {
+  bottom: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.mg-edge-left {
+  left: -14px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.mg-edge-right {
+  right: -14px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Floating Merge Button */
+.mg-merge-float {
+  position: absolute;
+  display: none;
+  align-items: center;
+  gap: 4px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, .08);
+  border-radius: 8px;
+  padding: 4px 10px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .1);
+  z-index: 12;
+  cursor: pointer;
+  transition: all .12s;
+  font-size: .65rem;
+  font-family: var(--font);
+  font-weight: 500;
+  color: #555;
+}
+
+.mg-merge-float.show {
+  display: flex;
+}
+
+.mg-merge-float:hover {
+  background: var(--ac);
+  color: #fff;
+  border-color: var(--ac);
+  box-shadow: 0 4px 16px rgba(108, 143, 255, .25);
+}
+
+.mg-merge-float svg {
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+
+/* Cell selection */
+td.mg-sel {
+  outline: 2px solid var(--ac) !important;
+  outline-offset: -1px;
+}
+
+/* Row/Column full highlight */
+td.mg-row-hl {
+  background: rgba(108, 143, 255, .08) !important;
+}
+td.mg-col-hl {
+  background: rgba(108, 143, 255, .08) !important;
+}
+
+/* Toggle button active state */
+.mg-toggle.active {
+  background: rgba(108, 143, 255, .3);
+  color: var(--ac);
 }
 
 /* ─── Mind Map Widget ─── */
