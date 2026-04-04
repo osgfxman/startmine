@@ -4119,6 +4119,132 @@ document.getElementById('inbox-import-file').addEventListener('change', (e) => {
   e.target.value = '';
 });
 
+// ─── Export Inbox to Page (inbox env → inbox gr → timestamped page) ───
+document.getElementById('inbox-export-page-btn').onclick = () => {
+  if (!D.inbox || !D.inbox.length) {
+    showToast('📥 Inbox is empty — nothing to export', 2000);
+    return;
+  }
+
+  // 1. Generate page name: "4APR26-2:29PM" format
+  const now = new Date();
+  const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  const day = now.getDate();
+  const mon = months[now.getMonth()];
+  const yr = String(now.getFullYear()).slice(-2);
+  let hrs = now.getHours();
+  const mins = String(now.getMinutes()).padStart(2, '0');
+  const ampm = hrs >= 12 ? 'PM' : 'AM';
+  hrs = hrs % 12 || 12;
+  const pageName = `${day}${mon}${yr}-${hrs}:${mins}${ampm}`;
+
+  // 2. Find or create "inbox env" environment
+  let inboxEnv = D.environments.find(e => e.name === 'inbox env');
+  if (!inboxEnv) {
+    const envId = uid();
+    inboxEnv = { id: envId, name: 'inbox env' };
+    D.environments.push(inboxEnv);
+  }
+
+  // 3. Find or create "inbox gr" group under that environment
+  let inboxGrp = D.groups.find(g => g.name === 'inbox gr' && g.envId === inboxEnv.id);
+  if (!inboxGrp) {
+    const grpId = uid();
+    inboxGrp = { id: grpId, name: 'inbox gr', envId: inboxEnv.id };
+    D.groups.push(inboxGrp);
+  }
+
+  // 4. Create miroCards from inbox items in a grid layout
+  const GAP = 40;
+  const COLS_PER_ROW = 4;
+  const START_X = 80;
+  const START_Y = 80;
+  let curX = START_X;
+  let curY = START_Y;
+  let rowMaxH = 0;
+  let colCount = 0;
+  const miroCards = [];
+
+  D.inbox.forEach(item => {
+    const itemType = item.type || 'url';
+    let card;
+
+    if (itemType === 'text') {
+      card = {
+        id: uid(), type: 'sticky',
+        text: item.text || item.label || '',
+        bg: '#ffe599',
+        x: curX, y: curY,
+        w: 200, h: 200
+      };
+    } else if (itemType === 'image') {
+      card = {
+        id: uid(), type: 'image',
+        imageUrl: item.data,
+        label: item.label || 'Image',
+        x: curX, y: curY,
+        w: 300, h: 200
+      };
+    } else {
+      // URL → bookmark card
+      const url = item.url || '';
+      card = {
+        id: uid(), type: 'card',
+        url: url,
+        label: item.label || '',
+        x: curX, y: curY,
+        w: 280, h: 240
+      };
+    }
+
+    miroCards.push(card);
+
+    // Advance grid position
+    const cardW = card.w || 280;
+    const cardH = card.h || 240;
+    curX += cardW + GAP;
+    rowMaxH = Math.max(rowMaxH, cardH);
+    colCount++;
+
+    if (colCount % COLS_PER_ROW === 0) {
+      curX = START_X;
+      curY += rowMaxH + GAP;
+      rowMaxH = 0;
+    }
+  });
+
+  // 5. Create the new page
+  const pageId = uid();
+  D.pages.push({
+    id: pageId,
+    groupId: inboxGrp.id,
+    name: pageName,
+    pageType: 'miro',
+    miroCards: miroCards,
+    zoom: 100,
+    panX: 0,
+    panY: 0,
+    bg: '',
+    bgType: 'none',
+    widgets: [],
+  });
+
+  // 6. Clear inbox
+  const exportedCount = D.inbox.length;
+  D.inbox = [];
+
+  // 7. Navigate to the new page
+  D.curEnv = inboxEnv.id;
+  D.curGroup = inboxGrp.id;
+  sv();
+  switchActivePage(pageId);
+
+  // 8. Close inbox sidebar and show toast
+  document.getElementById('inbox-side').classList.remove('open');
+  document.getElementById('inbox-btn').classList.remove('active-toggle');
+  showToast(`📄 Exported ${exportedCount} items to "${pageName}"`, 3000);
+};
+
 // Duplicate link detection
 let _dupScope = 'page'; // 'page' or 'all'
 document.getElementById('dup-btn').onclick = () => {

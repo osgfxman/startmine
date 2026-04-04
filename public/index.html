@@ -18,8 +18,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1775305090">
-  <link rel="stylesheet" href="css/miro.css?v=1775305090">
+  <link rel="stylesheet" href="css/base.css?v=1775313273">
+  <link rel="stylesheet" href="css/miro.css?v=1775313273">
 </head>
 
 <body>
@@ -175,6 +175,7 @@
         <button class="inbox-hdr-btn" id="inbox-restore-btn" title="Restore Inbox Backup">🔄</button>
         <button class="inbox-hdr-btn" id="inbox-export-btn" title="Export Inbox as JSON">📤</button>
         <label class="inbox-hdr-btn" title="Import Inbox JSON" style="cursor:pointer">📥<input type="file" id="inbox-import-file" accept=".json" style="display:none"></label>
+        <button class="inbox-hdr-btn" id="inbox-export-page-btn" title="Export Inbox to Page" style="background:linear-gradient(135deg,#6c8fff22,#a278ff22);border:1px solid rgba(108,143,255,.3)">📄</button>
       </div>
       <button id="inbox-close">✕</button>
     </div>
@@ -692,11 +693,11 @@
     <div class="ctx-item danger" data-action="delete"><span class="ctx-icon">🗑️</span><span class="ctx-label">Delete</span><span class="ctx-shortcut">Del</span></div>
   </div>
 
-    <script src="js/app.js?v=1775305090"></script>
-    <script src="js/outline.js?v=1775305090"></script>
-    <script src="js/miro-engine.js?v=1775305090"></script>
-    <script src="js/thumbnails.js?v=1775305090"></script>
-    <script src="js/alignment.js?v=1775305090"></script>
+    <script src="js/app.js?v=1775313273"></script>
+    <script src="js/outline.js?v=1775313273"></script>
+    <script src="js/miro-engine.js?v=1775313273"></script>
+    <script src="js/thumbnails.js?v=1775313273"></script>
+    <script src="js/alignment.js?v=1775313273"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});
