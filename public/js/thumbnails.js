@@ -2992,6 +2992,42 @@ function buildMiroGridCard(card) {
   });
   cleanupObserver.observe(document.body, { childList: true, subtree: true });
 
+  /* ── Delete/Backspace: remove selected row or column ── */
+  const gridKeyHandler = (e) => {
+    if (!document.body.contains(el)) { document.removeEventListener('keydown', gridKeyHandler); return; }
+    if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+    if (document.activeElement && (document.activeElement.contentEditable === 'true' || document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) return;
+    if (selectedCells.size === 0) return;
+
+    const cells = [...selectedCells].map(s => { const [r, c] = s.split(',').map(Number); return { r, c }; });
+    const selRows = new Set(cells.map(c => c.r));
+    const selCols = new Set(cells.map(c => c.c));
+
+    // Check if entire rows are selected
+    const fullRows = [...selRows].filter(r => {
+      for (let c = 0; c < cols; c++) { if (!selectedCells.has(`${r},${c}`)) return false; }
+      return true;
+    }).sort((a, b) => b - a); // Delete from bottom up
+
+    // Check if entire columns are selected
+    const fullCols = [...selCols].filter(c => {
+      for (let r = 0; r < rows; r++) { if (!selectedCells.has(`${r},${c}`)) return false; }
+      return true;
+    }).sort((a, b) => b - a); // Delete from right to left
+
+    if (fullRows.length > 0 && card.rows - fullRows.length >= 1) {
+      e.preventDefault(); pushUndo();
+      fullRows.forEach(r => { card.cells.splice(r, 1); card.rowHeights.splice(r, 1); card.rows--; });
+      selectedCells.clear(); sv(); buildMiroCanvas(); return;
+    }
+    if (fullCols.length > 0 && card.cols - fullCols.length >= 1) {
+      e.preventDefault(); pushUndo();
+      fullCols.forEach(c => { card.cells.forEach(row => row.splice(c, 1)); card.colWidths.splice(c, 1); card.cols--; });
+      selectedCells.clear(); sv(); buildMiroCanvas(); return;
+    }
+  };
+  document.addEventListener('keydown', gridKeyHandler);
+
   /* ── Edge + Buttons (inherit neighbor size) ── */
   const addRowTop = document.createElement('button');
   addRowTop.className = 'mg-edge-btn mg-edge-top'; addRowTop.innerHTML = '+';
@@ -3368,15 +3404,34 @@ function buildMiroGridCard(card) {
     });
     sv(); buildMiroCanvas();
   }
-  toolbar.appendChild(mkBtn(svgAlignL, 'Align Left', () => setAlign('textAlign', 'left')));
-  toolbar.appendChild(mkBtn(svgAlignC, 'Align Center', () => setAlign('textAlign', 'center')));
-  toolbar.appendChild(mkBtn(svgAlignR, 'Align Right', () => setAlign('textAlign', 'right')));
-
-  toolbar.appendChild(mkSep());
-
-  toolbar.appendChild(mkBtn(svgVTop, 'Vertical Top', () => setAlign('verticalAlign', 'top')));
-  toolbar.appendChild(mkBtn(svgVMid, 'Vertical Middle', () => setAlign('verticalAlign', 'middle')));
-  toolbar.appendChild(mkBtn(svgVBot, 'Vertical Bottom', () => setAlign('verticalAlign', 'bottom')));
+  // ── Alignment Dropdown (combines 6 icons in one) ──
+  const alignWrap = document.createElement('div');
+  alignWrap.className = 'mg-resize-wrap';
+  const alignBtn = document.createElement('button');
+  alignBtn.className = 'mg-tb-btn'; alignBtn.title = 'Alignment';
+  alignBtn.innerHTML = svgAlignL;
+  const alignDrop = document.createElement('div');
+  alignDrop.className = 'mg-resize-drop mg-align-drop';
+  alignDrop.style.minWidth = '100px';
+  const alignGrid = document.createElement('div');
+  alignGrid.style.cssText = 'display:grid;grid-template-columns:repeat(3,28px);gap:2px;padding:2px;';
+  function mkAlignBtn(icon, title, prop, val) {
+    const b = document.createElement('button');
+    b.className = 'mg-tb-btn'; b.innerHTML = icon; b.title = title;
+    b.onclick = (e) => { e.stopPropagation(); setAlign(prop, val); alignDrop.classList.remove('show'); };
+    return b;
+  }
+  alignGrid.appendChild(mkAlignBtn(svgAlignL, 'Left', 'textAlign', 'left'));
+  alignGrid.appendChild(mkAlignBtn(svgAlignC, 'Center', 'textAlign', 'center'));
+  alignGrid.appendChild(mkAlignBtn(svgAlignR, 'Right', 'textAlign', 'right'));
+  alignGrid.appendChild(mkAlignBtn(svgVTop, 'Top', 'verticalAlign', 'top'));
+  alignGrid.appendChild(mkAlignBtn(svgVMid, 'Middle', 'verticalAlign', 'middle'));
+  alignGrid.appendChild(mkAlignBtn(svgVBot, 'Bottom', 'verticalAlign', 'bottom'));
+  alignDrop.appendChild(alignGrid);
+  alignBtn.onclick = (e) => { e.stopPropagation(); alignDrop.classList.toggle('show'); };
+  alignWrap.appendChild(alignBtn);
+  alignWrap.appendChild(alignDrop);
+  toolbar.appendChild(alignWrap);
 
   /* ── Toolbar Click Toggle ── */
   el.addEventListener('click', (e) => {
@@ -3386,7 +3441,7 @@ function buildMiroGridCard(card) {
   });
   const docClickHandler = (e) => {
     if (!document.body.contains(el)) { document.removeEventListener('click', docClickHandler); return; }
-    if (!el.contains(e.target)) { toolbar.classList.remove('show'); resizeDrop.classList.remove('show'); }
+    if (!el.contains(e.target)) { toolbar.classList.remove('show'); resizeDrop.classList.remove('show'); alignDrop.classList.remove('show'); }
   };
   document.addEventListener('click', docClickHandler);
 
@@ -3404,6 +3459,8 @@ function buildMiroGridCard(card) {
       e.target.closest('.mg-col-resizer') ||
       e.target.closest('.mg-ctrl-btn') ||
       e.target.closest('.mg-merge-float') ||
+      e.target.closest('.mc-edge-resize') ||
+      e.target.closest('[class^="mc-resize-"]') ||
       e.target.closest('td')
     ) return;
 
@@ -3438,7 +3495,7 @@ function buildMiroGridCard(card) {
     document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
   });
 
-  miroSetupCardDrag(el, card, ['.mg-col-handle', '.mg-row-handle', '.mc-del', 'td', '.mg-ctrl-btn', '.mg-merge-float']);
+  miroSetupCardDrag(el, card, ['.mg-col-handle', '.mg-row-handle', '.mc-del', 'td', '.mg-ctrl-btn', '.mg-merge-float', '.mc-edge-resize', '[class^="mc-resize-"]', '.mg-edge-btn', '.mg-row-resizer', '.mg-col-resizer']);
 
   // Lock UI
   attachLockUI(el, card);
@@ -3451,6 +3508,7 @@ function buildMiroGridCard(card) {
       e.stopPropagation();
       const startX = e.clientX, startY = e.clientY;
       const startW = card.w, startH = card.h;
+      const startCardX = card.x || 0, startCardY = card.y || 0;
       const startColWidths = [...card.colWidths], startRowHeights = [...card.rowHeights];
       const pg = cp(); const zoom = (pg.zoom || 100) / 100;
       function onMove(ev) {
@@ -3463,8 +3521,8 @@ function buildMiroGridCard(card) {
         card.rowHeights = startRowHeights.map(h => Math.max(20, Math.round(h * scaleY)));
         card.w = card.colWidths.reduce((a, b) => a + b, 0);
         card.h = card.rowHeights.reduce((a, b) => a + b, 0);
-        if (corner === 'tl' || corner === 'bl') card.x = (card.x || 0) + startW - card.w;
-        if (corner === 'tl' || corner === 'tr') card.y = (card.y || 0) + startH - card.h;
+        if (corner === 'tl' || corner === 'bl') card.x = startCardX + startW - card.w;
+        if (corner === 'tl' || corner === 'tr') card.y = startCardY + startH - card.h;
         el.style.left = card.x + 'px'; el.style.top = card.y + 'px';
         el.style.width = card.w + 'px'; el.style.height = card.h + 'px';
         table.style.width = card.w + 'px'; table.style.height = card.h + 'px';
@@ -3483,6 +3541,7 @@ function buildMiroGridCard(card) {
       e.stopPropagation();
       const startX = e.clientX, startY = e.clientY;
       const startW = card.w, startH = card.h;
+      const startCardX2 = card.x || 0, startCardY2 = card.y || 0;
       const startColWidths = [...card.colWidths], startRowHeights = [...card.rowHeights];
       const pg = cp(); const zoom = (pg.zoom || 100) / 100;
       function onMove(ev) {
@@ -3492,14 +3551,14 @@ function buildMiroGridCard(card) {
           const scaleX = Math.max(0.2, (startW + dx) / startW);
           card.colWidths = startColWidths.map(w => Math.max(30, Math.round(w * scaleX)));
           card.w = card.colWidths.reduce((a, b) => a + b, 0);
-          if (side === 'left') card.x = (card.x || 0) + startW - card.w;
+          if (side === 'left') card.x = startCardX2 + startW - card.w;
         } else {
           let dy = (ev.clientY - startY) / zoom;
           if (side === 'top') dy = -dy;
           const scaleY = Math.max(0.2, (startH + dy) / startH);
           card.rowHeights = startRowHeights.map(h => Math.max(20, Math.round(h * scaleY)));
           card.h = card.rowHeights.reduce((a, b) => a + b, 0);
-          if (side === 'top') card.y = (card.y || 0) + startH - card.h;
+          if (side === 'top') card.y = startCardY2 + startH - card.h;
         }
         el.style.left = (card.x || 0) + 'px'; el.style.top = (card.y || 0) + 'px';
         el.style.width = card.w + 'px'; el.style.height = card.h + 'px';

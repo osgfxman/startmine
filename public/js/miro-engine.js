@@ -1483,10 +1483,16 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
       }, 100);
     } else if (_gridCreateMode) {
       const rows = _gridPickerRows || 3, cols = _gridPickerCols || 3;
+      const rdInput = document.getElementById('mgp-rd');
+      const cdInput = document.getElementById('mgp-cd');
+      const rowH = rdInput ? parseInt(rdInput.value) || 40 : 40;
+      const colW = cdInput ? parseInt(cdInput.value) || 120 : 120;
       const cells = [];
       for (let r = 0; r < rows; r++) { const row = []; for (let c = 0; c < cols; c++) row.push(''); cells.push(row); }
-      const w = cols * 120, h = rows * 40;
-      page.miroCards.push({ id: uid(), type: 'grid', rows, cols, cells, x: bx - w / 2, y: by - h / 2, w, h, headerColor: 'none', borderColor: '#555' });
+      const w = cols * colW, h = rows * rowH;
+      const colWidths = Array(cols).fill(colW);
+      const rowHeights = Array(rows).fill(rowH);
+      page.miroCards.push({ id: uid(), type: 'grid', rows, cols, cells, colWidths, rowHeights, x: bx - w / 2, y: by - h / 2, w, h, headerColor: 'none', borderColor: '#555' });
       sv(); buildMiroCanvas(); buildOutline();
     } else if (_mindmapCreateMode) {
       const rootId = uid(), child1 = uid(), child2 = uid(), child3 = uid();
@@ -1552,6 +1558,8 @@ let _gridPickerRows = 3, _gridPickerCols = 3;
   const panel = document.getElementById('miro-grid-picker');
   const grid = document.getElementById('mgp-grid');
   const dimLabel = document.getElementById('mgp-dim');
+  const rnInput = document.getElementById('mgp-rn');
+  const cnInput = document.getElementById('mgp-cn');
   const MAXR = 15, MAXC = 10;
   // Build cells
   for (let r = 0; r < MAXR; r++) {
@@ -1574,7 +1582,11 @@ let _gridPickerRows = 3, _gridPickerCols = 3;
   grid.addEventListener('mousemove', (e) => {
     const cell = e.target.closest('.mgp-cell');
     if (!cell) return;
-    highlight(+cell.dataset.r, +cell.dataset.c);
+    const hr = +cell.dataset.r, hc = +cell.dataset.c;
+    highlight(hr, hc);
+    // Sync numeric inputs
+    if (rnInput) rnInput.value = hr + 1;
+    if (cnInput) cnInput.value = hc + 1;
   });
   grid.addEventListener('mouseleave', () => {
     cells.forEach(c => c.classList.remove('active'));
@@ -1585,8 +1597,26 @@ let _gridPickerRows = 3, _gridPickerCols = 3;
     if (!cell) return;
     _gridPickerRows = +cell.dataset.r + 1;
     _gridPickerCols = +cell.dataset.c + 1;
+    if (rnInput) rnInput.value = _gridPickerRows;
+    if (cnInput) cnInput.value = _gridPickerCols;
     panel.classList.remove('show');
     setActiveTool('grid');
+  });
+  // Numeric inputs: update picker state and enter grid mode
+  [rnInput, cnInput].forEach(inp => {
+    if (!inp) return;
+    inp.addEventListener('change', () => {
+      _gridPickerRows = parseInt(rnInput.value) || 3;
+      _gridPickerCols = parseInt(cnInput.value) || 3;
+    });
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        _gridPickerRows = parseInt(rnInput.value) || 3;
+        _gridPickerCols = parseInt(cnInput.value) || 3;
+        panel.classList.remove('show');
+        setActiveTool('grid');
+      }
+    });
   });
   document.getElementById('mgp-close').onclick = () => {
     panel.classList.remove('show');

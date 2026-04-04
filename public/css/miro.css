@@ -2885,6 +2885,57 @@
   opacity: 1;
 }
 
+.mgp-inputs {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.mgp-field {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.mgp-field label {
+  font-size: .55rem;
+  font-weight: 600;
+  color: #888;
+  font-family: var(--font);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
+.mgp-field input {
+  width: 38px;
+  height: 24px;
+  border: 1px solid rgba(0, 0, 0, .12);
+  border-radius: 5px;
+  text-align: center;
+  font-size: .65rem;
+  font-family: var(--font);
+  color: #333;
+  background: #f8f9fa;
+  outline: none;
+  padding: 0;
+  -moz-appearance: textfield;
+  appearance: textfield;
+  transition: border-color .12s;
+}
+
+.mgp-field input:focus {
+  border-color: #4a7aff;
+  background: #fff;
+}
+
+.mgp-field input::-webkit-inner-spin-button,
+.mgp-field input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 /* ─── Grid/Table Widget ─── */
 .miro-grid {
   position: absolute;

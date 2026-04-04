@@ -18,8 +18,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1774961486">
-  <link rel="stylesheet" href="css/miro.css?v=1774961486">
+  <link rel="stylesheet" href="css/base.css?v=1775305090">
+  <link rel="stylesheet" href="css/miro.css?v=1775305090">
 </head>
 
 <body>
@@ -516,6 +516,12 @@
     </div>
     <div class="mgp-grid" id="mgp-grid"></div>
     <div class="mgp-dim" id="mgp-dim"></div>
+    <div class="mgp-inputs">
+      <div class="mgp-field"><label>Rn</label><input type="number" id="mgp-rn" min="1" max="50" value="3" title="Number of rows"></div>
+      <div class="mgp-field"><label>Rd</label><input type="number" id="mgp-rd" min="20" max="200" value="40" title="Row height (px)"></div>
+      <div class="mgp-field"><label>Cn</label><input type="number" id="mgp-cn" min="1" max="50" value="3" title="Number of columns"></div>
+      <div class="mgp-field"><label>Cd</label><input type="number" id="mgp-cd" min="30" max="400" value="120" title="Column width (px)"></div>
+    </div>
   </div>
 
   <!-- Sticky create hint -->
@@ -686,11 +692,11 @@
     <div class="ctx-item danger" data-action="delete"><span class="ctx-icon">🗑️</span><span class="ctx-label">Delete</span><span class="ctx-shortcut">Del</span></div>
   </div>
 
-    <script src="js/app.js?v=1774961486"></script>
-    <script src="js/outline.js?v=1774961486"></script>
-    <script src="js/miro-engine.js?v=1774961486"></script>
-    <script src="js/thumbnails.js?v=1774961486"></script>
-    <script src="js/alignment.js?v=1774961486"></script>
+    <script src="js/app.js?v=1775305090"></script>
+    <script src="js/outline.js?v=1775305090"></script>
+    <script src="js/miro-engine.js?v=1775305090"></script>
+    <script src="js/thumbnails.js?v=1775305090"></script>
+    <script src="js/alignment.js?v=1775305090"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});
