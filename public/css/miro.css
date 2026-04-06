@@ -4710,3 +4710,88 @@ textarea.cal-form-input {
   filter: brightness(1.2);
   transform: scale(1.03);
 }
+
+/* ─── Inline Video Player ─── */
+.mc-play-btn {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 56px;
+  height: 56px;
+  background: rgba(0,0,0,.65);
+  border: 2px solid rgba(255,255,255,.85);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 5;
+  transition: all .2s;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+.mc-play-btn:hover {
+  background: rgba(255,0,50,.8);
+  border-color: #fff;
+  transform: translate(-50%, -50%) scale(1.12);
+  box-shadow: 0 0 24px rgba(255,0,50,.5);
+}
+.mc-play-btn::after {
+  content: '';
+  display: block;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 10px 0 10px 18px;
+  border-color: transparent transparent transparent #fff;
+  margin-left: 3px;
+}
+.mc-video-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(255,0,0,.85);
+  color: #fff;
+  font-size: .55rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  z-index: 4;
+  pointer-events: none;
+  letter-spacing: .3px;
+}
+.miro-card.mc-video-active .mc-thumb {
+  background: #000;
+}
+.miro-card.mc-video-active .mc-thumb iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+}
+.mc-video-close {
+  position: absolute;
+  top: 6px;
+  right: 36px;
+  z-index: 10;
+  background: rgba(255,30,30,.85);
+  border: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  cursor: pointer;
+  font-size: .7rem;
+  font-weight: 700;
+  transition: all .15s;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+.mc-video-close:hover {
+  background: #ff0020;
+  transform: scale(1.1);
+}

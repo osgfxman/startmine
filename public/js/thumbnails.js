@@ -1,5 +1,78 @@
 /* ─── Fast Thumbnail Cache Engine ─── */
-/* ─── Fast Thumbnail Cache Engine ─── */
+
+// ─── Thumbnail IndexedDB Cache (separate DB to avoid version conflicts) ───
+let _thumbIdb = null;
+const THUMB_IDB_NAME = 'startmine_thumbs';
+const THUMB_IDB_STORE = 'thumbs';
+
+function openThumbIDB() {
+  return new Promise((resolve, reject) => {
+    if (_thumbIdb) return resolve(_thumbIdb);
+    const req = indexedDB.open(THUMB_IDB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(THUMB_IDB_STORE); };
+    req.onsuccess = () => { _thumbIdb = req.result; resolve(_thumbIdb); };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function thumbKey(url) {
+  // Simple hash to create a short key from URL
+  let h = 0;
+  for (let i = 0; i < url.length; i++) {
+    h = ((h << 5) - h + url.charCodeAt(i)) | 0;
+  }
+  return 'th_' + (h >>> 0).toString(36);
+}
+
+async function getCachedThumb(url) {
+  try {
+    const db = await openThumbIDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(THUMB_IDB_STORE, 'readonly');
+      const req = tx.objectStore(THUMB_IDB_STORE).get(thumbKey(url));
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  } catch (e) { return null; }
+}
+
+async function cacheThumbBlob(url, blob) {
+  try {
+    const db = await openThumbIDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(THUMB_IDB_STORE, 'readwrite');
+      tx.objectStore(THUMB_IDB_STORE).put({ blob, url, ts: Date.now() }, thumbKey(url));
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    });
+  } catch (e) { return false; }
+}
+
+// Download an image URL as a blob and cache it
+async function fetchAndCacheThumb(url) {
+  try {
+    const resp = await fetch(url, { cache: 'force-cache' });
+    if (!resp.ok) return null;
+    const ct = resp.headers.get('content-type') || '';
+    if (!ct.startsWith('image/')) return null;
+    const blob = await resp.blob();
+    if (blob.size < 500) return null;
+    await cacheThumbBlob(url, blob);
+    return URL.createObjectURL(blob);
+  } catch (e) { return null; }
+}
+
+// Load a thumbnail: try IDB cache first, then network
+async function loadThumbCached(url) {
+  // 1. IDB cache
+  const cached = await getCachedThumb(url);
+  if (cached && cached.blob) {
+    return URL.createObjectURL(cached.blob);
+  }
+  // 2. Network → cache
+  return await fetchAndCacheThumb(url);
+}
+
 const THUMB_GRADIENTS = [
   'linear-gradient(135deg,#667eea,#764ba2)',
   'linear-gradient(135deg,#f093fb,#f5576c)',
@@ -52,10 +125,23 @@ function processFetchQueue() {
 const _fetchedThisSession = new Set();
 
 async function fetchCardMeta(card) {
-  // Skip if already fetched this session or already has a thumbnail
+  // Skip if already fetched this session
   if (_fetchedThisSession.has(card.id)) return;
-  if (card.thumbUrl) { _fetchedThisSession.add(card.id); return; }
   _fetchedThisSession.add(card.id);
+
+  // ─── IDB Cache Check: if thumbUrl exists, try loading from local cache ───
+  if (card.thumbUrl) {
+    const cachedBlobUrl = await loadThumbCached(card.thumbUrl);
+    if (cachedBlobUrl) {
+      updateCardThumbDirect(card, cachedBlobUrl);
+      return;
+    }
+    // Cache miss but thumbUrl exists — fetch from network and cache
+    fetchAndCacheThumb(card.thumbUrl).then(blobUrl => {
+      if (blobUrl) updateCardThumbDirect(card, blobUrl);
+    });
+    return;
+  }
 
   // Step 1: Try jsonlink.io for OG metadata + image
   let ogImage = null;
@@ -92,7 +178,11 @@ async function fetchCardMeta(card) {
     if (ok) {
       card.thumbUrl = ogImage;
       sv();
-      updateCardThumb(card);
+      // Cache to IDB then display
+      fetchAndCacheThumb(ogImage).then(blobUrl => {
+        if (blobUrl) updateCardThumbDirect(card, blobUrl);
+        else updateCardThumb(card);
+      });
       return;
     }
   }
@@ -110,6 +200,8 @@ async function fetchCardMeta(card) {
     if (blobUrl) {
       card.thumbUrl = wpBase;
       sv();
+      // Also cache the blob to IDB for future loads
+      fetch(wpBase, { cache: 'force-cache' }).then(r => r.blob()).then(b => cacheThumbBlob(wpBase, b)).catch(() => {});
       updateCardThumbDirect(card, blobUrl);
       return;
     }
@@ -127,6 +219,8 @@ async function fetchCardMeta(card) {
     if (blobUrl) {
       card.thumbUrl = thumBase;
       sv();
+      // Also cache the blob to IDB
+      fetch(thumBase, { cache: 'force-cache' }).then(r => r.blob()).then(b => cacheThumbBlob(thumBase, b)).catch(() => {});
       updateCardThumbDirect(card, blobUrl);
       return;
     }

@@ -531,6 +531,41 @@ function updateMiroScrollbars() {
   }
 }
 
+// ─── Video URL Detection ───
+function detectVideoUrl(url) {
+  if (!url) return null;
+  // YouTube (watch, shorts, youtu.be, embed)
+  let m = url.match(/(?:youtube\.com\/(?:watch\?.*v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{11})/);
+  if (m) return { platform: 'YouTube', videoId: m[1], embedUrl: `https://www.youtube.com/embed/${m[1]}?autoplay=1&rel=0` };
+  // TikTok (video IDs are numeric)
+  m = url.match(/tiktok\.com\/@[^/]+\/video\/(\d+)/);
+  if (m) return { platform: 'TikTok', videoId: m[1], embedUrl: `https://www.tiktok.com/embed/v2/${m[1]}` };
+  // TikTok short URLs (vm.tiktok.com)
+  if (/vm\.tiktok\.com|vt\.tiktok\.com/.test(url)) return { platform: 'TikTok', videoId: '', embedUrl: '' , shortUrl: url };
+  // Facebook video
+  m = url.match(/facebook\.com.*\/(?:videos?|watch|reel)[\/?]/);
+  if (m) return { platform: 'Facebook', videoId: '', embedUrl: `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false&autoplay=true&width=560` };
+  // Facebook reel
+  if (/facebook\.com\/reel\//.test(url)) return { platform: 'Facebook', videoId: '', embedUrl: `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false&autoplay=true&width=560` };
+  return null;
+}
+
+// Resolve TikTok short URLs to full URLs
+async function resolveTikTokShortUrl(shortUrl) {
+  try {
+    // Use a HEAD request to follow redirects
+    const resp = await fetch(`https://jsonlink.io/api/extract?url=${encodeURIComponent(shortUrl)}`, { signal: AbortSignal.timeout(5000) });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.url) {
+        const m = data.url.match(/tiktok\.com\/@[^/]+\/video\/(\d+)/);
+        if (m) return { platform: 'TikTok', videoId: m[1], embedUrl: `https://www.tiktok.com/embed/v2/${m[1]}` };
+      }
+    }
+  } catch (e) { /* timeout */ }
+  return null;
+}
+
 function buildMiroCard(card) {
   const el = document.createElement('div');
   el.className = 'miro-card';
@@ -563,24 +598,45 @@ function buildMiroCard(card) {
   thumb.className = 'mc-thumb';
 
   if (card.thumbUrl) {
+    // ─── Try IDB cache first for instant loading ───
     const thumbImg = document.createElement('img');
-    thumbImg.src = card.thumbUrl;
     thumbImg.alt = card.label || '';
     thumbImg.loading = 'lazy';
     thumbImg.onerror = () => {
       thumb.innerHTML = '';
       thumb.appendChild(buildMiroPlaceholder(card, true));
     };
-    thumb.appendChild(thumbImg);
+
+    // Load from IDB cache (async)
+    if (typeof loadThumbCached === 'function') {
+      // Show placeholder immediately while loading from cache
+      const ph = buildMiroPlaceholder(card, false);
+      thumb.appendChild(ph);
+      loadThumbCached(card.thumbUrl).then(blobUrl => {
+        if (blobUrl) {
+          thumbImg.src = blobUrl;
+          thumbImg.onload = () => { thumb.innerHTML = ''; thumb.appendChild(thumbImg); _addVideoOverlay(thumb, card); };
+        } else {
+          // Fallback to direct URL
+          thumbImg.src = card.thumbUrl;
+          thumbImg.onload = () => { thumb.innerHTML = ''; thumb.appendChild(thumbImg); _addVideoOverlay(thumb, card); };
+        }
+      });
+    } else {
+      thumbImg.src = card.thumbUrl;
+      thumb.appendChild(thumbImg);
+    }
   } else {
     thumb.appendChild(buildMiroPlaceholder(card, true));
     queueCardFetch(card);
   }
 
-  // Drag logic — drag from thumbnail area (supports multi-select group drag)
-  // We use the new global Alt-Drag duplication helper from thumbnails.js
+  // ─── Video overlay (play button + badge) ───
+  _addVideoOverlay(thumb, card);
+
+  // Drag logic
   if (typeof miroSetupCardDrag === 'function') {
-    miroSetupCardDrag(thumb, card, ['.mc-del', '.mc-open', '.mc-resize', '.mc-lock']);
+    miroSetupCardDrag(thumb, card, ['.mc-del', '.mc-open', '.mc-resize', '.mc-lock', '.mc-play-btn', '.mc-video-close']);
   }
 
   // Metadata footer
@@ -617,6 +673,97 @@ function buildMiroCard(card) {
   el.appendChild(thumb);
   el.appendChild(meta);
   return el;
+}
+
+// ─── Video Overlay Helpers ───
+function _addVideoOverlay(thumb, card) {
+  const video = detectVideoUrl(card.url);
+  if (!video) return;
+
+  // Remove existing overlay if re-adding
+  const existing = thumb.querySelector('.mc-play-btn');
+  if (existing) return;
+
+  // Badge
+  const badge = document.createElement('div');
+  badge.className = 'mc-video-badge';
+  badge.textContent = video.platform === 'YouTube' ? '▶ YouTube' : video.platform === 'TikTok' ? '♪ TikTok' : '▶ Facebook';
+  thumb.appendChild(badge);
+
+  // Play button
+  const playBtn = document.createElement('div');
+  playBtn.className = 'mc-play-btn';
+  playBtn.title = 'Play video in-place';
+  playBtn.onclick = async (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    let embedUrl = video.embedUrl;
+
+    // Handle TikTok short URLs — resolve first
+    if (video.shortUrl && !embedUrl) {
+      const resolved = await resolveTikTokShortUrl(video.shortUrl);
+      if (resolved) {
+        embedUrl = resolved.embedUrl;
+      } else {
+        // Fallback: open in browser
+        window.open(card.url, '_blank');
+        return;
+      }
+    }
+
+    if (!embedUrl) {
+      window.open(card.url, '_blank');
+      return;
+    }
+
+    // Create iframe in-place
+    const cardEl = thumb.closest('.miro-card');
+    cardEl.classList.add('mc-video-active');
+
+    thumb.innerHTML = '';
+    const iframe = document.createElement('iframe');
+    iframe.src = embedUrl;
+    iframe.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
+    iframe.allowFullscreen = true;
+    iframe.style.cssText = 'width:100%;height:100%;border:none;';
+    thumb.appendChild(iframe);
+
+    // Add close button
+    let closeBtn = cardEl.querySelector('.mc-video-close');
+    if (!closeBtn) {
+      closeBtn = document.createElement('button');
+      closeBtn.className = 'mc-video-close';
+      closeBtn.textContent = '■';
+      closeBtn.title = 'Stop video';
+      closeBtn.onclick = (ev) => {
+        ev.stopPropagation();
+        cardEl.classList.remove('mc-video-active');
+        // Rebuild the card thumbnail
+        thumb.innerHTML = '';
+        if (card.thumbUrl) {
+          const img = document.createElement('img');
+          img.src = card.thumbUrl;
+          img.alt = card.label || '';
+          img.loading = 'lazy';
+          img.onerror = () => { thumb.innerHTML = ''; thumb.appendChild(buildMiroPlaceholder(card, false)); };
+          thumb.appendChild(img);
+          // Load from cache
+          if (typeof loadThumbCached === 'function') {
+            loadThumbCached(card.thumbUrl).then(blobUrl => {
+              if (blobUrl) { img.src = blobUrl; }
+            });
+          }
+        } else {
+          thumb.appendChild(buildMiroPlaceholder(card, false));
+        }
+        _addVideoOverlay(thumb, card);
+        closeBtn.remove();
+      };
+      cardEl.appendChild(closeBtn);
+    }
+  };
+  thumb.appendChild(playBtn);
 }
 
 function deleteMiroCard(cid) {
