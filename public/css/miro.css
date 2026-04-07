@@ -4714,7 +4714,7 @@ textarea.cal-form-input {
 /* ─── Inline Video Player ─── */
 .mc-play-btn {
   position: absolute;
-  top: 50%;
+  top: calc(50% - 18px);
   left: 50%;
   transform: translate(-50%, -50%);
   width: 56px;
@@ -4761,8 +4761,16 @@ textarea.cal-form-input {
   pointer-events: none;
   letter-spacing: .3px;
 }
+.miro-card .mc-thumb {
+  cursor: pointer;
+}
+.miro-card.mc-video-active .mc-play-btn,
+.miro-card.mc-video-active .mc-video-badge {
+  display: none !important;
+}
 .miro-card.mc-video-active .mc-thumb {
   background: #000;
+  cursor: default;
 }
 .miro-card.mc-video-active .mc-thumb iframe {
   width: 100%;

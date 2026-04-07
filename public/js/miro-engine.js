@@ -597,42 +597,79 @@ function buildMiroCard(card) {
   const thumb = document.createElement('div');
   thumb.className = 'mc-thumb';
 
-  if (card.thumbUrl) {
-    // ─── Try IDB cache first for instant loading ───
-    const thumbImg = document.createElement('img');
-    thumbImg.alt = card.label || '';
-    thumbImg.loading = 'lazy';
-    thumbImg.onerror = () => {
-      thumb.innerHTML = '';
-      thumb.appendChild(buildMiroPlaceholder(card, true));
-    };
+  // Helper: replace thumb content without destroying overlays on el
+  function setThumbImage(src) {
+    // Remove any existing img or placeholder inside thumb
+    const oldImg = thumb.querySelector('img');
+    if (oldImg) oldImg.remove();
+    const oldPh = thumb.querySelector('.mc-placeholder');
+    if (oldPh) oldPh.remove();
+    // Remove any iframe too (from video stop)
+    const oldIframe = thumb.querySelector('iframe');
+    if (oldIframe) oldIframe.remove();
 
-    // Load from IDB cache (async)
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = card.label || '';
+    img.loading = 'lazy';
+    img.onerror = () => {
+      img.remove();
+      if (!thumb.querySelector('.mc-placeholder')) {
+        thumb.appendChild(buildMiroPlaceholder(card, true));
+      }
+    };
+    thumb.insertBefore(img, thumb.firstChild);
+  }
+
+  function setThumbPlaceholder(showSpinner) {
+    const oldImg = thumb.querySelector('img');
+    if (oldImg) oldImg.remove();
+    const oldPh = thumb.querySelector('.mc-placeholder');
+    if (oldPh) oldPh.remove();
+    thumb.insertBefore(buildMiroPlaceholder(card, showSpinner), thumb.firstChild);
+  }
+
+  if (card.thumbUrl) {
+    // Show placeholder first, then load from IDB cache
+    setThumbPlaceholder(false);
     if (typeof loadThumbCached === 'function') {
-      // Show placeholder immediately while loading from cache
-      const ph = buildMiroPlaceholder(card, false);
-      thumb.appendChild(ph);
       loadThumbCached(card.thumbUrl).then(blobUrl => {
         if (blobUrl) {
-          thumbImg.src = blobUrl;
-          thumbImg.onload = () => { thumb.innerHTML = ''; thumb.appendChild(thumbImg); _addVideoOverlay(thumb, card); };
+          setThumbImage(blobUrl);
         } else {
-          // Fallback to direct URL
-          thumbImg.src = card.thumbUrl;
-          thumbImg.onload = () => { thumb.innerHTML = ''; thumb.appendChild(thumbImg); _addVideoOverlay(thumb, card); };
+          setThumbImage(card.thumbUrl);
         }
       });
     } else {
-      thumbImg.src = card.thumbUrl;
-      thumb.appendChild(thumbImg);
+      setThumbImage(card.thumbUrl);
     }
   } else {
-    thumb.appendChild(buildMiroPlaceholder(card, true));
+    setThumbPlaceholder(true);
     queueCardFetch(card);
   }
 
-  // ─── Video overlay (play button + badge) ───
-  _addVideoOverlay(thumb, card);
+  // ─── Click-to-open / Click-to-play detection ───
+  // Track mousedown position to distinguish click from drag
+  let _mdX = 0, _mdY = 0, _mdTime = 0;
+  thumb.addEventListener('mousedown', (e) => {
+    _mdX = e.clientX; _mdY = e.clientY; _mdTime = Date.now();
+  });
+  thumb.addEventListener('click', (e) => {
+    // Ignore clicks on buttons/links/controls
+    if (e.target.closest('.mc-del, .mc-open, .mc-play-btn, .mc-video-close, .mc-lock')) return;
+    // Check if this was a click (not a drag): short time + small distance
+    const dt = Date.now() - _mdTime;
+    const dist = Math.hypot(e.clientX - _mdX, e.clientY - _mdY);
+    if (dt > 350 || dist > 8) return; // It was a drag, ignore
+
+    e.stopPropagation();
+    const videoInfo = detectVideoUrl(card.url);
+    if (videoInfo) {
+      _playVideoInCard(el, thumb, card, videoInfo);
+    } else {
+      window.open(card.url, '_blank', 'noopener');
+    }
+  });
 
   // Drag logic
   if (typeof miroSetupCardDrag === 'function') {
@@ -663,7 +700,7 @@ function buildMiroCard(card) {
   // 4-corner resize handles
   attach8WayResize(el, card, 160, 100);
 
-  // Lock UI (using the function from thumbnails.js)
+  // Lock UI
   if (typeof attachLockUI === 'function') {
     attachLockUI(el, card);
   }
@@ -672,98 +709,105 @@ function buildMiroCard(card) {
   el.appendChild(openBtn);
   el.appendChild(thumb);
   el.appendChild(meta);
+
+  // ─── Video badge + play button (on card el, NOT inside thumb) ───
+  const videoInfo = detectVideoUrl(card.url);
+  if (videoInfo) {
+    const badge = document.createElement('div');
+    badge.className = 'mc-video-badge';
+    badge.textContent = videoInfo.platform === 'YouTube' ? '▶ YouTube' : videoInfo.platform === 'TikTok' ? '♪ TikTok' : '▶ Facebook';
+    el.appendChild(badge);
+
+    const playBtn = document.createElement('div');
+    playBtn.className = 'mc-play-btn';
+    playBtn.title = 'Play video';
+    playBtn.onclick = (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      _playVideoInCard(el, thumb, card, videoInfo);
+    };
+    el.appendChild(playBtn);
+  }
+
   return el;
 }
 
-// ─── Video Overlay Helpers ───
-function _addVideoOverlay(thumb, card) {
-  const video = detectVideoUrl(card.url);
-  if (!video) return;
+// ─── Play video inside card ───
+async function _playVideoInCard(el, thumb, card, videoInfo) {
+  let embedUrl = videoInfo.embedUrl;
 
-  // Remove existing overlay if re-adding
-  const existing = thumb.querySelector('.mc-play-btn');
-  if (existing) return;
-
-  // Badge
-  const badge = document.createElement('div');
-  badge.className = 'mc-video-badge';
-  badge.textContent = video.platform === 'YouTube' ? '▶ YouTube' : video.platform === 'TikTok' ? '♪ TikTok' : '▶ Facebook';
-  thumb.appendChild(badge);
-
-  // Play button
-  const playBtn = document.createElement('div');
-  playBtn.className = 'mc-play-btn';
-  playBtn.title = 'Play video in-place';
-  playBtn.onclick = async (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-
-    let embedUrl = video.embedUrl;
-
-    // Handle TikTok short URLs — resolve first
-    if (video.shortUrl && !embedUrl) {
-      const resolved = await resolveTikTokShortUrl(video.shortUrl);
-      if (resolved) {
-        embedUrl = resolved.embedUrl;
-      } else {
-        // Fallback: open in browser
-        window.open(card.url, '_blank');
-        return;
-      }
-    }
-
-    if (!embedUrl) {
+  // Handle TikTok short URLs
+  if (videoInfo.shortUrl && !embedUrl) {
+    if (typeof showToast === 'function') showToast('Resolving TikTok link…', 2000);
+    const resolved = await resolveTikTokShortUrl(videoInfo.shortUrl);
+    if (resolved) {
+      embedUrl = resolved.embedUrl;
+    } else {
       window.open(card.url, '_blank');
       return;
     }
+  }
 
-    // Create iframe in-place
-    const cardEl = thumb.closest('.miro-card');
-    cardEl.classList.add('mc-video-active');
+  if (!embedUrl) {
+    window.open(card.url, '_blank');
+    return;
+  }
 
-    thumb.innerHTML = '';
-    const iframe = document.createElement('iframe');
-    iframe.src = embedUrl;
-    iframe.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
-    iframe.allowFullscreen = true;
-    iframe.style.cssText = 'width:100%;height:100%;border:none;';
-    thumb.appendChild(iframe);
+  el.classList.add('mc-video-active');
 
-    // Add close button
-    let closeBtn = cardEl.querySelector('.mc-video-close');
-    if (!closeBtn) {
-      closeBtn = document.createElement('button');
-      closeBtn.className = 'mc-video-close';
-      closeBtn.textContent = '■';
-      closeBtn.title = 'Stop video';
-      closeBtn.onclick = (ev) => {
-        ev.stopPropagation();
-        cardEl.classList.remove('mc-video-active');
-        // Rebuild the card thumbnail
-        thumb.innerHTML = '';
-        if (card.thumbUrl) {
-          const img = document.createElement('img');
-          img.src = card.thumbUrl;
-          img.alt = card.label || '';
-          img.loading = 'lazy';
-          img.onerror = () => { thumb.innerHTML = ''; thumb.appendChild(buildMiroPlaceholder(card, false)); };
-          thumb.appendChild(img);
-          // Load from cache
-          if (typeof loadThumbCached === 'function') {
-            loadThumbCached(card.thumbUrl).then(blobUrl => {
-              if (blobUrl) { img.src = blobUrl; }
-            });
-          }
-        } else {
-          thumb.appendChild(buildMiroPlaceholder(card, false));
+  // Hide badge + play btn
+  const badge = el.querySelector('.mc-video-badge');
+  const playBtn = el.querySelector('.mc-play-btn');
+  if (badge) badge.style.display = 'none';
+  if (playBtn) playBtn.style.display = 'none';
+
+  // Clear thumb content and insert iframe
+  thumb.innerHTML = '';
+  const iframe = document.createElement('iframe');
+  iframe.src = embedUrl;
+  iframe.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
+  iframe.allowFullscreen = true;
+  iframe.style.cssText = 'width:100%;height:100%;border:none;';
+  thumb.appendChild(iframe);
+
+  // Add close/stop button
+  let closeBtn = el.querySelector('.mc-video-close');
+  if (!closeBtn) {
+    closeBtn = document.createElement('button');
+    closeBtn.className = 'mc-video-close';
+    closeBtn.textContent = '■';
+    closeBtn.title = 'Stop video';
+    closeBtn.onclick = (ev) => {
+      ev.stopPropagation();
+      el.classList.remove('mc-video-active');
+
+      // Remove iframe
+      thumb.innerHTML = '';
+
+      // Restore thumbnail
+      if (card.thumbUrl) {
+        const img = document.createElement('img');
+        img.src = card.thumbUrl;
+        img.alt = card.label || '';
+        img.loading = 'lazy';
+        img.onerror = () => { img.remove(); thumb.appendChild(buildMiroPlaceholder(card, false)); };
+        thumb.appendChild(img);
+        if (typeof loadThumbCached === 'function') {
+          loadThumbCached(card.thumbUrl).then(blobUrl => {
+            if (blobUrl) img.src = blobUrl;
+          });
         }
-        _addVideoOverlay(thumb, card);
-        closeBtn.remove();
-      };
-      cardEl.appendChild(closeBtn);
-    }
-  };
-  thumb.appendChild(playBtn);
+      } else {
+        thumb.appendChild(buildMiroPlaceholder(card, false));
+      }
+
+      // Restore badge + play btn
+      if (badge) badge.style.display = '';
+      if (playBtn) playBtn.style.display = '';
+      closeBtn.remove();
+    };
+    el.appendChild(closeBtn);
+  }
 }
 
 function deleteMiroCard(cid) {
