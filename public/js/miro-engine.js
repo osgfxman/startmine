@@ -1486,6 +1486,79 @@ document.getElementById('ok-miro-image').onclick = () => {
   _miroImgData = null;
 };
 
+// ─── Drag & Drop Images onto Canvas ───
+const IMGBB_KEY = 'c2a058a30580ce5e21608e3ec431b9c0';
+function uploadToImgBB(base64) {
+  const fd = new FormData();
+  fd.append('image', base64.split(',')[1]);
+  return fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(data => data.success ? data.data.url : null)
+    .catch(() => null);
+}
+
+(function initCanvasDragDrop() {
+  const canvas = document.getElementById('miro-canvas');
+  if (!canvas) return;
+
+  canvas.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+  canvas.addEventListener('dragleave', (e) => { e.preventDefault(); });
+
+  canvas.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    const files = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
+    if (files.length === 0) return;
+
+    const page = cp();
+    if (!page.miroCards) page.miroCards = [];
+    const zoom = (page.zoom || 100) / 100;
+    const rect = canvas.getBoundingClientRect();
+    const baseX = (e.clientX - rect.left - (page.panX || 0)) / zoom;
+    const baseY = (e.clientY - rect.top - (page.panY || 0)) / zoom;
+
+    if (typeof showToast === 'function') showToast(`📤 Uploading ${files.length} image(s)...`, 3000);
+
+    let offsetX = 0;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const base64 = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => resolve(ev.target.result);
+        reader.readAsDataURL(file);
+      });
+
+      // Get natural dimensions
+      const dims = await new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+        img.onerror = () => resolve({ w: 400, h: 300 });
+        img.src = base64;
+      });
+
+      // Upload to ImgBB
+      const imgbbUrl = await uploadToImgBB(base64);
+      const finalUrl = imgbbUrl || base64; // fallback to base64 only if upload fails
+
+      // Scale to max 400px wide
+      let w = dims.w, h = dims.h;
+      if (w > 400) { h = Math.round((h / w) * 400); w = 400; }
+
+      page.miroCards.push({
+        id: uid(), type: 'image',
+        imageUrl: finalUrl,
+        label: file.name.replace(/\.[^.]+$/, ''),
+        x: baseX + offsetX, y: baseY,
+        w, h
+      });
+
+      offsetX += w + 20; // Stack horizontally with gap
+    }
+
+    sv(); buildMiroCanvas(); buildOutline();
+    if (typeof showToast === 'function') showToast(`✅ ${files.length} image(s) added!`, 2000);
+  });
+})();
+
 // ─── Text Widget ───
 document.getElementById('miro-opt-text').onclick = () => {
   document.getElementById('miro-add-menu').classList.remove('show');
