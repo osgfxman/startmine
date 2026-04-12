@@ -2600,7 +2600,7 @@ document.getElementById('bg-up').onchange = function (e) {
     btn.disabled = true;
     const fd = new FormData();
     fd.append('image', base64.split(',')[1]);
-    fetch('https://api.imgbb.com/1/upload?key=c2a058a30580ce5e21608e3ec431b9c0', {
+    fetch('https://api.imgbb.com/1/upload?key=129f1b49da234235959ee4405ac9ebb1', {
       method: 'POST',
       body: fd,
     })
