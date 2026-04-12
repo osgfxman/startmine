@@ -2955,42 +2955,27 @@ function buildMiroGridCard(card) {
     sv(); buildMiroCanvas();
   };
 
-  function updateMergeFloat() {
-    // Auto-show toolbar when cells are selected, position near selection
+  function updateMergeFloat(mouseX, mouseY) {
+    // Auto-show toolbar when cells are selected
     if (selectedCells.size > 0) {
       toolbar.classList.add('show');
-      // Position toolbar above the selected cells using screen coords
-      const cells = [...selectedCells].map(s => { const [r, c] = s.split(',').map(Number); return { r, c }; });
-      const minR = Math.min(...cells.map(c => c.r));
-      const minC = Math.min(...cells.map(c => c.c));
-      const maxC = Math.max(...cells.map(c => c.c));
-      // Find the first selected cell to get screen position
-      const firstTd = el.querySelector(`td[data-row="${minR}"][data-col="${minC}"]`);
-      const lastTd = el.querySelector(`td[data-row="${minR}"][data-col="${maxC}"]`);
-      if (firstTd) {
-        const fRect = firstTd.getBoundingClientRect();
-        const lRect = lastTd ? lastTd.getBoundingClientRect() : fRect;
-        const centerX = (fRect.left + lRect.right) / 2;
-        const tbW = toolbar.offsetWidth || 300;
-        let tx = centerX - tbW / 2;
-        // Clamp to viewport
-        if (tx < 4) tx = 4;
-        if (tx + tbW > window.innerWidth - 4) tx = window.innerWidth - 4 - tbW;
-        toolbar.style.left = tx + 'px';
-        toolbar.style.top = Math.max(4, fRect.top - 44) + 'px';
+      // Use provided coords, or fallback to cell screen position
+      let mx = mouseX || 0, my = mouseY || 0;
+      if (!mx && !my) {
+        const anyKey = [...selectedCells][0];
+        const [ar, ac] = anyKey.split(',').map(Number);
+        const tdF = el.querySelector(`td[data-row="${ar}"][data-col="${ac}"]`);
+        if (tdF) { const rc = tdF.getBoundingClientRect(); mx = rc.left + rc.width / 2; my = rc.top; }
       }
+      if (mx || my) positionToolbarAt(mx, my);
     } else {
       toolbar.classList.remove('show');
     }
-    if (selectedCells.size < 2) {
-      mergeFloat.classList.remove('show');
-      return;
-    }
+    if (selectedCells.size < 2) { mergeFloat.classList.remove('show'); return; }
     const cells = [...selectedCells].map(s => { const [r, c] = s.split(',').map(Number); return { r, c }; });
     const minR = Math.min(...cells.map(c => c.r));
     const minC = Math.min(...cells.map(c => c.c));
     const maxC = Math.max(...cells.map(c => c.c));
-    // Position above the selection
     let yOff = 0;
     for (let rr = 0; rr < minR; rr++) yOff += card.rowHeights[rr] || 40;
     let xOff = 0;
@@ -3003,7 +2988,19 @@ function buildMiroGridCard(card) {
     mergeFloat.classList.add('show');
   }
 
-  function selectRange(r1, c1, r2, c2, append) {
+  function positionToolbarAt(mx, my) {
+    const tbW = toolbar.offsetWidth || 400;
+    const tbH = toolbar.offsetHeight || 36;
+    let tx = mx - tbW / 2;
+    let ty = my - tbH - 12;
+    if (tx < 4) tx = 4;
+    if (tx + tbW > window.innerWidth - 4) tx = window.innerWidth - 4 - tbW;
+    if (ty < 4) ty = my + 20;
+    toolbar.style.left = tx + 'px';
+    toolbar.style.top = ty + 'px';
+  }
+
+  function selectRange(r1, c1, r2, c2, append, mouseX, mouseY) {
     if (!append) {
       selectedCells.clear();
       el.querySelectorAll('td.mg-sel').forEach(t => t.classList.remove('mg-sel'));
@@ -3018,7 +3015,7 @@ function buildMiroGridCard(card) {
         if (cellEl) cellEl.classList.add('mg-sel');
       }
     }
-    updateMergeFloat();
+    updateMergeFloat(mouseX, mouseY);
   }
 
   /* ── Build Table Cells ── */
@@ -3078,15 +3075,15 @@ function buildMiroGridCard(card) {
 
         if (e.shiftKey && lastSelectedCell) {
           const [lr, lc] = lastSelectedCell.split(',').map(Number);
-          selectRange(lr, lc, r, c, e.ctrlKey || e.metaKey);
+          selectRange(lr, lc, r, c, e.ctrlKey || e.metaKey, e.clientX, e.clientY);
         } else if (e.ctrlKey || e.metaKey) {
           const key = `${r},${c}`;
           if (selectedCells.has(key)) { selectedCells.delete(key); td.classList.remove('mg-sel'); }
           else { selectedCells.add(key); td.classList.add('mg-sel'); }
           lastSelectedCell = key;
-          updateMergeFloat();
+          updateMergeFloat(e.clientX, e.clientY);
         } else {
-          selectRange(r, c, r, c, false);
+          selectRange(r, c, r, c, false, e.clientX, e.clientY);
           lastSelectedCell = `${r},${c}`;
         }
       });
@@ -3094,7 +3091,7 @@ function buildMiroGridCard(card) {
       // Mousemove: extend drag selection
       td.addEventListener('mouseenter', (e) => {
         if (!_dragSelecting || !_dragStartCell) return;
-        selectRange(_dragStartCell.r, _dragStartCell.c, r, c, false);
+        selectRange(_dragStartCell.r, _dragStartCell.c, r, c, false, e.clientX, e.clientY);
         lastSelectedCell = `${r},${c}`;
       });
 
@@ -3356,6 +3353,7 @@ function buildMiroGridCard(card) {
   /* ── Modern Toolbar ── */
   const toolbar = document.createElement('div');
   toolbar.className = 'mg-toolbar';
+  toolbar.dataset.gridId = card.id;
   const noFillActive = !card.fillColor || card.fillColor === 'none';
 
   // SVG icons for toolbar buttons
@@ -3654,22 +3652,16 @@ function buildMiroGridCard(card) {
   alignWrap.appendChild(alignDrop);
   toolbar.appendChild(alignWrap);
 
+  // Prevent toolbar clicks from bubbling to grid drag handlers
+  toolbar.addEventListener('mousedown', (e) => e.stopPropagation());
+
   /* ── Toolbar Click Toggle ── */
   /* Toolbar stays open as long as table is clicked/selected; only hides when clicking outside */
   el.addEventListener('click', (e) => {
     if (e.target.closest('.mc-del') || e.target.closest('.mg-toolbar') || e.target.closest('.mg-merge-float')) return;
     document.querySelectorAll('.mg-toolbar.show').forEach(t => { if (t !== toolbar) t.classList.remove('show'); });
     toolbar.classList.add('show');
-    // Position near click if no cells selected (general grid click)
-    if (selectedCells.size === 0) {
-      const elRect = el.getBoundingClientRect();
-      const tbW = toolbar.offsetWidth || 300;
-      let tx = elRect.left + elRect.width / 2 - tbW / 2;
-      if (tx < 4) tx = 4;
-      if (tx + tbW > window.innerWidth - 4) tx = window.innerWidth - 4 - tbW;
-      toolbar.style.left = tx + 'px';
-      toolbar.style.top = Math.max(4, elRect.top - 44) + 'px';
-    }
+    positionToolbarAt(e.clientX, e.clientY);
   });
   const docClickHandler = (e) => {
     if (!document.body.contains(el)) { document.removeEventListener('click', docClickHandler); return; }
@@ -3729,7 +3721,7 @@ function buildMiroGridCard(card) {
     document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
   });
 
-  miroSetupCardDrag(el, card, ['.mg-col-handle', '.mg-row-handle', '.mc-del', 'td', '.mg-ctrl-btn', '.mg-merge-float', '.mc-edge-resize', '[class^="mc-resize-"]', '.mg-edge-btn', '.mg-row-resizer', '.mg-col-resizer', '.mg-drag-handle']);
+  miroSetupCardDrag(el, card, ['.mg-col-handle', '.mg-row-handle', '.mc-del', 'td', '.mg-ctrl-btn', '.mg-merge-float', '.mc-edge-resize', '[class^="mc-resize-"]', '.mg-edge-btn', '.mg-row-resizer', '.mg-col-resizer', '.mg-drag-handle', '.mg-toolbar']);
 
   // Lock UI
   attachLockUI(el, card);
@@ -3843,7 +3835,8 @@ function buildMiroGridCard(card) {
   });
 
   el.appendChild(del);
-  el.appendChild(toolbar);
+  // Toolbar lives in document.body to escape transform containing block
+  document.body.appendChild(toolbar);
   el.appendChild(mergeFloat);
   el.appendChild(addRowTop);
   el.appendChild(addColLeft);

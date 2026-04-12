@@ -3291,10 +3291,12 @@
   white-space: nowrap;
   max-width: 90vw;
   overflow-x: auto;
+  pointer-events: none;
 }
 
 .mg-toolbar.show {
   display: flex;
+  pointer-events: auto;
 }
 
 .mg-toolbar .mg-tb-sep {
@@ -3447,7 +3449,7 @@
   flex-direction: column;
   gap: 1px;
   min-width: 80px;
-  z-index: 20;
+  z-index: 620;
 }
 
 .mg-resize-drop.show {

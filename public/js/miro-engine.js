@@ -377,6 +377,8 @@ function buildMiroCanvas() {
   if (_pl) _pl.innerHTML = '';
   // Remove only card elements, preserve selection overlays
   board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-embed').forEach((el) => el.remove());
+  // Clean up grid toolbars that live in document.body
+  document.querySelectorAll('.mg-toolbar[data-grid-id]').forEach(t => t.remove());
   // Clear selection state
   _miroSelected.clear();
   document.getElementById('miro-sel-frame').style.display = 'none';
@@ -1557,6 +1559,37 @@ function uploadToImgBB(base64) {
     sv(); buildMiroCanvas(); buildOutline();
     if (typeof showToast === 'function') showToast(`✅ ${files.length} image(s) added!`, 2000);
   });
+})();
+
+// ─── Auto-migrate base64 images to ImgBB ───
+(async function migrateBase64Images() {
+  try {
+    const allPages = JSON.parse(localStorage.getItem('pages') || '[]');
+    let changed = false;
+    for (const page of allPages) {
+      if (!page.miroCards) continue;
+      for (const card of page.miroCards) {
+        if (card.type !== 'image') continue;
+        if (!card.imageUrl) continue;
+        // Skip if already an HTTP URL (already on ImgBB or elsewhere)
+        if (card.imageUrl.startsWith('http://') || card.imageUrl.startsWith('https://')) continue;
+        // This is a base64 or blob URL — try to upload to ImgBB
+        if (card.imageUrl.startsWith('data:image')) {
+          console.log('[ImageMigrate] Uploading base64 image to ImgBB for card:', card.id);
+          const url = await uploadToImgBB(card.imageUrl);
+          if (url) {
+            card.imageUrl = url;
+            changed = true;
+            console.log('[ImageMigrate] ✅ Migrated:', card.id, '->', url);
+          }
+        }
+      }
+    }
+    if (changed) {
+      localStorage.setItem('pages', JSON.stringify(allPages));
+      if (typeof showToast === 'function') showToast('🔄 Images migrated to cloud storage', 3000);
+    }
+  } catch (e) { console.warn('[ImageMigrate] Error:', e); }
 })();
 
 // ─── Text Widget ───
