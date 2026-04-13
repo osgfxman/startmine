@@ -2073,8 +2073,39 @@ function buildMiroImage(card) {
     labelEl.textContent = card.label;
   }
 
+  // Download button
+  const dlBtn = document.createElement('button');
+  dlBtn.className = 'mc-download';
+  dlBtn.title = 'Download image';
+  dlBtn.innerHTML = '⤓';
+  dlBtn.onclick = (e) => {
+    e.stopPropagation();
+    const url = card.imageUrl;
+    if (!url) return;
+    const fileName = (card.label || 'image') + (url.includes('.png') ? '.png' : '.jpg');
+    // For http URLs, fetch as blob to bypass cross-origin issues
+    if (url.startsWith('http')) {
+      fetch(url, { mode: 'cors' })
+        .then(r => r.blob())
+        .then(blob => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = fileName;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        })
+        .catch(() => { window.open(url, '_blank'); });
+    } else {
+      // base64 — direct download
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+    }
+  };
+
   // Drag (via global helper)
-  miroSetupCardDrag(el, card, ['.mc-del', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.mc-lock']);
+  miroSetupCardDrag(el, card, ['.mc-del', '.mc-download', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.mc-lock']);
 
   // 4-corner resize
   attach8WayResize(el, card, 20, 20);
@@ -2083,6 +2114,7 @@ function buildMiroImage(card) {
   attachLockUI(el, card);
 
   el.appendChild(del);
+  el.appendChild(dlBtn);
   el.appendChild(img);
   if (labelEl) el.appendChild(labelEl);
   return el;

@@ -2594,31 +2594,28 @@ document.getElementById('bg-up').onchange = function (e) {
     const base64 = ev.target.result;
     document.getElementById('bg-img-preview').style.display = 'block';
     document.getElementById('bg-img-prev-el').src = base64;
-    // Upload to imgbb for persistent URL
+    // Upload to imgbb for persistent URL (compressed)
     const btn = document.getElementById('ok-bg');
     btn.textContent = 'Uploading…';
     btn.disabled = true;
-    const fd = new FormData();
-    fd.append('image', base64.split(',')[1]);
-    fetch('https://api.imgbb.com/1/upload?key=129f1b49da234235959ee4405ac9ebb1', {
-      method: 'POST',
-      body: fd,
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.success) {
-          _bgTempValue = data.data.url;
-        } else {
-          _bgTempValue = base64; // fallback
-        }
+    // Use uploadToImgBB if available (has compression), else direct
+    const doUpload = typeof uploadToImgBB === 'function'
+      ? uploadToImgBB(base64)
+      : fetch('https://api.imgbb.com/1/upload?key=129f1b49da234235959ee4405ac9ebb1', {
+          method: 'POST', body: (() => { const fd = new FormData(); fd.append('image', base64.split(',')[1]); return fd; })()
+        }).then(r => r.json()).then(d => d.success ? d.data.url : null).catch(() => null);
+    doUpload.then(url => {
+      if (url) {
+        _bgTempValue = url;
         btn.textContent = 'Apply';
         btn.disabled = false;
-      })
-      .catch(() => {
-        _bgTempValue = base64; // fallback
-        btn.textContent = 'Apply';
+      } else {
+        _bgTempValue = null;
+        btn.textContent = '⚠️ Upload Failed';
         btn.disabled = false;
-      });
+        if (typeof showToast === 'function') showToast('⚠️ Background upload failed.', 3000);
+      }
+    });
   };
   r.readAsDataURL(f);
   this.value = '';

@@ -1421,34 +1421,22 @@ document.getElementById('miro-img-file').onchange = function (e) {
       const natW = tempImg.naturalWidth;
       const natH = tempImg.naturalHeight;
 
-      // Upload to ImgBB
+      // Upload to ImgBB (with compression)
       const btn = document.getElementById('ok-miro-image');
-      btn.textContent = 'Uploading…';
+      btn.textContent = 'Compressing…';
       btn.disabled = true;
-      const fd = new FormData();
-      fd.append('image', base64.split(',')[1]);
-      fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, {
-        method: 'POST',
-        body: fd,
-      })
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.success) {
-            _miroImgData = { imgbbUrl: data.data.url, naturalW: natW, naturalH: natH };
-            btn.textContent = 'Add Image';
-            btn.disabled = false;
-          } else {
-            // Upload failed — do NOT fallback to base64 (it fills storage)
-            btn.textContent = '⚠️ Upload Failed — Retry';
-            btn.disabled = false;
-            if (typeof showToast === 'function') showToast('⚠️ Image upload failed. Try again.', 3000);
-          }
-        })
-        .catch(() => {
-          btn.textContent = '⚠️ Upload Failed — Retry';
+      uploadToImgBB(base64).then(url => {
+        if (url) {
+          _miroImgData = { imgbbUrl: url, naturalW: natW, naturalH: natH };
+          btn.textContent = 'Add Image';
           btn.disabled = false;
-          if (typeof showToast === 'function') showToast('⚠️ Network error. Check connection and retry.', 3000);
-        });
+        } else {
+          btn.textContent = '⚠️ Upload Failed — Pick Again';
+          btn.disabled = false;
+          _miroImgData = null;
+          if (typeof showToast === 'function') showToast('⚠️ Image upload failed. Try a smaller image or check connection.', 4000);
+        }
+      });
     };
     tempImg.src = base64;
   };
@@ -1593,9 +1581,12 @@ async function uploadToImgBB(base64) {
         img.src = base64;
       });
 
-      // Upload to ImgBB
+      // Upload to ImgBB (compressed, NO base64 fallback)
       const imgbbUrl = await uploadToImgBB(base64);
-      const finalUrl = imgbbUrl || base64; // fallback to base64 only if upload fails
+      if (!imgbbUrl) {
+        if (typeof showToast === 'function') showToast(`⚠️ Failed to upload "${file.name}" — skipped`, 3000);
+        continue; // Skip this image entirely
+      }
 
       // Scale to max 400px wide
       let w = dims.w, h = dims.h;
@@ -1603,17 +1594,17 @@ async function uploadToImgBB(base64) {
 
       page.miroCards.push({
         id: uid(), type: 'image',
-        imageUrl: finalUrl,
+        imageUrl: imgbbUrl,
         label: file.name.replace(/\.[^.]+$/, ''),
         x: baseX + offsetX, y: baseY,
         w, h
       });
 
-      offsetX += w + 20; // Stack horizontally with gap
+      offsetX += w + 20;
     }
 
     sv(); buildMiroCanvas(); buildOutline();
-    if (typeof showToast === 'function') showToast(`✅ ${files.length} image(s) added!`, 2000);
+    if (typeof showToast === 'function') showToast(`✅ Images added!`, 2000);
   });
 })();
 

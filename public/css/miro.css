@@ -1955,7 +1955,8 @@
 }
 
 .miro-image:hover .mc-del,
-.miro-image:hover .mc-lock {
+.miro-image:hover .mc-lock,
+.miro-image:hover .mc-download {
   opacity: 1;
 }
 
@@ -1975,6 +1976,31 @@
 .miro-image .mc-del:hover,
 .miro-image .mc-lock:hover {
   color: var(--red);
+}
+
+/* Download button */
+.miro-image .mc-download {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 3;
+  background: rgba(0, 0, 0, 0.55);
+  border: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mu);
+  cursor: pointer;
+  font-size: 0.75rem;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s, background 0.12s;
+}
+.miro-image .mc-download:hover {
+  background: rgba(50, 130, 255, 0.85);
+  color: #fff;
 }
 
 /* 4-corner resize handles */
