@@ -1595,7 +1595,7 @@ async function uploadToImgBB(base64) {
       page.miroCards.push({
         id: uid(), type: 'image',
         imageUrl: imgbbUrl,
-        label: file.name.replace(/\.[^.]+$/, ''),
+        label: '',
         x: baseX + offsetX, y: baseY,
         w, h
       });
@@ -1708,35 +1708,7 @@ document.querySelectorAll('.msp-item').forEach(item => {
 });
 document.getElementById('miro-canvas').addEventListener('dragover', (e) => { e.preventDefault(); });
 document.getElementById('miro-canvas').addEventListener('drop', (e) => {
-  // Handle dropped image files from desktop/explorer
-  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-    const file = e.dataTransfer.files[0];
-    if (file.type.startsWith('image/')) {
-      e.preventDefault();
-      const reader = new FileReader();
-      reader.onload = function(event) {
-        const dataUrl = event.target.result;
-        const img = new Image();
-        img.onload = function() {
-          const page = cp();
-          if (!page.miroCards) page.miroCards = [];
-          const zoom = (page.zoom || 100) / 100;
-          const rect = document.getElementById('miro-canvas').getBoundingClientRect();
-          const x = (e.clientX - rect.left - (page.panX || 0)) / zoom;
-          const y = (e.clientY - rect.top - (page.panY || 0)) / zoom;
-          let w = img.width, h = img.height;
-          if (w > 800) { h = Math.round(800 * (h / w)); w = 800; }
-          const card = { id: uid(), type: 'image', w, h, x: x - w / 2, y: y - h / 2, imageUrl: dataUrl };
-          page.miroCards.push(card);
-          sv(); buildMiroCanvas(); buildOutline();
-        };
-        img.src = dataUrl;
-      };
-      reader.readAsDataURL(file);
-      return;
-    }
-  }
-
+  // Image files handled by initCanvasDragDrop — only handle shape drops here
   const shapeType = e.dataTransfer.getData('shape');
   if (!shapeType) return;
   e.preventDefault();
@@ -3478,6 +3450,24 @@ function _handleContextMenu(e) {
     if (icon) icon.textContent = isPinned ? '📍' : '📌';
   }
 
+  // Show/hide image-only items
+  const isImage = !!cardEl.closest('.miro-image');
+  document.querySelectorAll('#miro-ctx-menu .ctx-img-only').forEach(el => {
+    el.style.display = isImage ? '' : 'none';
+  });
+  // Show add/remove caption based on whether caption exists
+  if (isImage) {
+    const page = typeof cp === 'function' ? cp() : {};
+    const mc = (page.miroCards || []).find(c => c.id === cid);
+    const hasCaption = mc && mc.caption;
+    const addBelow = document.querySelector('[data-action="add-caption-below"]');
+    const addAbove = document.querySelector('[data-action="add-caption-above"]');
+    const removeCap = document.querySelector('[data-action="remove-caption"]');
+    if (addBelow) addBelow.style.display = hasCaption ? 'none' : '';
+    if (addAbove) addAbove.style.display = hasCaption ? 'none' : '';
+    if (removeCap) removeCap.style.display = hasCaption ? '' : 'none';
+  }
+
   showCtxMenu(e.clientX, e.clientY);
 }
 
@@ -3563,6 +3553,33 @@ document.getElementById('miro-ctx-menu').addEventListener('click', (e) => {
         if (typeof togglePinElement === 'function') togglePinElement(cid);
       });
       break;
+    case 'add-caption-below':
+    case 'add-caption-above': {
+      const pos = action === 'add-caption-below' ? 'below' : 'above';
+      const page = cp();
+      cids.forEach(cid => {
+        const card = (page.miroCards || []).find(c => c.id === cid);
+        if (card && card.type === 'image') {
+          card.caption = {
+            text: 'Caption', position: pos,
+            bg: '#1a1d2e', color: '#e4e4e4', fontSize: 14,
+            fontWeight: 'normal', textAlign: 'center',
+            height: 36
+          };
+        }
+      });
+      sv(); buildMiroCanvas();
+      break;
+    }
+    case 'remove-caption': {
+      const page = cp();
+      cids.forEach(cid => {
+        const card = (page.miroCards || []).find(c => c.id === cid);
+        if (card) delete card.caption;
+      });
+      sv(); buildMiroCanvas();
+      break;
+    }
   }
   hideCtxMenu();
 });

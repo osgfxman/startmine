@@ -2032,6 +2032,67 @@ function removeMiroSelectEl(cid) {
   if (el) el.classList.remove('miro-selected');
 }
 
+/* ─── Caption Toolbar ─── */
+function _showCaptionToolbar(captionEl, card) {
+  _hideCaptionToolbar();
+  const tb = document.createElement('div');
+  tb.id = 'mi-caption-toolbar';
+  tb.innerHTML = `
+    <label title="Background"><input type="color" data-prop="bg" value="${card.caption.bg || '#1a1d2e'}"></label>
+    <label title="Text Color"><input type="color" data-prop="color" value="${card.caption.color || '#e4e4e4'}"></label>
+    <select data-prop="fontSize" title="Font Size">
+      <option value="10" ${card.caption.fontSize==10?'selected':''}>10</option>
+      <option value="12" ${card.caption.fontSize==12?'selected':''}>12</option>
+      <option value="14" ${card.caption.fontSize==14||!card.caption.fontSize?'selected':''}>14</option>
+      <option value="16" ${card.caption.fontSize==16?'selected':''}>16</option>
+      <option value="18" ${card.caption.fontSize==18?'selected':''}>18</option>
+      <option value="20" ${card.caption.fontSize==20?'selected':''}>20</option>
+      <option value="24" ${card.caption.fontSize==24?'selected':''}>24</option>
+    </select>
+    <button data-prop="fontWeight" data-val="toggle" title="Bold" style="font-weight:bold;${card.caption.fontWeight==='bold'?'background:rgba(108,143,255,.4)':''}">B</button>
+    <button data-prop="textAlign" data-val="left" title="Left">⫷</button>
+    <button data-prop="textAlign" data-val="center" title="Center">☰</button>
+    <button data-prop="textAlign" data-val="right" title="Right">⫸</button>
+  `;
+  // Position near caption
+  const rect = captionEl.getBoundingClientRect();
+  tb.style.position = 'fixed';
+  tb.style.left = rect.left + 'px';
+  tb.style.top = (rect.top - 38) + 'px';
+  tb.style.zIndex = '99999';
+
+  tb.addEventListener('mousedown', (e) => e.preventDefault()); // prevent blur
+  tb.addEventListener('change', (e) => {
+    const prop = e.target.dataset.prop;
+    if (!prop) return;
+    card.caption[prop] = prop === 'fontSize' ? +e.target.value : e.target.value;
+    captionEl.style[prop] = prop === 'fontSize' ? e.target.value + 'px' : e.target.value;
+    sv();
+  });
+  tb.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-prop]');
+    if (!btn) return;
+    const prop = btn.dataset.prop;
+    if (prop === 'fontWeight') {
+      const newVal = card.caption.fontWeight === 'bold' ? 'normal' : 'bold';
+      card.caption.fontWeight = newVal;
+      captionEl.style.fontWeight = newVal;
+      btn.style.background = newVal === 'bold' ? 'rgba(108,143,255,.4)' : '';
+    } else if (prop === 'textAlign') {
+      card.caption.textAlign = btn.dataset.val;
+      captionEl.style.textAlign = btn.dataset.val;
+    }
+    sv();
+  });
+
+  document.body.appendChild(tb);
+}
+
+function _hideCaptionToolbar() {
+  const tb = document.getElementById('mi-caption-toolbar');
+  if (tb) tb.remove();
+}
+
 /* ─── Image Card ─── */
 function buildMiroImage(card) {
   const el = document.createElement('div');
@@ -2040,16 +2101,17 @@ function buildMiroImage(card) {
   el.style.left = (card.x || 0) + 'px';
   el.style.top = (card.y || 0) + 'px';
   el.style.width = (card.w || 300) + 'px';
-  el.style.height = (card.h || 200) + 'px';
+
+  const cap = card.caption;
+  const capH = cap ? (cap.height || 36) : 0;
+  const totalH = (card.h || 200) + capH;
+  el.style.height = totalH + 'px';
 
   // Delete button
   const del = document.createElement('button');
   del.className = 'mc-del';
   del.textContent = '✕';
-  del.onclick = (e) => {
-    e.stopPropagation();
-    deleteMiroCard(card.id);
-  };
+  del.onclick = (e) => { e.stopPropagation(); deleteMiroCard(card.id); };
 
   // Image element
   const img = document.createElement('img');
@@ -2057,21 +2119,16 @@ function buildMiroImage(card) {
   img.src = card.imageUrl;
   img.alt = card.label || 'Image';
   img.draggable = false;
+  img.style.height = (card.h || 200) + 'px';
+  if (cap && cap.position === 'above') img.style.order = '2';
   img.onerror = () => {
     img.style.display = 'none';
     const ph = document.createElement('div');
     ph.className = 'mi-placeholder';
     ph.textContent = '🖼️';
-    el.insertBefore(ph, el.querySelector('.mi-label'));
+    ph.style.height = (card.h || 200) + 'px';
+    el.insertBefore(ph, img);
   };
-
-  // Optional label footer
-  let labelEl = null;
-  if (card.label) {
-    labelEl = document.createElement('div');
-    labelEl.className = 'mi-label';
-    labelEl.textContent = card.label;
-  }
 
   // Download button
   const dlBtn = document.createElement('button');
@@ -2083,7 +2140,6 @@ function buildMiroImage(card) {
     const url = card.imageUrl;
     if (!url) return;
     const fileName = (card.label || 'image') + (url.includes('.png') ? '.png' : '.jpg');
-    // For http URLs, fetch as blob to bypass cross-origin issues
     if (url.startsWith('http')) {
       fetch(url, { mode: 'cors' })
         .then(r => r.blob())
@@ -2096,16 +2152,86 @@ function buildMiroImage(card) {
         })
         .catch(() => { window.open(url, '_blank'); });
     } else {
-      // base64 — direct download
       const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      a.click();
+      a.href = url; a.download = fileName; a.click();
     }
   };
 
+  // ─── Caption element ───
+  let captionEl = null;
+  if (cap) {
+    captionEl = document.createElement('div');
+    captionEl.className = 'mi-caption';
+    captionEl.style.height = capH + 'px';
+    captionEl.style.background = cap.bg || '#1a1d2e';
+    captionEl.style.color = cap.color || '#e4e4e4';
+    captionEl.style.fontSize = (cap.fontSize || 14) + 'px';
+    captionEl.style.fontWeight = cap.fontWeight || 'normal';
+    captionEl.style.textAlign = cap.textAlign || 'center';
+    captionEl.style.order = cap.position === 'above' ? '1' : '3';
+    captionEl.textContent = cap.text || '';
+
+    // Double-click to edit
+    captionEl.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      captionEl.contentEditable = 'true';
+      captionEl.focus();
+      // Select all text
+      const range = document.createRange();
+      range.selectNodeContents(captionEl);
+      const sel = window.getSelection();
+      sel.removeAllRanges(); sel.addRange(range);
+
+      // Show caption toolbar
+      _showCaptionToolbar(captionEl, card);
+    });
+
+    captionEl.addEventListener('blur', () => {
+      captionEl.contentEditable = 'false';
+      card.caption.text = captionEl.textContent;
+      sv();
+      _hideCaptionToolbar();
+    });
+
+    captionEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        captionEl.blur();
+      }
+      e.stopPropagation();
+    });
+
+    captionEl.addEventListener('input', (e) => { e.stopPropagation(); });
+
+    // Caption height resize handle
+    const capResize = document.createElement('div');
+    capResize.className = 'mi-cap-resize';
+    capResize.style.cursor = cap.position === 'above' ? 'n-resize' : 's-resize';
+    let capStartY, capStartH;
+    capResize.addEventListener('mousedown', (re) => {
+      re.stopPropagation(); re.preventDefault();
+      capStartY = re.clientY;
+      capStartH = cap.height || 36;
+      const onMove = (me) => {
+        const dy = cap.position === 'above' ? (capStartY - me.clientY) : (me.clientY - capStartY);
+        const newH = Math.max(24, Math.min(200, capStartH + dy));
+        cap.height = newH;
+        captionEl.style.height = newH + 'px';
+        el.style.height = ((card.h || 200) + newH) + 'px';
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        sv();
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+    captionEl.appendChild(capResize);
+  }
+
   // Drag (via global helper)
-  miroSetupCardDrag(el, card, ['.mc-del', '.mc-download', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.mc-lock']);
+  miroSetupCardDrag(el, card, ['.mc-del', '.mc-download', '.mi-caption', '.mi-cap-resize', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.mc-lock']);
 
   // 4-corner resize
   attach8WayResize(el, card, 20, 20);
@@ -2115,8 +2241,9 @@ function buildMiroImage(card) {
 
   el.appendChild(del);
   el.appendChild(dlBtn);
+  if (captionEl && cap.position === 'above') el.appendChild(captionEl);
   el.appendChild(img);
-  if (labelEl) el.appendChild(labelEl);
+  if (captionEl && cap.position !== 'above') el.appendChild(captionEl);
   return el;
 }
 

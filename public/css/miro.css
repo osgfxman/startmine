@@ -1878,9 +1878,9 @@
 }
 
 .miro-image .mi-img {
-  flex: 1;
   width: 100%;
   min-height: 0;
+  flex-shrink: 0;
   object-fit: contain;
   display: block;
   pointer-events: none;
@@ -2001,6 +2001,78 @@
 .miro-image .mc-download:hover {
   background: rgba(50, 130, 255, 0.85);
   color: #fff;
+}
+
+/* ─── Image Caption ─── */
+.miro-image .mi-caption {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  word-break: break-word;
+  line-height: 1.3;
+  cursor: default;
+  position: relative;
+  user-select: none;
+  flex-shrink: 0;
+}
+.miro-image .mi-caption[contenteditable="true"] {
+  cursor: text;
+  outline: 2px solid var(--ac);
+  outline-offset: -2px;
+  user-select: text;
+}
+.miro-image .mi-cap-resize {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 5px;
+  bottom: 0;
+  z-index: 5;
+  opacity: 0;
+  background: var(--ac);
+  transition: opacity 0.15s;
+}
+.miro-image:hover .mi-cap-resize { opacity: 0.35; }
+.miro-image .mi-cap-resize:hover { opacity: 1; }
+
+/* Caption Toolbar */
+#mi-caption-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(20, 22, 35, 0.95);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 4px 6px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+#mi-caption-toolbar input[type="color"] {
+  width: 22px; height: 22px;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 5px; cursor: pointer;
+  background: transparent; padding: 0;
+}
+#mi-caption-toolbar select {
+  background: rgba(255,255,255,0.08);
+  color: #e4e4e4;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 5px; font-size: 0.65rem;
+  padding: 2px 4px; cursor: pointer; height: 22px;
+}
+#mi-caption-toolbar button {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #ccc; border-radius: 5px;
+  width: 22px; height: 22px;
+  font-size: 0.65rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+#mi-caption-toolbar button:hover {
+  background: rgba(108,143,255,0.3); color: #fff;
 }
 
 /* 4-corner resize handles */
