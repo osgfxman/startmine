@@ -3829,15 +3829,19 @@ let _cachedCalendarList = null;
 let _cachedCalendarListTs = 0;
 const CALENDAR_LIST_CACHE_MS = 5 * 60 * 1000; // 5 min cache
 
-document.getElementById('mtb-calendar').onclick = () => {
+document.getElementById('mtb-calendar').onclick = async () => {
+  // If no token, get one via popup (this is a direct user click, so popup won't be blocked)
   if (!_googleAccessToken) {
-    auth.signInWithPopup(provider).then(result => {
-      if (result.credential) {
-        cacheGoogleToken(result.credential.accessToken);
+    try {
+      if (typeof manualGoogleReAuth === 'function') {
+        await manualGoogleReAuth();
+      } else {
+        const result = await auth.signInWithPopup(provider);
+        if (result.credential) cacheGoogleToken(result.credential.accessToken);
       }
-      placeCalendarWidget();
-    }).catch(e => showToast('❌ Auth failed: ' + e.message));
-    return;
+    } catch (e) {
+      // Auth failed or cancelled — still place the widget, it will show "Sign in" button
+    }
   }
   placeCalendarWidget();
 };
@@ -3885,8 +3889,10 @@ async function getCalendarList() {
     headers: { 'Authorization': 'Bearer ' + _googleAccessToken }
   });
   if (res.status === 401) {
+    // Token expired — clear it and throw NEEDS_AUTH
+    // The calendar widget will show a "🔑 Sign in" button for user-triggered re-auth
     _googleAccessToken = null;
-    try { localStorage.removeItem('sm_google_token'); } catch (e) {}
+    try { localStorage.removeItem('sm_google_token'); localStorage.removeItem('sm_google_token_expiry'); } catch (e) {}
     const e = new Error('NEEDS_AUTH'); e.needsAuth = true; throw e;
   }
   if (!res.ok) throw new Error('Calendar list failed: ' + res.status);
@@ -3912,8 +3918,7 @@ async function fetchCalendarEvents(timeMin, timeMax) {
     try {
       const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${tMin}&timeMax=${tMax}&singleEvents=true&orderBy=startTime&maxResults=200`;
       const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + _googleAccessToken } });
-      if (res.status === 401) return; // will be caught by getCalendarList on next call
-      if (!res.ok) return;
+      if (res.status === 401 || !res.ok) return;
       const data = await res.json();
       (data.items || []).forEach(ev => {
         allEvents.push({
