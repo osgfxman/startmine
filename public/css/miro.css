@@ -4962,3 +4962,215 @@ textarea.cal-form-input {
   background: #ff0020;
   transform: scale(1.1);
 }
+
+/* ─── Gantt Chart Widget ─── */
+.miro-gantt {
+  position: absolute;
+  background: #1a1c2e;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(108,143,255,.2);
+  box-shadow: 0 4px 24px rgba(0,0,0,.4);
+  font-family: var(--font);
+}
+.gantt-body {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  font-family: var(--font);
+}
+.gantt-container {
+  display: flex;
+  min-height: 100%;
+}
+.gantt-labels {
+  flex-shrink: 0;
+  width: 120px;
+  min-width: 80px;
+  border-right: 1px solid rgba(255,255,255,.08);
+  background: rgba(0,0,0,.15);
+  z-index: 2;
+}
+.gantt-label-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  font-size: .55rem;
+  color: #ccc;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+}
+.gantt-label-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.gantt-timeline {
+  flex: 1;
+  position: relative;
+  overflow-x: auto;
+}
+.gantt-header {
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: rgba(26,28,46,.95);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.gantt-hour-cell {
+  flex-shrink: 0;
+  text-align: center;
+  font-size: .5rem;
+  color: #888;
+  border-right: 1px solid rgba(255,255,255,.04);
+  padding: 2px 0;
+  box-sizing: border-box;
+}
+.gantt-rows {
+  position: relative;
+}
+.gantt-row {
+  position: relative;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  box-sizing: border-box;
+}
+.gantt-row:nth-child(even) {
+  background: rgba(255,255,255,.015);
+}
+.gantt-event {
+  transition: filter .1s;
+}
+.gantt-event:hover {
+  filter: brightness(1.3);
+  z-index: 5;
+}
+.gantt-now-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ff4444;
+  z-index: 4;
+  pointer-events: none;
+}
+.gantt-day-sep {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(108,143,255,.15);
+  z-index: 0;
+  pointer-events: none;
+}
+.gantt-day-label {
+  position: absolute;
+  top: 0;
+  font-size: .5rem;
+  color: rgba(108,143,255,.5);
+  padding: 1px 4px;
+  z-index: 3;
+  pointer-events: none;
+  font-weight: 600;
+}
+
+/* ─── Toolbar Right-Click Context Menu ─── */
+.mtb-ctx-menu {
+  position: fixed;
+  z-index: 99999;
+  background: rgba(26,28,46,.97);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  min-width: 140px;
+  font-family: var(--font);
+}
+.mtb-ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: .7rem;
+  color: #ccc;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background .1s;
+  white-space: nowrap;
+}
+.mtb-ctx-item:hover {
+  background: rgba(108,143,255,.15);
+  color: #fff;
+}
+
+/* ─── Full-Screen Gantt Overlay ─── */
+.gantt-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 9998;
+  background: rgba(0,0,0,.5);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: ganttFadeIn .15s ease;
+}
+@keyframes ganttFadeIn { from { opacity: 0; } to { opacity: 1; } }
+.gantt-overlay-panel {
+  width: calc(100vw - 40px);
+  height: calc(100vh - 40px);
+  background: #1a1c2e;
+  border-radius: 14px;
+  border: 1px solid rgba(108,143,255,.2);
+  box-shadow: 0 12px 60px rgba(0,0,0,.7);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: var(--font);
+  resize: both;
+  min-width: 400px;
+  min-height: 300px;
+}
+.gantt-overlay-hdr {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  background: rgba(108,143,255,.08);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  gap: 6px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.gantt-overlay-hdr button {
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 6px;
+  color: #aaa;
+  font-size: .65rem;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: background .1s;
+}
+.gantt-overlay-hdr button:hover { background: rgba(255,255,255,.15); color: #fff; }
+.gantt-overlay-close {
+  margin-left: auto !important;
+  color: #888 !important;
+  font-size: .8rem !important;
+}
+.gantt-overlay-close:hover { color: #e55 !important; background: rgba(255,50,50,.15) !important; }
+.gantt-overlay-body {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}

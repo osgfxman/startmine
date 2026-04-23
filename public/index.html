@@ -18,8 +18,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1776950317">
-  <link rel="stylesheet" href="css/miro.css?v=1776950317">
+  <link rel="stylesheet" href="css/base.css?v=1776977693">
+  <link rel="stylesheet" href="css/miro.css?v=1776977693">
 </head>
 
 <body>
@@ -63,6 +63,7 @@
       <div id="sync-dot" class="loading"></div>
       <span id="sync-msg">Connecting...</span>
       <div class="tb-sep"></div>
+      <button class="ib" id="gantt-overlay-btn" title="Gantt Chart (H)">📊</button>
       <input id="qi" type="text" placeholder="✉ Quick Inbox…" autocomplete="off" spellcheck="false"
         title="Paste URL here to send to Inbox" style="width: 130px;">
       <div id="sw">
@@ -404,6 +405,12 @@
         <rect x="6" y="16" width="3" height="2.5" rx=".5" fill="currentColor" opacity=".4"/>
         <rect x="10.5" y="16" width="3" height="2.5" rx=".5" fill="currentColor" opacity=".4"/>
       </svg></button>
+    <button class="mtb-btn" id="mtb-gantt" title="Gantt Chart (Google Calendar)"><svg viewBox="0 0 24 24" width="22" height="22">
+        <rect x="2" y="4" width="12" height="3" rx="1.5" fill="currentColor" opacity=".5"/>
+        <rect x="6" y="9" width="14" height="3" rx="1.5" fill="currentColor" opacity=".4"/>
+        <rect x="4" y="14" width="10" height="3" rx="1.5" fill="currentColor" opacity=".35"/>
+        <rect x="8" y="19" width="8" height="3" rx="1.5" fill="currentColor" opacity=".3"/>
+      </svg></button>
     <button class="mtb-btn" id="mtb-embed" title="Embed Web View (E)"><svg viewBox="0 0 24 24" width="22" height="22">
         <rect x="2" y="3" width="20" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
         <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
@@ -697,11 +704,11 @@
     <div class="ctx-item danger" data-action="delete"><span class="ctx-icon">🗑️</span><span class="ctx-label">Delete</span><span class="ctx-shortcut">Del</span></div>
   </div>
 
-    <script src="js/app.js?v=1776950317"></script>
-    <script src="js/outline.js?v=1776950317"></script>
-    <script src="js/miro-engine.js?v=1776950317"></script>
-    <script src="js/thumbnails.js?v=1776950317"></script>
-    <script src="js/alignment.js?v=1776950317"></script>
+    <script src="js/app.js?v=1776977693"></script>
+    <script src="js/outline.js?v=1776977693"></script>
+    <script src="js/miro-engine.js?v=1776977693"></script>
+    <script src="js/thumbnails.js?v=1776977693"></script>
+    <script src="js/alignment.js?v=1776977693"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});

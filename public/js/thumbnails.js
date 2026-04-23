@@ -484,6 +484,7 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
             else if (c.type === 'bwidget') el = buildMiroBookmarkWidget(c);
             else if (c.type === 'array') el = buildMiroArray(c);
             else if (c.type === 'calendar') el = buildMiroCalendar(c);
+            else if (c.type === 'gantt') el = buildMiroGantt(c);
             else if (c.type === 'embed') el = buildMiroEmbed(c);
             else el = buildMiroCard(c);
             if (el) board.appendChild(el);
@@ -5484,6 +5485,175 @@ function buildMiroCalendar(card) {
   // Load events after render
   requestAnimationFrame(() => {
     if (typeof renderCalendarContent === 'function') renderCalendarContent(el, card);
+  });
+
+  return el;
+}
+
+/* ─── Gantt Chart Widget (Google Calendar) ─── */
+function buildMiroGantt(card) {
+  const el = document.createElement('div');
+  el.className = 'miro-gantt';
+  el.dataset.cid = card.id;
+  el.style.left = (card.x || 0) + 'px';
+  el.style.top = (card.y || 0) + 'px';
+  el.style.width = (card.w || 900) + 'px';
+  el.style.height = (card.h || 400) + 'px';
+
+  // Header
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:4px 6px;background:rgba(108,143,255,.08);border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0;gap:3px;flex-wrap:wrap;';
+
+  const title = document.createElement('span');
+  title.style.cssText = 'font-weight:700;font-size:.72rem;color:#ccc;white-space:nowrap;';
+  title.textContent = '\u{1F4CA}';
+
+  const _cb = (text, tip, fn) => {
+    const b = document.createElement('button');
+    b.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;color:#aaa;font-size:.55rem;padding:2px 5px;cursor:pointer;font-family:var(--font);';
+    b.textContent = text; b.title = tip;
+    b.onclick = (e) => { e.stopPropagation(); fn(); };
+    return b;
+  };
+  const _days = () => card.ganttView === 'month' ? 30 : card.ganttView === '2week' ? 14 : 7;
+
+  const prevBtn = _cb('◀', 'Previous period', () => {
+    if (!card.calOffset) card.calOffset = 0;
+    card.calOffset -= _days(); sv();
+    if (typeof renderGanttContent === 'function') renderGanttContent(el, card);
+  });
+  const prevDayBtn = _cb('‹', 'Previous day', () => {
+    if (!card.calOffset) card.calOffset = 0;
+    card.calOffset--; sv();
+    if (typeof renderGanttContent === 'function') renderGanttContent(el, card);
+  });
+  const todayBtn = _cb('Today', 'Go to today', () => {
+    card.calOffset = 0; sv();
+    if (typeof renderGanttContent === 'function') renderGanttContent(el, card);
+  });
+  const nextDayBtn = _cb('›', 'Next day', () => {
+    if (!card.calOffset) card.calOffset = 0;
+    card.calOffset++; sv();
+    if (typeof renderGanttContent === 'function') renderGanttContent(el, card);
+  });
+  const nextBtn = _cb('▶', 'Next period', () => {
+    if (!card.calOffset) card.calOffset = 0;
+    card.calOffset += _days(); sv();
+    if (typeof renderGanttContent === 'function') renderGanttContent(el, card);
+  });
+
+  // View toggle (week / 2week / month)
+  const _viewLabels = { week: 'Wk', '2week': '2W', month: 'Mo' };
+  const _viewCycle = ['week', '2week', 'month'];
+  if (!card.ganttView) card.ganttView = 'week';
+  const viewBtn = document.createElement('button');
+  viewBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;color:#aaa;font-size:.55rem;padding:2px 6px;cursor:pointer;font-family:var(--font);';
+  viewBtn.textContent = _viewLabels[card.ganttView] || 'Wk';
+  viewBtn.title = 'Toggle Week / 2-Week / Month';
+  viewBtn.onclick = (e) => {
+    e.stopPropagation();
+    const idx = _viewCycle.indexOf(card.ganttView);
+    card.ganttView = _viewCycle[(idx + 1) % _viewCycle.length];
+    card.calOffset = 0;
+    viewBtn.textContent = _viewLabels[card.ganttView];
+    sv();
+    if (typeof renderGanttContent === 'function') renderGanttContent(el, card);
+  };
+
+  // Theme toggle
+  const _themes = ['dark', 'light', 'transparent'];
+  const _themeIcons = { dark: '🌙', light: '☀️', transparent: '👁' };
+  if (!card.calTheme) card.calTheme = 'dark';
+  const themeBtn = document.createElement('button');
+  themeBtn.style.cssText = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:5px;color:#aaa;font-size:.55rem;padding:2px 5px;cursor:pointer;font-family:var(--font);';
+  themeBtn.textContent = _themeIcons[card.calTheme] || '🌙';
+  themeBtn.onclick = (e) => {
+    e.stopPropagation();
+    const idx = _themes.indexOf(card.calTheme);
+    card.calTheme = _themes[(idx + 1) % _themes.length];
+    themeBtn.textContent = _themeIcons[card.calTheme];
+    _applyGanttTheme(el, hdr, card.calTheme);
+    sv();
+  };
+
+  // Refresh
+  const refBtn = _cb('\u21BB', 'Refresh', () => {
+    if (typeof renderGanttContent === 'function') renderGanttContent(el, card);
+  });
+
+  // Delete
+  const del = document.createElement('button');
+  del.style.cssText = 'background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:5px;color:#888;font-size:.6rem;padding:2px 5px;cursor:pointer;opacity:.6;transition:opacity .12s,color .12s;';
+  del.textContent = '\u2715';
+  del.title = 'Delete widget';
+  del.onmouseenter = () => { del.style.opacity = '1'; del.style.color = '#e55'; };
+  del.onmouseleave = () => { del.style.opacity = '.6'; del.style.color = '#888'; };
+  del.onclick = (e) => { e.stopPropagation(); deleteMiroCard(card.id); };
+
+  hdr.appendChild(title);
+  hdr.appendChild(prevBtn);
+  hdr.appendChild(prevDayBtn);
+  hdr.appendChild(todayBtn);
+  hdr.appendChild(nextDayBtn);
+  hdr.appendChild(nextBtn);
+  hdr.appendChild(viewBtn);
+  hdr.appendChild(themeBtn);
+  hdr.appendChild(refBtn);
+  hdr.appendChild(del);
+
+  // Body
+  const body = document.createElement('div');
+  body.className = 'gantt-body';
+
+  el.appendChild(hdr);
+  el.appendChild(body);
+
+  // Theme system
+  function _applyGanttTheme(el, hdr, theme) {
+    const btns = hdr.querySelectorAll('button');
+    if (theme === 'light') {
+      el.style.background = '#f5f6fa'; el.style.border = '1px solid #d0d5dd'; el.style.boxShadow = '0 4px 16px rgba(0,0,0,.12)';
+      hdr.style.background = 'rgba(66,133,244,.06)'; hdr.style.borderBottom = '1px solid #d0d5dd';
+      title.style.color = '#333'; body.style.color = '#222';
+      btns.forEach(b => { b.style.color = '#444'; b.style.background = 'rgba(0,0,0,.05)'; b.style.borderColor = '#ccc'; });
+    } else if (theme === 'transparent') {
+      el.style.background = 'transparent'; el.style.border = '1px solid rgba(255,255,255,.08)'; el.style.boxShadow = 'none';
+      hdr.style.background = 'transparent'; hdr.style.borderBottom = '1px solid rgba(255,255,255,.06)';
+      title.style.color = '#aaa'; body.style.color = '#ccc';
+      btns.forEach(b => { b.style.color = '#aaa'; b.style.background = 'rgba(255,255,255,.05)'; b.style.borderColor = 'rgba(255,255,255,.1)'; });
+    } else {
+      el.style.background = '#1a1c2e'; el.style.border = '1px solid rgba(108,143,255,.2)'; el.style.boxShadow = '0 4px 24px rgba(0,0,0,.4)';
+      hdr.style.background = 'rgba(108,143,255,.08)'; hdr.style.borderBottom = '1px solid rgba(255,255,255,.08)';
+      title.style.color = '#ccc'; body.style.color = '#eee';
+      btns.forEach(b => { b.style.color = '#aaa'; b.style.background = 'rgba(255,255,255,.08)'; b.style.borderColor = 'rgba(255,255,255,.12)'; });
+    }
+  }
+  _applyGanttTheme(el, hdr, card.calTheme || 'dark');
+
+  // Drag, resize, lock
+  miroSetupCardDrag(el, card, ['.gantt-body', '.gantt-event', 'button', 'input', 'select', 'textarea', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.mc-resize-t', '.mc-resize-b', '.mc-resize-l', '.mc-resize-r', '.mc-lock']);
+  attach8WayResize(el, card, 300, 150);
+  attachLockUI(el, card);
+
+  // Re-render on resize
+  let _resizeTimer = null;
+  let _lastW = el.offsetWidth, _lastH = el.offsetHeight;
+  const resObs = new ResizeObserver(() => {
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(() => {
+      const w = el.offsetWidth, h = el.offsetHeight;
+      if (w < 50 || h < 50) return;
+      if (Math.abs(w - _lastW) < 5 && Math.abs(h - _lastH) < 5) return;
+      _lastW = w; _lastH = h;
+      card.h = h; card.w = w;
+      if (typeof renderGanttContent === 'function') renderGanttContent(el, card);
+    }, 500);
+  });
+  resObs.observe(el);
+
+  // Load events after render
+  requestAnimationFrame(() => {
+    if (typeof renderGanttContent === 'function') renderGanttContent(el, card);
   });
 
   return el;

@@ -1,4 +1,4 @@
-/* ─── Miro Page Engine ─── */
+﻿/* ─── Miro Page Engine ─── */
 let _miroMode = true;
 let _miroPanning = false,
   _miroPanStartX = 0,
@@ -376,7 +376,7 @@ function buildMiroCanvas() {
   const _pl = document.getElementById('miro-pinned-layer');
   if (_pl) _pl.innerHTML = '';
   // Remove only card elements, preserve selection overlays
-  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-embed').forEach((el) => el.remove());
+  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed').forEach((el) => el.remove());
   // Clean up grid toolbars that live in document.body
   document.querySelectorAll('.mg-toolbar[data-grid-id]').forEach(t => t.remove());
   // Clear selection state
@@ -405,6 +405,7 @@ function buildMiroCanvas() {
     else if (card.type === 'bwidget') board.appendChild(buildMiroBookmarkWidget(card));
     else if (card.type === 'array') board.appendChild(buildMiroArray(card));
     else if (card.type === 'calendar') board.appendChild(buildMiroCalendar(card));
+    else if (card.type === 'gantt') board.appendChild(buildMiroGantt(card));
     else if (card.type === 'embed') board.appendChild(buildMiroEmbed(card));
     else board.appendChild(buildMiroCard(card));
     } catch (err) { console.error('[RENDER ERROR]', card.type, card.id, err); }
@@ -3875,6 +3876,393 @@ async function placeCalendarWidget() {
   showToast('📅 Calendar widget added');
 }
 
+// ─── Gantt Chart Widget (Google Calendar) ───
+document.getElementById('mtb-gantt').onclick = async () => {
+  if (!_googleAccessToken) {
+    try {
+      if (typeof manualGoogleReAuth === 'function') {
+        await manualGoogleReAuth();
+      } else {
+        const result = await auth.signInWithPopup(provider);
+        if (result.credential) cacheGoogleToken(result.credential.accessToken);
+      }
+    } catch (e) { /* widget will show sign-in button */ }
+  }
+  placeGanttWidget();
+};
+
+async function placeGanttWidget() {
+  const page = cp();
+  if (!page) return;
+  const zoom = (page.zoom || 100) / 100;
+  const panX = page.panX || 0, panY = page.panY || 0;
+  const board = document.getElementById('miro-board');
+  const rect = board.getBoundingClientRect();
+  const cx = (-panX + (window.innerWidth / 2 - rect.left) / zoom);
+  const cy = (-panY + (window.innerHeight / 2 - rect.top) / zoom);
+
+  const card = {
+    id: 'gantt_' + Date.now(),
+    type: 'gantt',
+    x: cx - 500,
+    y: cy - 250,
+    w: 1000,
+    h: 500,
+    calView: 'week',
+    calOffset: 0,
+    calTheme: 'dark',
+    ganttRowHeight: 50,
+    ganttView: 'week', // week | 2week | month
+  };
+
+  if (!page.miroCards) page.miroCards = [];
+  pushUndo();
+  page.miroCards.push(card);
+  sv();
+  buildMiroCanvas();
+  showToast('📊 Gantt chart added');
+}
+
+// ─── Render Gantt Content ───
+async function renderGanttContent(el, card) {
+  const body = el.querySelector('.gantt-body');
+  if (!body) return;
+  const now = new Date();
+  const gv = card.ganttView || 'week';
+  const days = gv === 'month' ? 30 : gv === '2week' ? 14 : 7;
+  const offset = card.calOffset || 0;
+  const rowH = card.ganttRowHeight || 50;
+  const theme = card.calTheme || 'dark';
+
+  let startDate = new Date(now);
+  startDate.setDate(now.getDate() - now.getDay() + offset);
+  startDate.setHours(0, 0, 0, 0);
+  const endDate = new Date(startDate);
+  endDate.setDate(startDate.getDate() + days);
+
+  const cacheKey = `sm_gantt_${startDate.toISOString().slice(0,10)}_${days}`;
+  const _cache = evts => { try { localStorage.setItem(cacheKey, JSON.stringify(evts)); } catch(e) {} };
+  const _getCached = () => { try { const d = localStorage.getItem(cacheKey); return d ? JSON.parse(d) : null; } catch(e) { return null; } };
+
+  const cached = _getCached();
+  if (cached && cached.length > 0) _drawGantt(body, el, card, cached, startDate, days, now, rowH, theme);
+
+  let fresh = null, fetchErr = null;
+  try { fresh = await fetchCalendarEvents(startDate, endDate); } catch(e) { fetchErr = e; }
+
+  if (fresh) { _cache(fresh); _drawGantt(body, el, card, fresh, startDate, days, now, rowH, theme); }
+  else if (!cached || cached.length === 0) {
+    body.innerHTML = '';
+    const d = document.createElement('div');
+    d.style.cssText = 'text-align:center;padding:40px 20px;color:#aaa;font-size:.75rem;';
+    if (fetchErr && fetchErr.needsAuth) {
+      d.innerHTML = '🔑 Sign in to load Gantt';
+      const b = document.createElement('button');
+      b.className = 'cal-form-btn cal-form-btn-primary';
+      b.style.cssText = 'margin-top:12px;font-size:.7rem;padding:6px 14px;';
+      b.textContent = '🔐 Sign in';
+      b.onclick = async (e) => { e.stopPropagation(); try { await manualGoogleReAuth(); renderGanttContent(el, card); } catch(er) {} };
+      d.appendChild(document.createElement('br')); d.appendChild(b);
+    } else {
+      d.innerHTML = '⚠️ No events';
+      const rb = document.createElement('button');
+      rb.className = 'cal-form-btn cal-form-btn-primary';
+      rb.style.cssText = 'margin-top:12px;'; rb.textContent = '🔄 Retry';
+      rb.onclick = (e) => { e.stopPropagation(); renderGanttContent(el, card); };
+      d.appendChild(document.createElement('br')); d.appendChild(rb);
+    }
+    body.appendChild(d);
+  }
+}
+
+function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
+  body.innerHTML = '';
+  const isDark = theme !== 'light';
+  const txtCol = isDark ? '#ddd' : '#222';
+  const mutedCol = isDark ? '#777' : '#888';
+  const lineCol = isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.1)';
+  const rowEven = isDark ? 'rgba(255,255,255,.03)' : 'rgba(0,0,0,.03)';
+  const rowOdd = 'transparent';
+  const todayBg = isDark ? 'rgba(108,143,255,.08)' : 'rgba(66,133,244,.08)';
+  const hdrBg = isDark ? 'rgba(0,0,0,.3)' : 'rgba(0,0,0,.05)';
+  const labelBg = isDark ? 'rgba(0,0,0,.25)' : 'rgba(0,0,0,.04)';
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // Responsive sizing
+  const bodyW = body.clientWidth || (card.w || 900);
+  const bodyH = body.clientHeight || (card.h || 500) - 30;
+  const labelW = Math.min(75, Math.max(50, bodyW * 0.08));
+  const allDayW = Math.min(50, Math.max(30, bodyW * 0.04));
+  const slots = 48;
+  const autoRowH = Math.max(22, Math.floor((bodyH - 22) / days));
+
+  // Wrapper
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow-y:auto;overflow-x:hidden;';
+
+  // Header row
+  const hdrRow = document.createElement('div');
+  hdrRow.style.cssText = `display:flex;flex-shrink:0;height:20px;background:${hdrBg};border-bottom:1px solid ${lineCol};`;
+  const lh = document.createElement('div');
+  lh.style.cssText = `width:${labelW}px;flex-shrink:0;font-size:.45rem;color:${mutedCol};display:flex;align-items:center;justify-content:center;border-right:1px solid ${lineCol};`;
+  lh.textContent = 'Day';
+  hdrRow.appendChild(lh);
+  const hdrTL = document.createElement('div');
+  hdrTL.style.cssText = 'flex:1;display:flex;min-width:0;';
+  for (let s = 0; s < slots; s++) {
+    const h = Math.floor(s / 2);
+    const cell = document.createElement('div');
+    cell.style.cssText = `flex:1;text-align:center;font-size:.38rem;color:${mutedCol};border-right:1px solid ${s%2===1?lineCol:'transparent'};overflow:hidden;white-space:nowrap;min-width:0;`;
+    if (s % 2 === 0) cell.textContent = `${h}`;
+    hdrTL.appendChild(cell);
+  }
+  hdrRow.appendChild(hdrTL);
+  const adh = document.createElement('div');
+  adh.style.cssText = `width:${allDayW}px;flex-shrink:0;font-size:.38rem;color:${mutedCol};display:flex;align-items:center;justify-content:center;border-left:1px solid ${lineCol};`;
+  adh.textContent = 'All';
+  hdrRow.appendChild(adh);
+  wrap.appendChild(hdrRow);
+
+  // Day rows
+  for (let d = 0; d < days; d++) {
+    const dayStart = new Date(startDate); dayStart.setDate(startDate.getDate() + d);
+    dayStart.setHours(0,0,0,0);
+    const dayEnd = new Date(dayStart); dayEnd.setDate(dayStart.getDate() + 1);
+    const dayMs = dayStart.getTime();
+    const isToday = dayStart.toDateString() === now.toDateString();
+
+    const row = document.createElement('div');
+    row.style.cssText = `display:flex;height:${autoRowH}px;border-bottom:1px solid ${lineCol};background:${isToday ? todayBg : (d%2===0 ? rowEven : rowOdd)};flex-shrink:0;`;
+
+    // Label
+    const label = document.createElement('div');
+    label.style.cssText = `width:${labelW}px;flex-shrink:0;display:flex;align-items:center;justify-content:center;flex-direction:column;font-size:.48rem;color:${isToday?'#6c8fff':txtCol};font-weight:${isToday?'700':'400'};border-right:1px solid ${lineCol};background:${labelBg};`;
+    label.innerHTML = `<span>${dayNames[dayStart.getDay()]}</span><span style="font-size:.38rem;opacity:.6">${dayStart.getDate()} ${months[dayStart.getMonth()]}</span>`;
+    row.appendChild(label);
+
+    // Timeline cell
+    const tc = document.createElement('div');
+    tc.style.cssText = 'flex:1;position:relative;overflow:hidden;min-width:0;';
+
+    // Hour grid lines
+    for (let s = 1; s < slots; s++) {
+      if (s % 2 === 0) {
+        const gl = document.createElement('div');
+        gl.style.cssText = `position:absolute;left:${(s/slots)*100}%;top:0;bottom:0;width:1px;background:${lineCol};pointer-events:none;`;
+        tc.appendChild(gl);
+      }
+    }
+
+    // Timed events
+    const dayEvts = events.filter(ev => {
+      if (ev.allDay) return false;
+      const es = new Date(ev.start).getTime(), ee = new Date(ev.end).getTime();
+      return es < dayEnd.getTime() && ee > dayMs && (ee - es) < 86400000;
+    });
+    const lanes = [];
+    dayEvts.sort((a,b) => new Date(a.start) - new Date(b.start));
+    const placed = dayEvts.map(ev => {
+      const es = Math.max(new Date(ev.start).getTime(), dayMs);
+      const ee = Math.min(new Date(ev.end).getTime(), dayEnd.getTime());
+      let lane = 0;
+      for (let l = 0; l < lanes.length; l++) { if (lanes[l] <= es) { lane = l; break; } lane = l + 1; }
+      if (lane >= lanes.length) lanes.push(0);
+      lanes[lane] = ee;
+      return { ev, es, ee, lane };
+    });
+    const totalLanes = Math.max(1, lanes.length);
+    const barH = Math.max(6, Math.floor((autoRowH - 2) / totalLanes) - 1);
+
+    placed.forEach(({ ev, es, ee, lane }) => {
+      const leftPct = ((es - dayMs) / 86400000) * 100;
+      const widthPct = Math.max(0.5, ((ee - es) / 86400000) * 100);
+      const topPx = 1 + lane * (barH + 1);
+      const bar = document.createElement('div');
+      bar.className = 'gantt-event';
+      bar.style.cssText = `position:absolute;left:${leftPct}%;width:${widthPct}%;height:${barH}px;top:${topPx}px;background:${ev.color||'#4285f4'};border-radius:3px;font-size:${barH>12?'.43rem':'.33rem'};color:#fff;padding:0 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;display:flex;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,.3);z-index:1;`;
+      const evS = new Date(ev.start), evE = new Date(ev.end);
+      const fmt = t => t.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+      bar.title = `${ev.summary}\n${fmt(evS)} — ${fmt(evE)}\n${ev.calendarName}`;
+      bar.textContent = ev.summary || '';
+
+      bar.addEventListener('click', e2 => {
+        e2.stopPropagation();
+        if (typeof showCalendarEventForm === 'function')
+          showCalendarEventForm(body, el, card, {mode:'edit',calendarId:ev.calendarId,eventId:ev.id,summary:ev.summary,description:ev.description,startTime:evS,endTime:evE});
+      });
+
+      // Resize handles with snap-to-30min
+      ['left','right'].forEach(side => {
+        const hndl = document.createElement('div');
+        hndl.style.cssText = `position:absolute;top:0;${side}:0;width:5px;height:100%;cursor:col-resize;z-index:6;`;
+        hndl.addEventListener('mousedown', e3 => {
+          e3.stopPropagation(); e3.preventDefault();
+          const sx = e3.clientX, tcRect = tc.getBoundingClientRect(), tcW = tcRect.width;
+          const oL = parseFloat(bar.style.left), oW = parseFloat(bar.style.width);
+          const tip = document.createElement('div');
+          tip.style.cssText = 'position:fixed;padding:3px 8px;background:rgba(0,0,0,.9);color:#fff;border-radius:5px;font-size:.6rem;z-index:99999;pointer-events:none;font-family:var(--font);white-space:nowrap;';
+          document.body.appendChild(tip);
+          const snapPct = 100/48;
+          const toTime = pct => { const m=Math.round(pct/100*1440); return `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}`; };
+          const calc = (mx) => {
+            let nl = side==='left' ? oL+((mx-sx)/tcW)*100 : oL;
+            let nw = side==='left' ? oW-((mx-sx)/tcW)*100 : oW+((mx-sx)/tcW)*100;
+            nl = Math.round(nl/snapPct)*snapPct; nw = Math.max(snapPct,Math.round(nw/snapPct)*snapPct);
+            if(nl<0)nl=0; if(nl+nw>100)nw=100-nl;
+            return {nl,nw};
+          };
+          const updTip = (mx,my) => { const{nl,nw}=calc(mx); tip.textContent=`${toTime(nl)} — ${toTime(nl+nw)}`; tip.style.left=(mx+12)+'px'; tip.style.top=(my-22)+'px'; };
+          updTip(e3.clientX, e3.clientY);
+          const onMv = mv => { const{nl,nw}=calc(mv.clientX); bar.style.left=nl+'%'; bar.style.width=nw+'%'; updTip(mv.clientX,mv.clientY); };
+          const onUp = async()=>{
+            document.removeEventListener('mousemove',onMv); document.removeEventListener('mouseup',onUp); tip.remove();
+            const{nl,nw}=calc(0); // use current bar values
+            const fl=parseFloat(bar.style.left),fw=parseFloat(bar.style.width);
+            const nS=new Date(dayMs+(fl/100)*86400000), nE=new Date(dayMs+((fl+fw)/100)*86400000);
+            if(nE<=nS)return;
+            try{bar.style.opacity='.5';await updateCalendarEvent(ev.calendarId,ev.id,{summary:ev.summary,start:nS,end:nE});showToast('✅ Updated');renderGanttContent(el,card);}
+            catch(err){showToast('❌ '+err.message);renderGanttContent(el,card);}
+          };
+          document.addEventListener('mousemove',onMv); document.addEventListener('mouseup',onUp);
+        });
+        bar.appendChild(hndl);
+      });
+      tc.appendChild(bar);
+    });
+
+    // Now line
+    if (isToday) {
+      const nowPct = ((now.getHours()*60+now.getMinutes())/1440)*100;
+      const nl = document.createElement('div');
+      nl.style.cssText = `position:absolute;left:${nowPct}%;top:0;bottom:0;width:2px;background:#ff4444;z-index:4;pointer-events:none;`;
+      tc.appendChild(nl);
+    }
+    row.appendChild(tc);
+
+    // All-day column
+    const adc = document.createElement('div');
+    adc.style.cssText = `width:${allDayW}px;flex-shrink:0;border-left:1px solid ${lineCol};display:flex;flex-direction:column;gap:1px;padding:1px;overflow:hidden;align-items:stretch;justify-content:center;`;
+    const allDayEvts = events.filter(ev => {
+      if (ev.allDay) { const es=new Date(ev.start).getTime(); return es>=dayMs&&es<dayEnd.getTime(); }
+      const es=new Date(ev.start).getTime(),ee=new Date(ev.end).getTime();
+      return es<dayEnd.getTime()&&ee>dayMs&&(ee-es)>=86400000;
+    });
+    allDayEvts.forEach(ev => {
+      const chip = document.createElement('div');
+      chip.style.cssText = `background:${ev.color||'#4285f4'};color:#fff;font-size:.33rem;border-radius:2px;padding:0 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;min-height:7px;display:flex;align-items:center;`;
+      chip.title = ev.summary+'\n'+(ev.calendarName||'');
+      chip.textContent = ev.summary||'•';
+      chip.onclick = e2 => {
+        e2.stopPropagation();
+        if(typeof showCalendarEventForm==='function')
+          showCalendarEventForm(body,el,card,{mode:'edit',calendarId:ev.calendarId,eventId:ev.id,summary:ev.summary,description:ev.description,startTime:new Date(ev.start),endTime:new Date(ev.end)});
+      };
+      adc.appendChild(chip);
+    });
+    row.appendChild(adc);
+    wrap.appendChild(row);
+  }
+  body.appendChild(wrap);
+}
+
+
+// ─── Full-Screen Gantt Overlay ───
+(function initGanttOverlay() {
+  const _state = { view: 'week', offset: 0, theme: 'dark' };
+  let _overlayEl = null;
+  function openGanttOverlay() {
+    if (_overlayEl) return;
+    if (!_googleAccessToken && typeof manualGoogleReAuth === 'function') {
+      manualGoogleReAuth().then(() => _buildOverlay()).catch(() => _buildOverlay());
+      return;
+    }
+    _buildOverlay();
+  }
+  function closeGanttOverlay() { if (_overlayEl) { _overlayEl.remove(); _overlayEl = null; } }
+  function _buildOverlay() {
+    closeGanttOverlay();
+    const overlay = document.createElement('div');
+    overlay.className = 'gantt-overlay';
+    overlay.addEventListener('mousedown', e => { if (e.target === overlay) closeGanttOverlay(); });
+    _overlayEl = overlay;
+    const panel = document.createElement('div');
+    panel.className = 'gantt-overlay-panel';
+    const hdr = document.createElement('div');
+    hdr.className = 'gantt-overlay-hdr';
+    const title = document.createElement('span');
+    title.style.cssText = 'color:#ccc;font-size:.7rem;font-weight:600;margin-right:8px;';
+    title.textContent = '\u{1F4CA} Gantt Chart';
+    hdr.appendChild(title);
+    const _days = () => _state.view === 'month' ? 30 : _state.view === '2week' ? 14 : 7;
+    const mkBtn = (txt, tip, fn) => { const b = document.createElement('button'); b.textContent = txt; b.title = tip; b.onclick = e => { e.stopPropagation(); fn(); }; return b; };
+    hdr.appendChild(mkBtn('\u25C0', 'Prev period', () => { _state.offset -= _days(); _render(); }));
+    hdr.appendChild(mkBtn('\u2039', 'Prev day', () => { _state.offset--; _render(); }));
+    hdr.appendChild(mkBtn('Today', 'Today', () => { _state.offset = 0; _render(); }));
+    hdr.appendChild(mkBtn('\u203A', 'Next day', () => { _state.offset++; _render(); }));
+    hdr.appendChild(mkBtn('\u25B6', 'Next period', () => { _state.offset += _days(); _render(); }));
+    const viewLabels = { week: 'Wk', '2week': '2W', month: 'Mo' };
+    const viewCycle = ['week', '2week', 'month'];
+    const viewBtn = mkBtn(viewLabels[_state.view], 'View', () => {
+      const i = viewCycle.indexOf(_state.view);
+      _state.view = viewCycle[(i + 1) % viewCycle.length]; _state.offset = 0;
+      viewBtn.textContent = viewLabels[_state.view]; _render();
+    });
+    hdr.appendChild(viewBtn);
+    const themes = ['dark', 'light', 'transparent'];
+    const thIcons = { dark: '\u{1F319}', light: '\u2600\uFE0F', transparent: '\u{1F441}' };
+    const thBtn = mkBtn(thIcons[_state.theme], 'Theme', () => {
+      const i = themes.indexOf(_state.theme);
+      _state.theme = themes[(i + 1) % themes.length]; thBtn.textContent = thIcons[_state.theme]; _applyTh(); _render();
+    });
+    hdr.appendChild(thBtn);
+    hdr.appendChild(mkBtn('\u{1F504}', 'Refresh', () => _render()));
+    const closeBtn = mkBtn('\u2715', 'Close (Esc)', closeGanttOverlay);
+    closeBtn.className = 'gantt-overlay-close';
+    hdr.appendChild(closeBtn);
+    panel.appendChild(hdr);
+    const body = document.createElement('div');
+    body.className = 'gantt-overlay-body';
+    panel.appendChild(body);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    function _applyTh() {
+      const t = _state.theme;
+      if (t === 'light') { panel.style.background='#f5f6fa'; panel.style.border='1px solid #ddd'; hdr.style.background='rgba(0,0,0,.04)'; title.style.color='#333'; }
+      else if (t === 'transparent') { panel.style.background='rgba(20,20,30,.85)'; panel.style.border='1px solid rgba(255,255,255,.08)'; hdr.style.background='transparent'; title.style.color='#aaa'; }
+      else { panel.style.background='#1a1c2e'; panel.style.border='1px solid rgba(108,143,255,.2)'; hdr.style.background='rgba(108,143,255,.08)'; title.style.color='#ccc'; }
+    }
+    _applyTh();
+    const _fc = { calTheme: _state.theme };
+    async function _render() {
+      _fc.calTheme = _state.theme; _fc.w = body.clientWidth; _fc.h = body.clientHeight;
+      const now = new Date(), days = _days();
+      const sd = new Date(now); sd.setDate(now.getDate() - now.getDay() + _state.offset); sd.setHours(0,0,0,0);
+      const ed = new Date(sd); ed.setDate(sd.getDate() + days);
+      body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:.7rem;">Loading...</div>';
+      try {
+        const ev = await fetchCalendarEvents(sd, ed);
+        if (ev && ev.length > 0) _drawGantt(body, panel, _fc, ev, sd, days, now, 50, _state.theme);
+        else body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:.7rem;">No events</div>';
+      } catch (err) {
+        body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:.7rem;">\u26A0\uFE0F ' + (err.message||'Error') + '</div>';
+      }
+    }
+    const ro = new ResizeObserver(() => { clearTimeout(ro._t); ro._t = setTimeout(_render, 400); });
+    ro.observe(panel);
+    _render();
+  }
+  const btn = document.getElementById('gantt-overlay-btn');
+  if (btn) btn.onclick = () => openGanttOverlay();
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.contentEditable === 'true') return;
+    if (e.key === 'Escape' && _overlayEl) { closeGanttOverlay(); e.preventDefault(); return; }
+    if ((e.key === 'h' || e.key === 'H' || e.key === '\u0623') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (_overlayEl) closeGanttOverlay(); else openGanttOverlay(); e.preventDefault();
+    }
+  });
+})();
+
 // ─── Embed Web View Widget ───
 document.getElementById('mtb-embed').onclick = () => setActiveTool('embed');
 
@@ -4774,3 +5162,129 @@ function _renderCalGrid(container, el, card, events, startDate, days, now) {
 
   card._weekStart = startDate.getTime();
 }
+
+// ══════════════════════════════════════════════════════════
+// ─── Toolbar Customization (Right-Click Hide/Show) ───
+// ══════════════════════════════════════════════════════════
+(function initToolbarCustomization() {
+  const LS_KEY = 'sm_toolbar_hidden';
+  const PROTECTED = ['mtb-select', 'mtb-more']; // Cannot be hidden
+  const toolbar = document.getElementById('miro-toolbar');
+  const moreGrid = toolbar ? toolbar.querySelector('.mtb-more-grid') : null;
+  if (!toolbar || !moreGrid) return;
+
+  // Restore hidden state
+  function getHidden() {
+    try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch(e) { return []; }
+  }
+  function saveHidden(arr) {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(arr)); } catch(e) {}
+  }
+
+  function applyHiddenState() {
+    const hidden = getHidden();
+    hidden.forEach(id => {
+      const btn = document.getElementById(id);
+      if (!btn || PROTECTED.includes(id)) return;
+      // Move to more panel if not already there
+      if (!moreGrid.contains(btn)) {
+        moreGrid.appendChild(btn);
+      }
+    });
+  }
+
+  function hideButton(id) {
+    const hidden = getHidden();
+    if (!hidden.includes(id)) hidden.push(id);
+    saveHidden(hidden);
+    const btn = document.getElementById(id);
+    if (btn && !moreGrid.contains(btn)) {
+      moreGrid.appendChild(btn);
+    }
+  }
+
+  function showButton(id) {
+    let hidden = getHidden();
+    hidden = hidden.filter(h => h !== id);
+    saveHidden(hidden);
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    // Move back to main toolbar (before the separator/more button)
+    const sep = toolbar.querySelector('div[style*="height:1px"]');
+    if (sep) {
+      toolbar.insertBefore(btn, sep);
+    } else {
+      const moreBtn = document.getElementById('mtb-more');
+      if (moreBtn) toolbar.insertBefore(btn, moreBtn);
+      else toolbar.appendChild(btn);
+    }
+  }
+
+  // Create context menu
+  let ctxMenu = null;
+  function showCtxMenu(x, y, btnId, isInMorePanel) {
+    removeCtxMenu();
+    ctxMenu = document.createElement('div');
+    ctxMenu.className = 'mtb-ctx-menu';
+    ctxMenu.style.left = x + 'px';
+    ctxMenu.style.top = y + 'px';
+
+    if (isInMorePanel) {
+      const showItem = document.createElement('div');
+      showItem.className = 'mtb-ctx-item';
+      showItem.innerHTML = '📌 Show on toolbar';
+      showItem.onclick = () => { showButton(btnId); removeCtxMenu(); };
+      ctxMenu.appendChild(showItem);
+    } else {
+      const hideItem = document.createElement('div');
+      hideItem.className = 'mtb-ctx-item';
+      hideItem.innerHTML = '👁‍🗨 Hide to + panel';
+      hideItem.onclick = () => { hideButton(btnId); removeCtxMenu(); };
+      ctxMenu.appendChild(hideItem);
+    }
+
+    document.body.appendChild(ctxMenu);
+
+    // Adjust position if overflow
+    const rect = ctxMenu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) ctxMenu.style.left = (window.innerWidth - rect.width - 8) + 'px';
+    if (rect.bottom > window.innerHeight) ctxMenu.style.top = (window.innerHeight - rect.height - 8) + 'px';
+
+    // Close on click outside
+    setTimeout(() => {
+      document.addEventListener('mousedown', _closeCtxOnClick);
+      document.addEventListener('contextmenu', _closeCtxOnClick);
+    }, 0);
+  }
+
+  function removeCtxMenu() {
+    if (ctxMenu && ctxMenu.parentNode) ctxMenu.parentNode.removeChild(ctxMenu);
+    ctxMenu = null;
+    document.removeEventListener('mousedown', _closeCtxOnClick);
+    document.removeEventListener('contextmenu', _closeCtxOnClick);
+  }
+
+  function _closeCtxOnClick(e) {
+    if (ctxMenu && !ctxMenu.contains(e.target)) {
+      removeCtxMenu();
+    }
+  }
+
+  // Attach contextmenu to all toolbar buttons
+  function attachContextMenu(btn) {
+    if (!btn.id || PROTECTED.includes(btn.id)) return;
+    btn.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const isInMore = moreGrid.contains(btn);
+      showCtxMenu(e.clientX, e.clientY, btn.id, isInMore);
+    });
+  }
+
+  // Attach to all existing buttons
+  toolbar.querySelectorAll('.mtb-btn').forEach(attachContextMenu);
+  moreGrid.querySelectorAll('.mtb-btn').forEach(attachContextMenu);
+
+  // Apply saved state on load
+  applyHiddenState();
+})();
