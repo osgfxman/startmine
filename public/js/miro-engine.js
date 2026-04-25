@@ -4158,7 +4158,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
 
 // ─── Full-Screen Gantt Overlay ───
 (function initGanttOverlay() {
-  const _state = { view: '2week', offset: 0, theme: 'light' };
+  const _state = { view: '2week', offset: 0, theme: 'light', page: 0 }; // page: 0=gantt, 1=stats
   let _overlayEl = null;
   function openGanttOverlay() {
     if (_overlayEl) return;
@@ -4253,7 +4253,165 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
     }
     _applyTh();
     const _fc = { calTheme: _state.theme };
-    async function _render() {
+        // Page navigation dots
+    const _pageDots = document.createElement('div');
+    _pageDots.style.cssText = 'display:flex;gap:4px;align-items:center;margin-left:auto;margin-right:8px;';
+    const _pageNames = ['\u{1F4CA}', '\u{1F4C8}'];
+    const _pageTitles = ['Gantt Chart', 'Statistics'];
+    _pageNames.forEach((p, i) => {
+      const d = document.createElement('button');
+      d.textContent = p;
+      d.title = _pageTitles[i];
+      d.style.cssText = 'border:none;background:'+(i===_state.page?'#6c8fff':'transparent')+';color:'+(i===_state.page?'#fff':'#888')+';border-radius:4px;padding:2px 8px;font-size:.65rem;cursor:pointer;';
+      d.onclick = (e) => { e.stopPropagation(); _state.page = i; _updatePageDots(); _renderPage(); };
+      _pageDots.appendChild(d);
+    });
+    hdr.appendChild(_pageDots);
+
+    function _updatePageDots() {
+      var btns = _pageDots.querySelectorAll('button');
+      btns.forEach((b, i) => {
+        b.style.background = i===_state.page?'#6c8fff':'transparent';
+        b.style.color = i===_state.page?'#fff':'#888';
+      });
+    }
+
+    // Mouse wheel page switching
+    body.addEventListener('wheel', function(e) {
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 50) {
+        e.preventDefault();
+        if (e.deltaX > 0 && _state.page < 1) { _state.page++; _updatePageDots(); _renderPage(); }
+        else if (e.deltaX < 0 && _state.page > 0) { _state.page--; _updatePageDots(); _renderPage(); }
+      }
+    }, {passive: false});
+
+    function _renderPage() {
+      if (_state.page === 0) _render();
+      else _renderStats();
+    }
+
+    async function _renderStats() {
+      body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:.7rem;">Loading stats...</div>';
+      var now = new Date();
+      var isDk = _state.theme !== 'light';
+      var txt = isDk ? '#ddd' : '#222';
+      var bg2 = isDk ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.03)';
+      var oneJan = new Date(now.getFullYear(),0,1);
+      var wkNum = Math.ceil(((now-oneJan)/86400000+oneJan.getDay()+1)/7);
+      var sprintNum = Math.ceil(wkNum/2);
+      var exclude = ['phases of the moon','holidays in egypt','muslim holidays'];
+      var planned = {'01R':3,'02W':1,'02xO':2,'03G':2,'04G2':1,'05B':0,'06C':0,'07J':0,'08M':1,'09N':1,'10Y':1,'11L':0.5,'12k':0.5,'13S':7};
+      var chartRows = [
+        {type:'plan',label:'Plan: Work',cals:['01R','02W','02xO']},
+        {type:'actual',label:'Sleep (Actual)',cals:['13S']},
+        {type:'actual',label:'Work (Actual)',cals:['01R','02W','02xO']},
+        {type:'sep'},
+        {type:'plan',label:'Plan: Dev',cals:['08M','09N','10Y','03G','04G2']},
+        {type:'actual',label:'Family (Actual)',cals:['06C','07J']},
+        {type:'actual',label:'Dev (Actual)',cals:['08M','09N','10Y','03G','04G2']},
+        {type:'sep'},
+        {type:'plan',label:'Plan: Leisure',cals:['11L','12k']},
+        {type:'plan',label:'Plan: Fitness',cals:['05B']},
+        {type:'actual',label:'Leisure (Actual)',cals:['11L','12k']}
+      ];
+      var epoch = new Date(2025,9,28); epoch.setHours(0,0,0,0);
+      var spStart = (function(){var d=new Date(now);d.setDate(d.getDate()-d.getDay()-((wkNum%2===0)?7:0));d.setHours(0,0,0,0);return d;})();
+      var spEnd = (function(){var d=new Date(spStart);d.setDate(d.getDate()+14);return d;})();
+      var ranges = [
+        {id:'week',label:'This Week',s:function(){var d=new Date(now);d.setDate(d.getDate()-d.getDay());d.setHours(0,0,0,0);return d;},e:function(){var d=new Date(now);d.setDate(d.getDate()-d.getDay()+7);d.setHours(0,0,0,0);return d;}},
+        {id:'sprint',label:'Sprint '+sprintNum,s:function(){return new Date(spStart);},e:function(){return new Date(spEnd);}},
+        {id:'month',label:'This Month',s:function(){return new Date(now.getFullYear(),now.getMonth(),1);},e:function(){return new Date(now.getFullYear(),now.getMonth()+1,1);}},
+        {id:'quarter',label:'Q'+Math.ceil((now.getMonth()+1)/3),s:function(){var q=Math.floor(now.getMonth()/3);return new Date(now.getFullYear(),q*3,1);},e:function(){var q=Math.floor(now.getMonth()/3);return new Date(now.getFullYear(),q*3+3,1);}},
+        {id:'year',label:''+now.getFullYear(),s:function(){return new Date(now.getFullYear(),0,1);},e:function(){return new Date(now.getFullYear()+1,0,1);}},
+        {id:'all',label:'All (Oct 28)',isTotal:true,s:function(){return new Date(epoch);},e:function(){return new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);}},
+        {id:'avg',label:'Avg/Day',isAvg:true,s:function(){return new Date(epoch);},e:function(){return new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);}}
+      ];
+      try {
+        var allEv = await fetchCalendarEvents(epoch, new Date(now.getFullYear(),now.getMonth(),now.getDate()+1));
+        if (!allEv) allEv = [];
+        allEv = allEv.filter(function(e){ return exclude.indexOf((e.calendarName||'').toLowerCase()) === -1; });
+        // Debug: log per-calendar event counts
+        var _dbg = {};
+        allEv.forEach(function(e){ var cn=e.calendarName||'?'; if(!_dbg[cn])_dbg[cn]={count:0,hours:0}; _dbg[cn].count++; _dbg[cn].hours+=(new Date(e.end).getTime()-new Date(e.start).getTime())/3600000; });
+        console.table(_dbg);
+        // Also filter out all-day events from hour calculations
+        allEv = allEv.filter(function(e){ return !e.allDay; });
+        // Build color map
+        var colorMap = {};
+        allEv.forEach(function(e){ if(e.calendarName) colorMap[e.calendarName] = e.color||'#4285f4'; });
+
+        var html = '<div style="padding:16px;color:'+txt+';font-family:var(--font);overflow-y:auto;height:100%;">';
+        html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">';
+        html += '<h2 style="margin:0;font-size:1rem;">\u{1F4C8} Statistics</h2>';
+        html += '<span style="background:#10b981;color:#fff;padding:2px 6px;border-radius:4px;font-size:.55rem;font-weight:600;">Sprint '+sprintNum+'</span>';
+        html += '<span style="background:#6c8fff;color:#fff;padding:2px 6px;border-radius:4px;font-size:.55rem;font-weight:600;">W'+wkNum+'</span></div>';
+
+        html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:12px;">';
+        ranges.forEach(function(rng) {
+          var sd = rng.s(), ed = rng.e();
+          var daysElapsed = Math.max(1, Math.round((Math.min(now.getTime(),ed.getTime()) - sd.getTime()) / 86400000));
+          var evts = allEv.filter(function(e){ var es=new Date(e.start).getTime(); return es>=sd.getTime() && es<ed.getTime(); });
+          // Actual hours per calendar
+          var actMap = {};
+          evts.forEach(function(e){
+            var cn = e.calendarName||'Other';
+            if(!actMap[cn]) actMap[cn]=0;
+            actMap[cn] += (new Date(e.end).getTime()-new Date(e.start).getTime())/3600000;
+          });
+          // Find max value across all rows for scaling
+          var maxVal = 1;
+          chartRows.forEach(function(r){
+            if(r.type==='sep') return;
+            var v = 0;
+            r.cals.forEach(function(cn){
+              if(r.type==='plan') v += rng.isAvg?(planned[cn]||0):(planned[cn]||0)*daysElapsed;
+              else v += rng.isAvg?(actMap[cn]||0)/daysElapsed:(actMap[cn]||0);
+            });
+            if(v>maxVal) maxVal=v;
+          });
+
+          html += '<div style="margin-bottom:16px;background:'+bg2+';border-radius:8px;padding:10px;">';
+          html += '<div style="font-weight:700;font-size:.7rem;margin-bottom:8px;">'+rng.label+' <span style="font-weight:400;opacity:.5;font-size:.55rem;">('+daysElapsed+' days)</span></div>';
+
+          chartRows.forEach(function(r){
+            if(r.type==='sep'){
+              html += '<div style="height:6px;"></div>';
+              return;
+            }
+            var segs = [];
+            var total = 0;
+            r.cals.forEach(function(cn){
+              var v = r.type==='plan' ? (planned[cn]||0)*daysElapsed : (actMap[cn]||0);
+              segs.push({name:cn,val:v,color:colorMap[cn]||(r.type==='plan'?'#888':'#4285f4')});
+              total += v;
+            });
+            var barPct = Math.min(100, total/maxVal*100);
+            html += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:3px;height:22px;">';
+            html += '<div style="width:90px;font-size:.5rem;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;opacity:.7;">'+r.label+'</div>';
+            html += '<div style="flex:1;height:18px;background:'+(isDk?'rgba(255,255,255,.05)':'rgba(0,0,0,.05)')+';border-radius:3px;overflow:hidden;display:flex;">';
+            segs.forEach(function(sg){
+              if(sg.val<=0) return;
+              var w = (sg.val/maxVal*100);
+              html += '<div title="'+sg.name+': '+sg.val.toFixed(1)+'h" style="width:'+w+'%;height:100%;background:'+sg.color+';display:flex;align-items:center;justify-content:center;font-size:.4rem;color:#fff;font-weight:600;text-shadow:0 1px 1px rgba(0,0,0,.5);overflow:hidden;white-space:nowrap;min-width:0;">';
+              if(w>4) html += sg.val.toFixed(0)+'.';
+              html += '</div>';
+            });
+            html += '</div>';
+            html += '<div style="font-size:.5rem;width:35px;text-align:left;opacity:.6;">'+total.toFixed(1)+'</div>';
+            html += '</div>';
+          });
+          html += '</div>';
+        });
+
+        html += '</div>';
+        body.innerHTML = html;
+        // Custom range handler
+        (function(){var goBtn=body.querySelector('#stats-go');if(goBtn)goBtn.onclick=async function(){var fi=body.querySelector('#stats-from').value,ti=body.querySelector('#stats-to').value;if(!fi||!ti)return;showToast('Calculating...');_renderStats();};})();
+      } catch(err) {
+        body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:.7rem;">\u26A0\uFE0F '+err.message+'</div>';
+      }
+    }
+        async function _render() {
       _fc.calTheme = _state.theme; _fc.w = body.clientWidth; _fc.h = body.clientHeight;
       const now = new Date(), days = _days();
       var sd, oDays = days; if (_state.view==='2week'){var hm2=now.getMonth()*2+(now.getDate()>15?1:0)+_state.offset;var hY2=now.getFullYear()+Math.floor(hm2/24);hm2=((hm2%24)+24)%24;var hM2=Math.floor(hm2/2),hH2=hm2%2;if(hH2===1){sd=new Date(hY2,hM2,16);oDays=new Date(hY2,hM2+1,0).getDate()-15;}else{sd=new Date(hY2,hM2,1);oDays=15;}}else{sd=new Date(now);sd.setDate(now.getDate()-now.getDay()+_state.offset);}sd.setHours(0,0,0,0);
@@ -4269,8 +4427,8 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
     }
     const ro = new ResizeObserver(() => { clearTimeout(ro._t); ro._t = setTimeout(_render, 400); });
     ro.observe(panel);
-    panel._ganttRender = _render;
-    var _autoTimer = setInterval(_render, 15*60*1000);
+    panel._ganttRender = _renderPage;
+    var _autoTimer = setInterval(_renderPage, 15*60*1000);
     panel._autoTimer = _autoTimer;
     _render();
   }
@@ -4326,26 +4484,34 @@ async function fetchCalendarEvents(timeMin, timeMax) {
 
   await Promise.all(calendars.map(async cal => {
     try {
-      const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${tMin}&timeMax=${tMax}&singleEvents=true&orderBy=startTime&maxResults=200`;
-      const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + _googleAccessToken } });
-      if (res.status === 401 || !res.ok) return;
-      const data = await res.json();
-      (data.items || []).forEach(ev => {
-        allEvents.push({
-          id: ev.id,
-          calendarId: cal.id,
-          summary: ev.summary || '(No title)',
-          description: ev.description || '',
-          start: ev.start.dateTime || ev.start.date,
-          end: ev.end.dateTime || ev.end.date,
-          color: ev.colorId ? null : (cal.backgroundColor || '#4285f4'),
-          calendarName: cal.summary,
-          allDay: !ev.start.dateTime,
+      let pageToken = '';
+      let page = 0;
+      do {
+        let url = 'https://www.googleapis.com/calendar/v3/calendars/' + encodeURIComponent(cal.id) + '/events?timeMin=' + tMin + '&timeMax=' + tMax + '&singleEvents=true&orderBy=startTime&maxResults=2500';
+        if (pageToken) url += '&pageToken=' + encodeURIComponent(pageToken);
+        const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + _googleAccessToken } });
+        if (res.status === 401 || !res.ok) break;
+        const data = await res.json();
+        (data.items || []).forEach(ev => {
+          allEvents.push({
+            id: ev.id,
+            calendarId: cal.id,
+            summary: ev.summary || '(No title)',
+            description: ev.description || '',
+            start: ev.start.dateTime || ev.start.date,
+            end: ev.end.dateTime || ev.end.date,
+            color: ev.colorId ? null : (cal.backgroundColor || '#4285f4'),
+            calendarName: cal.summary,
+            allDay: !ev.start.dateTime,
+          });
         });
-      });
+        pageToken = data.nextPageToken || '';
+        page++;
+      } while (pageToken && page < 10);
     } catch (e) { /* skip individual calendar */ }
   }));
 
+  console.log('[Stats] Fetched', allEvents.length, 'events from', calendars.length, 'calendars for', tMin.slice(0,10), 'to', tMax.slice(0,10));
   return allEvents;
 }
 
