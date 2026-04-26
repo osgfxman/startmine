@@ -5121,25 +5121,23 @@ textarea.cal-form-input {
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: stretch;
   animation: ganttFadeIn .15s ease;
+  overflow: hidden;
 }
 @keyframes ganttFadeIn { from { opacity: 0; } to { opacity: 1; } }
 .gantt-overlay-panel {
-  width: calc(100vw - 40px);
-  height: calc(100vh - 40px);
+  width: 100vw;
+  height: 100vh;
   background: #1a1c2e;
-  border-radius: 14px;
-  border: 1px solid rgba(108,143,255,.2);
-  box-shadow: 0 12px 60px rgba(0,0,0,.7);
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   font-family: var(--font);
-  resize: both;
-  min-width: 400px;
-  min-height: 300px;
 }
 .gantt-overlay-hdr {
   display: flex;
