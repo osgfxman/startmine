@@ -1,6 +1,6 @@
 {
   "projects": {
-    "default": "startmine-e12e4",
+    "default": "quran-gfx",
     "quran-gfx": "quran-gfx"
   },
   "targets": {},

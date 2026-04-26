@@ -4175,8 +4175,8 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
       cb._fs=fs;cb._isChk=isChk;cb._slotEvs=slotEvs;cb._dMs=dMs;
       var isSes=(fs%8===0&&fs>0),isFlt=(fs%4===0&&fs>0&&!isSes);
       var bdrL=isSes?'2px solid '+(isDark?'rgba(255,255,255,.2)':'rgba(0,0,0,.2)'):isFlt?'1px solid '+(isDark?'rgba(255,255,255,.1)':'rgba(0,0,0,.1)'):(fs>0?'1px solid '+(isDark?'rgba(255,255,255,.04)':'rgba(0,0,0,.05)'):'none');
-      cb.style.cssText='flex:1;border-left:'+bdrL+';background:'+(isChk?'#10b981':_uncBg)+';cursor:pointer;transition:background .12s;';
-      if(isChk)cb.style.boxShadow='inset 0 1px 0 rgba(255,255,255,.3)';
+      cb.style.cssText='flex:1;border-left:'+bdrL+';background:'+(isChk?'transparent':_uncBg)+';cursor:pointer;transition:background .12s;display:flex;align-items:center;justify-content:center;font-size:'+(fruitRH*0.7)+'px;line-height:1;overflow:hidden;';
+      if(isChk)cb.textContent='\uD83C\uDF4E';
       cb.title=(isChk?'\u2705':'\u2B1C')+' '+Math.floor(fs/2)+':'+(fs%2===0?'00':'30');
       _cbEls.push(cb);
       frTL.appendChild(cb);
@@ -4436,7 +4436,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           html += '<span style="width:16px;font-size:.4rem;opacity:.5;">'+dt.getDate()+'</span>';
           for(var i=0;i<16;i++){
             var checked = i < dy.count;
-            html += '<div style="width:12px;height:12px;border-radius:2px;border:1px solid '+(isDk?'rgba(255,255,255,.15)':'rgba(0,0,0,.12)')+';background:'+(checked?'#10b981':'transparent')+';'+(checked?'box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 1px 2px rgba(0,0,0,.15);':'')+'"></div>';
+            html += '<div style="width:12px;height:12px;border-radius:2px;border:1px solid '+(isDk?'rgba(255,255,255,.15)':'rgba(0,0,0,.12)')+';background:transparent;display:flex;align-items:center;justify-content:center;font-size:10px;line-height:1;">'+(checked?'\uD83C\uDF4E':'')+'</div>';
           }
           html += '<span style="font-size:.4rem;margin-left:4px;opacity:.6;">'+dy.count+'/16</span>';
           html += '</div>';
