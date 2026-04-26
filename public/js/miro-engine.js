@@ -3939,17 +3939,17 @@ async function renderGanttContent(el, card) {
   const endDate = new Date(startDate);
   endDate.setDate(startDate.getDate() + days);
 
-  const cacheKey = `sm_gantt_${startDate.toISOString().slice(0,10)}_${actualDays}`;
+  const cacheKey = `sm_gantt_${startDate.toISOString().slice(0,10)}_${days}`;
   const _cache = evts => { try { localStorage.setItem(cacheKey, JSON.stringify(evts)); } catch(e) {} };
   const _getCached = () => { try { const d = localStorage.getItem(cacheKey); return d ? JSON.parse(d) : null; } catch(e) { return null; } };
 
   const cached = _getCached();
-  if (cached && cached.length > 0) _drawGantt(body, el, card, cached, startDate, actualDays, now, rowH, theme);
+  if (cached && cached.length > 0) _drawGantt(body, el, card, cached, startDate, days, now, rowH, theme);
 
   let fresh = null, fetchErr = null;
   try { fresh = await fetchCalendarEvents(startDate, endDate); } catch(e) { fetchErr = e; }
 
-  if (fresh) { _cache(fresh); _drawGantt(body, el, card, fresh, startDate, actualDays, now, rowH, theme); }
+  if (fresh) { _cache(fresh); _drawGantt(body, el, card, fresh, startDate, days, now, rowH, theme); }
   else if (!cached || cached.length === 0) {
     body.innerHTML = '';
     const d = document.createElement('div');
@@ -3996,7 +3996,9 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
   var adW = Math.min(55,Math.max(35,bodyW*0.05));
   var slots=48, snap=100/48;
   var hdrH = 80;
-  var autoRH = Math.max(32,Math.floor((bodyH-hdrH)/days));
+  var fruitRH = 20;
+  var _fitMode = !el._ganttScroll;
+  var autoRH = _fitMode ? Math.max(18, Math.floor((bodyH - hdrH) / days) - fruitRH) : Math.max(32, Math.floor((bodyH - hdrH) / days));
   var nowH = now.getHours(), nowM = now.getMinutes(), nowSlot = nowH*2+Math.floor(nowM/30);
   var curSes = Math.floor(nowSlot/8), curFlt = Math.floor(nowSlot/4), curPomo = nowSlot;
   var pastBg = '#111', pastTx = '#fff', pastBdr = '1px solid rgba(255,255,255,.3)';
@@ -4006,7 +4008,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
   var greg = now.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
 
   var wrap = document.createElement('div');
-  wrap.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow-y:auto;overflow-x:hidden;';
+  wrap.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow-y:'+(_fitMode?'hidden':'auto')+';overflow-x:hidden;';
 
   // === SESSION ROW ===
   var sRow = document.createElement('div');
@@ -4154,50 +4156,81 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
     row.appendChild(adc);wrap.appendChild(row);
     // === FRUIT CHECKBOX ROW ===
     var frRow=document.createElement('div');
-    frRow.style.cssText='display:flex;height:18px;border-bottom:2px solid '+(isDark?'rgba(255,255,255,.15)':'rgba(0,0,0,.18)')+';flex-shrink:0;';
+    frRow.style.cssText='display:flex;height:'+fruitRH+'px;border-bottom:2px solid '+(isDark?'rgba(255,255,255,.15)':'rgba(0,0,0,.18)')+';flex-shrink:0;';
     var frLab2=document.createElement('div');
     frLab2.style.cssText='width:'+labW+'px;flex-shrink:0;border-right:1px solid '+ln+';background:'+lBg+';';
     frRow.appendChild(frLab2);
     var frTL=document.createElement('div');
-    frTL.style.cssText='flex:1;display:flex;min-width:0;';
+    frTL.style.cssText='flex:1;display:flex;min-width:0;position:relative;';
+    frTL._dayMs=dMs;
     var frSlotMap={};
     var fruitDayEvts=events.filter(function(ev){return (ev.calendarName||'').toLowerCase()==="!40's fruit"&&!ev.allDay&&new Date(ev.start).getTime()>=dMs&&new Date(ev.start).getTime()<de.getTime();});
     fruitDayEvts.forEach(function(ev){var s=new Date(ev.start).getTime(),e=new Date(ev.end).getTime();var ss=Math.floor((s-dMs)/1800000),se=Math.ceil((e-dMs)/1800000);for(var x=ss;x<se&&x<48;x++){if(x>=0){if(!frSlotMap[x])frSlotMap[x]=[];frSlotMap[x].push(ev);}}});
     var _uncBg=isDark?'transparent':'rgba(0,0,0,.02)';
+    var _cbEls=[];
     for(var fs=0;fs<48;fs++){(function(fs){
       var slotEvs=frSlotMap[fs]||[];
       var isChk=slotEvs.length>0;
       var cb=document.createElement('div');
+      cb._fs=fs;cb._isChk=isChk;cb._slotEvs=slotEvs;cb._dMs=dMs;
       var isSes=(fs%8===0&&fs>0),isFlt=(fs%4===0&&fs>0&&!isSes);
       var bdrL=isSes?'2px solid '+(isDark?'rgba(255,255,255,.2)':'rgba(0,0,0,.2)'):isFlt?'1px solid '+(isDark?'rgba(255,255,255,.1)':'rgba(0,0,0,.1)'):(fs>0?'1px solid '+(isDark?'rgba(255,255,255,.04)':'rgba(0,0,0,.05)'):'none');
-      cb.style.cssText='flex:1;border-left:'+bdrL+';background:'+(isChk?'#10b981':_uncBg)+';cursor:pointer;transition:background .15s;';
+      cb.style.cssText='flex:1;border-left:'+bdrL+';background:'+(isChk?'#10b981':_uncBg)+';cursor:pointer;transition:background .12s;';
       if(isChk)cb.style.boxShadow='inset 0 1px 0 rgba(255,255,255,.3)';
       cb.title=(isChk?'\u2705':'\u2B1C')+' '+Math.floor(fs/2)+':'+(fs%2===0?'00':'30');
-      cb.addEventListener('mouseenter',function(){cb.style.background=isChk?'#ef4444':'rgba(16,185,129,.2)';});
-      cb.addEventListener('mouseleave',function(){cb.style.background=isChk?'#10b981':_uncBg;});
-      cb.addEventListener('click',function(e5){
-        e5.stopPropagation();
-        if(isChk){
-          var evToDel=slotEvs[0];
-          cb.style.background='rgba(239,68,68,.4)';
-          deleteCalendarEvent(evToDel.calendarId,evToDel.id).then(function(){
-            showToast('\u2705 Fruit removed');_rfn();
-          }).catch(function(er){showToast('\u274C '+er.message);cb.style.background='#10b981';});
-        } else {
-          var slotStart=new Date(dMs+fs*1800000);
-          var slotEnd=new Date(dMs+(fs+1)*1800000);
-          cb.style.background='rgba(16,185,129,.5)';
+      _cbEls.push(cb);
+      frTL.appendChild(cb);
+    })(fs);}
+    // Drag-select support
+    (function(frTL,_cbEls,_uncBg,dMs,_rfn){
+      var dragging=false,dragMode=null,touched=[];
+      frTL.addEventListener('mousedown',function(eD){
+        eD.preventDefault();eD.stopPropagation();
+        var tgt=eD.target;if(!tgt._fs&&tgt._fs!==0)return;
+        dragging=true;dragMode=tgt._isChk?'remove':'add';touched=[tgt._fs];
+        tgt.style.background=dragMode==='add'?'rgba(16,185,129,.5)':'rgba(239,68,68,.4)';
+      });
+      frTL.addEventListener('mousemove',function(eM){
+        if(!dragging)return;
+        var tgt=eM.target;if(!tgt._fs&&tgt._fs!==0)return;
+        if(touched.indexOf(tgt._fs)===-1){
+          touched.push(tgt._fs);
+          tgt.style.background=dragMode==='add'?'rgba(16,185,129,.5)':'rgba(239,68,68,.4)';
+        }
+      });
+      var onUp=function(){
+        if(!dragging)return;
+        dragging=false;
+        if(touched.length===0)return;
+        if(dragMode==='add'){
           getCalendarList().then(function(cals){
             var frCal=cals.find(function(c){return c.summary.toLowerCase()==="!40's fruit";});
             if(!frCal){showToast('\u274C Fruit calendar not found');return;}
-            createCalendarEvent(frCal.id,"!40's Fruit",slotStart,slotEnd,'').then(function(){
-              showToast('\u2705 Fruit logged');_rfn();
-            }).catch(function(er){showToast('\u274C '+er.message);cb.style.background=_uncBg;});
+            var p=[];
+            touched.forEach(function(fs){
+              var cb=_cbEls[fs];
+              if(!cb._isChk){
+                p.push(createCalendarEvent(frCal.id,"!40's Fruit",new Date(dMs+fs*1800000),new Date(dMs+(fs+1)*1800000),''));
+              }
+            });
+            if(p.length===0)return;
+            Promise.all(p).then(function(){showToast('\u2705 '+p.length+' fruit logged');_rfn();}).catch(function(er){showToast('\u274C '+er.message);_rfn();});
           });
+        } else {
+          var p2=[];
+          touched.forEach(function(fs){
+            var cb=_cbEls[fs];
+            if(cb._isChk&&cb._slotEvs.length>0){
+              p2.push(deleteCalendarEvent(cb._slotEvs[0].calendarId,cb._slotEvs[0].id));
+            }
+          });
+          if(p2.length===0)return;
+          Promise.all(p2).then(function(){showToast('\u2705 '+p2.length+' fruit removed');_rfn();}).catch(function(er){showToast('\u274C '+er.message);_rfn();});
         }
-      });
-      frTL.appendChild(cb);
-    })(fs);}
+      };
+      frTL.addEventListener('mouseup',onUp);
+      document.addEventListener('mouseup',function(){if(dragging)onUp();});
+    })(frTL,_cbEls,_uncBg,dMs,_rfn);
     frRow.appendChild(frTL);
     var frAd=document.createElement('div');
     frAd.style.cssText='width:'+adW+'px;flex-shrink:0;border-left:1px solid '+ln+';';
@@ -4240,7 +4273,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
     const _sp = Math.ceil(_wk/2);
     let _hij = ''; try { _hij = _now.toLocaleDateString('ar-SA-u-ca-islamic',{day:'numeric',month:'long'}); } catch(e){}
     const _greg = _now.toLocaleDateString('en-US',{month:'short',day:'numeric'});
-    title.innerHTML = '\u{1F4CA} <span style="background:#6c8fff;color:#fff;padding:1px 5px;border-radius:4px;font-size:.55rem">W'+_wk+'</span><span style="background:#10b981;color:#fff;padding:1px 5px;border-radius:4px;font-size:.55rem">Sprint '+_sp+'</span><span style="opacity:.6;font-size:.55rem">'+_greg+'</span><span style="opacity:.5;font-size:.5rem;direction:rtl">'+_hij+'</span>';
+    title.innerHTML = '\uD83D\uDCCA <span style="background:#6c8fff;color:#fff;padding:1px 5px;border-radius:4px;font-size:.55rem">W'+_wk+'</span><span style="background:#10b981;color:#fff;padding:1px 5px;border-radius:4px;font-size:.55rem">Sprint '+_sp+'</span><span style="opacity:.6;font-size:.55rem">'+_greg+'</span><span style="opacity:.5;font-size:.5rem;direction:rtl">'+_hij+'</span>';
     hdr.appendChild(title);
     // Week/Sprint progress bars
     const _wkBar = document.createElement('div');
@@ -4281,13 +4314,20 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
     });
     hdr.appendChild(viewBtn);
     const themes = ['dark', 'light', 'transparent'];
-    const thIcons = { dark: '\u{1F319}', light: '\u2600\uFE0F', transparent: '\u{1F441}' };
+    const thIcons = { dark: '\uD83C\uDF19', light: '\u2600\uFE0F', transparent: '\uD83D\uDC41' };
     const thBtn = mkBtn(thIcons[_state.theme], 'Theme', () => {
       const i = themes.indexOf(_state.theme);
       _state.theme = themes[(i + 1) % themes.length]; thBtn.textContent = thIcons[_state.theme]; _applyTh(); _render();
     });
     hdr.appendChild(thBtn);
-    hdr.appendChild(mkBtn('\u{1F504}', 'Refresh', () => _render()));
+    var _scrollBtn = mkBtn(_state.scroll ? '\u2195' : '\u2194', _state.scroll ? 'Fit to screen' : 'Allow scroll', () => {
+      _state.scroll = !_state.scroll;
+      _scrollBtn.textContent = _state.scroll ? '\u2195' : '\u2194';
+      _scrollBtn.title = _state.scroll ? 'Fit to screen' : 'Allow scroll';
+      _render();
+    });
+    hdr.appendChild(_scrollBtn);
+    hdr.appendChild(mkBtn('\uD83D\uDD04', 'Refresh', () => _render()));
     const closeBtn = mkBtn('\u2715', 'Close (Esc)', closeGanttOverlay);
     closeBtn.className = 'gantt-overlay-close';
     hdr.appendChild(closeBtn);
@@ -4459,7 +4499,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
 
         var html = '<div style="padding:16px;color:'+txt+';font-family:var(--font);overflow-y:auto;height:100%;">';
         html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">';
-        html += '<h2 style="margin:0;font-size:1rem;">\u{1F4C8} Statistics</h2>';
+        html += '<h2 style="margin:0;font-size:1rem;">\uD83D\uDCC8 Statistics</h2>';
         html += '<span style="background:#10b981;color:#fff;padding:2px 6px;border-radius:4px;font-size:.55rem;font-weight:600;">Sprint '+sprintNum+'</span>';
         html += '<span style="background:#6c8fff;color:#fff;padding:2px 6px;border-radius:4px;font-size:.55rem;font-weight:600;">W'+wkNum+'</span></div>';
 

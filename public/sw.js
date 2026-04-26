@@ -1,17 +1,17 @@
 /* ─── Startmine Service Worker ─── */
-const CACHE_NAME = 'startmine-1777140017';
+const CACHE_NAME = 'startmine-1777149706';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/inbox.html',
   '/manifest.json',
-  '/css/base.css?v=1777140017',
-  '/css/miro.css?v=1777140017',
-  '/js/app.js?v=1777140017',
-  '/js/miro-engine.js?v=1777140017',
-  '/js/thumbnails.js?v=1777140017',
-  '/js/outline.js?v=1777140017',
-  '/js/alignment.js?v=1777140017',
+  '/css/base.css?v=1777149706',
+  '/css/miro.css?v=1777149706',
+  '/js/app.js?v=1777149706',
+  '/js/miro-engine.js?v=1777149706',
+  '/js/thumbnails.js?v=1777149706',
+  '/js/outline.js?v=1777149706',
+  '/js/alignment.js?v=1777149706',
 ];
 
 // External CDN assets to cache
@@ -133,8 +133,21 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For local static assets: cache-first, fallback to network
+  // For local static assets: network-first for JS/CSS, cache-first for others
   if (url.origin === self.location.origin) {
+    // JS and CSS files: always try network first to get latest code
+    if (url.pathname.endsWith('.js') || url.pathname.endsWith('.css')) {
+      event.respondWith(
+        fetch(event.request).then((resp) => {
+          if (resp.ok) {
+            const clone = resp.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(event.request, clone));
+          }
+          return resp;
+        }).catch(() => caches.match(event.request) || new Response('Offline', { status: 503 }))
+      );
+      return;
+    }
     event.respondWith(
       caches.match(event.request).then((cached) => {
         if (cached) return cached;
