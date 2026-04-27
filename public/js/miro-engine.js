@@ -4300,34 +4300,34 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
     hdr.appendChild(_spBar);
     const _days = () => _state.view === 'month' ? 30 : _state.view === '2week' ? 14 : 7;
     const mkBtn = (txt, tip, fn) => { const b = document.createElement('button'); b.textContent = txt; b.title = tip; b.onclick = e => { e.stopPropagation(); fn(); }; return b; };
-    hdr.appendChild(mkBtn('\u25C0', 'Prev period', () => { _state.offset -= _days(); _render(); }));
-    hdr.appendChild(mkBtn('\u2039', 'Prev day', () => { _state.offset--; _render(); }));
-    hdr.appendChild(mkBtn('Today', 'Today', () => { _state.offset = 0; _render(); }));
-    hdr.appendChild(mkBtn('\u203A', 'Next day', () => { _state.offset++; _render(); }));
-    hdr.appendChild(mkBtn('\u25B6', 'Next period', () => { _state.offset += _days(); _render(); }));
+    hdr.appendChild(mkBtn('\u25C0', 'Prev period', () => { _state.offset -= _days(); _renderPage(); }));
+    hdr.appendChild(mkBtn('\u2039', 'Prev day', () => { _state.offset--; _renderPage(); }));
+    hdr.appendChild(mkBtn('Today', 'Today', () => { _state.offset = 0; _renderPage(); }));
+    hdr.appendChild(mkBtn('\u203A', 'Next day', () => { _state.offset++; _renderPage(); }));
+    hdr.appendChild(mkBtn('\u25B6', 'Next period', () => { _state.offset += _days(); _renderPage(); }));
     const viewLabels = { week: 'Wk', '2week': '2W', month: 'Mo' };
     const viewCycle = ['week', '2week', 'month'];
     const viewBtn = mkBtn(viewLabels[_state.view], 'View', () => {
       const i = viewCycle.indexOf(_state.view);
       _state.view = viewCycle[(i + 1) % viewCycle.length]; _state.offset = 0;
-      viewBtn.textContent = viewLabels[_state.view]; _render();
+      viewBtn.textContent = viewLabels[_state.view]; _renderPage();
     });
     hdr.appendChild(viewBtn);
     const themes = ['dark', 'light', 'transparent'];
     const thIcons = { dark: '\uD83C\uDF19', light: '\u2600\uFE0F', transparent: '\uD83D\uDC41' };
     const thBtn = mkBtn(thIcons[_state.theme], 'Theme', () => {
       const i = themes.indexOf(_state.theme);
-      _state.theme = themes[(i + 1) % themes.length]; thBtn.textContent = thIcons[_state.theme]; _applyTh(); _render();
+      _state.theme = themes[(i + 1) % themes.length]; thBtn.textContent = thIcons[_state.theme]; _applyTh(); _renderPage();
     });
     hdr.appendChild(thBtn);
     var _scrollBtn = mkBtn(_state.scroll ? '\u2195' : '\u2194', _state.scroll ? 'Fit to screen' : 'Allow scroll', () => {
       _state.scroll = !_state.scroll;
       _scrollBtn.textContent = _state.scroll ? '\u2195' : '\u2194';
       _scrollBtn.title = _state.scroll ? 'Fit to screen' : 'Allow scroll';
-      _render();
+      _renderPage();
     });
     hdr.appendChild(_scrollBtn);
-    hdr.appendChild(mkBtn('\uD83D\uDD04', 'Refresh', () => _render()));
+    hdr.appendChild(mkBtn('\uD83D\uDD04', 'Refresh', () => _renderPage()));
     const closeBtn = mkBtn('\u2715', 'Close (Esc)', closeGanttOverlay);
     closeBtn.className = 'gantt-overlay-close';
     hdr.appendChild(closeBtn);
@@ -4493,7 +4493,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
 
             // Events area
             var evArea = document.createElement('div');
-            evArea.style.cssText = 'flex:1;display:flex;flex-wrap:wrap;gap:2px;align-items:center;';
+            evArea.style.cssText = 'flex:1;display:flex;flex-wrap:wrap;gap:2px;align-items:center;min-height:20px;';
 
             slotEvents.forEach(function(e) {
               var calColor = e.color || colorMap[e.calendarName] || '#4285f4';
@@ -4527,6 +4527,17 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
                 startTime: slotStartDate,
                 endTime: slotEndDate
               });
+            });
+            // Fallback: click anywhere on the row to create
+            row.addEventListener('click', function(ev2) {
+              if (ev2.target === row || ev2.target === timeSpan) {
+                ev2.stopPropagation();
+                showCalendarEventForm(body, body, null, {
+                  mode: 'create',
+                  startTime: slotStartDate,
+                  endTime: slotEndDate
+                });
+              }
             });
 
             row.appendChild(evArea);
@@ -4568,7 +4579,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         // Current session - full width top row
         var curS = sessions[curSessionIdx];
         var topRow = document.createElement('div');
-        topRow.style.cssText = 'flex-shrink:0;';
+        topRow.style.cssText = 'flex-shrink:0;max-height:fit-content;';
         var curPanel = buildSessionPanel(curS, curSessionIdx);
         curPanel.style.flex = '0 0 auto';
         topRow.appendChild(curPanel);
@@ -4576,7 +4587,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
 
         // Remaining 5 sessions in 3x2 grid
         var grid = document.createElement('div');
-        grid.style.cssText = 'display:grid;grid-template-columns:repeat(3, 1fr);grid-template-rows:repeat(2, 1fr);gap:8px;flex:1;min-height:0;';
+        grid.style.cssText = 'display:grid;grid-template-columns:repeat(3, 1fr);grid-template-rows:repeat(2, auto);gap:8px;flex:1;min-height:0;align-content:start;';
 
         var remainingSessions = sessions.filter(function(_, i) { return i !== curSessionIdx; });
         remainingSessions.forEach(function(s, i) {
@@ -4793,7 +4804,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:.7rem;">\u26A0\uFE0F ' + (err.message||'Error') + '</div>';
       }
     }
-    const ro = new ResizeObserver(() => { clearTimeout(ro._t); ro._t = setTimeout(_render, 400); });
+    const ro = new ResizeObserver(() => { clearTimeout(ro._t); ro._t = setTimeout(_renderPage, 400); });
     ro.observe(panel);
     panel._ganttRender = _renderPage;
     var _autoTimer = setInterval(_renderPage, 15*60*1000);
