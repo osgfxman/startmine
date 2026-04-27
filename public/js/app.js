@@ -60,6 +60,20 @@ function isGoogleTokenExpired() {
 // Restore on load
 restoreGoogleToken();
 
+// ─── Auto-refresh Google token before expiry ───
+// Refresh proactively every 45 min to avoid 401s during API calls
+setInterval(async () => {
+  if (_googleAccessToken && Date.now() >= _googleTokenExpiry - 10 * 60 * 1000) {
+    console.log('[Token] Proactive refresh triggered');
+    try {
+      await manualGoogleReAuth();
+      console.log('[Token] Proactive refresh succeeded');
+    } catch (e) {
+      console.warn('[Token] Proactive refresh failed:', e.message);
+    }
+  }
+}, 5 * 60 * 1000); // Check every 5 minutes
+
 const ENGINES = [
   { k: 'bm', ic: '🔖', name: 'Bookmarks (local)', url: '' },
   { k: 'g', ic: '🔍', name: 'Google', url: 'https://www.google.com/search?q=' },

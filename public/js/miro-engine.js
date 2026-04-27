@@ -4243,7 +4243,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
 
 // ─── Full-Screen Gantt Overlay ───
 (function initGanttOverlay() {
-  const _state = { view: '2week', offset: 0, theme: 'light', page: 0 }; // page: 0=gantt, 1=stats, 2=fruit
+  const _state = { view: '2week', offset: 0, theme: 'light', page: 0 }; // page: 0=today, 1=gantt, 2=stats, 3=fruit
   let _overlayEl = null;
   function openGanttOverlay() {
     if (_overlayEl) return;
@@ -4348,8 +4348,8 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         // Page navigation dots
     const _pageDots = document.createElement('div');
     _pageDots.style.cssText = 'display:flex;gap:4px;align-items:center;margin-left:auto;margin-right:8px;';
-    const _pageNames = ['\uD83D\uDCCA', '\uD83D\uDCC8', '\uD83C\uDF4E'];
-    const _pageTitles = ['Gantt Chart', 'Statistics', 'Fruit Tracker'];
+    const _pageNames = ['\u2600\uFE0F', '\uD83D\uDCCA', '\uD83D\uDCC8', '\uD83C\uDF4E'];
+    const _pageTitles = ['Today', 'Gantt Chart', 'Statistics', 'Fruit Tracker'];
     _pageNames.forEach((p, i) => {
       const d = document.createElement('button');
       d.textContent = p;
@@ -4372,15 +4372,226 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
     body.addEventListener('wheel', function(e) {
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 50) {
         e.preventDefault();
-        if (e.deltaX > 0 && _state.page < 2) { _state.page++; _updatePageDots(); _renderPage(); }
+        if (e.deltaX > 0 && _state.page < 3) { _state.page++; _updatePageDots(); _renderPage(); }
         else if (e.deltaX < 0 && _state.page > 0) { _state.page--; _updatePageDots(); _renderPage(); }
       }
     }, {passive: false});
 
     function _renderPage() {
-      if (_state.page === 0) _render(); else if (_state.page === 1) _renderStats(); else _renderFruit();
+      if (_state.page === 0) _renderToday(); else if (_state.page === 1) _render(); else if (_state.page === 2) _renderStats(); else _renderFruit();
     }
 
+    async function _renderToday() {
+      body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:.7rem;">Loading today...</div>';
+      var now = new Date();
+      now.setDate(now.getDate() + _state.offset);
+      var isDk = _state.theme !== 'light';
+      var txt = isDk ? '#ddd' : '#222';
+      var bg2 = isDk ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.03)';
+      var border = isDk ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)';
+      var slotBg = isDk ? 'rgba(255,255,255,.02)' : 'rgba(0,0,0,.02)';
+      var fruitBg = isDk ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)';
+
+      var todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      var todayEnd = new Date(todayStart.getTime() + 86400000);
+
+      try {
+        var allEv = await fetchCalendarEvents(todayStart, todayEnd);
+        var evts = (allEv || []).filter(function(e) { return !e.allDay; });
+
+        var colorMap = {};
+        evts.forEach(function(e) { if(e.calendarName) colorMap[e.calendarName] = e.color || '#4285f4'; });
+
+        // Get fruit calendar ID
+        var fruitCalId = '';
+        try {
+          var cals = await getCalendarList();
+          var frCal = cals.find(function(c) { return c.summary.toLowerCase() === "!40's fruit"; });
+          if (frCal) fruitCalId = frCal.id;
+        } catch(e) {}
+
+        var sessions = [
+          {name:'S1', emoji:'🌙', start:0, end:4, label:'12am – 4am'},
+          {name:'S2', emoji:'🌅', start:4, end:8, label:'4am – 8am'},
+          {name:'S3', emoji:'☀️', start:8, end:12, label:'8am – 12pm'},
+          {name:'S4', emoji:'🔥', start:12, end:16, label:'12pm – 4pm'},
+          {name:'S5', emoji:'🌆', start:16, end:20, label:'4pm – 8pm'},
+          {name:'S6', emoji:'🌙', start:20, end:24, label:'8pm – 12am'}
+        ];
+
+        // Determine current session
+        var curH = now.getHours();
+        var curSessionIdx = Math.floor(curH / 4);
+        if (curSessionIdx < 0) curSessionIdx = 0;
+        if (curSessionIdx > 5) curSessionIdx = 5;
+
+        // Build fruit slot map for the whole day
+        var dayMs = todayStart.getTime();
+        var frSlotMap = {};
+        var fruitEvts = evts.filter(function(e) {
+          return (e.calendarName||'').toLowerCase() === "!40's fruit";
+        });
+        fruitEvts.forEach(function(ev) {
+          var s = new Date(ev.start).getTime();
+          var e = new Date(ev.end).getTime();
+          var ss = Math.floor((s - dayMs) / 1800000);
+          var se = Math.ceil((e - dayMs) / 1800000);
+          for (var x = ss; x < se && x < 48; x++) {
+            if (x >= 0) {
+              if (!frSlotMap[x]) frSlotMap[x] = [];
+              frSlotMap[x].push(ev);
+            }
+          }
+        });
+
+        // Set up refresh function on body for showCalendarEventForm
+        body._ganttRender = function() { _renderToday(); };
+
+        // Helper to build a session panel
+        function buildSessionPanel(s, idx) {
+          var panel = document.createElement('div');
+          panel.style.cssText = 'background:'+bg2+';border:1px solid '+border+';border-radius:8px;padding:8px;display:flex;flex-direction:column;overflow:hidden;min-height:0;';
+
+          var hdr = document.createElement('div');
+          hdr.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-shrink:0;';
+          hdr.innerHTML = '<span style="font-size:1rem;line-height:1;">'+s.emoji+'</span><span style="font-size:.7rem;font-weight:700;color:'+txt+';">'+s.name+'</span><span style="font-size:.55rem;opacity:.6;color:'+txt+';margin-left:auto;white-space:nowrap;">'+s.label+'</span>';
+          panel.appendChild(hdr);
+
+          var slotsWrap = document.createElement('div');
+          slotsWrap.style.cssText = 'display:flex;flex-direction:column;flex:1;gap:2px;overflow-y:auto;min-height:0;';
+
+          for (let slot = 0; slot < 8; slot++) {
+            var slotStartMin = (s.start * 60) + (slot * 30);
+            var slotEndMin = slotStartMin + 30;
+            var slotStartH = Math.floor(slotStartMin / 60);
+            var slotStartM = slotStartMin % 60;
+            var slotEndH = Math.floor(slotEndMin / 60);
+            var slotEndM = slotEndMin % 60;
+            var timeLabel = ((slotStartH % 12) || 12) + ':' + (slotStartM < 10 ? '0' : '') + slotStartM + ' – ' + ((slotEndH % 12) || 12) + ':' + (slotEndM < 10 ? '0' : '') + slotEndM + (slotEndH < 12 || slotEndH === 24 ? 'am' : 'pm');
+
+            let slotStartDate = new Date(todayStart.getTime() + slotStartMin * 60000);
+            let slotEndDate = new Date(todayStart.getTime() + slotEndMin * 60000);
+            let slotIdx = idx * 8 + slot;
+
+            var slotEvents = evts.filter(function(e) {
+              if ((e.calendarName||'').toLowerCase() === "!40's fruit") return false;
+              var es = new Date(e.start);
+              var ee = new Date(e.end);
+              var emStart = es.getHours() * 60 + es.getMinutes();
+              var emEnd = ee.getHours() * 60 + ee.getMinutes();
+              return emStart < slotEndMin && emEnd > slotStartMin;
+            });
+
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:4px;padding:2px 4px;border-radius:4px;background:'+slotBg+';min-height:24px;';
+
+            // Time label
+            var timeSpan = document.createElement('span');
+            timeSpan.style.cssText = 'font-size:.45rem;opacity:.5;color:'+txt+';width:52px;flex-shrink:0;white-space:nowrap;font-family:var(--font);';
+            timeSpan.textContent = timeLabel;
+            row.appendChild(timeSpan);
+
+            // Events area
+            var evArea = document.createElement('div');
+            evArea.style.cssText = 'flex:1;display:flex;flex-wrap:wrap;gap:2px;align-items:center;';
+
+            slotEvents.forEach(function(e) {
+              var calColor = e.color || colorMap[e.calendarName] || '#4285f4';
+              var dur = ((new Date(e.end).getTime() - new Date(e.start).getTime()) / 60000);
+              var durText = dur >= 60 ? Math.floor(dur/60)+'h'+(dur%60>0?(dur%60)+'m':'') : dur+'m';
+              var chip = document.createElement('div');
+              chip.title = (e.summary||'')+' • '+(e.calendarName||'')+' • '+durText;
+              chip.style.cssText = 'background:'+calColor+';color:#fff;font-size:.45rem;padding:1px 5px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;cursor:pointer;font-family:var(--font);line-height:1.4;';
+              chip.textContent = e.summary || '(No title)';
+              chip.addEventListener('click', function(ev2) {
+                ev2.stopPropagation();
+                showCalendarEventForm(body, body, null, {
+                  mode: 'edit',
+                  calendarId: e.calendarId,
+                  eventId: e.id,
+                  summary: e.summary,
+                  description: e.description,
+                  startTime: new Date(e.start),
+                  endTime: new Date(e.end)
+                });
+              });
+              evArea.appendChild(chip);
+            });
+
+            // Click empty area to create
+            evArea.addEventListener('click', function(ev2) {
+              if (ev2.target !== evArea) return;
+              ev2.stopPropagation();
+              showCalendarEventForm(body, body, null, {
+                mode: 'create',
+                startTime: slotStartDate,
+                endTime: slotEndDate
+              });
+            });
+
+            row.appendChild(evArea);
+
+            // Fruit toggle button
+            var frBtn = document.createElement('button');
+            let frSlotEvs = frSlotMap[slotIdx] || [];
+            let isFrChk = frSlotEvs.length > 0;
+            frBtn.style.cssText = 'width:22px;height:22px;border-radius:4px;border:1px solid '+(isDk?'rgba(255,255,255,.15)':'rgba(0,0,0,.12)')+';background:'+(isFrChk?'rgba(16,185,129,.2)':fruitBg)+';cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;flex-shrink:0;padding:0;';
+            frBtn.textContent = isFrChk ? '🍎' : '';
+            frBtn.title = isFrChk ? '✅ Fruit logged' : '⬜ Add fruit';
+
+            frBtn.addEventListener('click', function(ev2) {
+              ev2.stopPropagation();
+              if (!fruitCalId) { showToast('❌ Fruit calendar not found'); return; }
+              if (isFrChk && frSlotEvs.length > 0) {
+                deleteCalendarEvent(frSlotEvs[0].calendarId, frSlotEvs[0].id)
+                  .then(function() { showToast('🗑 Fruit removed'); _renderToday(); })
+                  .catch(function(er) { showToast('❌ ' + er.message); });
+              } else {
+                createCalendarEvent(fruitCalId, "!40's Fruit", slotStartDate, slotEndDate, '')
+                  .then(function() { showToast('✅ Fruit added'); _renderToday(); })
+                  .catch(function(er) { showToast('❌ ' + er.message); });
+              }
+            });
+
+            row.appendChild(frBtn);
+            slotsWrap.appendChild(row);
+          }
+
+          panel.appendChild(slotsWrap);
+          return panel;
+        }
+
+        // Create main container
+        var container = document.createElement('div');
+        container.style.cssText = 'display:flex;flex-direction:column;gap:8px;padding:12px;height:100%;box-sizing:border-box;overflow-y:auto;font-family:var(--font);';
+
+        // Current session - full width top row
+        var curS = sessions[curSessionIdx];
+        var topRow = document.createElement('div');
+        topRow.style.cssText = 'flex-shrink:0;';
+        var curPanel = buildSessionPanel(curS, curSessionIdx);
+        curPanel.style.flex = '0 0 auto';
+        topRow.appendChild(curPanel);
+        container.appendChild(topRow);
+
+        // Remaining 5 sessions in 3x2 grid
+        var grid = document.createElement('div');
+        grid.style.cssText = 'display:grid;grid-template-columns:repeat(3, 1fr);grid-template-rows:repeat(2, 1fr);gap:8px;flex:1;min-height:0;';
+
+        var remainingSessions = sessions.filter(function(_, i) { return i !== curSessionIdx; });
+        remainingSessions.forEach(function(s, i) {
+          var origIdx = (i < curSessionIdx) ? i : i + 1;
+          var panel = buildSessionPanel(s, origIdx);
+          grid.appendChild(panel);
+        });
+
+        container.appendChild(grid);
+        body.innerHTML = '';
+        body.appendChild(container);
+      } catch(err) {
+        body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:.7rem;">⚠️ '+err.message+'</div>';
+      }
+    }
 
     async function _renderFruit() {
       body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:.7rem;">Loading fruit data...</div>';
@@ -4587,7 +4798,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
     panel._ganttRender = _renderPage;
     var _autoTimer = setInterval(_renderPage, 15*60*1000);
     panel._autoTimer = _autoTimer;
-    _render();
+    _renderPage();
   }
   const btn = document.getElementById('gantt-overlay-btn');
   if (btn) btn.onclick = () => openGanttOverlay();
@@ -4698,11 +4909,21 @@ async function updateCalendarEvent(calendarId, eventId, updates) {
   if (updates.description !== undefined) body.description = updates.description;
   if (updates.start) body.start = { dateTime: updates.start.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone };
   if (updates.end) body.end = { dateTime: updates.end.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone };
-  const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, {
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`;
+  const doFetch = async (token) => fetch(url, {
     method: 'PATCH',
-    headers: { 'Authorization': 'Bearer ' + _googleAccessToken, 'Content-Type': 'application/json' },
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
+  let res = await doFetch(_googleAccessToken);
+  // Auto-retry once on 401 with fresh token
+  if (res.status === 401 && typeof ensureGoogleTokenFresh === 'function') {
+    const freshToken = await ensureGoogleTokenFresh();
+    if (freshToken) {
+      _googleAccessToken = freshToken;
+      res = await doFetch(freshToken);
+    }
+  }
   if (!res.ok) { const err = await res.text(); throw new Error('Update failed: ' + err); }
   return await res.json();
 }

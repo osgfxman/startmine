@@ -5172,3 +5172,79 @@ textarea.cal-form-input {
   overflow: hidden;
   position: relative;
 }
+
+/* ─── Today Grid (3×2 Sessions) ─── */
+.today-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 8px;
+  padding: 12px;
+  height: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+  font-family: var(--font);
+}
+.today-session {
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+.today-session-hdr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+.today-slots {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 2px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.today-slot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: rgba(255,255,255,.02);
+  min-height: 20px;
+}
+.today-slot span {
+  font-size: .45rem;
+  opacity: .5;
+  width: 52px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-family: var(--font);
+}
+.today-slot div[title] {
+  font-size: .45rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  cursor: default;
+  font-family: var(--font);
+  line-height: 1.4;
+}
+
+/* Light theme overrides for Today grid */
+.gantt-overlay-panel[style*="background:#f5f6fa"] .today-session {
+  background: rgba(0,0,0,.03);
+  border-color: rgba(0,0,0,.08);
+}
+.gantt-overlay-panel[style*="background:#f5f6fa"] .today-slot {
+  background: rgba(0,0,0,.02);
+}
