@@ -4245,8 +4245,11 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
 (function initGanttOverlay() {
   const _state = { view: '2week', offset: 0, theme: 'light', page: 0 }; // page: 0=today, 1=gantt, 2=stats, 3=fruit
   let _overlayEl = null;
-  function openGanttOverlay() {
-    if (_overlayEl) return;
+  var _updatePageDotsRef = function() {};
+  var _renderPageRef = function() {};
+  function openGanttOverlay(page) {
+    if (typeof page === 'number') _state.page = page;
+    if (_overlayEl) { _updatePageDotsRef(); _renderPageRef(); return; }
     if (!_googleAccessToken && typeof manualGoogleReAuth === 'function') {
       manualGoogleReAuth().then(() => _buildOverlay()).catch(() => _buildOverlay());
       return;
@@ -4324,7 +4327,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
       _state.scroll = !_state.scroll;
       _scrollBtn.textContent = _state.scroll ? '\u2195' : '\u2194';
       _scrollBtn.title = _state.scroll ? 'Fit to screen' : 'Allow scroll';
-      _renderPage();
+    _renderPage();
     });
     hdr.appendChild(_scrollBtn);
     hdr.appendChild(mkBtn('\uD83D\uDD04', 'Refresh', () => _renderPage()));
@@ -4450,7 +4453,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         // Helper to build a session panel
         function buildSessionPanel(s, idx) {
           var panel = document.createElement('div');
-          panel.style.cssText = 'background:'+bg2+';border:1px solid '+border+';border-radius:8px;padding:8px;display:flex;flex-direction:column;overflow:hidden;min-height:0;';
+          panel.style.cssText = 'background:'+bg2+';border:1px solid '+border+';border-radius:8px;padding:8px;display:flex;flex-direction:column;overflow:visible;';
 
           var hdr = document.createElement('div');
           hdr.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-shrink:0;';
@@ -4458,7 +4461,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           panel.appendChild(hdr);
 
           var slotsWrap = document.createElement('div');
-          slotsWrap.style.cssText = 'display:flex;flex-direction:column;flex:1;gap:2px;overflow-y:auto;min-height:0;';
+          slotsWrap.style.cssText = 'display:flex;flex-direction:column;gap:2px;';
 
           for (let slot = 0; slot < 8; slot++) {
             var slotStartMin = (s.start * 60) + (slot * 30);
@@ -4483,17 +4486,17 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
             });
 
             var row = document.createElement('div');
-            row.style.cssText = 'display:flex;align-items:center;gap:4px;padding:2px 4px;border-radius:4px;background:'+slotBg+';min-height:24px;';
+            row.style.cssText = 'display:grid;grid-template-columns:auto auto auto;align-items:center;gap:4px;padding:2px 4px;border-radius:4px;background:'+slotBg+';min-height:24px;cursor:pointer;';
 
             // Time label
             var timeSpan = document.createElement('span');
-            timeSpan.style.cssText = 'font-size:.45rem;opacity:.5;color:'+txt+';width:52px;flex-shrink:0;white-space:nowrap;font-family:var(--font);';
+            timeSpan.style.cssText = 'font-size:.45rem;opacity:.5;color:'+txt+';white-space:nowrap;font-family:var(--font);padding-right:4px;';
             timeSpan.textContent = timeLabel;
             row.appendChild(timeSpan);
 
             // Events area
             var evArea = document.createElement('div');
-            evArea.style.cssText = 'flex:1;display:flex;flex-wrap:wrap;gap:2px;align-items:center;min-height:20px;';
+            evArea.style.cssText = 'display:flex;flex-wrap:wrap;gap:2px;align-items:center;min-height:20px;overflow:hidden;cursor:pointer;';
 
             slotEvents.forEach(function(e) {
               var calColor = e.color || colorMap[e.calendarName] || '#4285f4';
@@ -4501,6 +4504,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
               var durText = dur >= 60 ? Math.floor(dur/60)+'h'+(dur%60>0?(dur%60)+'m':'') : dur+'m';
               var chip = document.createElement('div');
               chip.title = (e.summary||'')+' • '+(e.calendarName||'')+' • '+durText;
+              chip.dataset.isChip = '1';
               chip.style.cssText = 'background:'+calColor+';color:#fff;font-size:.45rem;padding:1px 5px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;cursor:pointer;font-family:var(--font);line-height:1.4;';
               chip.textContent = e.summary || '(No title)';
               chip.addEventListener('click', function(ev2) {
@@ -4518,26 +4522,18 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
               evArea.appendChild(chip);
             });
 
-            // Click empty area to create
-            evArea.addEventListener('click', function(ev2) {
-              if (ev2.target !== evArea) return;
+            // Click empty area to create — works on evArea, row, or timeSpan
+            row.addEventListener('click', function(ev2) {
+              // If the click target is an event chip (or inside one), skip
+              if (ev2.target.closest && ev2.target.closest('[data-is-chip]')) return;
+              // If the click target is the fruit button, skip
+              if (ev2.target.tagName === 'BUTTON' || (ev2.target.closest && ev2.target.closest('button'))) return;
               ev2.stopPropagation();
               showCalendarEventForm(body, body, null, {
                 mode: 'create',
                 startTime: slotStartDate,
                 endTime: slotEndDate
               });
-            });
-            // Fallback: click anywhere on the row to create
-            row.addEventListener('click', function(ev2) {
-              if (ev2.target === row || ev2.target === timeSpan) {
-                ev2.stopPropagation();
-                showCalendarEventForm(body, body, null, {
-                  mode: 'create',
-                  startTime: slotStartDate,
-                  endTime: slotEndDate
-                });
-              }
             });
 
             row.appendChild(evArea);
@@ -4574,25 +4570,26 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
 
         // Create main container
         var container = document.createElement('div');
-        container.style.cssText = 'display:flex;flex-direction:column;gap:8px;padding:12px;height:100%;box-sizing:border-box;overflow-y:auto;font-family:var(--font);';
+        container.style.cssText = 'display:flex;flex-direction:column;gap:10px;padding:12px;height:100%;box-sizing:border-box;overflow-y:auto;font-family:var(--font);align-items:center;';
 
-        // Current session - full width top row
+        // Current session - centered alone on its own row
         var curS = sessions[curSessionIdx];
         var topRow = document.createElement('div');
-        topRow.style.cssText = 'flex-shrink:0;max-height:fit-content;';
+        topRow.style.cssText = 'flex-shrink:0;display:flex;justify-content:center;width:100%;';
         var curPanel = buildSessionPanel(curS, curSessionIdx);
-        curPanel.style.flex = '0 0 auto';
+        curPanel.style.cssText += 'min-width:280px;max-width:600px;width:100%;';
         topRow.appendChild(curPanel);
         container.appendChild(topRow);
 
-        // Remaining 5 sessions in 3x2 grid
+        // Remaining 5 sessions in a single row
         var grid = document.createElement('div');
-        grid.style.cssText = 'display:grid;grid-template-columns:repeat(3, 1fr);grid-template-rows:repeat(2, auto);gap:8px;flex:1;min-height:0;align-content:start;';
+        grid.style.cssText = 'display:flex;gap:8px;width:100%;justify-content:center;flex-wrap:wrap;align-items:flex-start;';
 
         var remainingSessions = sessions.filter(function(_, i) { return i !== curSessionIdx; });
         remainingSessions.forEach(function(s, i) {
           var origIdx = (i < curSessionIdx) ? i : i + 1;
           var panel = buildSessionPanel(s, origIdx);
+          panel.style.cssText += 'flex:1 1 0;min-width:150px;max-width:260px;';
           grid.appendChild(panel);
         });
 
@@ -4809,13 +4806,36 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
     panel._ganttRender = _renderPage;
     var _autoTimer = setInterval(_renderPage, 15*60*1000);
     panel._autoTimer = _autoTimer;
+    _updatePageDotsRef = _updatePageDots;
+    _renderPageRef = _renderPage;
     _renderPage();
   }
-  const btn = document.getElementById('gantt-overlay-btn');
-  if (btn) btn.onclick = () => openGanttOverlay();
+  // Bind 4 toolbar buttons
+  var _tbBtns = [
+    {id:'overlay-today-btn', page:0},
+    {id:'overlay-gantt-btn', page:1},
+    {id:'overlay-stats-btn', page:2},
+    {id:'overlay-fruit-btn', page:3}
+  ];
+  _tbBtns.forEach(function(cfg) {
+    var b = document.getElementById(cfg.id);
+    if (b) b.onclick = function() {
+      if (_overlayEl && _state.page === cfg.page) { closeGanttOverlay(); }
+      else { openGanttOverlay(cfg.page); }
+    };
+  });
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.contentEditable === 'true') return;
     if (e.key === 'Escape' && _overlayEl) { closeGanttOverlay(); e.preventDefault(); return; }
+    // Shortcuts 1-4 to open specific pages
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+      var pageMap = {'1':0, '2':1, '3':2, '4':3};
+      if (pageMap[e.key] !== undefined) {
+        if (_overlayEl && _state.page === pageMap[e.key]) { closeGanttOverlay(); }
+        else { openGanttOverlay(pageMap[e.key]); }
+        e.preventDefault(); return;
+      }
+    }
     if ((e.key === 'h' || e.key === 'H' || e.key === '\u0623' || e.key === '\u0627') && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (_overlayEl) closeGanttOverlay(); else openGanttOverlay(); e.preventDefault();
     }

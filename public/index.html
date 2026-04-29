@@ -18,8 +18,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1777320725">
-  <link rel="stylesheet" href="css/miro.css?v=1777320725">
+  <link rel="stylesheet" href="css/base.css?v=1777325902">
+  <link rel="stylesheet" href="css/miro.css?v=1777325902">
 </head>
 
 <body>
@@ -63,7 +63,10 @@
       <div id="sync-dot" class="loading"></div>
       <span id="sync-msg">Connecting...</span>
       <div class="tb-sep"></div>
-      <button class="ib" id="gantt-overlay-btn" title="Gantt Chart (H)">📊</button>
+      <button class="ib" id="overlay-today-btn" title="Today (1)">☀️</button>
+      <button class="ib" id="overlay-gantt-btn" title="Gantt Chart (2)">📊</button>
+      <button class="ib" id="overlay-stats-btn" title="Statistics (3)">📈</button>
+      <button class="ib" id="overlay-fruit-btn" title="Fruit Tracker (4)">🍎</button>
       <input id="qi" type="text" placeholder="✉ Quick Inbox…" autocomplete="off" spellcheck="false"
         title="Paste URL here to send to Inbox" style="width: 130px;">
       <div id="sw">
@@ -704,11 +707,11 @@
     <div class="ctx-item danger" data-action="delete"><span class="ctx-icon">🗑️</span><span class="ctx-label">Delete</span><span class="ctx-shortcut">Del</span></div>
   </div>
 
-    <script src="js/app.js?v=1777320725"></script>
-    <script src="js/outline.js?v=1777320725"></script>
-    <script src="js/miro-engine.js?v=1777320725"></script>
-    <script src="js/thumbnails.js?v=1777320725"></script>
-    <script src="js/alignment.js?v=1777320725"></script>
+    <script src="js/app.js?v=1777325902"></script>
+    <script src="js/outline.js?v=1777325902"></script>
+    <script src="js/miro-engine.js?v=1777325902"></script>
+    <script src="js/thumbnails.js?v=1777325902"></script>
+    <script src="js/alignment.js?v=1777325902"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});
