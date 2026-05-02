@@ -1039,6 +1039,7 @@ function deleteMiroCard(cid) {
   let _touchStartMidX = 0;
   let _touchStartMidY = 0;
   let _touchPanning = false;
+  let _lastTouchCount = 0;
   let _touchPanStartX = 0;
   let _touchPanStartY = 0;
 
@@ -1057,11 +1058,13 @@ function deleteMiroCard(cid) {
       _touchStartMidX = (t0.clientX + t1.clientX) / 2;
       _touchStartMidY = (t0.clientY + t1.clientY) / 2;
       _touchPanning = false;
+      _lastTouchCount = 2;
     } else if (e.touches.length === 1) {
       // Single finger pan
       _touchPanning = true;
       _touchPanStartX = e.touches[0].clientX - (page.panX || 0);
       _touchPanStartY = e.touches[0].clientY - (page.panY || 0);
+      _lastTouchCount = 1;
     }
   }, { passive: false });
 
@@ -1074,6 +1077,18 @@ function deleteMiroCard(cid) {
       const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
       const midX = (t0.clientX + t1.clientX) / 2;
       const midY = (t0.clientY + t1.clientY) / 2;
+
+      // Re-init pinch if transitioning from non-pinch (fixes Android repeat-pinch bug)
+      if (_lastTouchCount !== 2 || _touchStartDist === 0) {
+        _touchStartDist = dist;
+        _touchStartZoom = page.zoom || 100;
+        _touchStartPanX = page.panX || 0;
+        _touchStartPanY = page.panY || 0;
+        _touchStartMidX = midX;
+        _touchStartMidY = midY;
+        _lastTouchCount = 2;
+        return;
+      }
 
       // Zoom
       const scale = dist / _touchStartDist;
@@ -1098,12 +1113,14 @@ function deleteMiroCard(cid) {
       document.getElementById('miro-board').style.transform =
         `translate(${page.panX}px,${page.panY}px) scale(${zoom})`;
       updateMiroGrid();
+      _lastTouchCount = 1;
     }
   }, { passive: false });
 
   canvas.addEventListener('touchend', (e) => {
     if (e.touches.length === 0) {
       _touchPanning = false;
+      _lastTouchCount = 0;
       sv();
     } else if (e.touches.length === 1) {
       // Switched from pinch to single finger — restart pan
@@ -1762,7 +1779,7 @@ function setActiveTool(tool) {
   else if (_widgetCreateMode) { hint.textContent = '🗂️ Click anywhere to place a bookmark widget • Press Esc to cancel'; hint.style.display = 'block'; }
   else if (_trelloCreateMode) { hint.textContent = '📋 Click anywhere to place Trello lists • Press Esc to cancel'; hint.style.display = 'block'; }
   else if (_embedCreateMode) { hint.textContent = '🌐 Click anywhere to place an embed web view • Press Esc to cancel'; hint.style.display = 'block'; }
-  else if (_overlayPageCreateMode) { var _opn = ['Today','Gantt Chart','Statistics','Fruit Tracker']; hint.textContent = _opn[_overlayPageCreateIdx] + ' - Click anywhere to place widget'; hint.style.display = 'block'; }
+  else if (_overlayPageCreateMode) { var _opn = ['2Days','Gantt Chart','Statistics','Fruit Tracker']; hint.textContent = _opn[_overlayPageCreateIdx] + ' - Click anywhere to place widget'; hint.style.display = 'block'; }
   else { hint.style.display = 'none'; }
 
   document.getElementById('miro-pen-toolbar').classList.toggle('show', _penMode);
@@ -4413,352 +4430,328 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
     }
 
     async function _renderToday() {
-      body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:.7rem;">Loading today...</div>';
+      body.innerHTML = '<div style="text-align:center;padding:10px;color:#888;font-size:.55rem;">Loading 2Days...</div>';
       var now = new Date();
-      now.setDate(now.getDate() + _state.offset);
       var isDk = _state.theme !== 'light';
       var txt = isDk ? '#ddd' : '#222';
-      var bg2 = isDk ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.03)';
-      var border = isDk ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.08)';
-      var slotBg = isDk ? 'rgba(255,255,255,.02)' : 'rgba(0,0,0,.02)';
-      var fruitBg = isDk ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)';
+      var bg2 = isDk ? 'rgba(255,255,255,.03)' : 'rgba(0,0,0,.025)';
+      var bdr = isDk ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.1)';
+      var SZ = 22;
 
-      var todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      var todayEnd = new Date(todayStart.getTime() + 86400000);
+      var pairIdx = _state.offset || 0;
+      if (pairIdx === 0) { pairIdx = Math.floor((now.getDate() - 1) / 2); }
+      var monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      var day1 = new Date(monthStart); day1.setDate(1 + pairIdx * 2);
+      var day2 = new Date(day1); day2.setDate(day1.getDate() + 1);
+      var fetchStart = new Date(day1); fetchStart.setHours(0,0,0,0);
+      var fetchEnd = new Date(day2.getTime() + 86400000);
+
+      var sessions = [
+        {name:'S1',emoji:'\uD83C\uDF19',start:0,end:4,label:'12a\u20134a'},
+        {name:'S2',emoji:'\uD83C\uDF05',start:4,end:8,label:'4a\u20138a'},
+        {name:'S3',emoji:'\u2600\uFE0F',start:8,end:12,label:'8a\u201312p'},
+        {name:'S4',emoji:'\uD83D\uDD25',start:12,end:16,label:'12p\u20134p'},
+        {name:'S5',emoji:'\uD83C\uDF06',start:16,end:20,label:'4p\u20138p'},
+        {name:'S6',emoji:'\uD83C\uDF19',start:20,end:24,label:'8p\u201312a'}
+      ];
 
       try {
-        var allEv = await fetchCalendarEvents(todayStart, todayEnd);
+        var allEv = await fetchCalendarEvents(fetchStart, fetchEnd);
         var evts = (allEv || []).filter(function(e) { return !e.allDay; });
-
-        var colorMap = {};
-        evts.forEach(function(e) { if(e.calendarName) colorMap[e.calendarName] = e.color || '#4285f4'; });
-
-        // Get fruit calendar ID
         var fruitCalId = '';
         try {
           var cals = await getCalendarList();
-          var frCal = cals.find(function(c) { return c.summary.toLowerCase() === "!40's fruit"; });
+          var frCal = cals.find(function(c2) { return c2.summary.toLowerCase() === "!40's fruit"; });
           if (frCal) fruitCalId = frCal.id;
         } catch(e) {}
 
-        var sessions = [
-          {name:'S1', emoji:'🌙', start:0, end:4, label:'12am – 4am'},
-          {name:'S2', emoji:'🌅', start:4, end:8, label:'4am – 8am'},
-          {name:'S3', emoji:'☀️', start:8, end:12, label:'8am – 12pm'},
-          {name:'S4', emoji:'🔥', start:12, end:16, label:'12pm – 4pm'},
-          {name:'S5', emoji:'🌆', start:16, end:20, label:'4pm – 8pm'},
-          {name:'S6', emoji:'🌙', start:20, end:24, label:'8pm – 12am'}
-        ];
-
-        // Determine current session
-        var curH = now.getHours();
-        var curSessionIdx = Math.floor(curH / 4);
-        if (curSessionIdx < 0) curSessionIdx = 0;
-        if (curSessionIdx > 5) curSessionIdx = 5;
-
-        // Build fruit slot map for the whole day
-        var dayMs = todayStart.getTime();
-        var frSlotMap = {};
-        var fruitEvts = evts.filter(function(e) {
-          return (e.calendarName||'').toLowerCase() === "!40's fruit";
-        });
-        fruitEvts.forEach(function(ev) {
-          var s = new Date(ev.start).getTime();
-          var e = new Date(ev.end).getTime();
-          var ss = Math.floor((s - dayMs) / 1800000);
-          var se = Math.ceil((e - dayMs) / 1800000);
-          for (var x = ss; x < se && x < 48; x++) {
-            if (x >= 0) {
-              if (!frSlotMap[x]) frSlotMap[x] = [];
-              frSlotMap[x].push(ev);
-            }
-          }
-        });
-
-        // Set up refresh function on body for showCalendarEventForm
         body._ganttRender = function() { _renderToday(); };
 
-        // Helper to build a session panel
-        function buildSessionPanel(s, idx) {
-          var panel = document.createElement('div');
-          panel.style.cssText = 'background:'+bg2+';border:1px solid '+border+';border-radius:8px;padding:8px;display:flex;flex-direction:column;overflow:visible;';
+        var container = document.createElement('div');
+        container.style.cssText = 'display:flex;flex-direction:column;gap:4px;padding:4px;height:100%;box-sizing:border-box;overflow-y:auto;font-family:var(--font);';
 
-          var hdr = document.createElement('div');
-          hdr.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-shrink:0;';
-          hdr.innerHTML = '<span style="font-size:1rem;line-height:1;">'+s.emoji+'</span><span style="font-size:.7rem;font-weight:700;color:'+txt+';">'+s.name+'</span><span style="font-size:.55rem;opacity:.6;color:'+txt+';margin-left:auto;white-space:nowrap;">'+s.label+'</span>';
-          panel.appendChild(hdr);
+        // Determine current session for today
+        var curH = now.getHours();
+        var curSessIdx = Math.min(5, Math.max(0, Math.floor(curH / 4)));
+        var isToday1 = (day1.getDate() === now.getDate() && day1.getMonth() === now.getMonth());
+        var isToday2 = (day2.getDate() === now.getDate() && day2.getMonth() === now.getMonth());
 
-          var slotsWrap = document.createElement('div');
-          slotsWrap.style.cssText = 'display:flex;flex-direction:column;gap:2px;';
+        function buildSession(sess, sIdx, dayMs, dayEvts, frSlotMap, fruitCalId, isCurrent) {
+          var sp = document.createElement('div');
+          sp.style.cssText = 'display:inline-flex;align-items:center;gap:2px;padding:2px 3px;background:'+bg2+';border-radius:4px;border:1px solid '+(isCurrent?'#4285f4':bdr)+';'+(isCurrent?'box-shadow:0 0 6px rgba(66,133,244,.3);':'');
 
-          for (let slot = 0; slot < 8; slot++) {
-            var slotStartMin = (s.start * 60) + (slot * 30);
-            var slotEndMin = slotStartMin + 30;
-            var slotStartH = Math.floor(slotStartMin / 60);
-            var slotStartM = slotStartMin % 60;
-            var slotEndH = Math.floor(slotEndMin / 60);
-            var slotEndM = slotEndMin % 60;
-            var timeLabel = ((slotStartH % 12) || 12) + ':' + (slotStartM < 10 ? '0' : '') + slotStartM + ' – ' + ((slotEndH % 12) || 12) + ':' + (slotEndM < 10 ? '0' : '') + slotEndM + (slotEndH < 12 || slotEndH === 24 ? 'am' : 'pm');
+          // Session label
+          var sl = document.createElement('div');
+          sl.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:0;margin-right:2px;';
+          var se = document.createElement('span'); se.style.cssText = 'font-size:14px;line-height:1;'; se.textContent = sess.emoji;
+          var sn = document.createElement('span'); sn.style.cssText = 'font-size:.55rem;font-weight:700;color:'+txt+';line-height:1;'; sn.textContent = sess.name;
+          sl.appendChild(se); sl.appendChild(sn);
+          sp.appendChild(sl);
 
-            let slotStartDate = new Date(todayStart.getTime() + slotStartMin * 60000);
-            let slotEndDate = new Date(todayStart.getTime() + slotEndMin * 60000);
-            let slotIdx = idx * 8 + slot;
+          // Pomodoro cells container with drag support
+          var pg = document.createElement('div');
+          pg.style.cssText = 'display:flex;align-items:flex-start;gap:1px;';
+          pg.dataset.sessIdx = sIdx;
 
-            var slotEvents = evts.filter(function(e) {
-              if ((e.calendarName||'').toLowerCase() === "!40's fruit") return false;
-              var es = new Date(e.start);
-              var ee = new Date(e.end);
-              var emStart = es.getHours() * 60 + es.getMinutes();
-              var emEnd = ee.getHours() * 60 + ee.getMinutes();
-              return emStart < slotEndMin && emEnd > slotStartMin;
-            });
+          var groups = [[0,1,2],[3,4],[5,6,7]];
+          var cellElements = [];
 
-            var row = document.createElement('div');
-            row.style.cssText = 'display:grid;grid-template-columns:auto auto auto;align-items:center;gap:4px;padding:2px 4px;border-radius:4px;background:'+slotBg+';min-height:24px;cursor:pointer;';
+          groups.forEach(function(grp, gi) {
+            if (gi > 0) {
+              var gap = document.createElement('div');
+              gap.style.cssText = 'width:4px;align-self:stretch;flex-shrink:0;';
+              pg.appendChild(gap);
+            }
 
-            // Time label
-            var timeSpan = document.createElement('span');
-            timeSpan.style.cssText = 'font-size:.45rem;opacity:.5;color:'+txt+';white-space:nowrap;font-family:var(--font);padding-right:4px;';
-            timeSpan.textContent = timeLabel;
-            row.appendChild(timeSpan);
+            grp.forEach(function(slotInSess) {
+              var absSlotIdx = sIdx * 8 + slotInSess;
+              var slotStartMin = (sess.start * 60) + (slotInSess * 30);
+              var slotEndMin = slotStartMin + 30;
+              var slotStartDate = new Date(dayMs + slotStartMin * 60000);
+              var slotEndDate = new Date(dayMs + slotEndMin * 60000);
 
-            // Events area
-            var evArea = document.createElement('div');
-            evArea.style.cssText = 'display:flex;flex-wrap:wrap;gap:2px;align-items:center;min-height:20px;overflow:hidden;cursor:pointer;';
-
-            slotEvents.forEach(function(e) {
-              var calColor = e.color || colorMap[e.calendarName] || '#4285f4';
-              var dur = ((new Date(e.end).getTime() - new Date(e.start).getTime()) / 60000);
-              var durText = dur >= 60 ? Math.floor(dur/60)+'h'+(dur%60>0?(dur%60)+'m':'') : dur+'m';
-              var textColor = getContrastColor(calColor);
-              var is00aplan = (e.calendarName||'').toLowerCase() === '00aplan';
-
-              if (is00aplan) {
-                // 00aplan checklist item with checkbox
-                var wrap = document.createElement('div');
-                wrap.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;font-family:var(--font);';
-                wrap.title = (e.summary||'')+' • '+(e.calendarName||'')+' • '+durText;
-                wrap.dataset.isChip = '1';
-
-                var cb = document.createElement('input');
-                cb.type = 'checkbox';
-                cb.style.cssText = 'width:12px;height:12px;cursor:pointer;flex-shrink:0;margin:0;';
-                var isDone = /\bdone\b/i.test(e.summary || '');
-                cb.checked = isDone;
-
-                var lbl = document.createElement('span');
-                lbl.style.cssText = 'font-size:.45rem;color:'+textColor+';line-height:1.4;word-break:break-word;';
-                lbl.textContent = (e.summary || '(No title)').replace(/\bdone\b/gi, '').trim() || '(No title)';
-
-                cb.addEventListener('click', function(ev2) {
-                  ev2.stopPropagation();
-                  var newSummary = cb.checked
-                    ? ((e.summary || '').replace(/\bdone\b/gi, '').trim() + ' done').trim()
-                    : (e.summary || '').replace(/\bdone\b/gi, '').trim();
-                  updateCalendarEvent(e.calendarId, e.id, { summary: newSummary })
-                    .then(function() { showToast(cb.checked ? '✅ Marked done' : '⬜ Marked undone'); _renderToday(); })
-                    .catch(function(er) { showToast('❌ ' + er.message); cb.checked = !cb.checked; });
-                });
-
-                wrap.addEventListener('click', function(ev2) {
-                  if (ev2.target === cb) return;
-                  ev2.stopPropagation();
-                  showCalendarEventForm(body, body, null, {
-                    mode: 'edit',
-                    calendarId: e.calendarId,
-                    eventId: e.id,
-                    summary: e.summary,
-                    description: e.description,
-                    startTime: new Date(e.start),
-                    endTime: new Date(e.end)
-                  });
-                });
-
-                wrap.appendChild(cb);
-                wrap.appendChild(lbl);
-                evArea.appendChild(wrap);
-              } else {
-                var chip = document.createElement('div');
-                chip.title = (e.summary||'')+' • '+(e.calendarName||'')+' • '+durText;
-                chip.dataset.isChip = '1';
-                chip.style.cssText = 'background:'+calColor+';color:'+textColor+';font-size:.45rem;padding:1px 5px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;cursor:pointer;font-family:var(--font);line-height:1.4;';
-                chip.textContent = e.summary || '(No title)';
-                chip.addEventListener('click', function(ev2) {
-                  ev2.stopPropagation();
-                  showCalendarEventForm(body, body, null, {
-                    mode: 'edit',
-                    calendarId: e.calendarId,
-                    eventId: e.id,
-                    summary: e.summary,
-                    description: e.description,
-                    startTime: new Date(e.start),
-                    endTime: new Date(e.end)
-                  });
-                });
-                evArea.appendChild(chip);
-              }
-            });
-
-            // Click empty area to create — works on evArea, row, or timeSpan
-            row.addEventListener('click', function(ev2) {
-              // If the click target is an event chip (or inside one), skip
-              if (ev2.target.closest && ev2.target.closest('[data-is-chip]')) return;
-              // If the click target is the fruit button, skip
-              if (ev2.target.tagName === 'BUTTON' || (ev2.target.closest && ev2.target.closest('button'))) return;
-              ev2.stopPropagation();
-              showCalendarEventForm(body, body, null, {
-                mode: 'create',
-                startTime: slotStartDate,
-                endTime: slotEndDate
+              var slotEvts = dayEvts.filter(function(e2) {
+                if ((e2.calendarName||'').toLowerCase() === "!40's fruit") return false;
+                var esM = new Date(e2.start).getHours() * 60 + new Date(e2.start).getMinutes();
+                var eeM = new Date(e2.end).getHours() * 60 + new Date(e2.end).getMinutes();
+                if (eeM === 0) eeM = 1440;
+                return esM < slotEndMin && eeM > slotStartMin;
               });
-            });
 
-            row.appendChild(evArea);
-
-            // Fruit toggle button
-            var frBtn = document.createElement('button');
-            let frSlotEvs = frSlotMap[slotIdx] || [];
-            let isFrChk = frSlotEvs.length > 0;
-            frBtn.style.cssText = 'width:22px;height:22px;border-radius:4px;border:1px solid '+(isDk?'rgba(255,255,255,.15)':'rgba(0,0,0,.12)')+';background:'+(isFrChk?'rgba(16,185,129,.2)':fruitBg)+';cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;flex-shrink:0;padding:0;';
-            frBtn.textContent = isFrChk ? '🍎' : '';
-            frBtn.title = isFrChk ? '✅ Fruit logged' : '⬜ Add fruit';
-
-            frBtn.addEventListener('click', function(ev2) {
-              ev2.stopPropagation();
-              if (!fruitCalId) { showToast('❌ Fruit calendar not found'); return; }
-              if (isFrChk && frSlotEvs.length > 0) {
-                deleteCalendarEvent(frSlotEvs[0].calendarId, frSlotEvs[0].id)
-                  .then(function() { showToast('🗑 Fruit removed'); _renderToday(); })
-                  .catch(function(er) { showToast('❌ ' + er.message); });
-              } else {
-                createCalendarEvent(fruitCalId, "!40's Fruit", slotStartDate, slotEndDate, '')
-                  .then(function() { showToast('✅ Fruit added'); _renderToday(); })
-                  .catch(function(er) { showToast('❌ ' + er.message); });
+              var cellBg = 'transparent';
+              var cellTitle = '';
+              if (slotEvts.length > 0) {
+                cellBg = slotEvts[0].color || '#4285f4';
+                cellTitle = slotEvts.map(function(e2) { return (e2.summary||'') + ' \u2022 ' + (e2.calendarName||''); }).join('\n');
               }
+
+              var hasFruit = (frSlotMap[absSlotIdx] || []).length > 0;
+
+              var cw = document.createElement('div');
+              cw.style.cssText = 'display:flex;flex-direction:column;gap:1px;';
+              cw.dataset.cellIdx = slotInSess;
+              cw.dataset.absSlot = absSlotIdx;
+
+              // Event cell
+              var ec = document.createElement('div');
+              ec.className = 'pomo-ev';
+              ec.style.cssText = 'width:'+SZ+'px;height:'+SZ+'px;border:1px solid '+bdr+';border-radius:3px;background:'+(cellBg!=='transparent'?cellBg:bg2)+';cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:.3rem;color:'+(cellBg!=='transparent'?getContrastColor(cellBg):txt)+';box-sizing:border-box;user-select:none;';
+              if (cellTitle) ec.title = cellTitle;
+              else {
+                var th2 = Math.floor(slotStartMin/60), tm2 = slotStartMin%60;
+                ec.title = ((th2%12)||12)+':'+(tm2<10?'0':'')+tm2+(th2<12?'am':'pm');
+              }
+
+              (function(ec, slotEvts, slotStartDate, slotEndDate) {
+                ec.addEventListener('click', function(ev2) {
+                  if (pg._didDrag) return;
+                  ev2.stopPropagation();
+                  if (slotEvts.length > 0) {
+                    var e0 = slotEvts[0];
+                    showCalendarEventForm(body, body, null, { mode:'edit', calendarId:e0.calendarId, eventId:e0.id, summary:e0.summary, description:e0.description, startTime:new Date(e0.start), endTime:new Date(e0.end) });
+                  } else {
+                    showCalendarEventForm(body, body, null, { mode:'create', startTime:slotStartDate, endTime:slotEndDate });
+                  }
+                });
+              })(ec, slotEvts, slotStartDate, slotEndDate);
+
+              cw.appendChild(ec);
+
+              // Fruit cell
+              var fc = document.createElement('div');
+              fc.className = 'pomo-fr';
+              fc.style.cssText = 'width:'+SZ+'px;height:'+SZ+'px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:'+(SZ-6)+'px;border-radius:3px;background:'+(hasFruit?'rgba(231,76,60,.1)':'transparent')+';box-sizing:border-box;user-select:none;';
+              fc.textContent = hasFruit ? '\uD83C\uDF4E' : '';
+              fc.title = hasFruit ? '\u2714 Fruit' : 'Add fruit';
+              fc.dataset.absSlot = absSlotIdx;
+              fc.dataset.hasFruit = hasFruit ? '1' : '0';
+
+              (function(fc, absSlotIdx, hasFruit, frSlotMap, fruitCalId, slotStartDate, slotEndDate) {
+                fc.addEventListener('click', function(ev2) {
+                  if (pg._didDragFr) return;
+                  ev2.stopPropagation();
+                  if (!fruitCalId) { showToast('\u274C No fruit calendar'); return; }
+                  var fEvs = frSlotMap[absSlotIdx] || [];
+                  if (hasFruit && fEvs.length > 0) {
+                    deleteCalendarEvent(fEvs[0].calendarId, fEvs[0].id).then(function() { showToast('\uD83D\uDDD1'); _renderToday(); }).catch(function(er) { showToast('\u274C ' + er.message); });
+                  } else {
+                    createCalendarEvent(fruitCalId, "!40's Fruit", slotStartDate, slotEndDate, '').then(function() { showToast('\u2705'); _renderToday(); }).catch(function(er) { showToast('\u274C ' + er.message); });
+                  }
+                });
+              })(fc, absSlotIdx, hasFruit, frSlotMap, fruitCalId, slotStartDate, slotEndDate);
+
+              cw.appendChild(fc);
+              pg.appendChild(cw);
+              cellElements.push({ el: cw, slot: slotInSess, absSlot: absSlotIdx, startMin: slotStartMin, endMin: slotEndMin, dayMs: dayMs });
             });
+          });
 
-            row.dataset.slotIdx = slot;
-            row.appendChild(frBtn);
-            slotsWrap.appendChild(row);
-          }
-
-          // Drag-to-select multiple slots
-          (function(slotsWrap, s, idx) {
-            var dragging = false;
-            var startSlot = -1;
-            var didDrag = false;
-
-            slotsWrap.addEventListener('mousedown', function(e) {
+          // â”€â”€ Drag-to-select for events (on .pomo-ev cells) â”€â”€
+          (function(pg, cellElements, sess, dayMs) {
+            var dragging = false, startSlot = -1, didDrag = false;
+            pg.addEventListener('mousedown', function(e) {
               if (e.button !== 0) return;
-              if (e.target.closest && (e.target.closest('[data-is-chip]') || e.target.closest('input[type="checkbox"]') || e.target.closest('button'))) return;
-              var row = e.target.closest('[data-slot-idx]');
-              if (!row) return;
-              dragging = true;
-              didDrag = false;
-              startSlot = parseInt(row.dataset.slotIdx);
+              var cell = e.target.closest('[data-cell-idx]');
+              if (!cell) return;
+              if (e.target.closest('.pomo-fr')) return; // skip fruit row
+              dragging = true; didDrag = false; pg._didDrag = false;
+              startSlot = parseInt(cell.dataset.cellIdx);
               e.preventDefault();
             });
-
-            slotsWrap.addEventListener('mousemove', function(e) {
+            pg.addEventListener('mousemove', function(e) {
               if (!dragging) return;
-              var row = e.target.closest('[data-slot-idx]');
-              if (!row) return;
-              var curSlot = parseInt(row.dataset.slotIdx);
-              if (curSlot !== startSlot) didDrag = true;
-              var minSlot = Math.min(startSlot, curSlot);
-              var maxSlot = Math.max(startSlot, curSlot);
-              slotsWrap.querySelectorAll('[data-slot-idx]').forEach(function(r) {
-                var si = parseInt(r.dataset.slotIdx);
-                if (si >= minSlot && si <= maxSlot) {
-                  r.style.background = 'rgba(108,143,255,.25)';
-                  r.style.outline = '1px solid rgba(108,143,255,.5)';
+              var cell = e.target.closest('[data-cell-idx]');
+              if (!cell) return;
+              var cur = parseInt(cell.dataset.cellIdx);
+              if (cur !== startSlot) didDrag = true;
+              var mn = Math.min(startSlot, cur), mx = Math.max(startSlot, cur);
+              cellElements.forEach(function(ce) {
+                var ev = ce.el.querySelector('.pomo-ev');
+                if (ce.slot >= mn && ce.slot <= mx) {
+                  ev.style.outline = '2px solid #4285f4'; ev.style.outlineOffset = '-2px';
                 } else {
-                  r.style.background = slotBg;
-                  r.style.outline = 'none';
+                  ev.style.outline = 'none';
                 }
               });
             });
-
             var endDrag = function(e) {
               if (!dragging) return;
               dragging = false;
-
               var highlighted = [];
-              slotsWrap.querySelectorAll('[data-slot-idx]').forEach(function(r) {
-                var si = parseInt(r.dataset.slotIdx);
-                var bg = r.style.background;
-                if (bg && bg.indexOf('108,143,255') !== -1) {
-                  highlighted.push(si);
-                }
-                r.style.background = slotBg;
-                r.style.outline = 'none';
+              cellElements.forEach(function(ce) {
+                var ev = ce.el.querySelector('.pomo-ev');
+                if (ev.style.outline && ev.style.outline.indexOf('4285f4') !== -1) highlighted.push(ce);
+                ev.style.outline = 'none';
               });
-
-              if (!didDrag || highlighted.length < 2) {
-                didDrag = false;
-                return;
-              }
-
-              didDrag = false;
-              e && e.stopPropagation();
-
-              var minSlot = Math.min.apply(null, highlighted);
-              var maxSlot = Math.max.apply(null, highlighted);
-              var startMin = (s.start * 60) + (minSlot * 30);
-              var endMin = (s.start * 60) + ((maxSlot + 1) * 30);
-              var startDate = new Date(todayStart.getTime() + startMin * 60000);
-              var endDate = new Date(todayStart.getTime() + endMin * 60000);
-
-              showCalendarEventForm(body, body, null, {
-                mode: 'create',
-                startTime: startDate,
-                endTime: endDate
-              });
+              if (!didDrag || highlighted.length < 2) { didDrag = false; return; }
+              pg._didDrag = true; setTimeout(function(){ pg._didDrag = false; }, 100);
+              var sMin = Math.min.apply(null, highlighted.map(function(h){return h.startMin;}));
+              var eMin = Math.max.apply(null, highlighted.map(function(h){return h.endMin;}));
+              var sd = new Date(dayMs + sMin * 60000), ed = new Date(dayMs + eMin * 60000);
+              showCalendarEventForm(body, body, null, { mode:'create', startTime:sd, endTime:ed });
             };
+            pg.addEventListener('mouseup', endDrag);
+            document.addEventListener('mouseup', function() { if (dragging) endDrag(null); });
+          })(pg, cellElements, sess, dayMs);
 
-            slotsWrap.addEventListener('mouseup', endDrag);
-            document.addEventListener('mouseup', function() {
-              if (dragging) endDrag(null);
+          // â”€â”€ Drag-to-select for fruits â”€â”€
+          (function(pg, cellElements, fruitCalId, frSlotMap, dayMs, sess) {
+            var dragging = false, startSlot = -1, didDrag = false;
+            pg.addEventListener('mousedown', function(e) {
+              if (e.button !== 0) return;
+              var fr = e.target.closest('.pomo-fr');
+              if (!fr) return;
+              var cell = fr.closest('[data-cell-idx]');
+              if (!cell) return;
+              dragging = true; didDrag = false; pg._didDragFr = false;
+              startSlot = parseInt(cell.dataset.cellIdx);
+              e.preventDefault();
             });
-          })(slotsWrap, s, idx);
+            pg.addEventListener('mousemove', function(e) {
+              if (!dragging) return;
+              var cell = e.target.closest('[data-cell-idx]');
+              if (!cell) return;
+              var cur = parseInt(cell.dataset.cellIdx);
+              if (cur !== startSlot) didDrag = true;
+              var mn = Math.min(startSlot, cur), mx = Math.max(startSlot, cur);
+              cellElements.forEach(function(ce) {
+                var fr = ce.el.querySelector('.pomo-fr');
+                if (ce.slot >= mn && ce.slot <= mx) {
+                  fr.style.outline = '2px solid #e74c3c'; fr.style.outlineOffset = '-2px';
+                } else {
+                  fr.style.outline = 'none';
+                }
+              });
+            });
+            var endFrDrag = function(e) {
+              if (!dragging) return;
+              dragging = false;
+              if (!didDrag) return;
+              pg._didDragFr = true; setTimeout(function(){ pg._didDragFr = false; }, 100);
+              var selected = [];
+              cellElements.forEach(function(ce) {
+                var fr = ce.el.querySelector('.pomo-fr');
+                if (fr.style.outline && fr.style.outline.indexOf('e74c3c') !== -1) selected.push(ce);
+                fr.style.outline = 'none';
+              });
+              if (selected.length < 1 || !fruitCalId) return;
+              // Check if mostly have fruit (delete) or don't (create)
+              var hasCount = selected.filter(function(ce) { return (frSlotMap[ce.absSlot]||[]).length > 0; }).length;
+              var shouldDelete = hasCount > selected.length / 2;
+              var ops = [];
+              selected.forEach(function(ce) {
+                var fEvs = frSlotMap[ce.absSlot] || [];
+                var sMin = (sess.start * 60) + (ce.slot * 30);
+                var sd = new Date(dayMs + sMin * 60000), ed = new Date(dayMs + (sMin+30) * 60000);
+                if (shouldDelete && fEvs.length > 0) {
+                  ops.push(deleteCalendarEvent(fEvs[0].calendarId, fEvs[0].id));
+                } else if (!shouldDelete && fEvs.length === 0) {
+                  ops.push(createCalendarEvent(fruitCalId, "!40's Fruit", sd, ed, ''));
+                }
+              });
+              Promise.all(ops).then(function() { showToast(shouldDelete ? '\uD83D\uDDD1 Removed '+ops.length : '\u2705 Added '+ops.length); _renderToday(); }).catch(function(er) { showToast('\u274C ' + er.message); _renderToday(); });
+            };
+            pg.addEventListener('mouseup', endFrDrag);
+            document.addEventListener('mouseup', function() { if (dragging) endFrDrag(null); });
+          })(pg, cellElements, fruitCalId, frSlotMap, dayMs, sess);
 
-          panel.appendChild(slotsWrap);
-          return panel;
+          sp.appendChild(pg);
+          return sp;
         }
 
-        // Create main container
-        var container = document.createElement('div');
-        container.style.cssText = 'display:flex;flex-direction:column;gap:10px;padding:12px;height:100%;box-sizing:border-box;overflow-y:auto;font-family:var(--font);align-items:center;';
-
-        // Current session - centered alone on its own row
-        var curS = sessions[curSessionIdx];
-        var topRow = document.createElement('div');
-        topRow.style.cssText = 'flex-shrink:0;display:flex;justify-content:center;width:100%;';
-        var curPanel = buildSessionPanel(curS, curSessionIdx);
-        curPanel.style.cssText += 'min-width:280px;max-width:600px;width:100%;';
-        topRow.appendChild(curPanel);
-        container.appendChild(topRow);
-
-        // Remaining 5 sessions in a single row
-        var grid = document.createElement('div');
-        grid.style.cssText = 'display:flex;gap:8px;width:100%;justify-content:center;flex-wrap:wrap;align-items:flex-start;';
-
-        var remainingSessions = sessions.filter(function(_, i) { return i !== curSessionIdx; });
-        remainingSessions.forEach(function(s, i) {
-          var origIdx = (i < curSessionIdx) ? i : i + 1;
-          var panel = buildSessionPanel(s, origIdx);
-          panel.style.cssText += 'flex:1 1 0;min-width:150px;max-width:260px;';
-          grid.appendChild(panel);
+        // Identify today and prepare data for both days
+        var dayDataArr = [day1, day2].map(function(dayDate) {
+          var dayMs = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate()).getTime();
+          var dayEnd = dayMs + 86400000;
+          var isToday = (dayDate.getDate() === now.getDate() && dayDate.getMonth() === now.getMonth() && dayDate.getFullYear() === now.getFullYear());
+          var dayEvts = evts.filter(function(e) {
+            var es = new Date(e.start).getTime(), ee = new Date(e.end).getTime();
+            return es < dayEnd && ee > dayMs;
+          });
+          var frSlotMap = {};
+          dayEvts.filter(function(e) { return (e.calendarName||'').toLowerCase() === "!40's fruit"; }).forEach(function(ev) {
+            var s2 = new Date(ev.start).getTime(), e2 = new Date(ev.end).getTime();
+            var ss = Math.floor((s2 - dayMs) / 1800000), se = Math.ceil((e2 - dayMs) / 1800000);
+            for (var x = ss; x < se && x < 48; x++) { if (x >= 0) { if (!frSlotMap[x]) frSlotMap[x] = []; frSlotMap[x].push(ev); } }
+          });
+          return { date: dayDate, dayMs: dayMs, isToday: isToday, dayEvts: dayEvts, frSlotMap: frSlotMap };
         });
 
-        container.appendChild(grid);
+        var dn = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+        // Current session at VERY TOP of page (above both days)
+        var todayData = dayDataArr.find(function(d) { return d.isToday; });
+        if (todayData) {
+          var curSess = sessions[curSessIdx];
+          var curPanel = buildSession(curSess, curSessIdx, todayData.dayMs, todayData.dayEvts, todayData.frSlotMap, fruitCalId, true);
+          container.appendChild(curPanel);
+        }
+
+        // Render each day
+        dayDataArr.forEach(function(dd, dayIdx) {
+          var dh = document.createElement('div');
+          dh.style.cssText = 'font-size:.6rem;font-weight:700;color:'+txt+';padding:2px 0;'+(dayIdx>0?'margin-top:4px;border-top:1px solid '+bdr+';padding-top:3px;':'');
+          dh.textContent = dn[dd.date.getDay()] + ' ' + dd.date.getDate() + '/' + (dd.date.getMonth()+1);
+          container.appendChild(dh);
+
+          var sg = document.createElement('div');
+          sg.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;';
+
+          sessions.forEach(function(sess, sIdx) {
+            if (dd.isToday && sIdx === curSessIdx) return;
+            var panel = buildSession(sess, sIdx, dd.dayMs, dd.dayEvts, dd.frSlotMap, fruitCalId, false);
+            sg.appendChild(panel);
+          });
+
+          container.appendChild(sg);
+        });
+
         body.innerHTML = '';
         body.appendChild(container);
       } catch(err) {
-        body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:.7rem;">⚠️ '+err.message+'</div>';
+        body.innerHTML = '<div style="text-align:center;padding:20px;color:#e55;font-size:.6rem;">\u26A0\uFE0F '+err.message+'</div>';
       }
     }
-
     async function _renderFruit() {
       body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:.7rem;">Loading fruit data...</div>';
       var now = new Date();
@@ -5041,8 +5034,8 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
 // ─── Embed Web View Widget ───
 
 // ── Place Overlay Page as Canvas Widget ──
-var _overlayPageNames = ['Today','Gantt Chart','Statistics','Fruit Tracker'];
-var _overlayPageEmojis = ['\u2600\uFE0F','\uD83D\uDCCA','\uD83D\uDCC8','\uD83C\uDF4E'];
+var _overlayPageNames = ['2Days','Gantt Chart','Statistics','Fruit Tracker'];
+var _overlayPageEmojis = ['\uD83D\uDCC5','\uD83D\uDCCA','\uD83D\uDCC8','\uD83C\uDF4E'];
 async function placeOverlayPageWidget(pageIdx) {
   if (!_googleAccessToken) {
     try {
