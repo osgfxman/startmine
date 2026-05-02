@@ -18,8 +18,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1777325902">
-  <link rel="stylesheet" href="css/miro.css?v=1777325902">
+  <link rel="stylesheet" href="css/base.css?v=1777682911">
+  <link rel="stylesheet" href="css/miro.css?v=1777682911">
 </head>
 
 <body>
@@ -424,6 +424,12 @@
       </svg></button>
     <button class="mtb-btn" id="mtb-save-all" title="Save All: Firebase + Drive + GitHub (Ctrl+Alt+A)" onclick="saveAllBackups()">🛡️</button>
     <div style="width:30px;height:1px;background:rgba(0,0,0,.08);margin:4px auto;"></div>
+    <!-- Overlay Page Buttons -->
+    <button class="mtb-btn mtb-overlay-btn" id="mtb-today" title="Today (Shift+1)">☀️</button>
+    <button class="mtb-btn mtb-overlay-btn" id="mtb-gantt-overlay" title="Gantt Chart (Shift+2)">📊</button>
+    <button class="mtb-btn mtb-overlay-btn" id="mtb-stats" title="Statistics (Shift+3)">📈</button>
+    <button class="mtb-btn mtb-overlay-btn" id="mtb-fruits" title="Fruit Tracker (Shift+4)">🍎</button>
+    <div style="width:30px;height:1px;background:rgba(0,0,0,.08);margin:4px auto;"></div>
     <!-- Expandable + button for extra tools -->
     <button class="mtb-btn" id="mtb-more" title="More tools">
       <svg viewBox="0 0 24 24" width="22" height="22">
@@ -707,11 +713,11 @@
     <div class="ctx-item danger" data-action="delete"><span class="ctx-icon">🗑️</span><span class="ctx-label">Delete</span><span class="ctx-shortcut">Del</span></div>
   </div>
 
-    <script src="js/app.js?v=1777325902"></script>
-    <script src="js/outline.js?v=1777325902"></script>
-    <script src="js/miro-engine.js?v=1777325902"></script>
-    <script src="js/thumbnails.js?v=1777325902"></script>
-    <script src="js/alignment.js?v=1777325902"></script>
+    <script src="js/app.js?v=1777682911"></script>
+    <script src="js/outline.js?v=1777682911"></script>
+    <script src="js/miro-engine.js?v=1777682911"></script>
+    <script src="js/thumbnails.js?v=1777682911"></script>
+    <script src="js/alignment.js?v=1777682911"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});

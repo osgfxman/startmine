@@ -5112,6 +5112,18 @@ textarea.cal-form-input {
   color: #fff;
 }
 
+/* ─── Overlay Toolbar Buttons ─── */
+.mtb-overlay-btn {
+  font-size: 16px !important;
+  padding: 5px !important;
+  position: relative;
+}
+.mtb-overlay-btn.active {
+  background: linear-gradient(135deg, #6c8fff, #c4a0ff) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(108,143,255,.4);
+}
+
 /* ─── Full-Screen Gantt Overlay ─── */
 .gantt-overlay {
   position: fixed;
@@ -5171,6 +5183,73 @@ textarea.cal-form-input {
   flex: 1;
   overflow: hidden;
   position: relative;
+}
+
+/* ─── Overlay Page Canvas Widget (placed on board) ─── */
+.miro-overlay-widget {
+  position: absolute;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.45);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: var(--font);
+  background: #1a1c2e;
+  border: 1px solid rgba(108,143,255,.2);
+  transition: box-shadow .15s;
+}
+.miro-overlay-widget:hover {
+  box-shadow: 0 6px 28px rgba(0,0,0,.6);
+}
+.miro-overlay-widget .ow-hdr {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  background: rgba(108,143,255,.08);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  gap: 4px;
+  flex-shrink: 0;
+  cursor: grab;
+}
+.miro-overlay-widget .ow-hdr:active { cursor: grabbing; }
+.miro-overlay-widget .ow-hdr button {
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 5px;
+  color: #aaa;
+  font-size: .55rem;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: background .1s;
+}
+.miro-overlay-widget .ow-hdr button:hover { background: rgba(255,255,255,.15); color: #fff; }
+.miro-overlay-widget .ow-body {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+/* Light theme for overlay widget */
+.miro-overlay-widget.ow-light {
+  background: #f5f6fa;
+  border-color: #ddd;
+}
+.miro-overlay-widget.ow-light .ow-hdr {
+  background: rgba(0,0,0,.04);
+  border-bottom-color: #ddd;
+}
+.miro-overlay-widget.ow-light .ow-hdr button {
+  color: #444; background: rgba(0,0,0,.05); border-color: #ccc;
+}
+/* Transparent theme */
+.miro-overlay-widget.ow-transparent {
+  background: rgba(20,20,30,.85);
+  border-color: rgba(255,255,255,.08);
+  box-shadow: none;
+}
+.miro-overlay-widget.ow-transparent .ow-hdr {
+  background: transparent;
+  border-bottom-color: rgba(255,255,255,.06);
 }
 
 /* ─── Today Grid (3×2 Sessions) ─── */

@@ -376,7 +376,7 @@ function buildMiroCanvas() {
   const _pl = document.getElementById('miro-pinned-layer');
   if (_pl) _pl.innerHTML = '';
   // Remove only card elements, preserve selection overlays
-  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed').forEach((el) => el.remove());
+  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed, .miro-overlay-widget').forEach((el) => el.remove());
   // Clean up grid toolbars that live in document.body
   document.querySelectorAll('.mg-toolbar[data-grid-id]').forEach(t => t.remove());
   // Clear selection state
@@ -406,6 +406,7 @@ function buildMiroCanvas() {
     else if (card.type === 'array') board.appendChild(buildMiroArray(card));
     else if (card.type === 'calendar' || card.type === 'gantt') board.appendChild(buildMiroGantt(card));
     else if (card.type === 'embed') board.appendChild(buildMiroEmbed(card));
+    else if (card.type === 'overlay-page') board.appendChild(buildMiroOverlayWidget(card));
     else board.appendChild(buildMiroCard(card));
     } catch (err) { console.error('[RENDER ERROR]', card.type, card.id, err); }
   });
@@ -1739,7 +1740,7 @@ let _penDrawing = false;
 function setActiveTool(tool) {
   _activeTool = tool;
   document.querySelectorAll('.mtb-btn').forEach(b => b.classList.remove('sel'));
-  const btnMap = { select: 'mtb-select', sticky: 'mtb-sticky', text: 'mtb-text', shape: 'mtb-shape', pen: 'mtb-pen', grid: 'mtb-grid', mindmap: 'mtb-mindmap', image: 'mtb-image', card: 'mtb-card', widget: 'mtb-widget', trello: 'mtb-trello', embed: 'mtb-embed' };
+  const btnMap = { select: 'mtb-select', sticky: 'mtb-sticky', text: 'mtb-text', shape: 'mtb-shape', pen: 'mtb-pen', grid: 'mtb-grid', mindmap: 'mtb-mindmap', image: 'mtb-image', card: 'mtb-card', widget: 'mtb-widget', trello: 'mtb-trello', embed: 'mtb-embed', 'overlay-page': null };
   const btn = document.getElementById(btnMap[tool]);
   if (btn) btn.classList.add('sel');
   _penMode = tool === 'pen';
@@ -1751,6 +1752,7 @@ function setActiveTool(tool) {
   _widgetCreateMode = tool === 'widget';
   _trelloCreateMode = tool === 'trello';
   _embedCreateMode = tool === 'embed';
+  _overlayPageCreateMode = (tool === 'overlay-page');
 
   const hint = document.getElementById('sn-create-hint');
   if (_stickyCreateMode) { hint.textContent = '📝 Click anywhere to place a sticky note • Press Esc to cancel'; hint.style.display = 'block'; }
@@ -1760,10 +1762,11 @@ function setActiveTool(tool) {
   else if (_widgetCreateMode) { hint.textContent = '🗂️ Click anywhere to place a bookmark widget • Press Esc to cancel'; hint.style.display = 'block'; }
   else if (_trelloCreateMode) { hint.textContent = '📋 Click anywhere to place Trello lists • Press Esc to cancel'; hint.style.display = 'block'; }
   else if (_embedCreateMode) { hint.textContent = '🌐 Click anywhere to place an embed web view • Press Esc to cancel'; hint.style.display = 'block'; }
+  else if (_overlayPageCreateMode) { var _opn = ['Today','Gantt Chart','Statistics','Fruit Tracker']; hint.textContent = _opn[_overlayPageCreateIdx] + ' - Click anywhere to place widget'; hint.style.display = 'block'; }
   else { hint.style.display = 'none'; }
 
   document.getElementById('miro-pen-toolbar').classList.toggle('show', _penMode);
-  const cursor = (_penMode || _shapeMode || _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode || _embedCreateMode) ? 'crosshair' : 'grab';
+  const cursor = (_penMode || _shapeMode || _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode || _embedCreateMode || _overlayPageCreateMode || _overlayPageCreateMode) ? 'crosshair' : 'grab';
   document.getElementById('miro-canvas').style.cursor = cursor;
   if (!_shapeMode) document.getElementById('miro-shape-panel').classList.remove('show');
 }
@@ -1774,6 +1777,8 @@ let _mindmapCreateMode = false;
 let _widgetCreateMode = false;
 let _trelloCreateMode = false;
 let _embedCreateMode = false;
+let _overlayPageCreateMode = false;
+let _overlayPageCreateIdx = 0;
 
 document.getElementById('mtb-select').onclick = () => setActiveTool('select');
 document.getElementById('mtb-sticky').onclick = () => setActiveTool('sticky');
@@ -1786,7 +1791,7 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
   if (e.button !== 0 && e.type !== 'touchstart') return;
 
   // Check if ANY creation mode is active
-  const anyCreateMode = _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode || _embedCreateMode;
+  const anyCreateMode = _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode || _embedCreateMode || _overlayPageCreateMode;
   if (!anyCreateMode) return;
 
   // Only block clicks on toolbar controls themselves
@@ -1874,6 +1879,10 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
       lists.forEach((l, i) => {
         page.miroCards.push({ id: uid(), type: 'trello', title: l.title, listColor: l.color, cards: [], x: startX + i * (lw + gap), y: by - lh / 2, w: lw, h: lh });
       });
+      sv(); buildMiroCanvas(); buildOutline();
+    } else if (_overlayPageCreateMode) {
+      var opIdx = _overlayPageCreateIdx;
+      page.miroCards.push({ id: uid(), type: 'overlay-page', overlayPage: opIdx, x: bx - 450, y: by - 250, w: 900, h: 500, calOffset: 0, calTheme: 'light', ganttView: '2week', ganttRowHeight: 50 });
       sv(); buildMiroCanvas(); buildOutline();
     } else if (_embedCreateMode) {
       const url = prompt('🌐 Enter published URL (Google Sheets chart, web page, etc.):');
@@ -4007,6 +4016,14 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
   var hijri = ''; try { hijri = now.toLocaleDateString('ar-SA-u-ca-islamic',{day:'numeric',month:'long',year:'numeric'}); } catch(e){}
   var greg = now.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
 
+  // Helper: auto-contrast text color based on background luminance
+  function _ganttTextColor(bg) {
+    var m = bg.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i);
+    if (!m) return '#fff';
+    var lum = (parseInt(m[1],16)*299 + parseInt(m[2],16)*587 + parseInt(m[3],16)*114) / 1000;
+    return lum > 160 ? '#1a1a1a' : '#fff';
+  }
+
   var wrap = document.createElement('div');
   wrap.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow-y:'+(_fitMode?'hidden':'auto')+';overflow-x:hidden;';
 
@@ -4130,7 +4147,9 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
       var ev=p.ev,es=p.es,ee=p.ee,la=p.lane;
       var lP=((es-dMs)/86400000)*100,wP=Math.max(.5,((ee-es)/86400000)*100),tP=1+la*(bH+1);
       var bar=document.createElement('div');bar.className='gantt-event';
-      bar.style.cssText='position:absolute;left:'+lP+'%;width:'+wP+'%;height:'+bH+'px;top:'+tP+'px;background:'+(ev.color||'#4285f4')+';border-radius:3px;font-size:'+Math.min(.75,Math.max(.4,bH/18))+'rem;color:#fff;padding:0 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:grab;display:flex;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,.3);z-index:2;font-weight:500;';
+      var _barColor = ev.color||'#4285f4';
+      var _barTxt = _ganttTextColor(_barColor);
+      bar.style.cssText='position:absolute;left:'+lP+'%;width:'+wP+'%;height:'+bH+'px;top:'+tP+'px;background:'+_barColor+';border-radius:3px;font-size:'+Math.min(.75,Math.max(.4,bH/18))+'rem;color:'+_barTxt+';padding:0 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:grab;display:flex;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,.3);z-index:2;font-weight:500;';
       var eS=new Date(ev.start),eE=new Date(ev.end);
       var fm=function(t){return t.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});};
       bar.title=ev.summary+'\n'+fm(eS)+' \u2014 '+fm(eE)+'\n'+ev.calendarName;bar.textContent=ev.summary||'';
@@ -4152,7 +4171,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
     if(isT){var nP=((now.getHours()*60+now.getMinutes())/1440)*100;var nl2=document.createElement('div');nl2.style.cssText='position:absolute;left:'+nP+'%;top:0;bottom:0;width:2px;background:#ff4444;z-index:4;pointer-events:none;box-shadow:0 0 6px #ff4444;';tc.appendChild(nl2);}
     row.appendChild(tc);
     var adc=document.createElement('div');adc.style.cssText='width:'+adW+'px;flex-shrink:0;border-left:1px solid '+ln+';display:flex;flex-direction:column;gap:1px;padding:1px;overflow:hidden;align-items:stretch;justify-content:center;';
-    events.filter(function(v){if(v.allDay){var s2=new Date(v.start).getTime();return s2>=dMs&&s2<de.getTime();}var s3=new Date(v.start).getTime(),e3=new Date(v.end).getTime();return s3<de.getTime()&&e3>dMs&&(e3-s3)>=86400000;}).forEach(function(v){var ch=document.createElement('div');ch.style.cssText='background:'+(v.color||'#4285f4')+';color:#fff;font-size:.45rem;border-radius:2px;padding:0 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;min-height:8px;display:flex;align-items:center;';ch.title=v.summary;ch.textContent=v.summary||'\u2022';ch.onclick=function(e2){e2.stopPropagation();if(typeof showCalendarEventForm==='function')showCalendarEventForm(body,el,card,{mode:'edit',calendarId:v.calendarId,eventId:v.id,summary:v.summary,description:v.description,startTime:new Date(v.start),endTime:new Date(v.end)});};adc.appendChild(ch);});
+    events.filter(function(v){if(v.allDay){var s2=new Date(v.start).getTime();return s2>=dMs&&s2<de.getTime();}var s3=new Date(v.start).getTime(),e3=new Date(v.end).getTime();return s3<de.getTime()&&e3>dMs&&(e3-s3)>=86400000;}).forEach(function(v){var ch=document.createElement('div');var _adcColor=v.color||'#4285f4';var _adcTxt=_ganttTextColor(_adcColor);ch.style.cssText='background:'+_adcColor+';color:'+_adcTxt+';font-size:.45rem;border-radius:2px;padding:0 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;min-height:8px;display:flex;align-items:center;';ch.title=v.summary;ch.textContent=v.summary||'\u2022';ch.onclick=function(e2){e2.stopPropagation();if(typeof showCalendarEventForm==='function')showCalendarEventForm(body,el,card,{mode:'edit',calendarId:v.calendarId,eventId:v.id,summary:v.summary,description:v.description,startTime:new Date(v.start),endTime:new Date(v.end)});};adc.appendChild(ch);});
     row.appendChild(adc);wrap.appendChild(row);
     // === FRUIT CHECKBOX ROW ===
     var frRow=document.createElement('div');
@@ -4384,6 +4403,15 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
       if (_state.page === 0) _renderToday(); else if (_state.page === 1) _render(); else if (_state.page === 2) _renderStats(); else _renderFruit();
     }
 
+    function getContrastColor(hexColor) {
+      if (!hexColor || hexColor.length < 7) return '#fff';
+      var r = parseInt(hexColor.slice(1,3), 16);
+      var g = parseInt(hexColor.slice(3,5), 16);
+      var b = parseInt(hexColor.slice(5,7), 16);
+      var luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance > 0.5 ? '#222' : '#fff';
+    }
+
     async function _renderToday() {
       body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:.7rem;">Loading today...</div>';
       var now = new Date();
@@ -4502,24 +4530,73 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
               var calColor = e.color || colorMap[e.calendarName] || '#4285f4';
               var dur = ((new Date(e.end).getTime() - new Date(e.start).getTime()) / 60000);
               var durText = dur >= 60 ? Math.floor(dur/60)+'h'+(dur%60>0?(dur%60)+'m':'') : dur+'m';
-              var chip = document.createElement('div');
-              chip.title = (e.summary||'')+' • '+(e.calendarName||'')+' • '+durText;
-              chip.dataset.isChip = '1';
-              chip.style.cssText = 'background:'+calColor+';color:#fff;font-size:.45rem;padding:1px 5px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;cursor:pointer;font-family:var(--font);line-height:1.4;';
-              chip.textContent = e.summary || '(No title)';
-              chip.addEventListener('click', function(ev2) {
-                ev2.stopPropagation();
-                showCalendarEventForm(body, body, null, {
-                  mode: 'edit',
-                  calendarId: e.calendarId,
-                  eventId: e.id,
-                  summary: e.summary,
-                  description: e.description,
-                  startTime: new Date(e.start),
-                  endTime: new Date(e.end)
+              var textColor = getContrastColor(calColor);
+              var is00aplan = (e.calendarName||'').toLowerCase() === '00aplan';
+
+              if (is00aplan) {
+                // 00aplan checklist item with checkbox
+                var wrap = document.createElement('div');
+                wrap.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;font-family:var(--font);';
+                wrap.title = (e.summary||'')+' • '+(e.calendarName||'')+' • '+durText;
+                wrap.dataset.isChip = '1';
+
+                var cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.style.cssText = 'width:12px;height:12px;cursor:pointer;flex-shrink:0;margin:0;';
+                var isDone = /\bdone\b/i.test(e.summary || '');
+                cb.checked = isDone;
+
+                var lbl = document.createElement('span');
+                lbl.style.cssText = 'font-size:.45rem;color:'+textColor+';line-height:1.4;word-break:break-word;';
+                lbl.textContent = (e.summary || '(No title)').replace(/\bdone\b/gi, '').trim() || '(No title)';
+
+                cb.addEventListener('click', function(ev2) {
+                  ev2.stopPropagation();
+                  var newSummary = cb.checked
+                    ? ((e.summary || '').replace(/\bdone\b/gi, '').trim() + ' done').trim()
+                    : (e.summary || '').replace(/\bdone\b/gi, '').trim();
+                  updateCalendarEvent(e.calendarId, e.id, { summary: newSummary })
+                    .then(function() { showToast(cb.checked ? '✅ Marked done' : '⬜ Marked undone'); _renderToday(); })
+                    .catch(function(er) { showToast('❌ ' + er.message); cb.checked = !cb.checked; });
                 });
-              });
-              evArea.appendChild(chip);
+
+                wrap.addEventListener('click', function(ev2) {
+                  if (ev2.target === cb) return;
+                  ev2.stopPropagation();
+                  showCalendarEventForm(body, body, null, {
+                    mode: 'edit',
+                    calendarId: e.calendarId,
+                    eventId: e.id,
+                    summary: e.summary,
+                    description: e.description,
+                    startTime: new Date(e.start),
+                    endTime: new Date(e.end)
+                  });
+                });
+
+                wrap.appendChild(cb);
+                wrap.appendChild(lbl);
+                evArea.appendChild(wrap);
+              } else {
+                var chip = document.createElement('div');
+                chip.title = (e.summary||'')+' • '+(e.calendarName||'')+' • '+durText;
+                chip.dataset.isChip = '1';
+                chip.style.cssText = 'background:'+calColor+';color:'+textColor+';font-size:.45rem;padding:1px 5px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;cursor:pointer;font-family:var(--font);line-height:1.4;';
+                chip.textContent = e.summary || '(No title)';
+                chip.addEventListener('click', function(ev2) {
+                  ev2.stopPropagation();
+                  showCalendarEventForm(body, body, null, {
+                    mode: 'edit',
+                    calendarId: e.calendarId,
+                    eventId: e.id,
+                    summary: e.summary,
+                    description: e.description,
+                    startTime: new Date(e.start),
+                    endTime: new Date(e.end)
+                  });
+                });
+                evArea.appendChild(chip);
+              }
             });
 
             // Click empty area to create — works on evArea, row, or timeSpan
@@ -4560,9 +4637,90 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
               }
             });
 
+            row.dataset.slotIdx = slot;
             row.appendChild(frBtn);
             slotsWrap.appendChild(row);
           }
+
+          // Drag-to-select multiple slots
+          (function(slotsWrap, s, idx) {
+            var dragging = false;
+            var startSlot = -1;
+            var didDrag = false;
+
+            slotsWrap.addEventListener('mousedown', function(e) {
+              if (e.button !== 0) return;
+              if (e.target.closest && (e.target.closest('[data-is-chip]') || e.target.closest('input[type="checkbox"]') || e.target.closest('button'))) return;
+              var row = e.target.closest('[data-slot-idx]');
+              if (!row) return;
+              dragging = true;
+              didDrag = false;
+              startSlot = parseInt(row.dataset.slotIdx);
+              e.preventDefault();
+            });
+
+            slotsWrap.addEventListener('mousemove', function(e) {
+              if (!dragging) return;
+              var row = e.target.closest('[data-slot-idx]');
+              if (!row) return;
+              var curSlot = parseInt(row.dataset.slotIdx);
+              if (curSlot !== startSlot) didDrag = true;
+              var minSlot = Math.min(startSlot, curSlot);
+              var maxSlot = Math.max(startSlot, curSlot);
+              slotsWrap.querySelectorAll('[data-slot-idx]').forEach(function(r) {
+                var si = parseInt(r.dataset.slotIdx);
+                if (si >= minSlot && si <= maxSlot) {
+                  r.style.background = 'rgba(108,143,255,.25)';
+                  r.style.outline = '1px solid rgba(108,143,255,.5)';
+                } else {
+                  r.style.background = slotBg;
+                  r.style.outline = 'none';
+                }
+              });
+            });
+
+            var endDrag = function(e) {
+              if (!dragging) return;
+              dragging = false;
+
+              var highlighted = [];
+              slotsWrap.querySelectorAll('[data-slot-idx]').forEach(function(r) {
+                var si = parseInt(r.dataset.slotIdx);
+                var bg = r.style.background;
+                if (bg && bg.indexOf('108,143,255') !== -1) {
+                  highlighted.push(si);
+                }
+                r.style.background = slotBg;
+                r.style.outline = 'none';
+              });
+
+              if (!didDrag || highlighted.length < 2) {
+                didDrag = false;
+                return;
+              }
+
+              didDrag = false;
+              e && e.stopPropagation();
+
+              var minSlot = Math.min.apply(null, highlighted);
+              var maxSlot = Math.max.apply(null, highlighted);
+              var startMin = (s.start * 60) + (minSlot * 30);
+              var endMin = (s.start * 60) + ((maxSlot + 1) * 30);
+              var startDate = new Date(todayStart.getTime() + startMin * 60000);
+              var endDate = new Date(todayStart.getTime() + endMin * 60000);
+
+              showCalendarEventForm(body, body, null, {
+                mode: 'create',
+                startTime: startDate,
+                endTime: endDate
+              });
+            };
+
+            slotsWrap.addEventListener('mouseup', endDrag);
+            document.addEventListener('mouseup', function() {
+              if (dragging) endDrag(null);
+            });
+          })(slotsWrap, s, idx);
 
           panel.appendChild(slotsWrap);
           return panel;
@@ -4809,8 +4967,18 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
     _updatePageDotsRef = _updatePageDots;
     _renderPageRef = _renderPage;
     _renderPage();
+    // Expose rendering for external widgets (canvas widgets)
+    window._overlayRenderInto = function(targetBody, pageIdx, offset, theme, view) {
+      var origBody = body, origOff = _state.offset, origTh = _state.theme, origV = _state.view, origP = _state.page;
+      body = targetBody; _state.offset = offset||0; _state.theme = theme||'light'; _state.view = view||'2week'; _state.page = pageIdx;
+      _renderPage();
+      setTimeout(function(){ body = origBody; _state.offset = origOff; _state.theme = origTh; _state.view = origV; _state.page = origP; }, 100);
+    };
   }
-  // Bind 4 toolbar buttons
+  // Expose open/close globally for widget bootstrap
+  window._openGanttOverlay = openGanttOverlay;
+  window._closeGanttOverlay = closeGanttOverlay;
+  // Bind 4 top toolbar buttons (overlay mode)
   var _tbBtns = [
     {id:'overlay-today-btn', page:0},
     {id:'overlay-gantt-btn', page:1},
@@ -4824,15 +4992,36 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
       else { openGanttOverlay(cfg.page); }
     };
   });
+  // Bind 4 vertical toolbar buttons (widget placement mode)
+  var _vtbBtns = [
+    {id:'mtb-today', page:0},
+    {id:'mtb-gantt-overlay', page:1},
+    {id:'mtb-stats', page:2},
+    {id:'mtb-fruits', page:3}
+  ];
+  _vtbBtns.forEach(function(cfg) {
+    var b = document.getElementById(cfg.id);
+    if (b) b.onclick = function() {
+      placeOverlayPageWidget(cfg.page);
+    };
+  });
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.contentEditable === 'true') return;
     if (e.key === 'Escape' && _overlayEl) { closeGanttOverlay(); e.preventDefault(); return; }
-    // Shortcuts 1-4 to open specific pages
-    if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+    // Plain 1-4 to open overlay pages
+    if (!e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
       var pageMap = {'1':0, '2':1, '3':2, '4':3};
       if (pageMap[e.key] !== undefined) {
         if (_overlayEl && _state.page === pageMap[e.key]) { closeGanttOverlay(); }
         else { openGanttOverlay(pageMap[e.key]); }
+        e.preventDefault(); return;
+      }
+    }
+    // Shift+1-4 to place widget on canvas
+    if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      var widgetMap = {'!':0, '@':1, '#':2, '$':3, '1':0, '2':1, '3':2, '4':3};
+      if (widgetMap[e.key] !== undefined) {
+        placeOverlayPageWidget(widgetMap[e.key]);
         e.preventDefault(); return;
       }
     }
@@ -4843,6 +5032,161 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
 })();
 
 // ─── Embed Web View Widget ───
+
+// ── Place Overlay Page as Canvas Widget ──
+var _overlayPageNames = ['Today','Gantt Chart','Statistics','Fruit Tracker'];
+var _overlayPageEmojis = ['\u2600\uFE0F','\uD83D\uDCCA','\uD83D\uDCC8','\uD83C\uDF4E'];
+async function placeOverlayPageWidget(pageIdx) {
+  if (!_googleAccessToken) {
+    try {
+      if (typeof manualGoogleReAuth === 'function') { await manualGoogleReAuth(); }
+      else { var result = await auth.signInWithPopup(provider); if (result.credential) cacheGoogleToken(result.credential.accessToken); }
+    } catch(e) { /* widget will show sign-in button */ }
+  }
+  var page = cp(); if (!page) return;
+  var zoom = (page.zoom || 100) / 100;
+  var panX = page.panX || 0, panY = page.panY || 0;
+  var board = document.getElementById('miro-board');
+  var rect = board.getBoundingClientRect();
+  var cx = (-panX + (window.innerWidth / 2 - rect.left) / zoom);
+  var cy = (-panY + (window.innerHeight / 2 - rect.top) / zoom);
+  var card = { id: 'ovpage_' + Date.now(), type: 'overlay-page', overlayPage: pageIdx,
+    x: cx - 450, y: cy - 250, w: 900, h: 500,
+    calView: '2week', calOffset: 0, calTheme: 'light', ganttView: '2week', ganttRowHeight: 50 };
+  if (!page.miroCards) page.miroCards = [];
+  pushUndo(); page.miroCards.push(card); sv(); buildMiroCanvas();
+  showToast(_overlayPageEmojis[pageIdx] + ' ' + _overlayPageNames[pageIdx] + ' widget added');
+}
+
+function buildMiroOverlayWidget(card) {
+  var pIdx = card.overlayPage || 0;
+  var el = document.createElement('div');
+  el.className = 'miro-overlay-widget'; el.dataset.cid = card.id;
+  el.style.left = (card.x||0)+'px'; el.style.top = (card.y||0)+'px';
+  el.style.width = (card.w||900)+'px'; el.style.height = (card.h||500)+'px';
+  var hdr = document.createElement('div'); hdr.className = 'ow-hdr';
+  var title = document.createElement('span');
+  title.style.cssText = 'font-weight:700;font-size:.65rem;color:#ccc;white-space:nowrap;margin-right:4px;';
+  title.textContent = _overlayPageEmojis[pIdx] + ' ' + _overlayPageNames[pIdx];
+  var _cb = function(txt,tip,fn){ var b=document.createElement('button'); b.textContent=txt; b.title=tip; b.onclick=function(e){e.stopPropagation();fn();}; return b; };
+  var _days = function(){ return card.ganttView==='month'?30:card.ganttView==='2week'?14:7; };
+  hdr.appendChild(title);
+  hdr.appendChild(_cb('\u25C0','Prev',function(){card.calOffset=(card.calOffset||0)-_days();sv();_rw();}));
+  hdr.appendChild(_cb('\u2039','Prev day',function(){card.calOffset=(card.calOffset||0)-1;sv();_rw();}));
+  hdr.appendChild(_cb('Today','Today',function(){card.calOffset=0;sv();_rw();}));
+  hdr.appendChild(_cb('\u203A','Next day',function(){card.calOffset=(card.calOffset||0)+1;sv();_rw();}));
+  hdr.appendChild(_cb('\u25B6','Next',function(){card.calOffset=(card.calOffset||0)+_days();sv();_rw();}));
+  var vl={week:'Wk','2week':'2W',month:'Mo'}, vc=['week','2week','month'];
+  var vb=_cb(vl[card.ganttView||'2week'],'View',function(){ var i=vc.indexOf(card.ganttView||'2week'); card.ganttView=vc[(i+1)%vc.length]; card.calOffset=0; vb.textContent=vl[card.ganttView]; sv();_rw(); });
+  hdr.appendChild(vb);
+  var ths=['dark','light','transparent'], thI={dark:'\uD83C\uDF19',light:'\u2600\uFE0F',transparent:'\uD83D\uDC41'};
+  var tb2=_cb(thI[card.calTheme||'light'],'Theme',function(){ var i=ths.indexOf(card.calTheme||'light'); card.calTheme=ths[(i+1)%ths.length]; tb2.textContent=thI[card.calTheme]; _at(); sv();_rw(); });
+  hdr.appendChild(tb2);
+  hdr.appendChild(_cb('\uD83D\uDD04','Refresh',function(){_rw();}));
+  var del=_cb('\u2715','Delete',function(){deleteMiroCard(card.id);}); del.style.marginLeft='auto'; hdr.appendChild(del);
+  var body = document.createElement('div'); body.className = 'ow-body';
+  el.appendChild(hdr); el.appendChild(body);
+  function _at(){ var t=card.calTheme||'light'; el.classList.remove('ow-light','ow-transparent');
+    if(t==='light'){el.classList.add('ow-light');title.style.color='#333';}
+    else if(t==='transparent'){el.classList.add('ow-transparent');title.style.color='#aaa';}
+    else{title.style.color='#ccc';} } _at();
+  async function _rw(){
+    var isDk=(card.calTheme||'light')!=='light', txt=isDk?'#ddd':'#222';
+    var bg2=isDk?'rgba(255,255,255,.04)':'rgba(0,0,0,.03)', bdr=isDk?'rgba(255,255,255,.08)':'rgba(0,0,0,.08)';
+    body.innerHTML='<div style="text-align:center;padding:30px;color:#888;font-size:.7rem;">Loading...</div>';
+    try {
+      if (pIdx===1) {
+        // Gantt: reuse global renderGanttContent
+        if (typeof renderGanttContent==='function') {
+          var gBody = document.createElement('div'); gBody.className='gantt-body'; gBody.style.cssText='flex:1;overflow:hidden;position:relative;';
+          body.innerHTML=''; body.appendChild(gBody);
+          el._ganttBody = gBody;
+          var fakeCard = { ganttView:card.ganttView||'2week', calOffset:card.calOffset||0, calTheme:card.calTheme||'light', ganttRowHeight:card.ganttRowHeight||50 };
+          // Inline gantt render
+          var now=new Date(),gv=fakeCard.ganttView,days=gv==='month'?30:gv==='2week'?14:7,sd,oDays=days,offset=fakeCard.calOffset||0;
+          if(gv==='2week'){var hm2=now.getMonth()*2+(now.getDate()>15?1:0)+offset,hY2=now.getFullYear()+Math.floor(hm2/24);hm2=((hm2%24)+24)%24;var hM2=Math.floor(hm2/2),hH2=hm2%2;if(hH2===1){sd=new Date(hY2,hM2,16);oDays=new Date(hY2,hM2+1,0).getDate()-15;}else{sd=new Date(hY2,hM2,1);oDays=15;}}
+          else{sd=new Date(now);sd.setDate(now.getDate()-now.getDay()+offset);}
+          sd.setHours(0,0,0,0); var ed=new Date(sd);ed.setDate(sd.getDate()+oDays);
+          var ev=await fetchCalendarEvents(sd,ed);
+          if(ev&&ev.length>0&&typeof _drawGantt==='function') _drawGantt(gBody,el,{calTheme:fakeCard.calTheme,w:body.clientWidth,h:body.clientHeight},ev,sd,oDays,now,50,fakeCard.calTheme);
+          else gBody.innerHTML='<div style="text-align:center;padding:40px;color:'+txt+';">No events</div>';
+        } else { body.innerHTML='<div style="text-align:center;padding:40px;color:'+txt+';">Gantt renderer unavailable</div>'; }
+      } else if (pIdx===0) {
+        // Today: fetch events and render schedule
+        var now=new Date(); now.setDate(now.getDate()+(card.calOffset||0));
+        var ds=new Date(now.getFullYear(),now.getMonth(),now.getDate()), de=new Date(ds.getTime()+86400000);
+        var allEv=await fetchCalendarEvents(ds,de);
+        var evts=(allEv||[]).filter(function(e){return !e.allDay;});
+        var sessions=[{n:'S1',e:'\uD83C\uDF19',s:0,f:4,l:'12am-4am'},{n:'S2',e:'\uD83C\uDF05',s:4,f:8,l:'4am-8am'},{n:'S3',e:'\u2600\uFE0F',s:8,f:12,l:'8am-12pm'},{n:'S4',e:'\uD83D\uDD25',s:12,f:16,l:'12pm-4pm'},{n:'S5',e:'\uD83C\uDF06',s:16,f:20,l:'4pm-8pm'},{n:'S6',e:'\uD83C\uDF19',s:20,f:24,l:'8pm-12am'}];
+        var curH=now.getHours(),curS=Math.min(5,Math.max(0,Math.floor(curH/4)));
+        var h='<div style="padding:8px;overflow:auto;height:100%;font-family:var(--font);">';
+        h+='<div style="text-align:center;font-size:.8rem;font-weight:700;color:'+txt+';margin-bottom:8px;">'+now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})+'</div>';
+        h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">';
+        sessions.forEach(function(ss,si){
+          var isCur=si===curS;
+          var sEvts=evts.filter(function(ev){var eh=new Date(ev.start).getHours();return eh>=ss.s&&eh<ss.f;});
+          h+='<div style="background:'+bg2+';border:1px solid '+(isCur?'#4285f4':bdr)+';border-radius:8px;padding:6px;'+(isCur?'box-shadow:0 0 8px rgba(66,133,244,.3);':'')+'overflow:hidden;">';
+          h+='<div style="font-size:.6rem;font-weight:600;color:'+txt+';margin-bottom:4px;">'+ss.e+' '+ss.n+' <span style="opacity:.5;font-weight:400;">'+ss.l+'</span></div>';
+          if(sEvts.length===0){h+='<div style="font-size:.5rem;color:#888;padding:4px;">No events</div>';}
+          else{sEvts.forEach(function(ev){h+='<div style="font-size:.5rem;padding:2px 4px;margin:2px 0;border-radius:4px;background:'+(ev.color||'#4285f4')+'22;color:'+txt+';border-left:2px solid '+(ev.color||'#4285f4')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+ev.summary+'</div>';});}
+          h+='</div>';
+        });
+        h+='</div></div>';
+        body.innerHTML=h;
+      } else if (pIdx===2) {
+        // Stats: fetch events and show hours per calendar
+        var now=new Date(); var sd7=new Date(now); sd7.setDate(now.getDate()-7);
+        var ev7=await fetchCalendarEvents(sd7,now);
+        var calHours={};
+        (ev7||[]).forEach(function(ev){if(ev.allDay)return;var dur=(new Date(ev.end)-new Date(ev.start))/3600000;var cn=ev.calendarName||'Other';if(!calHours[cn])calHours[cn]={h:0,c:ev.color||'#4285f4'};calHours[cn].h+=dur;});
+        var sorted=Object.keys(calHours).sort(function(a,b){return calHours[b].h-calHours[a].h;});
+        var totalH=sorted.reduce(function(s,k){return s+calHours[k].h;},0);
+        var h='<div style="padding:12px;overflow:auto;height:100%;font-family:var(--font);">';
+        h+='<div style="text-align:center;font-size:.8rem;font-weight:700;color:'+txt+';margin-bottom:10px;">\uD83D\uDCC8 Last 7 Days Stats</div>';
+        h+='<div style="text-align:center;font-size:1.5rem;font-weight:800;color:#4285f4;margin-bottom:12px;">'+totalH.toFixed(1)+' hrs</div>';
+        sorted.forEach(function(cn){var pct=totalH>0?((calHours[cn].h/totalH)*100).toFixed(0):0;
+          h+='<div style="margin:4px 0;display:flex;align-items:center;gap:6px;">';
+          h+='<span style="font-size:.55rem;color:'+txt+';min-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+cn+'</span>';
+          h+='<div style="flex:1;height:14px;background:'+bg2+';border-radius:7px;overflow:hidden;">';
+          h+='<div style="height:100%;width:'+pct+'%;background:'+calHours[cn].c+';border-radius:7px;transition:width .3s;"></div></div>';
+          h+='<span style="font-size:.5rem;color:#888;min-width:40px;">'+calHours[cn].h.toFixed(1)+'h</span></div>';
+        });
+        if(sorted.length===0) h+='<div style="text-align:center;color:#888;font-size:.6rem;">No events found</div>';
+        h+='</div>';
+        body.innerHTML=h;
+      } else {
+        // Fruit tracker
+        var now=new Date(); now.setDate(now.getDate()+(card.calOffset||0));
+        var ds=new Date(now.getFullYear(),now.getMonth(),now.getDate()), de=new Date(ds.getTime()+86400000);
+        var allEv=await fetchCalendarEvents(ds,de);
+        var fruitEvts=(allEv||[]).filter(function(e){return (e.calendarName||'').toLowerCase()==="!40's fruit";});
+        var slots=[];for(var i=0;i<48;i++){var sh=Math.floor(i/2),sm=(i%2)*30;slots.push({h:sh,m:sm,has:false});}
+        fruitEvts.forEach(function(ev){var s=new Date(ev.start).getTime(),e2=new Date(ev.end).getTime();var ss=Math.floor((s-ds.getTime())/1800000),se=Math.floor((e2-ds.getTime())/1800000);for(var i=ss;i<se&&i<48;i++){if(i>=0)slots[i].has=true;}});
+        var total=slots.filter(function(s){return s.has;}).length;
+        var h='<div style="padding:10px;overflow:auto;height:100%;font-family:var(--font);">';
+        h+='<div style="text-align:center;font-size:.75rem;font-weight:700;color:'+txt+';margin-bottom:8px;">\uD83C\uDF4E Fruit Tracker - '+now.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</div>';
+        h+='<div style="text-align:center;font-size:1.2rem;font-weight:800;color:#e74c3c;margin-bottom:8px;">'+total+'/48 slots</div>';
+        h+='<div style="display:grid;grid-template-columns:repeat(12,1fr);gap:2px;padding:4px;">';
+        slots.forEach(function(s){
+          var lbl=String(s.h).padStart(2,'0')+':'+(s.m===0?'00':'30');
+          h+='<div title="'+lbl+'" style="aspect-ratio:1;border-radius:3px;background:'+(s.has?'#e74c3c':'rgba(0,0,0,.06)')+';display:flex;align-items:center;justify-content:center;font-size:.4rem;color:'+(s.has?'#fff':'#ccc')+';">'+(s.has?'\uD83C\uDF4E':'')+'</div>';
+        });
+        h+='</div></div>';
+        body.innerHTML=h;
+      }
+    } catch(err) {
+      body.innerHTML='<div style="text-align:center;padding:30px;color:#e55;font-size:.65rem;">\u26A0\uFE0F '+err.message+'</div>';
+    }
+  }
+  miroSetupCardDrag(el,card,['.ow-body','button','.mc-resize-br','.mc-resize-bl','.mc-resize-tr','.mc-resize-tl','.mc-resize-t','.mc-resize-b','.mc-resize-l','.mc-resize-r','.mc-lock']);
+  attach8WayResize(el,card,300,200); attachLockUI(el,card);
+  var _rt=null,_lw=0,_lh=0;
+  var ro=new ResizeObserver(function(){clearTimeout(_rt);_rt=setTimeout(function(){var w=el.offsetWidth,h=el.offsetHeight;if(w<50||h<50)return;if(Math.abs(w-_lw)<5&&Math.abs(h-_lh)<5)return;_lw=w;_lh=h;card.w=w;card.h=h;_rw();},500);});
+  ro.observe(el);
+  requestAnimationFrame(function(){_rw();});
+  return el;
+}
+
 document.getElementById('mtb-embed').onclick = () => setActiveTool('embed');
 
 // ─── Calendar List (cached) ───
