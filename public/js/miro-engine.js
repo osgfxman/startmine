@@ -1882,7 +1882,7 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
       sv(); buildMiroCanvas(); buildOutline();
     } else if (_overlayPageCreateMode) {
       var opIdx = _overlayPageCreateIdx;
-      page.miroCards.push({ id: uid(), type: 'overlay-page', overlayPage: opIdx, x: bx - 450, y: by - 250, w: 900, h: 500, calOffset: 0, calTheme: 'light', ganttView: '2week', ganttRowHeight: 50 });
+      page.miroCards.push({ id: uid(), type: 'overlay-page', overlayPage: opIdx, x: bx - Math.floor(window.innerWidth*0.42), y: by - Math.floor(window.innerHeight*0.4), w: Math.floor(window.innerWidth*0.85), h: Math.floor(window.innerHeight*0.8), calOffset: 0, calTheme: 'light', ganttView: '2week', ganttRowHeight: 50 });
       sv(); buildMiroCanvas(); buildOutline();
     } else if (_embedCreateMode) {
       const url = prompt('🌐 Enter published URL (Google Sheets chart, web page, etc.):');
@@ -4354,7 +4354,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
     closeBtn.className = 'gantt-overlay-close';
     hdr.appendChild(closeBtn);
     panel.appendChild(hdr);
-    const body = document.createElement('div');
+    let body = document.createElement('div');
     body.className = 'gantt-overlay-body';
     panel.appendChild(body);
     overlay.appendChild(panel);
@@ -4967,12 +4967,19 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
     _updatePageDotsRef = _updatePageDots;
     _renderPageRef = _renderPage;
     _renderPage();
-    // Expose rendering for external widgets (canvas widgets)
-    window._overlayRenderInto = function(targetBody, pageIdx, offset, theme, view) {
-      var origBody = body, origOff = _state.offset, origTh = _state.theme, origV = _state.view, origP = _state.page;
-      body = targetBody; _state.offset = offset||0; _state.theme = theme||'light'; _state.view = view||'2week'; _state.page = pageIdx;
-      _renderPage();
-      setTimeout(function(){ body = origBody; _state.offset = origOff; _state.theme = origTh; _state.view = origV; _state.page = origP; }, 100);
+    // Expose rendering API for canvas widgets
+    window._overlayAPI = {
+      renderInto: function(targetBody, pageIdx, offset, theme, view) {
+        var origBody = body;
+        var origPage = _state.page, origOff = _state.offset, origTh = _state.theme, origV = _state.view;
+        body = targetBody;
+        _state.page = pageIdx; _state.offset = offset||0; _state.theme = theme||'light'; _state.view = view||'2week';
+        _renderPage();
+        setTimeout(function() {
+          if (body === targetBody) { body = origBody; }
+          _state.page = origPage; _state.offset = origOff; _state.theme = origTh; _state.view = origV;
+        }, 5000);
+      }
     };
   }
   // Expose open/close globally for widget bootstrap
@@ -5060,133 +5067,169 @@ async function placeOverlayPageWidget(pageIdx) {
 
 function buildMiroOverlayWidget(card) {
   var pIdx = card.overlayPage || 0;
+  // Default to near-fullscreen size if not set
+  if (!card.w || card.w < 100) card.w = Math.max(900, window.innerWidth * 0.85);
+  if (!card.h || card.h < 100) card.h = Math.max(500, window.innerHeight * 0.8);
+
   var el = document.createElement('div');
-  el.className = 'miro-overlay-widget'; el.dataset.cid = card.id;
-  el.style.left = (card.x||0)+'px'; el.style.top = (card.y||0)+'px';
-  el.style.width = (card.w||900)+'px'; el.style.height = (card.h||500)+'px';
-  var hdr = document.createElement('div'); hdr.className = 'ow-hdr';
-  var title = document.createElement('span');
-  title.style.cssText = 'font-weight:700;font-size:.65rem;color:#ccc;white-space:nowrap;margin-right:4px;';
-  title.textContent = _overlayPageEmojis[pIdx] + ' ' + _overlayPageNames[pIdx];
-  var _cb = function(txt,tip,fn){ var b=document.createElement('button'); b.textContent=txt; b.title=tip; b.onclick=function(e){e.stopPropagation();fn();}; return b; };
+  el.className = 'miro-overlay-widget';
+  el.dataset.cid = card.id;
+  el.style.left = (card.x||0)+'px';
+  el.style.top = (card.y||0)+'px';
+  el.style.width = card.w+'px';
+  el.style.height = card.h+'px';
+
+  // â”€â”€ Header (identical to overlay) â”€â”€
+  var hdr = document.createElement('div');
+  hdr.className = 'ow-hdr';
+
+  // Page switch buttons
+  var pageEmojis = ['\u2600\uFE0F','\uD83D\uDCCA','\uD83D\uDCC8','\uD83C\uDF4E'];
+  var pageNames = ['Today','Gantt','Stats','Fruit'];
+  var pageBtns = [];
+  pageEmojis.forEach(function(emoji, i) {
+    var pb = document.createElement('button');
+    pb.textContent = emoji;
+    pb.title = pageNames[i];
+    pb.className = 'ow-page-btn' + (i === pIdx ? ' active' : '');
+    pb.onclick = function(e) {
+      e.stopPropagation();
+      card.overlayPage = i; pIdx = i; card.calOffset = 0;
+      pageBtns.forEach(function(b,j){ b.className = 'ow-page-btn' + (j===i?' active':''); });
+      sv(); _rw();
+    };
+    pageBtns.push(pb);
+    hdr.appendChild(pb);
+  });
+
+  // Separator
+  var sep = document.createElement('div');
+  sep.style.cssText = 'width:1px;height:16px;background:rgba(128,128,128,.3);margin:0 4px;';
+  hdr.appendChild(sep);
+
+  // Nav buttons
+  var _cb = function(txt,tip,fn){
+    var b = document.createElement('button'); b.textContent = txt; b.title = tip;
+    b.onclick = function(e){ e.stopPropagation(); fn(); }; return b;
+  };
   var _days = function(){ return card.ganttView==='month'?30:card.ganttView==='2week'?14:7; };
-  hdr.appendChild(title);
   hdr.appendChild(_cb('\u25C0','Prev',function(){card.calOffset=(card.calOffset||0)-_days();sv();_rw();}));
   hdr.appendChild(_cb('\u2039','Prev day',function(){card.calOffset=(card.calOffset||0)-1;sv();_rw();}));
-  hdr.appendChild(_cb('Today','Today',function(){card.calOffset=0;sv();_rw();}));
+  hdr.appendChild(_cb('Today','Reset',function(){card.calOffset=0;sv();_rw();}));
   hdr.appendChild(_cb('\u203A','Next day',function(){card.calOffset=(card.calOffset||0)+1;sv();_rw();}));
   hdr.appendChild(_cb('\u25B6','Next',function(){card.calOffset=(card.calOffset||0)+_days();sv();_rw();}));
-  var vl={week:'Wk','2week':'2W',month:'Mo'}, vc=['week','2week','month'];
-  var vb=_cb(vl[card.ganttView||'2week'],'View',function(){ var i=vc.indexOf(card.ganttView||'2week'); card.ganttView=vc[(i+1)%vc.length]; card.calOffset=0; vb.textContent=vl[card.ganttView]; sv();_rw(); });
+
+  // View toggle
+  var vl = {week:'Wk','2week':'2W',month:'Mo'}, vc = ['week','2week','month'];
+  var vb = _cb(vl[card.ganttView||'2week'],'View',function(){
+    var i = vc.indexOf(card.ganttView||'2week');
+    card.ganttView = vc[(i+1)%vc.length]; card.calOffset=0;
+    vb.textContent = vl[card.ganttView]; sv(); _rw();
+  });
   hdr.appendChild(vb);
-  var ths=['dark','light','transparent'], thI={dark:'\uD83C\uDF19',light:'\u2600\uFE0F',transparent:'\uD83D\uDC41'};
-  var tb2=_cb(thI[card.calTheme||'light'],'Theme',function(){ var i=ths.indexOf(card.calTheme||'light'); card.calTheme=ths[(i+1)%ths.length]; tb2.textContent=thI[card.calTheme]; _at(); sv();_rw(); });
-  hdr.appendChild(tb2);
-  hdr.appendChild(_cb('\uD83D\uDD04','Refresh',function(){_rw();}));
-  var del=_cb('\u2715','Delete',function(){deleteMiroCard(card.id);}); del.style.marginLeft='auto'; hdr.appendChild(del);
-  var body = document.createElement('div'); body.className = 'ow-body';
-  el.appendChild(hdr); el.appendChild(body);
-  function _at(){ var t=card.calTheme||'light'; el.classList.remove('ow-light','ow-transparent');
-    if(t==='light'){el.classList.add('ow-light');title.style.color='#333';}
-    else if(t==='transparent'){el.classList.add('ow-transparent');title.style.color='#aaa';}
-    else{title.style.color='#ccc';} } _at();
-  async function _rw(){
-    var isDk=(card.calTheme||'light')!=='light', txt=isDk?'#ddd':'#222';
-    var bg2=isDk?'rgba(255,255,255,.04)':'rgba(0,0,0,.03)', bdr=isDk?'rgba(255,255,255,.08)':'rgba(0,0,0,.08)';
-    body.innerHTML='<div style="text-align:center;padding:30px;color:#888;font-size:.7rem;">Loading...</div>';
+
+  // Theme toggle
+  var ths = ['light','dark','transparent'];
+  var thI = {light:'\u2600\uFE0F',dark:'\uD83C\uDF19',transparent:'\uD83D\uDC41'};
+  var thB = _cb(thI[card.calTheme||'light'],'Theme',function(){
+    var i = ths.indexOf(card.calTheme||'light');
+    card.calTheme = ths[(i+1)%ths.length]; thB.textContent = thI[card.calTheme];
+    _applyTheme(); sv(); _rw();
+  });
+  hdr.appendChild(thB);
+  hdr.appendChild(_cb('\uD83D\uDD04','Refresh',function(){ _rw(); }));
+
+  // Spacer + delete
+  var spacer = document.createElement('div');
+  spacer.style.flex = '1';
+  hdr.appendChild(spacer);
+
+  var lockBtn = document.createElement('button');
+  lockBtn.textContent = card.locked ? '\uD83D\uDD12' : '\uD83D\uDD13';
+  lockBtn.title = 'Lock/Unlock';
+  lockBtn.className = 'ow-lock-btn';
+  lockBtn.onclick = function(e) {
+    e.stopPropagation();
+    card.locked = !card.locked;
+    lockBtn.textContent = card.locked ? '\uD83D\uDD12' : '\uD83D\uDD13';
+    el.classList.toggle('is-locked', card.locked);
+    sv();
+  };
+  hdr.appendChild(lockBtn);
+
+  var del = _cb('\u2715','Delete',function(){ deleteMiroCard(card.id); });
+  hdr.appendChild(del);
+
+  // â”€â”€ Body â”€â”€
+  var body = document.createElement('div');
+  body.className = 'ow-body';
+  el.appendChild(hdr);
+  el.appendChild(body);
+
+  // â”€â”€ Theme â”€â”€
+  function _applyTheme() {
+    var t = card.calTheme || 'light';
+    el.classList.remove('ow-light','ow-dark','ow-transparent');
+    el.classList.add('ow-' + t);
+  }
+  _applyTheme();
+
+  // â”€â”€ Render (uses overlay API for identical content) â”€â”€
+  var _rendering = false;
+  async function _rw() {
+    if (_rendering) return;
+    _rendering = true;
     try {
-      if (pIdx===1) {
-        // Gantt: reuse global renderGanttContent
-        if (typeof renderGanttContent==='function') {
-          var gBody = document.createElement('div'); gBody.className='gantt-body'; gBody.style.cssText='flex:1;overflow:hidden;position:relative;';
-          body.innerHTML=''; body.appendChild(gBody);
-          el._ganttBody = gBody;
-          var fakeCard = { ganttView:card.ganttView||'2week', calOffset:card.calOffset||0, calTheme:card.calTheme||'light', ganttRowHeight:card.ganttRowHeight||50 };
-          // Inline gantt render
-          var now=new Date(),gv=fakeCard.ganttView,days=gv==='month'?30:gv==='2week'?14:7,sd,oDays=days,offset=fakeCard.calOffset||0;
-          if(gv==='2week'){var hm2=now.getMonth()*2+(now.getDate()>15?1:0)+offset,hY2=now.getFullYear()+Math.floor(hm2/24);hm2=((hm2%24)+24)%24;var hM2=Math.floor(hm2/2),hH2=hm2%2;if(hH2===1){sd=new Date(hY2,hM2,16);oDays=new Date(hY2,hM2+1,0).getDate()-15;}else{sd=new Date(hY2,hM2,1);oDays=15;}}
-          else{sd=new Date(now);sd.setDate(now.getDate()-now.getDay()+offset);}
-          sd.setHours(0,0,0,0); var ed=new Date(sd);ed.setDate(sd.getDate()+oDays);
-          var ev=await fetchCalendarEvents(sd,ed);
-          if(ev&&ev.length>0&&typeof _drawGantt==='function') _drawGantt(gBody,el,{calTheme:fakeCard.calTheme,w:body.clientWidth,h:body.clientHeight},ev,sd,oDays,now,50,fakeCard.calTheme);
-          else gBody.innerHTML='<div style="text-align:center;padding:40px;color:'+txt+';">No events</div>';
-        } else { body.innerHTML='<div style="text-align:center;padding:40px;color:'+txt+';">Gantt renderer unavailable</div>'; }
-      } else if (pIdx===0) {
-        // Today: fetch events and render schedule
-        var now=new Date(); now.setDate(now.getDate()+(card.calOffset||0));
-        var ds=new Date(now.getFullYear(),now.getMonth(),now.getDate()), de=new Date(ds.getTime()+86400000);
-        var allEv=await fetchCalendarEvents(ds,de);
-        var evts=(allEv||[]).filter(function(e){return !e.allDay;});
-        var sessions=[{n:'S1',e:'\uD83C\uDF19',s:0,f:4,l:'12am-4am'},{n:'S2',e:'\uD83C\uDF05',s:4,f:8,l:'4am-8am'},{n:'S3',e:'\u2600\uFE0F',s:8,f:12,l:'8am-12pm'},{n:'S4',e:'\uD83D\uDD25',s:12,f:16,l:'12pm-4pm'},{n:'S5',e:'\uD83C\uDF06',s:16,f:20,l:'4pm-8pm'},{n:'S6',e:'\uD83C\uDF19',s:20,f:24,l:'8pm-12am'}];
-        var curH=now.getHours(),curS=Math.min(5,Math.max(0,Math.floor(curH/4)));
-        var h='<div style="padding:8px;overflow:auto;height:100%;font-family:var(--font);">';
-        h+='<div style="text-align:center;font-size:.8rem;font-weight:700;color:'+txt+';margin-bottom:8px;">'+now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})+'</div>';
-        h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">';
-        sessions.forEach(function(ss,si){
-          var isCur=si===curS;
-          var sEvts=evts.filter(function(ev){var eh=new Date(ev.start).getHours();return eh>=ss.s&&eh<ss.f;});
-          h+='<div style="background:'+bg2+';border:1px solid '+(isCur?'#4285f4':bdr)+';border-radius:8px;padding:6px;'+(isCur?'box-shadow:0 0 8px rgba(66,133,244,.3);':'')+'overflow:hidden;">';
-          h+='<div style="font-size:.6rem;font-weight:600;color:'+txt+';margin-bottom:4px;">'+ss.e+' '+ss.n+' <span style="opacity:.5;font-weight:400;">'+ss.l+'</span></div>';
-          if(sEvts.length===0){h+='<div style="font-size:.5rem;color:#888;padding:4px;">No events</div>';}
-          else{sEvts.forEach(function(ev){h+='<div style="font-size:.5rem;padding:2px 4px;margin:2px 0;border-radius:4px;background:'+(ev.color||'#4285f4')+'22;color:'+txt+';border-left:2px solid '+(ev.color||'#4285f4')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+ev.summary+'</div>';});}
-          h+='</div>';
-        });
-        h+='</div></div>';
-        body.innerHTML=h;
-      } else if (pIdx===2) {
-        // Stats: fetch events and show hours per calendar
-        var now=new Date(); var sd7=new Date(now); sd7.setDate(now.getDate()-7);
-        var ev7=await fetchCalendarEvents(sd7,now);
-        var calHours={};
-        (ev7||[]).forEach(function(ev){if(ev.allDay)return;var dur=(new Date(ev.end)-new Date(ev.start))/3600000;var cn=ev.calendarName||'Other';if(!calHours[cn])calHours[cn]={h:0,c:ev.color||'#4285f4'};calHours[cn].h+=dur;});
-        var sorted=Object.keys(calHours).sort(function(a,b){return calHours[b].h-calHours[a].h;});
-        var totalH=sorted.reduce(function(s,k){return s+calHours[k].h;},0);
-        var h='<div style="padding:12px;overflow:auto;height:100%;font-family:var(--font);">';
-        h+='<div style="text-align:center;font-size:.8rem;font-weight:700;color:'+txt+';margin-bottom:10px;">\uD83D\uDCC8 Last 7 Days Stats</div>';
-        h+='<div style="text-align:center;font-size:1.5rem;font-weight:800;color:#4285f4;margin-bottom:12px;">'+totalH.toFixed(1)+' hrs</div>';
-        sorted.forEach(function(cn){var pct=totalH>0?((calHours[cn].h/totalH)*100).toFixed(0):0;
-          h+='<div style="margin:4px 0;display:flex;align-items:center;gap:6px;">';
-          h+='<span style="font-size:.55rem;color:'+txt+';min-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+cn+'</span>';
-          h+='<div style="flex:1;height:14px;background:'+bg2+';border-radius:7px;overflow:hidden;">';
-          h+='<div style="height:100%;width:'+pct+'%;background:'+calHours[cn].c+';border-radius:7px;transition:width .3s;"></div></div>';
-          h+='<span style="font-size:.5rem;color:#888;min-width:40px;">'+calHours[cn].h.toFixed(1)+'h</span></div>';
-        });
-        if(sorted.length===0) h+='<div style="text-align:center;color:#888;font-size:.6rem;">No events found</div>';
-        h+='</div>';
-        body.innerHTML=h;
+      // Try to use overlay's exact render functions
+      if (window._overlayAPI && typeof window._overlayAPI.renderInto === 'function') {
+        window._overlayAPI.renderInto(body, pIdx, card.calOffset||0, card.calTheme||'light', card.ganttView||'2week');
       } else {
-        // Fruit tracker
-        var now=new Date(); now.setDate(now.getDate()+(card.calOffset||0));
-        var ds=new Date(now.getFullYear(),now.getMonth(),now.getDate()), de=new Date(ds.getTime()+86400000);
-        var allEv=await fetchCalendarEvents(ds,de);
-        var fruitEvts=(allEv||[]).filter(function(e){return (e.calendarName||'').toLowerCase()==="!40's fruit";});
-        var slots=[];for(var i=0;i<48;i++){var sh=Math.floor(i/2),sm=(i%2)*30;slots.push({h:sh,m:sm,has:false});}
-        fruitEvts.forEach(function(ev){var s=new Date(ev.start).getTime(),e2=new Date(ev.end).getTime();var ss=Math.floor((s-ds.getTime())/1800000),se=Math.floor((e2-ds.getTime())/1800000);for(var i=ss;i<se&&i<48;i++){if(i>=0)slots[i].has=true;}});
-        var total=slots.filter(function(s){return s.has;}).length;
-        var h='<div style="padding:10px;overflow:auto;height:100%;font-family:var(--font);">';
-        h+='<div style="text-align:center;font-size:.75rem;font-weight:700;color:'+txt+';margin-bottom:8px;">\uD83C\uDF4E Fruit Tracker - '+now.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</div>';
-        h+='<div style="text-align:center;font-size:1.2rem;font-weight:800;color:#e74c3c;margin-bottom:8px;">'+total+'/48 slots</div>';
-        h+='<div style="display:grid;grid-template-columns:repeat(12,1fr);gap:2px;padding:4px;">';
-        slots.forEach(function(s){
-          var lbl=String(s.h).padStart(2,'0')+':'+(s.m===0?'00':'30');
-          h+='<div title="'+lbl+'" style="aspect-ratio:1;border-radius:3px;background:'+(s.has?'#e74c3c':'rgba(0,0,0,.06)')+';display:flex;align-items:center;justify-content:center;font-size:.4rem;color:'+(s.has?'#fff':'#ccc')+';">'+(s.has?'\uD83C\uDF4E':'')+'</div>';
-        });
-        h+='</div></div>';
-        body.innerHTML=h;
+        // Bootstrap: silently open overlay to initialize API, then retry
+        if (typeof window._openGanttOverlay === 'function') {
+          window._openGanttOverlay(0);
+          await new Promise(function(r){ setTimeout(r, 300); });
+          if (typeof window._closeGanttOverlay === 'function') window._closeGanttOverlay();
+          // Now try again
+          if (window._overlayAPI && typeof window._overlayAPI.renderInto === 'function') {
+            window._overlayAPI.renderInto(body, pIdx, card.calOffset||0, card.calTheme||'light', card.ganttView||'2week');
+          } else {
+            body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;">Initializing...</div>';
+            setTimeout(function(){ _rendering = false; _rw(); }, 1500);
+            return;
+          }
+        }
       }
     } catch(err) {
-      body.innerHTML='<div style="text-align:center;padding:30px;color:#e55;font-size:.65rem;">\u26A0\uFE0F '+err.message+'</div>';
+      body.innerHTML = '<div style="text-align:center;padding:40px;color:#e55;">' + err.message + '</div>';
     }
+    _rendering = false;
   }
-  miroSetupCardDrag(el,card,['.ow-body','button','.mc-resize-br','.mc-resize-bl','.mc-resize-tr','.mc-resize-tl','.mc-resize-t','.mc-resize-b','.mc-resize-l','.mc-resize-r','.mc-lock']);
-  attach8WayResize(el,card,300,200); attachLockUI(el,card);
-  var _rt=null,_lw=0,_lh=0;
-  var ro=new ResizeObserver(function(){clearTimeout(_rt);_rt=setTimeout(function(){var w=el.offsetWidth,h=el.offsetHeight;if(w<50||h<50)return;if(Math.abs(w-_lw)<5&&Math.abs(h-_lh)<5)return;_lw=w;_lh=h;card.w=w;card.h=h;_rw();},500);});
+
+  // â”€â”€ Drag (from header) â”€â”€
+  miroSetupCardDrag(el, card, ['.ow-body','button','.mc-resize-br','.mc-resize-bl','.mc-resize-tr','.mc-resize-tl','.mc-resize-t','.mc-resize-b','.mc-resize-l','.mc-resize-r']);
+
+  // â”€â”€ 8-way Resize â”€â”€
+  attach8WayResize(el, card, 400, 300);
+
+  // â”€â”€ Auto-fit on resize â”€â”€
+  var _rt = null, _lw = 0, _lh = 0;
+  var ro = new ResizeObserver(function() {
+    clearTimeout(_rt);
+    _rt = setTimeout(function() {
+      var w = el.offsetWidth, h = el.offsetHeight;
+      if (w < 50 || h < 50) return;
+      if (Math.abs(w-_lw) < 5 && Math.abs(h-_lh) < 5) return;
+      _lw = w; _lh = h;
+      card.w = w; card.h = h;
+      _rw();
+    }, 600);
+  });
   ro.observe(el);
-  requestAnimationFrame(function(){_rw();});
+
+  // Initial render
+  requestAnimationFrame(function() { _rw(); });
   return el;
 }
-
 document.getElementById('mtb-embed').onclick = () => setActiveTool('embed');
 
 // ─── Calendar List (cached) ───

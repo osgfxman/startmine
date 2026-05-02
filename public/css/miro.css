@@ -5327,3 +5327,87 @@ textarea.cal-form-input {
 .gantt-overlay-panel[style*="background:#f5f6fa"] .today-slot {
   background: rgba(0,0,0,.02);
 }
+
+/* â”€â”€â”€ Overlay Widget: Resize Handles â”€â”€â”€ */
+.miro-overlay-widget .mc-resize-br,
+.miro-overlay-widget .mc-resize-bl,
+.miro-overlay-widget .mc-resize-tr,
+.miro-overlay-widget .mc-resize-tl,
+.miro-overlay-widget .mc-resize-t,
+.miro-overlay-widget .mc-resize-b,
+.miro-overlay-widget .mc-resize-l,
+.miro-overlay-widget .mc-resize-r {
+  position: absolute; z-index: 10; opacity: 0; transition: opacity .15s;
+}
+.miro-overlay-widget .mc-resize-br,
+.miro-overlay-widget .mc-resize-bl,
+.miro-overlay-widget .mc-resize-tr,
+.miro-overlay-widget .mc-resize-tl { width: 14px; height: 14px; border-radius: 50%; background: #4285f4; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+.miro-overlay-widget:hover .mc-resize-br,
+.miro-overlay-widget:hover .mc-resize-bl,
+.miro-overlay-widget:hover .mc-resize-tr,
+.miro-overlay-widget:hover .mc-resize-tl,
+.miro-overlay-widget:hover .mc-resize-t,
+.miro-overlay-widget:hover .mc-resize-b,
+.miro-overlay-widget:hover .mc-resize-l,
+.miro-overlay-widget:hover .mc-resize-r { opacity: 1; }
+.miro-overlay-widget .mc-resize-br { bottom: -7px; right: -7px; cursor: nwse-resize; }
+.miro-overlay-widget .mc-resize-bl { bottom: -7px; left: -7px; cursor: nesw-resize; }
+.miro-overlay-widget .mc-resize-tr { top: -7px; right: -7px; cursor: nesw-resize; }
+.miro-overlay-widget .mc-resize-tl { top: -7px; left: -7px; cursor: nwse-resize; }
+.miro-overlay-widget .mc-resize-t { top: -4px; left: 20px; right: 20px; height: 8px; cursor: ns-resize; }
+.miro-overlay-widget .mc-resize-b { bottom: -4px; left: 20px; right: 20px; height: 8px; cursor: ns-resize; }
+.miro-overlay-widget .mc-resize-l { left: -4px; top: 20px; bottom: 20px; width: 8px; cursor: ew-resize; }
+.miro-overlay-widget .mc-resize-r { right: -4px; top: 20px; bottom: 20px; width: 8px; cursor: ew-resize; }
+.miro-overlay-widget.is-locked [class^="mc-resize-"] { display: none !important; }
+
+/* â”€â”€â”€ Overlay Widget: Page Switch Buttons â”€â”€â”€ */
+.miro-overlay-widget .ow-page-btn {
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+  border-radius: 6px; padding: 2px 8px; cursor: pointer; font-size: .6rem;
+  transition: all .15s;
+}
+.miro-overlay-widget .ow-page-btn.active {
+  background: rgba(66,133,244,.25); border-color: #4285f4; box-shadow: 0 0 6px rgba(66,133,244,.3);
+}
+.miro-overlay-widget.ow-light .ow-page-btn {
+  background: rgba(0,0,0,.04); border-color: #ccc; color: #555;
+}
+.miro-overlay-widget.ow-light .ow-page-btn.active {
+  background: rgba(66,133,244,.15); border-color: #4285f4; color: #1a73e8;
+}
+
+/* â”€â”€â”€ Overlay Widget: Lock Icon Button â”€â”€â”€ */
+.miro-overlay-widget .ow-lock-btn {
+  background: none !important; border: none !important; padding: 2px 4px !important;
+  font-size: .6rem !important; cursor: pointer; opacity: .5; transition: opacity .15s;
+}
+.miro-overlay-widget .ow-lock-btn:hover { opacity: 1; }
+
+/* â”€â”€â”€ Overlay Widget: Dark theme â”€â”€â”€ */
+.miro-overlay-widget.ow-dark {
+  background: #1a1c2e; border-color: rgba(108,143,255,.2);
+}
+.miro-overlay-widget.ow-dark .ow-hdr {
+  background: rgba(108,143,255,.08); border-bottom-color: rgba(255,255,255,.08);
+}
+.miro-overlay-widget.ow-dark .ow-hdr button { color: #aaa; background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.12); }
+.miro-overlay-widget.ow-dark .ow-hdr button:hover { background: rgba(255,255,255,.15); color: #fff; }
+
+/* â”€â”€â”€ Overlay Widget: Light theme (matches overlay) â”€â”€â”€ */
+.miro-overlay-widget.ow-light {
+  background: #f5f6fa; border-color: #ddd;
+}
+.miro-overlay-widget.ow-light .ow-hdr {
+  background: rgba(0,0,0,.04); border-bottom-color: #ddd;
+}
+.miro-overlay-widget.ow-light .ow-hdr button { color: #444; background: rgba(0,0,0,.05); border-color: #ccc; }
+.miro-overlay-widget.ow-light .ow-hdr button:hover { background: rgba(0,0,0,.1); color: #222; }
+
+/* â”€â”€â”€ Overlay Widget: Transparent theme â”€â”€â”€ */
+.miro-overlay-widget.ow-transparent {
+  background: rgba(20,20,30,.85); border-color: rgba(255,255,255,.08); box-shadow: none;
+}
+.miro-overlay-widget.ow-transparent .ow-hdr {
+  background: transparent; border-bottom-color: rgba(255,255,255,.06);
+}
