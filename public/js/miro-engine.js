@@ -1,4 +1,4 @@
-/* ─── Miro Page Engine ─── */
+﻿/* ─── Miro Page Engine ─── */
 let _miroMode = true;
 let _miroPanning = false,
   _miroPanStartX = 0,
@@ -4581,119 +4581,99 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
               })(fc, absSlotIdx, hasFruit, frSlotMap, fruitCalId, slotStartDate, slotEndDate);
 
               cw.appendChild(fc);
+              cw.setAttribute('data-cell-idx', slotInSess);
               pg.appendChild(cw);
               cellElements.push({ el: cw, slot: slotInSess, absSlot: absSlotIdx, startMin: slotStartMin, endMin: slotEndMin, dayMs: dayMs });
             });
           });
 
-          // â”€â”€ Drag-to-select for events (on .pomo-ev cells) â”€â”€
-          (function(pg, cellElements, sess, dayMs) {
-            var dragging = false, startSlot = -1, didDrag = false;
-            pg.addEventListener('mousedown', function(e) {
-              if (e.button !== 0) return;
-              var cell = e.target.closest('[data-cell-idx]');
-              if (!cell) return;
-              if (e.target.closest('.pomo-fr')) return; // skip fruit row
-              dragging = true; didDrag = false; pg._didDrag = false;
-              startSlot = parseInt(cell.dataset.cellIdx);
-              e.preventDefault();
-            });
-            pg.addEventListener('mousemove', function(e) {
-              if (!dragging) return;
-              var cell = e.target.closest('[data-cell-idx]');
-              if (!cell) return;
-              var cur = parseInt(cell.dataset.cellIdx);
-              if (cur !== startSlot) didDrag = true;
-              var mn = Math.min(startSlot, cur), mx = Math.max(startSlot, cur);
-              cellElements.forEach(function(ce) {
-                var ev = ce.el.querySelector('.pomo-ev');
-                if (ce.slot >= mn && ce.slot <= mx) {
-                  ev.style.outline = '2px solid #4285f4'; ev.style.outlineOffset = '-2px';
-                } else {
-                  ev.style.outline = 'none';
-                }
-              });
-            });
-            var endDrag = function(e) {
-              if (!dragging) return;
-              dragging = false;
-              var highlighted = [];
-              cellElements.forEach(function(ce) {
-                var ev = ce.el.querySelector('.pomo-ev');
-                if (ev.style.outline && ev.style.outline.indexOf('4285f4') !== -1) highlighted.push(ce);
-                ev.style.outline = 'none';
-              });
-              if (!didDrag || highlighted.length < 2) { didDrag = false; return; }
-              pg._didDrag = true; setTimeout(function(){ pg._didDrag = false; }, 100);
-              var sMin = Math.min.apply(null, highlighted.map(function(h){return h.startMin;}));
-              var eMin = Math.max.apply(null, highlighted.map(function(h){return h.endMin;}));
-              var sd = new Date(dayMs + sMin * 60000), ed = new Date(dayMs + eMin * 60000);
-              showCalendarEventForm(body, body, null, { mode:'create', startTime:sd, endTime:ed });
-            };
-            pg.addEventListener('mouseup', endDrag);
-            document.addEventListener('mouseup', function() { if (dragging) endDrag(null); });
-          })(pg, cellElements, sess, dayMs);
+          // Drag-to-select (document-level with bounding rect hit testing)
+          (function(cellElements, sess, dayMs, fruitCalId, frSlotMap, pg) {
+            var mode = null;
+            var startSlot = -1;
 
-          // â”€â”€ Drag-to-select for fruits â”€â”€
-          (function(pg, cellElements, fruitCalId, frSlotMap, dayMs, sess) {
-            var dragging = false, startSlot = -1, didDrag = false;
-            pg.addEventListener('mousedown', function(e) {
-              if (e.button !== 0) return;
-              var fr = e.target.closest('.pomo-fr');
-              if (!fr) return;
-              var cell = fr.closest('[data-cell-idx]');
-              if (!cell) return;
-              dragging = true; didDrag = false; pg._didDragFr = false;
-              startSlot = parseInt(cell.dataset.cellIdx);
-              e.preventDefault();
-            });
-            pg.addEventListener('mousemove', function(e) {
-              if (!dragging) return;
-              var cell = e.target.closest('[data-cell-idx]');
-              if (!cell) return;
-              var cur = parseInt(cell.dataset.cellIdx);
-              if (cur !== startSlot) didDrag = true;
-              var mn = Math.min(startSlot, cur), mx = Math.max(startSlot, cur);
+            function getCellAt(x, y) {
+              for (var i = 0; i < cellElements.length; i++) {
+                var r = cellElements[i].el.getBoundingClientRect();
+                if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return cellElements[i];
+              }
+              return null;
+            }
+
+            function highlightRange(mn, mx) {
               cellElements.forEach(function(ce) {
-                var fr = ce.el.querySelector('.pomo-fr');
+                var tgt = mode === 'ev' ? ce.el.querySelector('.pomo-ev') : ce.el.querySelector('.pomo-fr');
+                var clr = mode === 'ev' ? '#4285f4' : '#e74c3c';
                 if (ce.slot >= mn && ce.slot <= mx) {
-                  fr.style.outline = '2px solid #e74c3c'; fr.style.outlineOffset = '-2px';
+                  tgt.style.outline = '2px solid ' + clr;
                 } else {
-                  fr.style.outline = 'none';
+                  tgt.style.outline = 'none';
                 }
+              });
+            }
+
+            function clearAll() {
+              cellElements.forEach(function(ce) {
+                ce.el.querySelector('.pomo-ev').style.outline = 'none';
+                ce.el.querySelector('.pomo-fr').style.outline = 'none';
+              });
+            }
+
+            cellElements.forEach(function(ce) {
+              ce.el.querySelector('.pomo-ev').addEventListener('mousedown', function(e) {
+                if (e.button !== 0) return;
+                mode = 'ev'; startSlot = ce.slot; pg._didDrag = false;
+                highlightRange(ce.slot, ce.slot);
+                e.preventDefault();
+              });
+              ce.el.querySelector('.pomo-fr').addEventListener('mousedown', function(e) {
+                if (e.button !== 0) return;
+                mode = 'fr'; startSlot = ce.slot; pg._didDragFr = false;
+                highlightRange(ce.slot, ce.slot);
+                e.preventDefault();
               });
             });
-            var endFrDrag = function(e) {
-              if (!dragging) return;
-              dragging = false;
-              if (!didDrag) return;
-              pg._didDragFr = true; setTimeout(function(){ pg._didDragFr = false; }, 100);
-              var selected = [];
+
+            document.addEventListener('mousemove', function(e) {
+              if (!mode) return;
+              var hit = getCellAt(e.clientX, e.clientY);
+              if (!hit) return;
+              highlightRange(Math.min(startSlot, hit.slot), Math.max(startSlot, hit.slot));
+            });
+
+            document.addEventListener('mouseup', function() {
+              if (!mode) return;
+              var curMode = mode; mode = null;
+              var sel = [];
               cellElements.forEach(function(ce) {
-                var fr = ce.el.querySelector('.pomo-fr');
-                if (fr.style.outline && fr.style.outline.indexOf('e74c3c') !== -1) selected.push(ce);
-                fr.style.outline = 'none';
+                var tgt = curMode === 'ev' ? ce.el.querySelector('.pomo-ev') : ce.el.querySelector('.pomo-fr');
+                if (tgt.style.outline && tgt.style.outline !== 'none') sel.push(ce);
               });
-              if (selected.length < 1 || !fruitCalId) return;
-              // Check if mostly have fruit (delete) or don't (create)
-              var hasCount = selected.filter(function(ce) { return (frSlotMap[ce.absSlot]||[]).length > 0; }).length;
-              var shouldDelete = hasCount > selected.length / 2;
-              var ops = [];
-              selected.forEach(function(ce) {
-                var fEvs = frSlotMap[ce.absSlot] || [];
-                var sMin = (sess.start * 60) + (ce.slot * 30);
-                var sd = new Date(dayMs + sMin * 60000), ed = new Date(dayMs + (sMin+30) * 60000);
-                if (shouldDelete && fEvs.length > 0) {
-                  ops.push(deleteCalendarEvent(fEvs[0].calendarId, fEvs[0].id));
-                } else if (!shouldDelete && fEvs.length === 0) {
-                  ops.push(createCalendarEvent(fruitCalId, "!40's Fruit", sd, ed, ''));
-                }
-              });
-              Promise.all(ops).then(function() { showToast(shouldDelete ? '\uD83D\uDDD1 Removed '+ops.length : '\u2705 Added '+ops.length); _renderToday(); }).catch(function(er) { showToast('\u274C ' + er.message); _renderToday(); });
-            };
-            pg.addEventListener('mouseup', endFrDrag);
-            document.addEventListener('mouseup', function() { if (dragging) endFrDrag(null); });
-          })(pg, cellElements, fruitCalId, frSlotMap, dayMs, sess);
+              clearAll();
+              if (curMode === 'ev') {
+                if (sel.length < 2) return;
+                pg._didDrag = true; setTimeout(function(){ pg._didDrag = false; }, 300);
+                var sMin = Math.min.apply(null, sel.map(function(h){return h.startMin;}));
+                var eMin = Math.max.apply(null, sel.map(function(h){return h.endMin;}));
+                showCalendarEventForm(body, body, null, { mode:'create', startTime:new Date(dayMs+sMin*60000), endTime:new Date(dayMs+eMin*60000) });
+              } else if (curMode === 'fr') {
+                if (sel.length < 2) return;
+                pg._didDragFr = true; setTimeout(function(){ pg._didDragFr = false; }, 300);
+                if (!fruitCalId) return;
+                var hasC = sel.filter(function(c2) { return (frSlotMap[c2.absSlot]||[]).length > 0; }).length;
+                var del2 = hasC > sel.length / 2;
+                var ops = [];
+                sel.forEach(function(c2) {
+                  var fEvs = frSlotMap[c2.absSlot] || [];
+                  var sM = (sess.start * 60) + (c2.slot * 30);
+                  var sd2 = new Date(dayMs + sM * 60000), ed2 = new Date(dayMs + (sM+30) * 60000);
+                  if (del2 && fEvs.length > 0) ops.push(deleteCalendarEvent(fEvs[0].calendarId, fEvs[0].id));
+                  else if (!del2 && fEvs.length === 0) ops.push(createCalendarEvent(fruitCalId, "!40's Fruit", sd2, ed2, ''));
+                });
+                if (ops.length) Promise.all(ops).then(function() { _renderToday(); }).catch(function() { _renderToday(); });
+              }
+            });
+          })(cellElements, sess, dayMs, fruitCalId, frSlotMap, pg);
 
           sp.appendChild(pg);
           return sp;
@@ -4724,7 +4704,10 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         if (todayData) {
           var curSess = sessions[curSessIdx];
           var curPanel = buildSession(curSess, curSessIdx, todayData.dayMs, todayData.dayEvts, todayData.frSlotMap, fruitCalId, true);
-          container.appendChild(curPanel);
+          var curWrap = document.createElement('div');
+          curWrap.style.cssText = 'display:flex;justify-content:center;width:100%;';
+          curWrap.appendChild(curPanel);
+          container.appendChild(curWrap);
         }
 
         // Render each day
@@ -4735,10 +4718,21 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           container.appendChild(dh);
 
           var sg = document.createElement('div');
-          sg.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;';
+          sg.style.cssText = 'display:grid;grid-template-columns:repeat(2,auto);gap:3px;justify-content:center;';
 
           sessions.forEach(function(sess, sIdx) {
-            if (dd.isToday && sIdx === curSessIdx) return;
+            if (dd.isToday && sIdx === curSessIdx) {
+              // Placeholder gap for current session's original position
+              var ph = document.createElement('div');
+              ph.style.cssText = 'display:inline-flex;align-items:center;padding:2px 3px;border-radius:4px;border:1px dashed rgba(66,133,244,.3);opacity:.4;';
+              var phl = document.createElement('span');
+              phl.style.cssText = 'font-size:14px;'; phl.textContent = sess.emoji;
+              var phn = document.createElement('span');
+              phn.style.cssText = 'font-size:.5rem;color:'+txt+';opacity:.5;margin-left:2px;'; phn.textContent = sess.name+' \u2191';
+              ph.appendChild(phl); ph.appendChild(phn);
+              sg.appendChild(ph);
+              return;
+            }
             var panel = buildSession(sess, sIdx, dd.dayMs, dd.dayEvts, dd.frSlotMap, fruitCalId, false);
             sg.appendChild(panel);
           });
