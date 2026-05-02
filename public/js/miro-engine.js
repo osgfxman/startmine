@@ -4477,33 +4477,97 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         var isToday2 = (day2.getDate() === now.getDate() && day2.getMonth() === now.getMonth());
 
         function buildSession(sess, sIdx, dayMs, dayEvts, frSlotMap, fruitCalId, isCurrent) {
-          var sp = document.createElement('div');
-          sp.style.cssText = 'display:inline-flex;align-items:center;gap:2px;padding:2px 3px;background:'+bg2+';border-radius:4px;border:1px solid '+(isCurrent?'#4285f4':bdr)+';'+(isCurrent?'box-shadow:0 0 6px rgba(66,133,244,.3);':'');
-
-          // Session label
-          var sl = document.createElement('div');
-          sl.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:0;margin-right:2px;';
-          var se = document.createElement('span'); se.style.cssText = 'font-size:14px;line-height:1;'; se.textContent = sess.emoji;
-          var sn = document.createElement('span'); sn.style.cssText = 'font-size:.55rem;font-weight:700;color:'+txt+';line-height:1;'; sn.textContent = sess.name;
-          sl.appendChild(se); sl.appendChild(sn);
-          sp.appendChild(sl);
-
-          // Pomodoro cells container with drag support
-          var pg = document.createElement('div');
-          pg.style.cssText = 'display:flex;align-items:flex-start;gap:1px;';
-          pg.dataset.sessIdx = sIdx;
-
-          var groups = [[0,1,2],[3,4],[5,6,7]];
-          var cellElements = [];
-
-          groups.forEach(function(grp, gi) {
-            if (gi > 0) {
-              var gap = document.createElement('div');
-              gap.style.cssText = 'width:4px;align-self:stretch;flex-shrink:0;';
-              pg.appendChild(gap);
+          var SZ = 22;
+          // Check if flights have 03G/04G2 events
+          function hasZakat(flightSlots) {
+            for (var fi = 0; fi < flightSlots.length; fi++) {
+              var slotStartMin = (sess.start * 60) + (flightSlots[fi] * 30);
+              var slotEndMin = slotStartMin + 30;
+              for (var ei2 = 0; ei2 < dayEvts.length; ei2++) {
+                var ev = dayEvts[ei2];
+                var cn = (ev.calendarName||'').toLowerCase();
+                if (cn !== '03g' && cn !== '04g2') continue;
+                var esM = new Date(ev.start).getHours() * 60 + new Date(ev.start).getMinutes();
+                var eeM = new Date(ev.end).getHours() * 60 + new Date(ev.end).getMinutes();
+                if (eeM === 0) eeM = 1440;
+                if (esM < slotEndMin && eeM > slotStartMin) return true;
+              }
             }
+            return false;
+          }
 
-            grp.forEach(function(slotInSess) {
+          var flight1Slots = [0,1,2,3];
+          var flight2Slots = [4,5,6,7];
+          var f1Zakat = hasZakat(flight1Slots);
+          var f2Zakat = hasZakat(flight2Slots);
+          var sessionSuccess = f1Zakat && f2Zakat;
+
+          var sp = document.createElement('div');
+          var sessBdr = sessionSuccess ? '#27ae60' : (isCurrent ? '#4285f4' : bdr);
+          var sessBg = sessionSuccess ? (isDk ? 'rgba(39,174,96,.08)' : 'rgba(39,174,96,.06)') : bg2;
+          sp.style.cssText = 'display:inline-flex;flex-direction:column;gap:2px;padding:3px;background:'+sessBg+';border-radius:6px;border:2px solid '+sessBdr+';'+(isCurrent?'box-shadow:0 0 8px rgba(66,133,244,.3);':'')+(sessionSuccess?'box-shadow:0 0 8px rgba(39,174,96,.3);':'');
+
+          // Combined header + flights container
+          var fc = document.createElement('div');
+          fc.style.cssText = 'display:flex;gap:4px;';
+
+          // Build each flight
+          [flight1Slots, flight2Slots].forEach(function(flightSlots, flIdx) {
+            var fZakat = flIdx === 0 ? f1Zakat : f2Zakat;
+            var fd = document.createElement('div');
+            var fBdr = fZakat ? '#27ae60' : bdr;
+            var fBdrW = fZakat ? '3px' : '1px';
+            fd.style.cssText = 'display:flex;flex-direction:column;gap:1px;padding:2px;border:'+fBdrW+' solid '+fBdr+';border-radius:4px;background:'+(fZakat?(isDk?'rgba(39,174,96,.06)':'rgba(39,174,96,.04)'):'transparent')+';';
+
+            // Combined header: session label (on first flight) + zakat + badge
+            var fh = document.createElement('div');
+            fh.style.cssText = 'display:flex;align-items:center;gap:3px;min-height:16px;';
+            if (flIdx === 0) {
+              var se2 = document.createElement('span'); se2.style.cssText = 'font-size:14px;line-height:1;'; se2.textContent = sess.emoji;
+              fh.appendChild(se2);
+              var sn2 = document.createElement('span'); sn2.style.cssText = 'font-size:.55rem;font-weight:700;color:'+txt+';'; sn2.textContent = sess.name;
+              fh.appendChild(sn2);
+            }
+            if (fZakat) {
+              var fb = document.createElement('span');
+              fb.style.cssText = 'font-size:12px;'; fb.textContent = '\uD83C\uDF4C\u2705';
+              fb.title = 'Flight '+((flIdx+1))+' has zakat!';
+              fh.appendChild(fb);
+            }
+            if (flIdx === 0 && sessionSuccess) {
+              var badge = document.createElement('span');
+              badge.style.cssText = 'font-size:14px;';
+              badge.textContent = '\uD83C\uDF49\u2705';
+              badge.title = 'Session Success!';
+              fh.appendChild(badge);
+            }
+            var spacer = document.createElement('span');
+            spacer.style.cssText = 'flex:1;';
+            fh.appendChild(spacer);
+            var zl = document.createElement('span');
+            if (fZakat) {
+              zl.style.cssText = 'font-size:.5rem;color:#27ae60;font-weight:900;text-shadow:0 0 6px rgba(39,174,96,.6);letter-spacing:.5px;';
+              zl.textContent = '\u0630\u0643\u0631 \u0627\u0644\u0644\u0647';
+            } else {
+              zl.style.cssText = 'font-size:.5rem;color:'+txt+';opacity:.7;font-weight:600;';
+              zl.textContent = '\u0632\u0643\u0627\u0629 \u0627\u0644\u0648\u0642\u062A';
+            }
+            fh.appendChild(zl);
+            fd.appendChild(fh);
+
+            // Pomodoro cells row: 3 work + gap + 1 break
+            var pr = document.createElement('div');
+            pr.style.cssText = 'display:flex;align-items:flex-start;gap:1px;';
+
+            var cellElements = [];
+            flightSlots.forEach(function(slotInSess, localIdx) {
+              var isBreak = (localIdx === 3);
+              if (isBreak) {
+                var gap = document.createElement('div');
+                gap.style.cssText = 'width:3px;align-self:stretch;';
+                pr.appendChild(gap);
+              }
+
               var absSlotIdx = sIdx * 8 + slotInSess;
               var slotStartMin = (sess.start * 60) + (slotInSess * 30);
               var slotEndMin = slotStartMin + 30;
@@ -4529,22 +4593,23 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
 
               var cw = document.createElement('div');
               cw.style.cssText = 'display:flex;flex-direction:column;gap:1px;';
-              cw.dataset.cellIdx = slotInSess;
-              cw.dataset.absSlot = absSlotIdx;
+              cw.setAttribute('data-cell-idx', slotInSess);
 
               // Event cell
               var ec = document.createElement('div');
               ec.className = 'pomo-ev';
-              ec.style.cssText = 'width:'+SZ+'px;height:'+SZ+'px;border:1px solid '+bdr+';border-radius:3px;background:'+(cellBg!=='transparent'?cellBg:bg2)+';cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:.3rem;color:'+(cellBg!=='transparent'?getContrastColor(cellBg):txt)+';box-sizing:border-box;user-select:none;';
+              var textCol = cellBg !== 'transparent' ? getContrastColor(cellBg) : txt;
+              ec.style.cssText = 'width:'+SZ+'px;height:'+SZ+'px;border:1px solid '+bdr+';border-radius:3px;background:'+(cellBg!=='transparent'?cellBg:(isBreak?'rgba(128,128,128,.05)':bg2))+';cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:.3rem;color:'+textCol+';box-sizing:border-box;user-select:none;';
               if (cellTitle) ec.title = cellTitle;
               else {
                 var th2 = Math.floor(slotStartMin/60), tm2 = slotStartMin%60;
-                ec.title = ((th2%12)||12)+':'+(tm2<10?'0':'')+tm2+(th2<12?'am':'pm');
+                ec.title = ((th2%12)||12)+':'+(tm2<10?'0':'')+tm2+(th2<12?'am':'pm')+(isBreak?' (Break)':'');
               }
+              if (isBreak && !cellTitle) ec.textContent = '\u23F8';
 
-              (function(ec, slotEvts, slotStartDate, slotEndDate) {
+              (function(ec, slotEvts, slotStartDate, slotEndDate, pg2) {
                 ec.addEventListener('click', function(ev2) {
-                  if (pg._didDrag) return;
+                  if (pg2 && pg2._didDrag) return;
                   ev2.stopPropagation();
                   if (slotEvts.length > 0) {
                     var e0 = slotEvts[0];
@@ -4553,22 +4618,20 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
                     showCalendarEventForm(body, body, null, { mode:'create', startTime:slotStartDate, endTime:slotEndDate });
                   }
                 });
-              })(ec, slotEvts, slotStartDate, slotEndDate);
+              })(ec, slotEvts, slotStartDate, slotEndDate, pr);
 
               cw.appendChild(ec);
 
               // Fruit cell
-              var fc = document.createElement('div');
-              fc.className = 'pomo-fr';
-              fc.style.cssText = 'width:'+SZ+'px;height:'+SZ+'px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:'+(SZ-6)+'px;border-radius:3px;background:'+(hasFruit?'rgba(231,76,60,.1)':'transparent')+';box-sizing:border-box;user-select:none;';
-              fc.textContent = hasFruit ? '\uD83C\uDF4E' : '';
-              fc.title = hasFruit ? '\u2714 Fruit' : 'Add fruit';
-              fc.dataset.absSlot = absSlotIdx;
-              fc.dataset.hasFruit = hasFruit ? '1' : '0';
+              var frc = document.createElement('div');
+              frc.className = 'pomo-fr';
+              frc.style.cssText = 'width:'+SZ+'px;height:'+SZ+'px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:'+(SZ-6)+'px;border-radius:3px;background:'+(hasFruit?'rgba(231,76,60,.1)':'transparent')+';box-sizing:border-box;user-select:none;';
+              frc.textContent = hasFruit ? '\uD83C\uDF4E' : '';
+              frc.title = hasFruit ? '\u2714 Fruit' : 'Add fruit';
 
-              (function(fc, absSlotIdx, hasFruit, frSlotMap, fruitCalId, slotStartDate, slotEndDate) {
-                fc.addEventListener('click', function(ev2) {
-                  if (pg._didDragFr) return;
+              (function(frc, absSlotIdx, hasFruit, frSlotMap, fruitCalId, slotStartDate, slotEndDate, pg2) {
+                frc.addEventListener('click', function(ev2) {
+                  if (pg2 && pg2._didDragFr) return;
                   ev2.stopPropagation();
                   if (!fruitCalId) { showToast('\u274C No fruit calendar'); return; }
                   var fEvs = frSlotMap[absSlotIdx] || [];
@@ -4578,104 +4641,72 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
                     createCalendarEvent(fruitCalId, "!40's Fruit", slotStartDate, slotEndDate, '').then(function() { showToast('\u2705'); _renderToday(); }).catch(function(er) { showToast('\u274C ' + er.message); });
                   }
                 });
-              })(fc, absSlotIdx, hasFruit, frSlotMap, fruitCalId, slotStartDate, slotEndDate);
+              })(frc, absSlotIdx, hasFruit, frSlotMap, fruitCalId, slotStartDate, slotEndDate, pr);
 
-              cw.appendChild(fc);
-              cw.setAttribute('data-cell-idx', slotInSess);
-              pg.appendChild(cw);
+              cw.appendChild(frc);
+              pr.appendChild(cw);
               cellElements.push({ el: cw, slot: slotInSess, absSlot: absSlotIdx, startMin: slotStartMin, endMin: slotEndMin, dayMs: dayMs });
             });
-          });
 
-          // Drag-to-select (document-level with bounding rect hit testing)
-          (function(cellElements, sess, dayMs, fruitCalId, frSlotMap, pg) {
-            var mode = null;
-            var startSlot = -1;
+            fd.appendChild(pr);
 
-            function getCellAt(x, y) {
-              for (var i = 0; i < cellElements.length; i++) {
-                var r = cellElements[i].el.getBoundingClientRect();
-                if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return cellElements[i];
+            // Drag-to-select for this flight
+            (function(cellElements, sess, dayMs, fruitCalId, frSlotMap, pr) {
+              var mode = null, startSlot = -1;
+              function getCellAt(x, y) {
+                for (var i = 0; i < cellElements.length; i++) {
+                  var r = cellElements[i].el.getBoundingClientRect();
+                  if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return cellElements[i];
+                }
+                return null;
               }
-              return null;
-            }
-
-            function highlightRange(mn, mx) {
+              function hl(mn, mx) {
+                cellElements.forEach(function(ce) {
+                  var tgt = mode === 'ev' ? ce.el.querySelector('.pomo-ev') : ce.el.querySelector('.pomo-fr');
+                  tgt.style.outline = (ce.slot >= mn && ce.slot <= mx) ? '2px solid '+(mode==='ev'?'#4285f4':'#e74c3c') : 'none';
+                });
+              }
+              function clr() { cellElements.forEach(function(ce) { ce.el.querySelector('.pomo-ev').style.outline='none'; ce.el.querySelector('.pomo-fr').style.outline='none'; }); }
               cellElements.forEach(function(ce) {
-                var tgt = mode === 'ev' ? ce.el.querySelector('.pomo-ev') : ce.el.querySelector('.pomo-fr');
-                var clr = mode === 'ev' ? '#4285f4' : '#e74c3c';
-                if (ce.slot >= mn && ce.slot <= mx) {
-                  tgt.style.outline = '2px solid ' + clr;
-                } else {
-                  tgt.style.outline = 'none';
+                ce.el.querySelector('.pomo-ev').addEventListener('mousedown', function(e) { if(e.button!==0)return; mode='ev';startSlot=ce.slot;pr._didDrag=false;hl(ce.slot,ce.slot);e.preventDefault(); });
+                ce.el.querySelector('.pomo-fr').addEventListener('mousedown', function(e) { if(e.button!==0)return; mode='fr';startSlot=ce.slot;pr._didDragFr=false;hl(ce.slot,ce.slot);e.preventDefault(); });
+              });
+              document.addEventListener('mousemove', function(e) { if(!mode)return; var h=getCellAt(e.clientX,e.clientY); if(!h)return; hl(Math.min(startSlot,h.slot),Math.max(startSlot,h.slot)); });
+              document.addEventListener('mouseup', function() {
+                if(!mode) return;
+                var cm = mode; mode = null;
+                var sel = [];
+                cellElements.forEach(function(ce) {
+                  var tgt = cm==='ev' ? ce.el.querySelector('.pomo-ev') : ce.el.querySelector('.pomo-fr');
+                  if (tgt.style.outline && tgt.style.outline !== 'none') sel.push(ce);
+                });
+                clr();
+                if (cm === 'ev' && sel.length >= 2) {
+                  pr._didDrag = true; setTimeout(function(){pr._didDrag=false;},300);
+                  var sMin = Math.min.apply(null,sel.map(function(h){return h.startMin;}));
+                  var eMin = Math.max.apply(null,sel.map(function(h){return h.endMin;}));
+                  showCalendarEventForm(body, body, null, {mode:'create',startTime:new Date(dayMs+sMin*60000),endTime:new Date(dayMs+eMin*60000)});
+                } else if (cm === 'fr' && sel.length >= 2 && fruitCalId) {
+                  pr._didDragFr = true; setTimeout(function(){pr._didDragFr=false;},300);
+                  var hc = sel.filter(function(c2){return(frSlotMap[c2.absSlot]||[]).length>0;}).length;
+                  var dl = hc > sel.length/2;
+                  var ops = [];
+                  sel.forEach(function(c2) {
+                    var fEvs=frSlotMap[c2.absSlot]||[];
+                    var sM=(sess.start*60)+(c2.slot*30);
+                    var sd2=new Date(dayMs+sM*60000),ed2=new Date(dayMs+(sM+30)*60000);
+                    if(dl&&fEvs.length>0) ops.push(deleteCalendarEvent(fEvs[0].calendarId,fEvs[0].id));
+                    else if(!dl&&fEvs.length===0) ops.push(createCalendarEvent(fruitCalId,"!40's Fruit",sd2,ed2,''));
+                  });
+                  if(ops.length) Promise.all(ops).then(function(){_renderToday();}).catch(function(){_renderToday();});
                 }
               });
-            }
+            })(cellElements, sess, dayMs, fruitCalId, frSlotMap, pr);
 
-            function clearAll() {
-              cellElements.forEach(function(ce) {
-                ce.el.querySelector('.pomo-ev').style.outline = 'none';
-                ce.el.querySelector('.pomo-fr').style.outline = 'none';
-              });
-            }
+            fc.appendChild(fd);
+          });
 
-            cellElements.forEach(function(ce) {
-              ce.el.querySelector('.pomo-ev').addEventListener('mousedown', function(e) {
-                if (e.button !== 0) return;
-                mode = 'ev'; startSlot = ce.slot; pg._didDrag = false;
-                highlightRange(ce.slot, ce.slot);
-                e.preventDefault();
-              });
-              ce.el.querySelector('.pomo-fr').addEventListener('mousedown', function(e) {
-                if (e.button !== 0) return;
-                mode = 'fr'; startSlot = ce.slot; pg._didDragFr = false;
-                highlightRange(ce.slot, ce.slot);
-                e.preventDefault();
-              });
-            });
-
-            document.addEventListener('mousemove', function(e) {
-              if (!mode) return;
-              var hit = getCellAt(e.clientX, e.clientY);
-              if (!hit) return;
-              highlightRange(Math.min(startSlot, hit.slot), Math.max(startSlot, hit.slot));
-            });
-
-            document.addEventListener('mouseup', function() {
-              if (!mode) return;
-              var curMode = mode; mode = null;
-              var sel = [];
-              cellElements.forEach(function(ce) {
-                var tgt = curMode === 'ev' ? ce.el.querySelector('.pomo-ev') : ce.el.querySelector('.pomo-fr');
-                if (tgt.style.outline && tgt.style.outline !== 'none') sel.push(ce);
-              });
-              clearAll();
-              if (curMode === 'ev') {
-                if (sel.length < 2) return;
-                pg._didDrag = true; setTimeout(function(){ pg._didDrag = false; }, 300);
-                var sMin = Math.min.apply(null, sel.map(function(h){return h.startMin;}));
-                var eMin = Math.max.apply(null, sel.map(function(h){return h.endMin;}));
-                showCalendarEventForm(body, body, null, { mode:'create', startTime:new Date(dayMs+sMin*60000), endTime:new Date(dayMs+eMin*60000) });
-              } else if (curMode === 'fr') {
-                if (sel.length < 2) return;
-                pg._didDragFr = true; setTimeout(function(){ pg._didDragFr = false; }, 300);
-                if (!fruitCalId) return;
-                var hasC = sel.filter(function(c2) { return (frSlotMap[c2.absSlot]||[]).length > 0; }).length;
-                var del2 = hasC > sel.length / 2;
-                var ops = [];
-                sel.forEach(function(c2) {
-                  var fEvs = frSlotMap[c2.absSlot] || [];
-                  var sM = (sess.start * 60) + (c2.slot * 30);
-                  var sd2 = new Date(dayMs + sM * 60000), ed2 = new Date(dayMs + (sM+30) * 60000);
-                  if (del2 && fEvs.length > 0) ops.push(deleteCalendarEvent(fEvs[0].calendarId, fEvs[0].id));
-                  else if (!del2 && fEvs.length === 0) ops.push(createCalendarEvent(fruitCalId, "!40's Fruit", sd2, ed2, ''));
-                });
-                if (ops.length) Promise.all(ops).then(function() { _renderToday(); }).catch(function() { _renderToday(); });
-              }
-            });
-          })(cellElements, sess, dayMs, fruitCalId, frSlotMap, pg);
-
-          sp.appendChild(pg);
+          sp.appendChild(fc);
           return sp;
         }
 
