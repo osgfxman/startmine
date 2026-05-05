@@ -4813,15 +4813,16 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         var fruitCalId='';
         try{var cals=await getCalendarList();var frCal=cals.find(function(c){return c.summary.toLowerCase()==="!40's fruit";});if(frCal)fruitCalId=frCal.id;}catch(e){}
         body._ganttRender=function(){_renderGantt2();};
-        var CS=14,DW=2,cardW=10*CS+DW;
+        var CS=14,DW=2;
         var dn=['Su','Mo','Tu','We','Th','Fr','Sa'];
-        // ROOT - no scroll
         var root=document.createElement('div');
         root.style.cssText='display:flex;flex-direction:column;height:100%;box-sizing:border-box;font-family:var(--font);overflow:hidden;';
-        // â”€â”€â”€ ROW 1: first 7 days â”€â”€â”€
+        // â”€â”€â”€ TOP HALF: DAY CARDS (50%) â”€â”€â”€
+        var topHalf=document.createElement('div');
+        topHalf.style.cssText='flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px;overflow:hidden;padding:2px;';
         function makeCardRow(startIdx,count){
           var row=document.createElement('div');
-          row.style.cssText='display:flex;flex-direction:row-reverse;gap:3px;justify-content:center;flex-shrink:0;padding:1px 2px;';
+          row.style.cssText='display:flex;flex-direction:row-reverse;gap:3px;justify-content:center;flex-shrink:0;';
           for(var d=startIdx;d<startIdx+count&&d<spDays;d++){
             var dayDate=new Date(sprintStart);dayDate.setDate(sprintStart.getDate()+d);
             var dayMs=new Date(dayDate.getFullYear(),dayDate.getMonth(),dayDate.getDate()).getTime();
@@ -4832,10 +4833,8 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
             function hasZS(sess,slots){for(var fi=0;fi<slots.length;fi++){var sm=(sess.start*60)+(slots[fi]*30),sx=sm+30;for(var ei=0;ei<dayEvts.length;ei++){var cn=(dayEvts[ei].calendarName||'').toLowerCase();if(cn!=='03g'&&cn!=='04g2')continue;var esM=new Date(dayEvts[ei].start).getHours()*60+new Date(dayEvts[ei].start).getMinutes();var eeM=new Date(dayEvts[ei].end).getHours()*60+new Date(dayEvts[ei].end).getMinutes();if(eeM===0)eeM=1440;if(esM<sx&&eeM>sm)return true;}}return false;}
             var dayFruitCount=0;for(var fk=0;fk<48;fk++){if((frSlotMap[fk]||[]).length>0)dayFruitCount++;}
             var bananaCount=0;for(var bsi=0;bsi<6;bsi++){if(hasZS(sessions[bsi],[0,1,2,3]))bananaCount++;if(hasZS(sessions[bsi],[4,5,6,7]))bananaCount++;}
-            // CARD
             var card=document.createElement('div');
             card.style.cssText='display:inline-flex;flex-direction:column;flex-shrink:0;border:1px solid '+(isToday?'#4285f4':bdr)+';border-radius:3px;'+(isToday?'background:rgba(66,133,244,.07);box-shadow:0 0 3px rgba(66,133,244,.3);':'')+(isFuture?'opacity:.3;':'');
-            // HEADER: single row [4Mo] [ðŸŽx/16 ðŸŒx/6] [17]
             var hdr=document.createElement('div');hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:0 2px;border-bottom:1px solid '+bdr+';height:12px;flex-shrink:0;gap:1px;';
             var hL=document.createElement('span');hL.style.cssText='font-size:.35rem;font-weight:900;color:'+(isToday?'#4285f4':(isDk?'#ddd':'#111'))+';white-space:nowrap;';hL.textContent=dayDate.getDate()+dn[dayDate.getDay()];
             var hM=document.createElement('span');hM.style.cssText='font-size:.3rem;font-weight:700;display:flex;gap:2px;';
@@ -4844,12 +4843,11 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
             hM.appendChild(sa);hM.appendChild(sb);
             var hR=document.createElement('span');hR.style.cssText='font-size:.35rem;font-weight:800;color:#27ae60;';hR.textContent=hijriDay(dayDate);
             hdr.appendChild(hL);hdr.appendChild(hM);hdr.appendChild(hR);card.appendChild(hdr);
-            // 6 sessions
             var allCells=[];
             for(var si=0;si<6;si++){
               var sess=sessions[si],f1z=hasZS(sess,[0,1,2,3]),f2z=hasZS(sess,[4,5,6,7]),sessOK=f1z&&f2z,isSpec=(si===0||si===1);
               var sessClr=sessOK?'#27ae60':(isDk?'rgba(255,255,255,.12)':'rgba(0,0,0,.1)');
-              var sr=document.createElement('div');sr.style.cssText='display:flex;align-items:stretch;height:'+CS+'px;flex-shrink:0;outline:1px solid '+sessClr+';outline-offset:-1px;position:relative;'+(sessOK||isSpec?'background:rgba(39,174,96,'+(sessOK?'.06':'.08')+');':'')+(si>0?'border-top:1px solid '+(isDk?'rgba(255,255,255,.04)':'rgba(0,0,0,.04)')+';':'');
+              var sr=document.createElement('div');sr.style.cssText='display:flex;align-items:stretch;height:'+CS+'px;flex-shrink:0;outline:1px solid '+sessClr+';outline-offset:-1px;position:relative;'+(sessOK||isSpec?'background:rgba(39,174,96,'+(sessOK?'.06':'.08')+');':'');
               if(sess.tip)sr.title=sess.tip;
               LAYOUT.forEach(function(lc){
                 if(lc.type==='div'){sr.appendChild(Object.assign(document.createElement('div'),{style:{cssText:'width:'+DW+'px;flex-shrink:0;background:'+(sessOK?'rgba(39,174,96,.2)':bdr)+';'}}));return;}
@@ -4877,9 +4875,10 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           }
           return row;
         }
-        root.appendChild(makeCardRow(0,7));
-        if(spDays>7) root.appendChild(makeCardRow(7,spDays-7));
-        // â”€â”€â”€ STATS: 7 charts in 2 rows, fill remaining space â”€â”€â”€
+        topHalf.appendChild(makeCardRow(0,7));
+        if(spDays>7) topHalf.appendChild(makeCardRow(7,spDays-7));
+        root.appendChild(topHalf);
+        // â”€â”€â”€ BOTTOM HALF: STATS (50%) â”€â”€â”€
         var epoch=new Date(2025,9,28);epoch.setHours(0,0,0,0);
         var allEvS=await fetchCalendarEvents(epoch,new Date(now.getFullYear(),now.getMonth(),now.getDate()+1));
         var excl=['phases of the moon','holidays in egypt','muslim holidays',"!40's fruit"];
@@ -4898,38 +4897,49 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           {id:'all',label:'All',isTotal:true,s:function(){return new Date(epoch);},e:function(){return new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);}},
           {id:'avg',label:'Avg/D',isAvg:true,s:function(){return new Date(epoch);},e:function(){return new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);}}
         ];
-        // 2 rows: row1=4 charts, row2=3 charts
-        var statsWrap=document.createElement('div');statsWrap.style.cssText='flex:1;display:flex;flex-direction:column;gap:3px;padding:2px 4px;overflow:hidden;min-height:0;';
+        var botHalf=document.createElement('div');
+        botHalf.style.cssText='flex:1;display:flex;flex-direction:column;gap:3px;padding:2px 4px;overflow:hidden;min-height:0;border-top:1px solid '+bdr+';';
         function makeStatsRow(rangeSlice){
-          var sr=document.createElement('div');sr.style.cssText='display:flex;gap:3px;flex:1;min-height:0;';
+          var sr=document.createElement('div');sr.style.cssText='display:flex;gap:4px;flex:1;min-height:0;';
           rangeSlice.forEach(function(rng){
             var sd=rng.s(),ed=rng.e();
             var dE=Math.max(1,Math.floor((Math.min(now.getTime(),ed.getTime())-sd.getTime())/86400000)+1);
             var sEvts=allEvS.filter(function(e){var es=new Date(e.start).getTime();return es>=sd.getTime()&&es<ed.getTime();});
             var aM={};sEvts.forEach(function(e){var cn=e.calendarName||'Other';if(!aM[cn])aM[cn]=0;aM[cn]+=(new Date(e.end).getTime()-new Date(e.start).getTime())/3600000;});
             var mx=1;cRows.forEach(function(r){if(r.type==='sep')return;var v=0;r.cals.forEach(function(cn){if(r.type==='plan')v+=rng.isAvg?(plan[cn]||0):(plan[cn]||0)*dE;else v+=rng.isAvg?(aM[cn]||0)/dE:(aM[cn]||0);});if(v>mx)mx=v;});
-            var sc=document.createElement('div');sc.style.cssText='flex:1;background:'+bg2+';border-radius:4px;padding:3px 4px;display:flex;flex-direction:column;overflow:hidden;min-width:0;';
-            var lb=document.createElement('div');lb.style.cssText='font-size:.45rem;font-weight:700;color:'+txt+';margin-bottom:2px;text-align:center;flex-shrink:0;';lb.textContent=rng.label+' ('+dE+'d)';sc.appendChild(lb);
-            var rowsWrap=document.createElement('div');rowsWrap.style.cssText='flex:1;display:flex;flex-direction:column;justify-content:space-evenly;min-height:0;';
+            var sc=document.createElement('div');sc.style.cssText='flex:1;background:'+bg2+';border-radius:4px;padding:3px 5px;display:flex;flex-direction:column;overflow:hidden;min-width:0;';
+            var lb=document.createElement('div');lb.style.cssText='font-size:.5rem;font-weight:700;color:'+txt+';margin-bottom:2px;text-align:center;flex-shrink:0;';lb.textContent=rng.label+' ('+dE+'d)';sc.appendChild(lb);
+            var rowsWrap=document.createElement('div');rowsWrap.style.cssText='flex:1;display:flex;flex-direction:column;justify-content:space-evenly;min-height:0;gap:1px;';
             cRows.forEach(function(r){
-              if(r.type==='sep'){var sp=document.createElement('div');sp.style.cssText='height:1px;flex-shrink:0;';rowsWrap.appendChild(sp);return;}
-              var row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:2px;flex-shrink:0;';
-              var rl=document.createElement('div');rl.style.cssText='width:40px;font-size:.35rem;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;opacity:.7;color:'+txt+';';rl.textContent=r.label;
-              var bar=document.createElement('div');bar.style.cssText='flex:1;height:100%;min-height:6px;max-height:14px;background:'+(isDk?'rgba(255,255,255,.05)':'rgba(0,0,0,.05)')+';border-radius:2px;overflow:hidden;display:flex;';
-              var tot=0;r.cals.forEach(function(cn){var v=r.type==='plan'?(rng.isAvg?(plan[cn]||0):(plan[cn]||0)*dE):(rng.isAvg?(aM[cn]||0)/dE:(aM[cn]||0));if(v<=0)return;tot+=v;var sg=document.createElement('div');sg.style.cssText='height:100%;width:'+(v/mx*100)+'%;background:'+(cMap[cn]||(r.type==='plan'?'#888':'#4285f4'))+';';sg.title=cn+': '+v.toFixed(1)+'h';bar.appendChild(sg);});
-              var rv=document.createElement('div');rv.style.cssText='font-size:.35rem;width:22px;text-align:left;opacity:.6;color:'+txt+';';rv.textContent=tot.toFixed(0);
+              if(r.type==='sep'){var sp=document.createElement('div');sp.style.cssText='height:3px;flex-shrink:0;border-bottom:1px solid '+(isDk?'rgba(255,255,255,.08)':'rgba(0,0,0,.06)')+';';rowsWrap.appendChild(sp);return;}
+              var row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:3px;flex-shrink:0;';
+              var rl=document.createElement('div');rl.style.cssText='width:46px;font-size:.4rem;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;opacity:.8;color:'+txt+';font-weight:600;';rl.textContent=r.label;
+              var bar=document.createElement('div');bar.style.cssText='flex:1;min-height:14px;max-height:22px;height:100%;background:'+(isDk?'rgba(255,255,255,.05)':'rgba(0,0,0,.05)')+';border-radius:3px;overflow:hidden;display:flex;box-shadow:inset 0 -1px 2px rgba(0,0,0,.1);';
+              var tot=0;r.cals.forEach(function(cn){
+                var v=r.type==='plan'?(rng.isAvg?(plan[cn]||0):(plan[cn]||0)*dE):(rng.isAvg?(aM[cn]||0)/dE:(aM[cn]||0));
+                if(v<=0)return;tot+=v;
+                var w=(v/mx*100);
+                var sg=document.createElement('div');
+                sg.style.cssText='height:100%;width:'+w+'%;background:linear-gradient(180deg,'+(cMap[cn]||(r.type==='plan'?'#888':'#4285f4'))+' 55%,rgba(0,0,0,.25) 100%);display:flex;align-items:center;justify-content:center;overflow:hidden;min-width:0;';
+                sg.title=cn+': '+v.toFixed(1)+'h';
+                if(w>3){var num=document.createElement('span');num.style.cssText='font-size:.35rem;color:#fff;font-weight:700;text-shadow:0 1px 1px rgba(0,0,0,.5);white-space:nowrap;';num.textContent=v.toFixed(0);sg.appendChild(num);}
+                bar.appendChild(sg);
+              });
+              var rv=document.createElement('div');rv.style.cssText='font-size:.4rem;width:26px;text-align:left;opacity:.7;color:'+txt+';font-weight:600;';rv.textContent=tot.toFixed(0);
               row.appendChild(rl);row.appendChild(bar);row.appendChild(rv);rowsWrap.appendChild(row);
             });
             sc.appendChild(rowsWrap);sr.appendChild(sc);
           });
           return sr;
         }
-        statsWrap.appendChild(makeStatsRow(ranges.slice(0,4)));
-        statsWrap.appendChild(makeStatsRow(ranges.slice(4)));
-        root.appendChild(statsWrap);
+        botHalf.appendChild(makeStatsRow(ranges.slice(0,4)));
+        botHalf.appendChild(makeStatsRow(ranges.slice(4)));
+        root.appendChild(botHalf);
         body.innerHTML='';body.appendChild(root);
       }catch(err){body.innerHTML='<div style="text-align:center;padding:10px;color:#e55;font-size:.5rem">\u26A0\uFE0F '+err.message+'</div>';}
     }
+
+
     async function _renderFruit() {
       body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:.7rem;">Loading fruit data...</div>';
       var now = new Date();

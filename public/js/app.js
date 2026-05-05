@@ -64,13 +64,11 @@ restoreGoogleToken();
 // Refresh proactively every 45 min to avoid 401s during API calls
 setInterval(async () => {
   if (_googleAccessToken && Date.now() >= _googleTokenExpiry - 10 * 60 * 1000) {
-    console.log('[Token] Proactive refresh triggered');
-    try {
-      await manualGoogleReAuth();
-      console.log('[Token] Proactive refresh succeeded');
-    } catch (e) {
-      console.warn('[Token] Proactive refresh failed:', e.message);
-    }
+    console.log('[Token] Proactive refresh — will refresh on next user action');
+    // Don't auto-popup — just clear the token so next user-triggered action re-auths
+    _googleAccessToken = null;
+    _googleTokenExpiry = 0;
+    try { localStorage.removeItem(LS_G_TOKEN); localStorage.removeItem(LS_G_TOKEN_EXP); } catch(e) {}
   }
 }, 5 * 60 * 1000); // Check every 5 minutes
 
