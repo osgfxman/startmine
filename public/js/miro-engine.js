@@ -1,4 +1,4 @@
-﻿/* ─── Miro Page Engine ─── */
+/* ─── Miro Page Engine ─── */
 let _miroMode = true;
 let _miroPanning = false,
   _miroPanStartX = 0,
@@ -4948,7 +4948,141 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         }
         botHalf.appendChild(makeStatsRow(ranges.slice(0,4)));
         botHalf.appendChild(makeStatsRow(ranges.slice(4)));
-        root.appendChild(botHalf);
+
+        // ─── TODO CHECKLIST PANEL (synced with 00aplan calendar) ───
+        var todoPanel=document.createElement('div');
+        todoPanel.style.cssText='flex:0 0 220px;display:flex;flex-direction:column;border-left:1px solid '+bdr+';overflow:hidden;background:'+(isDk?'rgba(0,0,0,.15)':'rgba(0,0,0,.02)')+';';
+        // Header
+        var todoHdr=document.createElement('div');
+        todoHdr.style.cssText='display:flex;align-items:center;gap:4px;padding:4px 8px;border-bottom:1px solid '+bdr+';flex-shrink:0;';
+        var todoTitle=document.createElement('span');
+        todoTitle.style.cssText='font-size:.6rem;font-weight:700;color:'+txt+';';
+        todoTitle.textContent='\u2705 Plan (00aplan)';
+        todoHdr.appendChild(todoTitle);
+        todoPanel.appendChild(todoHdr);
+        // Add input
+        var todoAddRow=document.createElement('div');
+        todoAddRow.style.cssText='display:flex;gap:3px;padding:4px 6px;border-bottom:1px solid '+bdr+';flex-shrink:0;';
+        var todoInput=document.createElement('input');
+        todoInput.type='text';todoInput.placeholder='Add task...';
+        todoInput.style.cssText='flex:1;background:'+(isDk?'rgba(255,255,255,.08)':'rgba(0,0,0,.05)')+';border:1px solid '+bdr+';border-radius:4px;color:'+txt+';font-size:.55rem;padding:3px 6px;outline:none;font-family:var(--font);';
+        var todoAddBtn=document.createElement('button');
+        todoAddBtn.textContent='+';
+        todoAddBtn.style.cssText='background:#6c8fff;color:#fff;border:none;border-radius:4px;font-size:.65rem;padding:2px 8px;cursor:pointer;font-weight:700;';
+        todoAddRow.appendChild(todoInput);todoAddRow.appendChild(todoAddBtn);
+        todoPanel.appendChild(todoAddRow);
+        // List container
+        var todoList=document.createElement('div');
+        todoList.style.cssText='flex:1;overflow-y:auto;padding:4px 6px;display:flex;flex-direction:column;gap:2px;';
+        todoPanel.appendChild(todoList);
+        // Find 00aplan calendar and load events
+        var planCalId=null;
+        try{
+          var calsList=await getCalendarList();
+          var planCal=calsList.find(function(c){return c.summary.toLowerCase()==='00aplan';});
+          if(planCal)planCalId=planCal.id;
+        }catch(e){}
+        var planEvents=[];
+        if(planCalId){
+          try{
+            // Fetch plan events for the current sprint period
+            var planEvAll=await fetchCalendarEvents(sprintStart,sprintEnd);
+            planEvents=(planEvAll||[]).filter(function(e){return(e.calendarName||'').toLowerCase()==='00aplan';});
+          }catch(e){}
+        }
+        function renderTodoItems(){
+          todoList.innerHTML='';
+          // Sort: unchecked first, then checked
+          var sorted=planEvents.slice().sort(function(a,b){
+            var aDone=(a.description||'').toLowerCase().indexOf('done')!==-1;
+            var bDone=(b.description||'').toLowerCase().indexOf('done')!==-1;
+            if(aDone!==bDone)return aDone?1:-1;
+            return new Date(a.start)-new Date(b.start);
+          });
+          if(sorted.length===0){
+            var empty=document.createElement('div');
+            empty.style.cssText='text-align:center;padding:12px;color:'+(isDk?'#555':'#aaa')+';font-size:.5rem;';
+            empty.textContent='No tasks yet';
+            todoList.appendChild(empty);
+            return;
+          }
+          sorted.forEach(function(ev){
+            var isDone=(ev.description||'').toLowerCase().indexOf('done')!==-1;
+            var item=document.createElement('div');
+            item.style.cssText='display:flex;align-items:flex-start;gap:4px;padding:3px 4px;border-radius:4px;background:'+(isDone?(isDk?'rgba(39,174,96,.08)':'rgba(39,174,96,.06)'):'transparent')+';cursor:pointer;transition:background .15s;';
+            item.onmouseenter=function(){item.style.background=isDk?'rgba(255,255,255,.06)':'rgba(0,0,0,.04)';};
+            item.onmouseleave=function(){item.style.background=isDone?(isDk?'rgba(39,174,96,.08)':'rgba(39,174,96,.06)'):'transparent';};
+            // Checkbox
+            var cb=document.createElement('div');
+            cb.style.cssText='width:14px;height:14px;flex-shrink:0;border:2px solid '+(isDone?'#27ae60':(isDk?'#555':'#bbb'))+';border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer;margin-top:1px;background:'+(isDone?'#27ae60':'transparent')+';color:#fff;transition:all .15s;';
+            cb.textContent=isDone?'\u2713':'';
+            cb.title=isDone?'Mark as not done':'Mark as done';
+            cb.onclick=function(e2){
+              e2.stopPropagation();
+              if(!planCalId)return;
+              var newDesc=isDone?((ev.description||'').replace(/done/gi,'').trim()):'done';
+              cb.style.opacity='.4';
+              updateCalendarEvent(planCalId,ev.id,{description:newDesc}).then(function(){
+                ev.description=newDesc;
+                showToast(isDone?'\u23EA Unmarked':'✅ Done!');
+                renderTodoItems();
+              }).catch(function(er){showToast('\u274C '+er.message);cb.style.opacity='1';});
+            };
+            // Label
+            var lb=document.createElement('span');
+            lb.style.cssText='font-size:.5rem;color:'+txt+';line-height:1.3;word-break:break-word;'+(isDone?'text-decoration:line-through;opacity:.5;':'');
+            lb.textContent=ev.summary||'(untitled)';
+            // Time badge
+            var tb=document.createElement('span');
+            var evDate=new Date(ev.start);
+            tb.style.cssText='font-size:.4rem;color:'+(isDk?'#666':'#aaa')+';flex-shrink:0;margin-left:auto;white-space:nowrap;margin-top:2px;';
+            tb.textContent=evDate.getDate()+'/'+(evDate.getMonth()+1);
+            // Delete button
+            var del=document.createElement('span');
+            del.style.cssText='font-size:.5rem;cursor:pointer;opacity:.3;flex-shrink:0;margin-top:1px;';
+            del.textContent='\u2715';del.title='Delete task';
+            del.onmouseenter=function(){del.style.opacity='1';del.style.color='#e74c3c';};
+            del.onmouseleave=function(){del.style.opacity='.3';del.style.color='';};
+            del.onclick=function(e2){
+              e2.stopPropagation();
+              if(!planCalId)return;
+              del.style.opacity='.2';
+              deleteCalendarEvent(planCalId,ev.id).then(function(){
+                planEvents=planEvents.filter(function(x){return x.id!==ev.id;});
+                showToast('\uD83D\uDDD1 Deleted');
+                renderTodoItems();
+              }).catch(function(er){showToast('\u274C '+er.message);del.style.opacity='.3';});
+            };
+            item.appendChild(cb);item.appendChild(lb);item.appendChild(tb);item.appendChild(del);
+            todoList.appendChild(item);
+          });
+        }
+        renderTodoItems();
+        // Add task handler
+        function addTodoItem(){
+          var val=todoInput.value.trim();
+          if(!val)return;
+          if(!planCalId){showToast('\u274C Calendar "00aplan" not found. Create it in Google Calendar first.');return;}
+          todoAddBtn.disabled=true;todoAddBtn.textContent='...';
+          var now2=new Date();
+          var startT=new Date(now2.getFullYear(),now2.getMonth(),now2.getDate(),9,0,0);
+          var endT=new Date(now2.getFullYear(),now2.getMonth(),now2.getDate(),9,30,0);
+          createCalendarEvent(planCalId,val,startT,endT,'').then(function(created){
+            planEvents.push({id:created.id,summary:val,description:'',start:startT.toISOString(),end:endT.toISOString(),calendarName:'00aplan',calendarId:planCalId});
+            todoInput.value='';
+            showToast('\u2705 Task added');
+            renderTodoItems();
+          }).catch(function(er){showToast('\u274C '+er.message);}).finally(function(){todoAddBtn.disabled=false;todoAddBtn.textContent='+';});
+        }
+        todoAddBtn.onclick=addTodoItem;
+        todoInput.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();addTodoItem();}});
+
+        // Wrap botHalf + todoPanel in a flex row
+        var botRow=document.createElement('div');
+        botRow.style.cssText='flex:1;display:flex;min-height:0;overflow:hidden;border-top:1px solid '+bdr+';';
+        botHalf.style.borderTop='none';
+        botRow.appendChild(botHalf);botRow.appendChild(todoPanel);
+        root.appendChild(botRow);
         body.innerHTML='';body.appendChild(root);
       }catch(err){body.innerHTML='<div style="text-align:center;padding:10px;color:#e55;font-size:.5rem">\u26A0\uFE0F '+err.message+'</div>';}
     }

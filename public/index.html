@@ -18,8 +18,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1778052746">
-  <link rel="stylesheet" href="css/miro.css?v=1778052746">
+  <link rel="stylesheet" href="css/base.css?v=1778186132">
+  <link rel="stylesheet" href="css/miro.css?v=1778186132">
 </head>
 
 <body>
@@ -67,6 +67,7 @@
       <button class="ib" id="overlay-gantt-btn" title="Gantt Chart (2)">📊</button>
       <button class="ib" id="overlay-stats-btn" title="Statistics (3)">📈</button>
       <button class="ib" id="overlay-fruit-btn" title="Fruit Tracker (4)">🍎</button>
+      <button class="ib" id="overlay-gantt2-btn" title="Zooper (5)">🏃</button>
       <input id="qi" type="text" placeholder="✉ Quick Inbox…" autocomplete="off" spellcheck="false"
         title="Paste URL here to send to Inbox" style="width: 130px;">
       <div id="sw">
@@ -429,6 +430,7 @@
     <button class="mtb-btn mtb-overlay-btn" id="mtb-gantt-overlay" title="Gantt Chart (Shift+2)">📊</button>
     <button class="mtb-btn mtb-overlay-btn" id="mtb-stats" title="Statistics (Shift+3)">📈</button>
     <button class="mtb-btn mtb-overlay-btn" id="mtb-fruits" title="Fruit Tracker (Shift+4)">🍎</button>
+    <button class="mtb-btn mtb-overlay-btn" id="mtb-gantt2" title="Zooper (Shift+5)">🏃</button>
     <div style="width:30px;height:1px;background:rgba(0,0,0,.08);margin:4px auto;"></div>
     <!-- Expandable + button for extra tools -->
     <button class="mtb-btn" id="mtb-more" title="More tools">
@@ -713,11 +715,11 @@
     <div class="ctx-item danger" data-action="delete"><span class="ctx-icon">🗑️</span><span class="ctx-label">Delete</span><span class="ctx-shortcut">Del</span></div>
   </div>
 
-    <script src="js/app.js?v=1778052746"></script>
-    <script src="js/outline.js?v=1778052746"></script>
-    <script src="js/miro-engine.js?v=1778052746"></script>
-    <script src="js/thumbnails.js?v=1778052746"></script>
-    <script src="js/alignment.js?v=1778052746"></script>
+    <script src="js/app.js?v=1778186132"></script>
+    <script src="js/outline.js?v=1778186132"></script>
+    <script src="js/miro-engine.js?v=1778186132"></script>
+    <script src="js/thumbnails.js?v=1778186132"></script>
+    <script src="js/alignment.js?v=1778186132"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});
