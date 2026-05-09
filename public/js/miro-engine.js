@@ -4857,6 +4857,10 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
             var hR=document.createElement('span');hR.style.cssText='font-size:'+(isToday?'.6rem':'.48rem')+';font-weight:800;color:#27ae60;line-height:1;';hR.textContent=hijriDay(dayDate);
             hdr.appendChild(hL);hdr.appendChild(hM);hdr.appendChild(hR);card.appendChild(hdr);
             var allCells=[];
+            // Build plan (00aplan) slot map for this day
+            var planSlotMap={};
+            var dayPlanEvts=dayEvts.filter(function(e2){return(e2.calendarName||'').toLowerCase()==='00aplan';});
+            dayPlanEvts.forEach(function(ev){var s2=new Date(ev.start).getTime(),e2=new Date(ev.end).getTime();var ss=Math.floor((s2-dayMs)/1800000),se=Math.ceil((e2-dayMs)/1800000);for(var x=ss;x<se&&x<48;x++){if(x>=0){if(!planSlotMap[x])planSlotMap[x]=[];planSlotMap[x].push(ev);}}});
             for(var si=0;si<6;si++){
               var sess=sessions[si],f1z=hasZS(sess,[0,1,2,3]),f2z=hasZS(sess,[4,5,6,7]),sessOK=f1z&&f2z,isSpec=(si===0||si===1);
               var sessClr=sessOK?'#27ae60':(isDk?'rgba(255,255,255,.12)':'rgba(0,0,0,.1)');
@@ -4868,26 +4872,61 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
                 var sIS=lc.slot,absSlot=si*8+sIS,sMn=(sess.start*60)+(sIS*30),eMn=sMn+30;
                 var sD=new Date(dayMs+sMn*60000),eD=new Date(dayMs+eMn*60000);
                 var h1v=Math.floor(sMn/60),m1=sMn%60;
-                var sEvts=dayEvts.filter(function(e2){if((e2.calendarName||'').toLowerCase()==="!40's fruit")return false;var esM=new Date(e2.start).getHours()*60+new Date(e2.start).getMinutes();var eeM=new Date(e2.end).getHours()*60+new Date(e2.end).getMinutes();if(eeM===0)eeM=1440;return esM<eMn&&eeM>sMn;});
+                var sEvts=dayEvts.filter(function(e2){if((e2.calendarName||'').toLowerCase()==="!40's fruit")return false;if((e2.calendarName||'').toLowerCase()==='00aplan')return false;var esM=new Date(e2.start).getHours()*60+new Date(e2.start).getMinutes();var eeM=new Date(e2.end).getHours()*60+new Date(e2.end).getMinutes();if(eeM===0)eeM=1440;return esM<eMn&&eeM>sMn;});
                 var cBg=sEvts.length>0?(sEvts[0].color||'#4285f4'):'transparent';
                 var isNow=false;if(isToday){var nM=now.getHours()*60+now.getMinutes();if(nM>=sMn&&nM<eMn)isNow=true;}
                 var hFr=(frSlotMap[absSlot]||[]).length>0;var isBr=(lc.slot===3||lc.slot===4);
-                // Tooltip: special text for first 2 sessions, time for others
+                var planCellEvts=planSlotMap[absSlot]||[];
+                // Tooltip
                 var tipText=isSpec?sessTips[si]:(fmtTime(sMn)+'-'+fmtTime(eMn));
                 if(sEvts.length>0)tipText=sEvts.map(function(e2){return(e2.summary||'')+' '+fmtTime(sMn)+'-'+fmtTime(eMn);}).join('\n');
                 if(hFr)tipText+=(' \uD83C\uDF4E');
+                if(planCellEvts.length>0)tipText+=('\n\u2705 '+planCellEvts.map(function(pe){return pe.summary||'';}).join(', '));
                 var ec=document.createElement('div');ec.className='pomo-ev';
                 ec.title=tipText;
-                ec.style.cssText='width:'+cSize+'px;flex-shrink:0;position:relative;background:'+(cBg!=='transparent'?cBg:(isBr?'rgba(128,128,128,.06)':bg2))+';cursor:pointer;border-right:1px solid '+(isDk?'rgba(255,255,255,.06)':'rgba(0,0,0,.06)')+';display:flex;align-items:center;justify-content:center;'+(isNow?'outline:2px solid #ff6b35;outline-offset:-1px;animation:pomoPulse 1.5s infinite;z-index:1;':'');
-                if(hFr){var frS=document.createElement('span');frS.style.cssText='font-size:'+(Math.max(6,cSize-4))+'px;pointer-events:none;';frS.textContent='\uD83C\uDF4E';ec.appendChild(frS);}
-                else if(sEvts.length===0){var tl=document.createElement('span');tl.style.cssText='font-size:'+Math.min(cSize-2,10)+'px;color:'+(isDk?'rgba(255,255,255,.25)':'rgba(0,0,0,.2)')+';font-weight:'+(m1===0?'700':'400')+';pointer-events:none;';tl.textContent=m1===0?String((h1v%12)||12):'30';ec.appendChild(tl);}
-                (function(ec,se,sd,ed,as,hf,fsm,fci){ec.addEventListener('click',function(ev2){ev2.stopPropagation();if(ev2.ctrlKey||ev2.metaKey){if(!fci)return;var fEvs=fsm[as]||[];if(hf&&fEvs.length>0){deleteCalendarEvent(fEvs[0].calendarId,fEvs[0].id).then(function(){_renderGantt2();});}else{createCalendarEvent(fci,"!40's Fruit",sd,ed,'').then(function(){_renderGantt2();});}}else{if(se.length>0){var e0=se[0];showCalendarEventForm(body,body,null,{mode:'edit',calendarId:e0.calendarId,eventId:e0.id,summary:e0.summary,description:e0.description,startTime:new Date(e0.start),endTime:new Date(e0.end)});}else{showCalendarEventForm(body,body,null,{mode:'create',startTime:sd,endTime:ed});}}});})(ec,sEvts,sD,eD,absSlot,hFr,frSlotMap,fruitCalId);
+                ec.style.cssText='width:'+cSize+'px;flex-shrink:0;position:relative;background:'+(cBg!=='transparent'?cBg:(isBr?'rgba(128,128,128,.06)':bg2))+';cursor:pointer;border-right:1px solid '+(isDk?'rgba(255,255,255,.06)':'rgba(0,0,0,.06)')+';display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;'+(isNow?'outline:2px solid #ff6b35;outline-offset:-1px;animation:pomoPulse 1.5s infinite;z-index:1;':'');
+                // Content layer: fruit + plan checkboxes stacked
+                if(hFr){var frS=document.createElement('span');frS.style.cssText='font-size:'+(Math.max(5,cSize-6))+'px;pointer-events:none;line-height:1;';frS.textContent='\uD83C\uDF4E';ec.appendChild(frS);}
+                // 00aplan checkboxes overlaid in cell
+                if(planCellEvts.length>0){
+                  planCellEvts.forEach(function(pev){
+                    var isDonePlan=(pev.summary||'').toLowerCase().indexOf('done')!==-1;
+                    var pcb=document.createElement('span');
+                    pcb.style.cssText='font-size:'+(Math.max(5,Math.min(cSize-4,10)))+'px;line-height:1;cursor:pointer;z-index:2;';
+                    pcb.textContent=isDonePlan?'\u2611':'\u2610';
+                    pcb.title=(pev.summary||'(task)')+' '+(isDonePlan?'[DONE]':'');
+                    (function(pev,pcb,isDonePlan){
+                      pcb.addEventListener('click',function(ev3){
+                        ev3.stopPropagation();ev3.preventDefault();
+                        if(!planCalId)return;
+                        var newSummary=isDonePlan?((pev.summary||'').replace(/\s*done\s*/gi,'').trim()):(pev.summary+' done');
+                        pcb.style.opacity='.4';
+                        updateCalendarEvent(pev.calendarId||planCalId,pev.id,{summary:newSummary}).then(function(){
+                          showToast(isDonePlan?'\u23EA Unmarked':'\u2705 Done!');
+                          _renderGantt2();
+                        }).catch(function(er){showToast('\u274C '+er.message);pcb.style.opacity='1';});
+                      });
+                    })(pev,pcb,isDonePlan);
+                    ec.appendChild(pcb);
+                  });
+                }
+                else if(!hFr&&sEvts.length===0){var tl=document.createElement('span');tl.style.cssText='font-size:'+Math.min(cSize-2,10)+'px;color:'+(isDk?'rgba(255,255,255,.25)':'rgba(0,0,0,.2)')+';font-weight:'+(m1===0?'700':'400')+';pointer-events:none;';tl.textContent=m1===0?String((h1v%12)||12):'30';ec.appendChild(tl);}
+                (function(ec,se,sd,ed,as,hf,fsm,fci){ec.addEventListener('click',function(ev2){ev2.stopPropagation();if(ev2.altKey)return;if(ev2.ctrlKey||ev2.metaKey){if(!fci)return;var fEvs=fsm[as]||[];if(hf&&fEvs.length>0){deleteCalendarEvent(fEvs[0].calendarId,fEvs[0].id).then(function(){_renderGantt2();});}else{createCalendarEvent(fci,"!40's Fruit",sd,ed,'').then(function(){_renderGantt2();});}}else{if(se.length>0){var e0=se[0];showCalendarEventForm(body,body,null,{mode:'edit',calendarId:e0.calendarId,eventId:e0.id,summary:e0.summary,description:e0.description,startTime:new Date(e0.start),endTime:new Date(e0.end)});}else{showCalendarEventForm(body,body,null,{mode:'create',startTime:sd,endTime:ed});}}});})(ec,sEvts,sD,eD,absSlot,hFr,frSlotMap,fruitCalId);
                 sr.appendChild(ec);allCells.push({ev:ec,absSlot:absSlot,slotStartMin:sMn,slotEndMin:eMn,dayMs:dayMs});
               });
               card.appendChild(sr);
             }
-            (function(ac,dm,fci,fsm){var mode=null,si2=-1,isCtrl=false;function gCA(x,y){for(var i=0;i<ac.length;i++){var r=ac[i].ev.getBoundingClientRect();if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return i;}return-1;}function hl(a,b){ac.forEach(function(c,i){c.ev.style.outline=(i>=a&&i<=b)?'2px solid '+(isCtrl?'#e74c3c':'#4285f4'):'none';});}function clr(){ac.forEach(function(c){c.ev.style.outline='none';});}ac.forEach(function(c,i){c.ev.addEventListener('mousedown',function(e){if(e.button!==0)return;mode='ev';si2=i;isCtrl=e.ctrlKey||e.metaKey;hl(i,i);e.preventDefault();});});document.addEventListener('mousemove',function(e){if(!mode)return;var h=gCA(e.clientX,e.clientY);if(h<0)return;hl(Math.min(si2,h),Math.max(si2,h));});document.addEventListener('mouseup',function(){if(!mode)return;mode=null;var sel=[];ac.forEach(function(c){if(c.ev.style.outline&&c.ev.style.outline!=='none')sel.push(c);});clr();if(isCtrl&&sel.length>=1&&fci){var hc=sel.filter(function(c2){return(fsm[c2.absSlot]||[]).length>0;}).length;var doDelete=hc>sel.length/2;var ops=[];sel.forEach(function(c2){var fEvs=fsm[c2.absSlot]||[];if(doDelete&&fEvs.length>0)ops.push(deleteCalendarEvent(fEvs[0].calendarId,fEvs[0].id));else if(!doDelete&&fEvs.length===0)ops.push(createCalendarEvent(fci,"!40's Fruit",new Date(dm+c2.slotStartMin*60000),new Date(dm+c2.slotEndMin*60000),''));});if(ops.length)Promise.all(ops).then(function(){_renderGantt2();}).catch(function(){_renderGantt2();});}else if(!isCtrl&&sel.length>=2){var sMin=Math.min.apply(null,sel.map(function(h){return h.slotStartMin;}));var eMin=Math.max.apply(null,sel.map(function(h){return h.slotEndMin;}));showCalendarEventForm(body,body,null,{mode:'create',startTime:new Date(dm+sMin*60000),endTime:new Date(dm+eMin*60000)});}});
-            })(allCells,dayMs,fruitCalId,frSlotMap);
+            // Drag handlers: normal=create event, Ctrl=fruit, Alt=create 00aplan todo
+            (function(ac,dm,fci,fsm,pci){var mode=null,si2=-1,isCtrl=false,isAlt=false;function gCA(x,y){for(var i=0;i<ac.length;i++){var r=ac[i].ev.getBoundingClientRect();if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return i;}return-1;}function hl(a,b){ac.forEach(function(c,i){c.ev.style.outline=(i>=a&&i<=b)?'2px solid '+(isCtrl?'#e74c3c':(isAlt?'#f59e0b':'#4285f4')):'none';});}function clr(){ac.forEach(function(c){c.ev.style.outline='none';});}ac.forEach(function(c,i){c.ev.addEventListener('mousedown',function(e){if(e.button!==0)return;mode='ev';si2=i;isCtrl=e.ctrlKey||e.metaKey;isAlt=e.altKey;hl(i,i);e.preventDefault();});});document.addEventListener('mousemove',function(e){if(!mode)return;var h=gCA(e.clientX,e.clientY);if(h<0)return;hl(Math.min(si2,h),Math.max(si2,h));});document.addEventListener('mouseup',function(){if(!mode)return;mode=null;var sel=[];ac.forEach(function(c){if(c.ev.style.outline&&c.ev.style.outline!=='none')sel.push(c);});clr();if(isAlt&&sel.length>=1&&pci){
+              // Alt+drag: create 00aplan todo item spanning selected time
+              var sMin2=Math.min.apply(null,sel.map(function(h){return h.slotStartMin;}));
+              var eMin2=Math.max.apply(null,sel.map(function(h){return h.slotEndMin;}));
+              var taskName=prompt('Task name for '+fmtTime(sMin2)+' - '+fmtTime(eMin2)+':');
+              if(taskName&&taskName.trim()){
+                createCalendarEvent(pci,taskName.trim(),new Date(dm+sMin2*60000),new Date(dm+eMin2*60000),'').then(function(){showToast('\u2705 Todo added');_renderGantt2();}).catch(function(er){showToast('\u274C '+er.message);});
+              }
+            }else if(isCtrl&&sel.length>=1&&fci){var hc=sel.filter(function(c2){return(fsm[c2.absSlot]||[]).length>0;}).length;var doDelete=hc>sel.length/2;var ops=[];sel.forEach(function(c2){var fEvs=fsm[c2.absSlot]||[];if(doDelete&&fEvs.length>0)ops.push(deleteCalendarEvent(fEvs[0].calendarId,fEvs[0].id));else if(!doDelete&&fEvs.length===0)ops.push(createCalendarEvent(fci,"!40's Fruit",new Date(dm+c2.slotStartMin*60000),new Date(dm+c2.slotEndMin*60000),''));});if(ops.length)Promise.all(ops).then(function(){_renderGantt2();}).catch(function(){_renderGantt2();});}else if(!isCtrl&&!isAlt&&sel.length>=2){var sMin=Math.min.apply(null,sel.map(function(h){return h.slotStartMin;}));var eMin=Math.max.apply(null,sel.map(function(h){return h.slotEndMin;}));showCalendarEventForm(body,body,null,{mode:'create',startTime:new Date(dm+sMin*60000),endTime:new Date(dm+eMin*60000)});}});
+            })(allCells,dayMs,fruitCalId,frSlotMap,planCalId);
             row.appendChild(card);
           }
           return row;
@@ -4992,11 +5031,8 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         }
         function renderTodoItems(){
           todoList.innerHTML='';
-          // Sort: unchecked first, then checked
+          // Sort by time (chronological)
           var sorted=planEvents.slice().sort(function(a,b){
-            var aDone=(a.description||'').toLowerCase().indexOf('done')!==-1;
-            var bDone=(b.description||'').toLowerCase().indexOf('done')!==-1;
-            if(aDone!==bDone)return aDone?1:-1;
             return new Date(a.start)-new Date(b.start);
           });
           if(sorted.length===0){
@@ -5007,7 +5043,8 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
             return;
           }
           sorted.forEach(function(ev){
-            var isDone=(ev.description||'').toLowerCase().indexOf('done')!==-1;
+            var isDone=(ev.summary||'').toLowerCase().indexOf('done')!==-1;
+            var displayName=(ev.summary||'(untitled)').replace(/\s*done\s*/gi,'').trim()||'(untitled)';
             var item=document.createElement('div');
             item.style.cssText='display:flex;align-items:flex-start;gap:4px;padding:3px 4px;border-radius:4px;background:'+(isDone?(isDk?'rgba(39,174,96,.08)':'rgba(39,174,96,.06)'):'transparent')+';cursor:pointer;transition:background .15s;';
             item.onmouseenter=function(){item.style.background=isDk?'rgba(255,255,255,.06)':'rgba(0,0,0,.04)';};
@@ -5020,23 +5057,23 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
             cb.onclick=function(e2){
               e2.stopPropagation();
               if(!planCalId)return;
-              var newDesc=isDone?((ev.description||'').replace(/done/gi,'').trim()):'done';
+              var newSummary=isDone?((ev.summary||'').replace(/\s*done\s*/gi,'').trim()):(ev.summary+' done');
               cb.style.opacity='.4';
-              updateCalendarEvent(planCalId,ev.id,{description:newDesc}).then(function(){
-                ev.description=newDesc;
-                showToast(isDone?'\u23EA Unmarked':'✅ Done!');
-                renderTodoItems();
+              updateCalendarEvent(planCalId,ev.id,{summary:newSummary}).then(function(){
+                ev.summary=newSummary;
+                showToast(isDone?'\u23EA Unmarked':'\u2705 Done!');
+                _renderGantt2();
               }).catch(function(er){showToast('\u274C '+er.message);cb.style.opacity='1';});
             };
             // Label
             var lb=document.createElement('span');
             lb.style.cssText='font-size:.5rem;color:'+txt+';line-height:1.3;word-break:break-word;'+(isDone?'text-decoration:line-through;opacity:.5;':'');
-            lb.textContent=ev.summary||'(untitled)';
-            // Time badge
+            lb.textContent=displayName;
+            // Time badge with hours
             var tb=document.createElement('span');
-            var evDate=new Date(ev.start);
+            var evStart=new Date(ev.start),evEnd=new Date(ev.end);
             tb.style.cssText='font-size:.4rem;color:'+(isDk?'#666':'#aaa')+';flex-shrink:0;margin-left:auto;white-space:nowrap;margin-top:2px;';
-            tb.textContent=evDate.getDate()+'/'+(evDate.getMonth()+1);
+            tb.textContent=evStart.getDate()+'/'+(evStart.getMonth()+1)+' '+fmtTime(evStart.getHours()*60+evStart.getMinutes())+'-'+fmtTime(evEnd.getHours()*60+evEnd.getMinutes());
             // Delete button
             var del=document.createElement('span');
             del.style.cssText='font-size:.5rem;cursor:pointer;opacity:.3;flex-shrink:0;margin-top:1px;';
@@ -5050,7 +5087,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
               deleteCalendarEvent(planCalId,ev.id).then(function(){
                 planEvents=planEvents.filter(function(x){return x.id!==ev.id;});
                 showToast('\uD83D\uDDD1 Deleted');
-                renderTodoItems();
+                _renderGantt2();
               }).catch(function(er){showToast('\u274C '+er.message);del.style.opacity='.3';});
             };
             item.appendChild(cb);item.appendChild(lb);item.appendChild(tb);item.appendChild(del);
@@ -5058,20 +5095,22 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           });
         }
         renderTodoItems();
-        // Add task handler
+        // Add task handler - defaults to current time
         function addTodoItem(){
           var val=todoInput.value.trim();
           if(!val)return;
           if(!planCalId){showToast('\u274C Calendar "00aplan" not found. Create it in Google Calendar first.');return;}
           todoAddBtn.disabled=true;todoAddBtn.textContent='...';
           var now2=new Date();
-          var startT=new Date(now2.getFullYear(),now2.getMonth(),now2.getDate(),9,0,0);
-          var endT=new Date(now2.getFullYear(),now2.getMonth(),now2.getDate(),9,30,0);
+          var curMin=now2.getHours()*60+now2.getMinutes();
+          var snapMin=Math.round(curMin/30)*30;
+          var startT=new Date(now2.getFullYear(),now2.getMonth(),now2.getDate(),Math.floor(snapMin/60),snapMin%60,0);
+          var endT=new Date(startT.getTime()+1800000);
           createCalendarEvent(planCalId,val,startT,endT,'').then(function(created){
             planEvents.push({id:created.id,summary:val,description:'',start:startT.toISOString(),end:endT.toISOString(),calendarName:'00aplan',calendarId:planCalId});
             todoInput.value='';
             showToast('\u2705 Task added');
-            renderTodoItems();
+            _renderGantt2();
           }).catch(function(er){showToast('\u274C '+er.message);}).finally(function(){todoAddBtn.disabled=false;todoAddBtn.textContent='+';});
         }
         todoAddBtn.onclick=addTodoItem;
