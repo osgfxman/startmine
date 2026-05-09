@@ -4821,8 +4821,9 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
       try{
         var allEv=await fetchCalendarEvents(sprintStart,sprintEnd);
         var evts=(allEv||[]).filter(function(e){return !e.allDay;});
-        var fruitCalId='';
-        try{var cals=await getCalendarList();var frCal=cals.find(function(c){return c.summary.toLowerCase()==="!40's fruit";});if(frCal)fruitCalId=frCal.id;}catch(e){}
+        var fruitCalId='',planCalId=null;
+        try{var cals=await getCalendarList();var frCal=cals.find(function(c){return c.summary.toLowerCase()==="!40's fruit";});if(frCal)fruitCalId=frCal.id;var planCal=cals.find(function(c){return c.summary.toLowerCase()==='00aplan';});if(planCal)planCalId=planCal.id;}catch(e){}
+        var planEvents=(allEv||[]).filter(function(e){return(e.calendarName||'').toLowerCase()==='00aplan'&&!e.allDay;});
         body._ganttRender=function(){_renderGantt2();};
         var CS=14,DW=2,CSbig=28;
         var dn=['Su','Mo','Tu','We','Th','Fr','Sa'];
@@ -4917,16 +4918,16 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
               card.appendChild(sr);
             }
             // Drag handlers: normal=create event, Ctrl=fruit, Alt=create 00aplan todo
-            (function(ac,dm,fci,fsm,pci){var mode=null,si2=-1,isCtrl=false,isAlt=false;function gCA(x,y){for(var i=0;i<ac.length;i++){var r=ac[i].ev.getBoundingClientRect();if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return i;}return-1;}function hl(a,b){ac.forEach(function(c,i){c.ev.style.outline=(i>=a&&i<=b)?'2px solid '+(isCtrl?'#e74c3c':(isAlt?'#f59e0b':'#4285f4')):'none';});}function clr(){ac.forEach(function(c){c.ev.style.outline='none';});}ac.forEach(function(c,i){c.ev.addEventListener('mousedown',function(e){if(e.button!==0)return;mode='ev';si2=i;isCtrl=e.ctrlKey||e.metaKey;isAlt=e.altKey;hl(i,i);e.preventDefault();});});document.addEventListener('mousemove',function(e){if(!mode)return;var h=gCA(e.clientX,e.clientY);if(h<0)return;hl(Math.min(si2,h),Math.max(si2,h));});document.addEventListener('mouseup',function(){if(!mode)return;mode=null;var sel=[];ac.forEach(function(c){if(c.ev.style.outline&&c.ev.style.outline!=='none')sel.push(c);});clr();if(isAlt&&sel.length>=1&&pci){
+            (function(ac,dm,fci,fsm){var mode=null,si2=-1,isCtrl=false,isAlt=false;function gCA(x,y){for(var i=0;i<ac.length;i++){var r=ac[i].ev.getBoundingClientRect();if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return i;}return-1;}function hl(a,b){ac.forEach(function(c,i){c.ev.style.outline=(i>=a&&i<=b)?'2px solid '+(isCtrl?'#e74c3c':(isAlt?'#f59e0b':'#4285f4')):'none';});}function clr(){ac.forEach(function(c){c.ev.style.outline='none';});}ac.forEach(function(c,i){c.ev.addEventListener('mousedown',function(e){if(e.button!==0)return;mode='ev';si2=i;isCtrl=e.ctrlKey||e.metaKey;isAlt=e.altKey;hl(i,i);e.preventDefault();});});document.addEventListener('mousemove',function(e){if(!mode)return;var h=gCA(e.clientX,e.clientY);if(h<0)return;hl(Math.min(si2,h),Math.max(si2,h));});document.addEventListener('mouseup',function(){if(!mode)return;mode=null;var sel=[];ac.forEach(function(c){if(c.ev.style.outline&&c.ev.style.outline!=='none')sel.push(c);});clr();if(isAlt&&sel.length>=1&&planCalId){
               // Alt+drag: create 00aplan todo item spanning selected time
               var sMin2=Math.min.apply(null,sel.map(function(h){return h.slotStartMin;}));
               var eMin2=Math.max.apply(null,sel.map(function(h){return h.slotEndMin;}));
               var taskName=prompt('Task name for '+fmtTime(sMin2)+' - '+fmtTime(eMin2)+':');
               if(taskName&&taskName.trim()){
-                createCalendarEvent(pci,taskName.trim(),new Date(dm+sMin2*60000),new Date(dm+eMin2*60000),'').then(function(){showToast('\u2705 Todo added');_renderGantt2();}).catch(function(er){showToast('\u274C '+er.message);});
+                createCalendarEvent(planCalId,taskName.trim(),new Date(dm+sMin2*60000),new Date(dm+eMin2*60000),'').then(function(){showToast('\u2705 Todo added');_renderGantt2();}).catch(function(er){showToast('\u274C '+er.message);});
               }
             }else if(isCtrl&&sel.length>=1&&fci){var hc=sel.filter(function(c2){return(fsm[c2.absSlot]||[]).length>0;}).length;var doDelete=hc>sel.length/2;var ops=[];sel.forEach(function(c2){var fEvs=fsm[c2.absSlot]||[];if(doDelete&&fEvs.length>0)ops.push(deleteCalendarEvent(fEvs[0].calendarId,fEvs[0].id));else if(!doDelete&&fEvs.length===0)ops.push(createCalendarEvent(fci,"!40's Fruit",new Date(dm+c2.slotStartMin*60000),new Date(dm+c2.slotEndMin*60000),''));});if(ops.length)Promise.all(ops).then(function(){_renderGantt2();}).catch(function(){_renderGantt2();});}else if(!isCtrl&&!isAlt&&sel.length>=2){var sMin=Math.min.apply(null,sel.map(function(h){return h.slotStartMin;}));var eMin=Math.max.apply(null,sel.map(function(h){return h.slotEndMin;}));showCalendarEventForm(body,body,null,{mode:'create',startTime:new Date(dm+sMin*60000),endTime:new Date(dm+eMin*60000)});}});
-            })(allCells,dayMs,fruitCalId,frSlotMap,planCalId);
+            })(allCells,dayMs,fruitCalId,frSlotMap);
             row.appendChild(card);
           }
           return row;
@@ -5015,20 +5016,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         todoList.style.cssText='flex:1;overflow-y:auto;padding:4px 6px;display:flex;flex-direction:column;gap:2px;';
         todoPanel.appendChild(todoList);
         // Find 00aplan calendar and load events
-        var planCalId=null;
-        try{
-          var calsList=await getCalendarList();
-          var planCal=calsList.find(function(c){return c.summary.toLowerCase()==='00aplan';});
-          if(planCal)planCalId=planCal.id;
-        }catch(e){}
-        var planEvents=[];
-        if(planCalId){
-          try{
-            // Fetch plan events for the current sprint period
-            var planEvAll=await fetchCalendarEvents(sprintStart,sprintEnd);
-            planEvents=(planEvAll||[]).filter(function(e){return(e.calendarName||'').toLowerCase()==='00aplan';});
-          }catch(e){}
-        }
+        // planCalId and planEvents already fetched at the top - reuse them
         function renderTodoItems(){
           todoList.innerHTML='';
           // Sort by time (chronological)
@@ -5076,7 +5064,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
             tb.textContent=evStart.getDate()+'/'+(evStart.getMonth()+1)+' '+fmtTime(evStart.getHours()*60+evStart.getMinutes())+'-'+fmtTime(evEnd.getHours()*60+evEnd.getMinutes());
             // Delete button
             var del=document.createElement('span');
-            del.style.cssText='font-size:.5rem;cursor:pointer;opacity:.3;flex-shrink:0;margin-top:1px;';
+            del.style.cssText='font-size:.6rem;cursor:pointer;opacity:.6;flex-shrink:0;margin-top:0px;color:'+(isDk?'#f66':'#c44')+';font-weight:700;';
             del.textContent='\u2715';del.title='Delete task';
             del.onmouseenter=function(){del.style.opacity='1';del.style.color='#e74c3c';};
             del.onmouseleave=function(){del.style.opacity='.3';del.style.color='';};
