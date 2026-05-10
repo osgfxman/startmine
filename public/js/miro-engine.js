@@ -4832,6 +4832,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         // â”€â”€â”€ TOP HALF: DAY CARDS (50%) â”€â”€â”€
         var topHalf=document.createElement('div');
         topHalf.style.cssText='flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px;overflow:hidden;padding:2px;';
+        var _allGridCells=[];
         function makeCardRow(startIdx,count){
           var row=document.createElement('div');
           row.style.cssText='display:flex;flex-direction:row-reverse;gap:3px;justify-content:center;flex-shrink:0;align-items:flex-start;';
@@ -4942,7 +4943,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
                     return;
                   }
                   if(ev2.ctrlKey||ev2.metaKey){if(!fci)return;var fEvs=fsm[as]||[];if(hf&&fEvs.length>0){deleteCalendarEvent(fEvs[0].calendarId,fEvs[0].id).then(function(){_renderGantt2();});}else{createCalendarEvent(fci,"!40's Fruit",sd,ed,'').then(function(){_renderGantt2();});}}else{if(se.length>0){var e0=se[0];showCalendarEventForm(body,body,null,{mode:'edit',calendarId:e0.calendarId,eventId:e0.id,summary:e0.summary,description:e0.description,startTime:new Date(e0.start),endTime:new Date(e0.end)});}else{showCalendarEventForm(body,body,null,{mode:'create',startTime:sd,endTime:ed});}}});})(ec,sEvts,sD,eD,absSlot,hFr,frSlotMap,fruitCalId,sMn,eMn);
-                sr.appendChild(ec);allCells.push({ev:ec,absSlot:absSlot,slotStartMin:sMn,slotEndMin:eMn,dayMs:dayMs});
+                sr.appendChild(ec);allCells.push({ev:ec,absSlot:absSlot,slotStartMin:sMn,slotEndMin:eMn,dayMs:dayMs});_allGridCells.push({ev:ec,slotStartMin:sMn,slotEndMin:eMn,dayMs:dayMs});
               });
               card.appendChild(sr);
             }
@@ -4981,6 +4982,23 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         topHalf.appendChild(makeCardRow(0,7));
         if(spDays>7) topHalf.appendChild(makeCardRow(7,spDays-7));
         root.appendChild(topHalf);
+        // --- Highlight helpers for time slot linking ---
+        var _hlActive=null;
+        function highlightCellsForEvent(ev){
+          clearCellHighlight();
+          var evS=new Date(ev.start).getTime(),evE=new Date(ev.end).getTime();
+          _allGridCells.forEach(function(c){
+            var cS=c.dayMs+c.slotStartMin*60000,cE=c.dayMs+c.slotEndMin*60000;
+            if(cS>=evS&&cE<=evE){
+              c.ev.style.outline='2px solid #f59e0b';c.ev.style.background='rgba(245,158,11,.15)';
+            }
+          });
+          _hlActive=ev.id;
+        }
+        function clearCellHighlight(){
+          _allGridCells.forEach(function(c){c.ev.style.outline='none';c.ev.style.background='';});
+          _hlActive=null;
+        }
         // â”€â”€â”€ BOTTOM HALF: STATS (50%) â”€â”€â”€
         var allEvS=await fetchCalendarEvents(epoch,new Date(now.getFullYear(),now.getMonth(),now.getDate()+1));
         var excl=['phases of the moon','holidays in egypt','muslim holidays',"!40's fruit"];
@@ -5142,6 +5160,13 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
                 _renderGantt2();
               }).catch(function(er){showToast('\u274C '+er.message);del.style.opacity='.3';});
             };
+            // Click to highlight time slots
+            (function(item,ev){
+              item.addEventListener('click',function(e3){
+                if(e3.target.closest('a')||e3.target.tagName==='IMG')return;
+                if(_hlActive===ev.id){clearCellHighlight();}else{clearCellHighlight();highlightCellsForEvent(ev);}
+              });
+            })(item,ev);
             item.appendChild(cb);item.appendChild(lb);item.appendChild(tb);item.appendChild(del);
             todoList.appendChild(item);
           });
@@ -5402,19 +5427,38 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
 
           // --- Body: image or text ---
           var hasImage=meta.imageUrl&&meta.imageUrl.length>10;
+          var hasCustomTitle=displayName&&!/^\uD83D\uDDBC/.test(displayName)&&displayName!=='(untitled)';
           if(hasImage){
+            sn.style.padding='0';sn.style.overflow='hidden';
+            if(!hasCustomTitle){sn.style.borderRadius='4px';}
             var snImg=document.createElement('img');
             snImg.src=meta.imageUrl;
-            snImg.style.cssText='flex:1;width:100%;object-fit:cover;min-height:40px;cursor:grab;pointer-events:auto;border-radius:0 0 6px 6px;';
+            snImg.style.cssText='width:100%;display:block;object-fit:cover;min-height:40px;cursor:grab;pointer-events:auto;'+(hasCustomTitle?'':'border-radius:0 0 4px 4px;flex:1;');
             snImg.draggable=false;
             snImg.ondblclick=function(e2){e2.stopPropagation();window.open(meta.imageUrl,'_blank');};
             sn.appendChild(snImg);
+            if(hasCustomTitle){
+              var snTitle=document.createElement('div');
+              snTitle.style.cssText='padding:3px 6px;font-size:.5rem;font-weight:600;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+              snTitle.textContent=displayName;
+              sn.appendChild(snTitle);
+            }
           }else{
             var snBody=document.createElement('div');
-            snBody.style.cssText='flex:1;padding:6px 8px;font-size:.6rem;font-weight:600;line-height:1.3;word-break:break-word;overflow:hidden;'
+            snBody.style.cssText='flex:1;padding:6px 8px;font-weight:600;line-height:1.3;word-break:break-word;overflow:hidden;display:flex;align-items:center;justify-content:center;text-align:center;'
               +(isDonePlan?'text-decoration:line-through;opacity:.5;':'');
             snBody.textContent=meta.richText||displayName;
             snBody.contentEditable=false;
+            // Autofit text size
+            requestAnimationFrame(function(){
+              var bw=sn.clientWidth-16,bh=sn.clientHeight-30;
+              if(bw<20||bh<10)return;
+              var fs=48;
+              snBody.style.fontSize=fs+'px';
+              while((snBody.scrollWidth>bw||snBody.scrollHeight>bh)&&fs>6){
+                fs-=1;snBody.style.fontSize=fs+'px';
+              }
+            });
             snBody.addEventListener('dblclick',function(e2){
               e2.stopPropagation();
               snBody.contentEditable=true;
@@ -5449,6 +5493,15 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
             });
             sn.appendChild(snBody);
           }
+
+          // --- Click to highlight time slots ---
+          (function(sn,ev){
+            sn.addEventListener('click',function(e5){
+              if(e5.target.closest('[contenteditable="true"]'))return;
+              if(_hlActive===ev.id){clearCellHighlight();sn.style.outline='';}
+              else{clearCellHighlight();highlightCellsForEvent(ev);sn.style.outline='2px solid #f59e0b';}
+            });
+          })(sn,ev);
 
           // --- Resize handle (bottom-right corner) ---
           var snResize=document.createElement('div');
