@@ -18,8 +18,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1778434184">
-  <link rel="stylesheet" href="css/miro.css?v=1778434184">
+  <link rel="stylesheet" href="css/base.css?v=1778442458">
+  <link rel="stylesheet" href="css/miro.css?v=1778442458">
 </head>
 
 <body>
@@ -715,14 +715,41 @@
     <div class="ctx-item danger" data-action="delete"><span class="ctx-icon">🗑️</span><span class="ctx-label">Delete</span><span class="ctx-shortcut">Del</span></div>
   </div>
 
-    <script src="js/app.js?v=1778434184"></script>
-    <script src="js/outline.js?v=1778434184"></script>
-    <script src="js/miro-engine.js?v=1778434184"></script>
-    <script src="js/thumbnails.js?v=1778434184"></script>
-    <script src="js/alignment.js?v=1778434184"></script>
+    <script src="js/miro-engine.js?v=1778442458"></script>
+    <script src="js/thumbnails.js?v=1778442458"></script>
     <script>
+      // ─── Zooper-first: auto-open on load, defer main app until dismissed ───
+      var _mainAppLoaded=false;
+      function _loadMainApp(){
+        if(_mainAppLoaded)return;_mainAppLoaded=true;
+        ['js/app.js','js/outline.js','js/alignment.js'].forEach(function(src){
+          var s=document.createElement('script');s.src=src+'?v=1778442458';document.body.appendChild(s);
+        });
+      }
+      // Auto-open Zooper on page load
+      document.addEventListener('DOMContentLoaded',function(){
+        // Wait for auth then open Zooper
+        var _zTry=setInterval(function(){
+          if(typeof showMiroOverlay==='function'){
+            clearInterval(_zTry);
+            setTimeout(function(){showMiroOverlay('gantt2');},300);
+          }
+        },100);
+      });
+      // Hook into overlay close to load main app
+      var _origCloseMiroOverlay=null;
+      var _hookTry=setInterval(function(){
+        if(typeof closeMiroOverlay==='function'&&!_origCloseMiroOverlay){
+          _origCloseMiroOverlay=closeMiroOverlay;
+          closeMiroOverlay=function(){
+            _origCloseMiroOverlay();
+            _loadMainApp();
+          };
+          clearInterval(_hookTry);
+        }
+      },100);
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js').catch(() => {});
+        navigator.serviceWorker.register('/sw.js').catch(function(){});
       }
     </script>
 

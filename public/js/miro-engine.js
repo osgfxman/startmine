@@ -5020,7 +5020,6 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         var cRows=[{type:'plan',label:'Pln:Wrk',cals:['01R','02W','02xO']},{type:'actual',label:'Sleep',cals:['13S']},{type:'actual',label:'Work',cals:['01R','02W','02xO']},{type:'sep'},{type:'plan',label:'Pln:Dev',cals:['08M','09N','10Y','03G','04G2']},{type:'actual',label:'Family',cals:['06C','07J']},{type:'actual',label:'Dev',cals:['08M','09N','10Y','03G','04G2']},{type:'sep'},{type:'plan',label:'Pln:Lsr',cals:['11L','12k']},{type:'actual',label:'Maint',cals:['05B']},{type:'actual',label:'Leisure',cals:['11L','12k']}];
         var mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
         var ranges=[
-          {id:'week',label:'W'+wkNum,s:function(){var d=new Date(now);d.setDate(d.getDate()-d.getDay());d.setHours(0,0,0,0);return d;},e:function(){var d=new Date(now);d.setDate(d.getDate()-d.getDay()+7);d.setHours(0,0,0,0);return d;}},
           {id:'sprint',label:'S'+spNum,s:function(){return new Date(sprintStart);},e:function(){return new Date(sprintEnd);}},
           {id:'month',label:mn[now.getMonth()],s:function(){return new Date(now.getFullYear(),now.getMonth(),1);},e:function(){return new Date(now.getFullYear(),now.getMonth()+1,1);}},
           {id:'quarter',label:'Q'+Math.ceil((now.getMonth()+1)/3),s:function(){var q=Math.floor(now.getMonth()/3);return new Date(now.getFullYear(),q*3,1);},e:function(){var q=Math.floor(now.getMonth()/3);return new Date(now.getFullYear(),q*3+3,1);}},
@@ -5038,32 +5037,30 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
             var sEvts=allEvS.filter(function(e){var es=new Date(e.start).getTime();return es>=sd.getTime()&&es<ed.getTime();});
             var aM={};sEvts.forEach(function(e){var cn=e.calendarName||'Other';if(!aM[cn])aM[cn]=0;aM[cn]+=(new Date(e.end).getTime()-new Date(e.start).getTime())/3600000;});
             var mx=1;cRows.forEach(function(r){if(r.type==='sep')return;var v=0;r.cals.forEach(function(cn){if(r.type==='plan')v+=rng.isAvg?(plan[cn]||0):(plan[cn]||0)*dE;else v+=rng.isAvg?(aM[cn]||0)/dE:(aM[cn]||0);});if(v>mx)mx=v;});
-            var sc=document.createElement('div');sc.style.cssText='flex:1;background:'+bg2+';border-radius:4px;padding:3px 5px;display:flex;flex-direction:column;overflow:hidden;min-width:0;';
-            var lb=document.createElement('div');lb.style.cssText='font-size:.55rem;font-weight:700;color:'+txt+';margin-bottom:2px;text-align:center;flex-shrink:0;';lb.textContent=rng.label+' ('+dE+'d)';sc.appendChild(lb);
+            var sc=document.createElement('div');sc.style.cssText='flex:1;background:'+bg2+';border-radius:4px;padding:3px 2px;display:flex;flex-direction:column;overflow:hidden;min-width:0;';
+            var lb=document.createElement('div');lb.style.cssText='font-size:.5rem;font-weight:700;color:'+txt+';margin-bottom:1px;text-align:center;flex-shrink:0;';lb.textContent=rng.label+' ('+dE+'d)';sc.appendChild(lb);
             var rowsWrap=document.createElement('div');rowsWrap.style.cssText='flex:1;display:flex;flex-direction:column;justify-content:space-evenly;min-height:0;gap:1px;';
             cRows.forEach(function(r){
-              if(r.type==='sep'){var sp=document.createElement('div');sp.style.cssText='height:3px;flex-shrink:0;border-bottom:1px solid '+(isDk?'rgba(255,255,255,.08)':'rgba(0,0,0,.06)')+';';rowsWrap.appendChild(sp);return;}
-              var row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:3px;flex-shrink:0;';
-              var rl=document.createElement('div');rl.style.cssText='width:46px;font-size:.42rem;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;opacity:.8;color:'+txt+';font-weight:600;';rl.textContent=r.label;
-              var bar=document.createElement('div');bar.style.cssText='flex:1;min-height:16px;max-height:24px;height:100%;background:'+(isDk?'rgba(255,255,255,.05)':'rgba(0,0,0,.05)')+';border-radius:3px;overflow:hidden;display:flex;box-shadow:inset 0 -1px 2px rgba(0,0,0,.1);';
+              if(r.type==='sep'){var sp=document.createElement('div');sp.style.cssText='height:2px;flex-shrink:0;border-bottom:1px solid '+(isDk?'rgba(255,255,255,.08)':'rgba(0,0,0,.06)')+';';rowsWrap.appendChild(sp);return;}
+              var row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:0;flex:1;min-height:0;';
+              var bar=document.createElement('div');bar.style.cssText='flex:1;height:100%;background:'+(isDk?'rgba(255,255,255,.05)':'rgba(0,0,0,.05)')+';border-radius:3px;overflow:hidden;display:flex;box-shadow:inset 0 -1px 2px rgba(0,0,0,.1);';
               var tot=0;r.cals.forEach(function(cn){
                 var v=r.type==='plan'?(rng.isAvg?(plan[cn]||0):(plan[cn]||0)*dE):(rng.isAvg?(aM[cn]||0)/dE:(aM[cn]||0));
                 if(v<=0)return;tot+=v;var w=(v/mx*100);
                 var sg=document.createElement('div');
                 sg.style.cssText='height:100%;width:'+w+'%;background:linear-gradient(180deg,'+(cMap[cn]||(r.type==='plan'?'#888':'#4285f4'))+' 55%,rgba(0,0,0,.25) 100%);display:flex;align-items:center;justify-content:center;overflow:hidden;min-width:0;';
                 sg.title=cn+': '+v.toFixed(1)+'h';
-                if(w>2.5){var num=document.createElement('span');num.style.cssText='font-size:.45rem;color:#fff;font-weight:800;text-shadow:0 1px 2px rgba(0,0,0,.6);white-space:nowrap;';num.textContent=v.toFixed(0);sg.appendChild(num);}
+                if(w>2){var num=document.createElement('span');num.style.cssText='font-size:.6rem;color:#fff;font-weight:800;text-shadow:0 1px 2px rgba(0,0,0,.6);white-space:nowrap;';num.textContent=v.toFixed(0);sg.appendChild(num);}
                 bar.appendChild(sg);
               });
-              var rv=document.createElement('div');rv.style.cssText='font-size:.45rem;width:28px;text-align:left;opacity:.7;color:'+txt+';font-weight:700;';rv.textContent=tot.toFixed(0);
-              row.appendChild(rl);row.appendChild(bar);row.appendChild(rv);rowsWrap.appendChild(row);
+              row.appendChild(bar);rowsWrap.appendChild(row);
             });
             sc.appendChild(rowsWrap);sr.appendChild(sc);
           });
           return sr;
         }
-        botHalf.appendChild(makeStatsRow(ranges.slice(0,4)));
-        botHalf.appendChild(makeStatsRow(ranges.slice(4)));
+        botHalf.appendChild(makeStatsRow(ranges.slice(0,3)));
+        botHalf.appendChild(makeStatsRow(ranges.slice(3)));
 
         // ─── TODO CHECKLIST PANEL (synced with 00aplan calendar) ───
         var todoPanel=document.createElement('div');
