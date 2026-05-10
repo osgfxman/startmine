@@ -4913,8 +4913,23 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
                 }
                 else if(!hFr&&sEvts.length===0){var tl=document.createElement('span');tl.style.cssText='font-size:'+Math.min(cSize-2,10)+'px;color:'+(isDk?'rgba(255,255,255,.25)':'rgba(0,0,0,.2)')+';font-weight:'+(m1===0?'700':'400')+';pointer-events:none;';tl.textContent=m1===0?String((h1v%12)||12):'30';ec.appendChild(tl);}
                 (function(ec,se,sd,ed,as,hf,fsm,fci,smn,emn){ec.addEventListener('click',function(ev2){ev2.stopPropagation();
+                  if(ev2.shiftKey){
+                    // Shift+click: add image to 00aplan
+                    if(!planCalId){showToast('\u274C Calendar "00aplan" not found');return;}
+                    var fi=document.createElement('input');fi.type='file';fi.accept='image/*';fi.style.display='none';
+                    fi.onchange=function(){var f=fi.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(re){
+                      showToast('\u23F3 Uploading image...');
+                      uploadToImgBB(re.target.result).then(function(url){
+                        if(!url){showToast('\u274C Upload failed');return;}
+                        var metaStr='<!--STICKYMETA:'+JSON.stringify({x:10,y:10,w:200,h:150,color:'white',imageUrl:url})+'-->';
+                        createCalendarEvent(planCalId,'\uD83D\uDDBC '+fmtTime(smn)+'-'+fmtTime(emn),sd,ed,metaStr).then(function(){
+                          showToast('\u2705 Image added');_renderGantt2();
+                        }).catch(function(er){showToast('\u274C '+er.message);});
+                      });
+                    };rd.readAsDataURL(f);};fi.click();
+                    return;
+                  }
                   if(ev2.altKey){
-                    // Alt+click: create 00aplan todo for this single cell
                     if(!planCalId){showToast('\u274C Calendar "00aplan" not found');return;}
                     var defName=se.length>0?(se[0].summary||''):'';
                     var taskName=prompt('Todo for '+fmtTime(smn)+'-'+fmtTime(emn)+':',defName);
@@ -4931,9 +4946,23 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
               });
               card.appendChild(sr);
             }
-            // Drag handlers: normal=create event, Ctrl=fruit, Alt=create 00aplan todo
-            (function(ac,dm,fci,fsm){var mode=null,si2=-1,ei2=-1,isCtrl=false,isAlt=false,didDrag=false;function gCA(x,y){for(var i=0;i<ac.length;i++){var r=ac[i].ev.getBoundingClientRect();if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return i;}return-1;}function hl(a,b){ac.forEach(function(c,i){c.ev.style.outline=(i>=a&&i<=b)?'2px solid '+(isCtrl?'#e74c3c':(isAlt?'#f59e0b':'#4285f4')):'none';});}function clr(){ac.forEach(function(c){c.ev.style.outline='none';});}ac.forEach(function(c,i){c.ev.addEventListener('mousedown',function(e){if(e.button!==0)return;mode='ev';si2=i;ei2=i;isCtrl=e.ctrlKey||e.metaKey;isAlt=e.altKey;didDrag=false;hl(i,i);e.preventDefault();});});document.addEventListener('mousemove',function(e){if(!mode)return;var h=gCA(e.clientX,e.clientY);if(h<0)return;if(h!==ei2)didDrag=true;ei2=h;hl(Math.min(si2,h),Math.max(si2,h));});document.addEventListener('mouseup',function(){if(!mode)return;mode=null;var lo=Math.min(si2,ei2),hi=Math.max(si2,ei2);var sel=[];for(var ii=lo;ii<=hi;ii++){sel.push(ac[ii]);}clr();if(isAlt&&sel.length>=2&&planCalId){
-              // Alt+drag (multi-cell): create 00aplan todo spanning selected time
+            // Drag handlers: normal=create event, Ctrl=fruit, Alt=todo, Shift=image
+            (function(ac,dm,fci,fsm){var mode=null,si2=-1,ei2=-1,isCtrl=false,isAlt=false,isShift=false,didDrag=false;function gCA(x,y){for(var i=0;i<ac.length;i++){var r=ac[i].ev.getBoundingClientRect();if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return i;}return-1;}function hl(a,b){ac.forEach(function(c,i){c.ev.style.outline=(i>=a&&i<=b)?'2px solid '+(isCtrl?'#e74c3c':(isAlt?'#f59e0b':(isShift?'#9b59b6':'#4285f4'))):'none';});}function clr(){ac.forEach(function(c){c.ev.style.outline='none';});}ac.forEach(function(c,i){c.ev.addEventListener('mousedown',function(e){if(e.button!==0)return;mode='ev';si2=i;ei2=i;isCtrl=e.ctrlKey||e.metaKey;isAlt=e.altKey;isShift=e.shiftKey;didDrag=false;hl(i,i);e.preventDefault();});});document.addEventListener('mousemove',function(e){if(!mode)return;var h=gCA(e.clientX,e.clientY);if(h<0)return;if(h!==ei2)didDrag=true;ei2=h;hl(Math.min(si2,h),Math.max(si2,h));});document.addEventListener('mouseup',function(){if(!mode)return;mode=null;var lo=Math.min(si2,ei2),hi=Math.max(si2,ei2);var sel=[];for(var ii=lo;ii<=hi;ii++){sel.push(ac[ii]);}clr();if(isShift&&sel.length>=2&&planCalId){
+              // Shift+drag: add image spanning selected time
+              var sMin2=Math.min.apply(null,sel.map(function(h){return h.slotStartMin;}));
+              var eMin2=Math.max.apply(null,sel.map(function(h){return h.slotEndMin;}));
+              var fi=document.createElement('input');fi.type='file';fi.accept='image/*';fi.style.display='none';
+              fi.onchange=function(){var f=fi.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(re){
+                showToast('\u23F3 Uploading image...');
+                uploadToImgBB(re.target.result).then(function(url){
+                  if(!url){showToast('\u274C Upload failed');return;}
+                  var metaStr='<!--STICKYMETA:'+JSON.stringify({x:10,y:10,w:200,h:150,color:'white',imageUrl:url})+'-->';
+                  createCalendarEvent(planCalId,'\uD83D\uDDBC '+fmtTime(sMin2)+'-'+fmtTime(eMin2),new Date(dm+sMin2*60000),new Date(dm+eMin2*60000),metaStr).then(function(){
+                    showToast('\u2705 Image added');_renderGantt2();
+                  }).catch(function(er){showToast('\u274C '+er.message);});
+                });
+              };rd.readAsDataURL(f);};fi.click();
+            }else if(isAlt&&sel.length>=2&&planCalId){
               var sMin2=Math.min.apply(null,sel.map(function(h){return h.slotStartMin;}));
               var eMin2=Math.max.apply(null,sel.map(function(h){return h.slotEndMin;}));
               var taskName=prompt('Todo for '+fmtTime(sMin2)+' - '+fmtTime(eMin2)+':');
@@ -4943,7 +4972,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
                   showToast('\u2705 Todo added');_renderGantt2();
                 }).catch(function(er){showToast('\u274C '+er.message);});
               }
-            }else if(isCtrl&&sel.length>=1&&fci){var hc=sel.filter(function(c2){return(fsm[c2.absSlot]||[]).length>0;}).length;var doDelete=hc>sel.length/2;var ops=[];sel.forEach(function(c2){var fEvs=fsm[c2.absSlot]||[];if(doDelete&&fEvs.length>0)ops.push(deleteCalendarEvent(fEvs[0].calendarId,fEvs[0].id));else if(!doDelete&&fEvs.length===0)ops.push(createCalendarEvent(fci,"!40's Fruit",new Date(dm+c2.slotStartMin*60000),new Date(dm+c2.slotEndMin*60000),''));});if(ops.length)Promise.all(ops).then(function(){_renderGantt2();}).catch(function(){_renderGantt2();});}else if(!isCtrl&&!isAlt&&sel.length>=2){var sMin=Math.min.apply(null,sel.map(function(h){return h.slotStartMin;}));var eMin=Math.max.apply(null,sel.map(function(h){return h.slotEndMin;}));showCalendarEventForm(body,body,null,{mode:'create',startTime:new Date(dm+sMin*60000),endTime:new Date(dm+eMin*60000)});}});
+            }else if(isCtrl&&sel.length>=1&&fci){var hc=sel.filter(function(c2){return(fsm[c2.absSlot]||[]).length>0;}).length;var doDelete=hc>sel.length/2;var ops=[];sel.forEach(function(c2){var fEvs=fsm[c2.absSlot]||[];if(doDelete&&fEvs.length>0)ops.push(deleteCalendarEvent(fEvs[0].calendarId,fEvs[0].id));else if(!doDelete&&fEvs.length===0)ops.push(createCalendarEvent(fci,"!40's Fruit",new Date(dm+c2.slotStartMin*60000),new Date(dm+c2.slotEndMin*60000),''));});if(ops.length)Promise.all(ops).then(function(){_renderGantt2();}).catch(function(){_renderGantt2();});}else if(!isCtrl&&!isAlt&&!isShift&&sel.length>=2){var sMin=Math.min.apply(null,sel.map(function(h){return h.slotStartMin;}));var eMin=Math.max.apply(null,sel.map(function(h){return h.slotEndMin;}));showCalendarEventForm(body,body,null,{mode:'create',startTime:new Date(dm+sMin*60000),endTime:new Date(dm+eMin*60000)});}});
             })(allCells,dayMs,fruitCalId,frSlotMap);
             row.appendChild(card);
           }
@@ -5036,7 +5065,6 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         // planCalId and planEvents already fetched at the top - reuse them
         function renderTodoItems(){
           todoList.innerHTML='';
-          // Sort by time (chronological)
           var sorted=planEvents.slice().sort(function(a,b){
             return new Date(a.start)-new Date(b.start);
           });
@@ -5050,6 +5078,8 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           sorted.forEach(function(ev){
             var isDone=(ev.summary||'').toLowerCase().indexOf('done')!==-1;
             var displayName=(ev.summary||'(untitled)').replace(/\s*done\s*/gi,'').trim()||'(untitled)';
+            var evMeta=parseStickyMeta(ev.description||'');
+            var isImg=evMeta&&evMeta.imageUrl&&evMeta.imageUrl.length>10;
             var item=document.createElement('div');
             item.style.cssText='display:flex;align-items:flex-start;gap:4px;padding:3px 4px;border-radius:4px;background:'+(isDone?(isDk?'rgba(39,174,96,.08)':'rgba(39,174,96,.06)'):'transparent')+';cursor:pointer;transition:background .15s;';
             item.onmouseenter=function(){item.style.background=isDk?'rgba(255,255,255,.06)':'rgba(0,0,0,.04)';};
@@ -5070,11 +5100,28 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
                 _renderGantt2();
               }).catch(function(er){showToast('\u274C '+er.message);cb.style.opacity='1';});
             };
-            // Label
-            var lb=document.createElement('span');
-            lb.style.cssText='font-size:.5rem;color:'+txt+';line-height:1.3;word-break:break-word;'+(isDone?'text-decoration:line-through;opacity:.5;':'');
-            lb.textContent=displayName;
-            // Time badge with hours
+            // Label - image thumbnail or text
+            var lb;
+            if(isImg){
+              lb=document.createElement('div');
+              lb.style.cssText='display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;';
+              var thumb=document.createElement('img');
+              thumb.src=evMeta.imageUrl;
+              thumb.style.cssText='width:100%;max-height:36px;object-fit:cover;border-radius:3px;cursor:pointer;';
+              thumb.title=evMeta.imageUrl;
+              thumb.onclick=function(e2){e2.stopPropagation();window.open(evMeta.imageUrl,'_blank');};
+              var urlTxt=document.createElement('a');
+              urlTxt.href=evMeta.imageUrl;urlTxt.target='_blank';
+              urlTxt.style.cssText='font-size:.4rem;color:'+(isDk?'#6c8fff':'#4285f4')+';text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:140px;';
+              urlTxt.textContent=evMeta.imageUrl.length>35?evMeta.imageUrl.substring(0,35)+'...':evMeta.imageUrl;
+              urlTxt.title=evMeta.imageUrl;
+              lb.appendChild(thumb);lb.appendChild(urlTxt);
+            }else{
+              lb=document.createElement('span');
+              lb.style.cssText='font-size:.5rem;color:'+txt+';line-height:1.3;word-break:break-word;'+(isDone?'text-decoration:line-through;opacity:.5;':'');
+              lb.textContent=displayName;
+            }
+            // Time badge
             var tb=document.createElement('span');
             var evStart=new Date(ev.start),evEnd=new Date(ev.end);
             tb.style.cssText='font-size:.4rem;color:'+(isDk?'#666':'#aaa')+';flex-shrink:0;margin-left:auto;white-space:nowrap;margin-top:2px;';
@@ -5100,7 +5147,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           });
         }
         renderTodoItems();
-        // Add task handler - defaults to current time
+        // Add task handler - detects image URLs automatically
         function addTodoItem(){
           var val=todoInput.value.trim();
           if(!val)return;
@@ -5111,12 +5158,23 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           var snapMin=Math.round(curMin/30)*30;
           var startT=new Date(now2.getFullYear(),now2.getMonth(),now2.getDate(),Math.floor(snapMin/60),snapMin%60,0);
           var endT=new Date(startT.getTime()+1800000);
-          createCalendarEvent(planCalId,val,startT,endT,'').then(function(created){
-            planEvents.push({id:created.id,summary:val,description:'',start:startT.toISOString(),end:endT.toISOString(),calendarName:'00aplan',calendarId:planCalId});
-            todoInput.value='';
-            showToast('\u2705 Task added');
-            _renderGantt2();
-          }).catch(function(er){showToast('\u274C '+er.message);}).finally(function(){todoAddBtn.disabled=false;todoAddBtn.textContent='+';});
+          // Detect image URL
+          var isImgUrl=/^https?:\/\/.+\.(jpg|jpeg|png|gif|webp|bmp|svg)/i.test(val)||/imgbb\.com|imgur\.com|i\.ibb\.co/i.test(val);
+          if(isImgUrl){
+            var metaStr='<!--STICKYMETA:'+JSON.stringify({x:10,y:10,w:200,h:150,color:'white',imageUrl:val})+'-->';
+            createCalendarEvent(planCalId,'\uD83D\uDDBC '+fmtTime(curMin),startT,endT,metaStr).then(function(){
+              todoInput.value='';
+              showToast('\u2705 Image added');
+              _renderGantt2();
+            }).catch(function(er){showToast('\u274C '+er.message);}).finally(function(){todoAddBtn.disabled=false;todoAddBtn.textContent='+';});
+          }else{
+            createCalendarEvent(planCalId,val,startT,endT,'').then(function(created){
+              planEvents.push({id:created.id,summary:val,description:'',start:startT.toISOString(),end:endT.toISOString(),calendarName:'00aplan',calendarId:planCalId});
+              todoInput.value='';
+              showToast('\u2705 Task added');
+              _renderGantt2();
+            }).catch(function(er){showToast('\u274C '+er.message);}).finally(function(){todoAddBtn.disabled=false;todoAddBtn.textContent='+';});
+          }
         }
         todoAddBtn.onclick=addTodoItem;
         todoInput.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();addTodoItem();}});
@@ -5181,14 +5239,24 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           return positions;
         }
 
-        // --- Save sticky meta back to calendar ---
+        // --- Save sticky meta back to calendar (DEBOUNCED — saves bandwidth) ---
+        var _saveTimers={};
         function saveStickyMeta(ev,meta){
           if(!planCalId||!ev.id||ev.id==='temp')return;
-          var cleanDesc=getDescWithoutMeta(ev.description||'');
-          var newDesc=(cleanDesc?cleanDesc+'\n':'')+serializeStickyMeta(meta);
-          updateCalendarEvent(planCalId,ev.id,{description:newDesc}).catch(function(er){
-            console.warn('[StickyMeta] Save failed:',er.message);
-          });
+          if(_saveTimers[ev.id])clearTimeout(_saveTimers[ev.id]);
+          _saveTimers[ev.id]=setTimeout(function(){
+            var cleanDesc=getDescWithoutMeta(ev.description||'');
+            var newDesc=(cleanDesc?cleanDesc+'\n':'')+serializeStickyMeta(meta);
+            updateCalendarEvent(planCalId,ev.id,{description:newDesc}).catch(function(er){
+              console.warn('[StickyMeta] Save failed:',er.message);
+            });
+          },1500);
+        }
+
+        // --- Helper: detect image URL ---
+        function isImageUrl(str){
+          if(!str)return false;
+          return /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp|bmp|svg)/i.test(str)||/imgbb\.com|imgur\.com|i\.ibb\.co/i.test(str);
         }
 
         // --- Build & render all sticky notes ---
@@ -5332,45 +5400,55 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           sn.appendChild(snHdr);
           sn.appendChild(snColorPopup);
 
-          // --- Body: task name (editable on dblclick) ---
-          var snBody=document.createElement('div');
-          snBody.style.cssText='flex:1;padding:6px 8px;font-size:.6rem;font-weight:600;line-height:1.3;word-break:break-word;overflow:hidden;'
-            +(isDonePlan?'text-decoration:line-through;opacity:.5;':'');
-          snBody.textContent=meta.richText||displayName;
-          snBody.contentEditable=false;
-          snBody.addEventListener('dblclick',function(e2){
-            e2.stopPropagation();
-            snBody.contentEditable=true;
-            snBody.style.cursor='text';
-            sn.style.cursor='text';
-            snBody.focus();
-          });
-          snBody.addEventListener('blur',function(){
+          // --- Body: image or text ---
+          var hasImage=meta.imageUrl&&meta.imageUrl.length>10;
+          if(hasImage){
+            var snImg=document.createElement('img');
+            snImg.src=meta.imageUrl;
+            snImg.style.cssText='flex:1;width:100%;object-fit:cover;min-height:40px;cursor:grab;pointer-events:auto;border-radius:0 0 6px 6px;';
+            snImg.draggable=false;
+            snImg.ondblclick=function(e2){e2.stopPropagation();window.open(meta.imageUrl,'_blank');};
+            sn.appendChild(snImg);
+          }else{
+            var snBody=document.createElement('div');
+            snBody.style.cssText='flex:1;padding:6px 8px;font-size:.6rem;font-weight:600;line-height:1.3;word-break:break-word;overflow:hidden;'
+              +(isDonePlan?'text-decoration:line-through;opacity:.5;':'');
+            snBody.textContent=meta.richText||displayName;
             snBody.contentEditable=false;
-            snBody.style.cursor='';
-            sn.style.cursor='grab';
-            var newText=snBody.textContent.trim();
-            if(newText&&newText!==displayName){
-              meta.richText=snBody.innerHTML;
-              var newSummary=newText+(isDonePlan?' done':'');
-              updateCalendarEvent(planCalId,ev.id,{summary:newSummary}).then(function(){
-                ev.summary=newSummary;
+            snBody.addEventListener('dblclick',function(e2){
+              e2.stopPropagation();
+              snBody.contentEditable=true;
+              snBody.style.cursor='text';
+              sn.style.cursor='text';
+              snBody.focus();
+            });
+            snBody.addEventListener('blur',function(){
+              snBody.contentEditable=false;
+              snBody.style.cursor='';
+              sn.style.cursor='grab';
+              var newText=snBody.textContent.trim();
+              if(newText&&newText!==displayName){
+                meta.richText=snBody.innerHTML;
+                var newSummary=newText+(isDonePlan?' done':'');
+                updateCalendarEvent(planCalId,ev.id,{summary:newSummary}).then(function(){
+                  ev.summary=newSummary;
+                  saveStickyMeta(ev,meta);
+                  showToast('\u2705 Updated');
+                  _renderGantt2();
+                }).catch(function(er){showToast('\u274C '+er.message);});
+              }else{
                 saveStickyMeta(ev,meta);
-                showToast('\u2705 Updated');
-                _renderGantt2();
-              }).catch(function(er){showToast('\u274C '+er.message);});
-            }else{
-              saveStickyMeta(ev,meta);
-            }
-          });
-          snBody.addEventListener('mousedown',function(e2){
-            if(snBody.contentEditable==='true')e2.stopPropagation();
-          });
-          snBody.addEventListener('keydown',function(e2){
-            if(e2.key==='Escape'){snBody.blur();}
-            e2.stopPropagation();
-          });
-          sn.appendChild(snBody);
+              }
+            });
+            snBody.addEventListener('mousedown',function(e2){
+              if(snBody.contentEditable==='true')e2.stopPropagation();
+            });
+            snBody.addEventListener('keydown',function(e2){
+              if(e2.key==='Escape'){snBody.blur();}
+              e2.stopPropagation();
+            });
+            sn.appendChild(snBody);
+          }
 
           // --- Resize handle (bottom-right corner) ---
           var snResize=document.createElement('div');
@@ -5415,7 +5493,6 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
               if(!dragging)return;
               var nx=ox+(mv.clientX-sx);
               var ny=oy+(mv.clientY-sy);
-              // Clamp to container bounds
               var maxX=cW-meta.w,maxY=cH-20;
               nx=Math.max(0,Math.min(nx,maxX));
               ny=Math.max(0,Math.min(ny,maxY));
@@ -5433,6 +5510,36 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           })(sn,meta,ev);
 
           stickyLayer.appendChild(sn);
+        });
+
+        // ─── PASTE IMAGE handler (Ctrl+V with image in clipboard) ───
+        root.addEventListener('paste',function(pe){
+          if(!planCalId)return;
+          var items=pe.clipboardData&&pe.clipboardData.items;
+          if(!items)return;
+          for(var i=0;i<items.length;i++){
+            if(items[i].type.indexOf('image')!==-1){
+              pe.preventDefault();
+              var blob=items[i].getAsFile();
+              var rd=new FileReader();
+              rd.onload=function(re){
+                showToast('\u23F3 Uploading pasted image...');
+                uploadToImgBB(re.target.result).then(function(url){
+                  if(!url){showToast('\u274C Upload failed');return;}
+                  var now2=new Date();var curMin=now2.getHours()*60+now2.getMinutes();
+                  var snapMin=Math.round(curMin/30)*30;
+                  var startT=new Date(now2.getFullYear(),now2.getMonth(),now2.getDate(),Math.floor(snapMin/60),snapMin%60,0);
+                  var endT=new Date(startT.getTime()+1800000);
+                  var metaStr='<!--STICKYMETA:'+JSON.stringify({x:10,y:10,w:200,h:150,color:'white',imageUrl:url})+'-->';
+                  createCalendarEvent(planCalId,'\uD83D\uDDBC '+fmtTime(curMin),startT,endT,metaStr).then(function(){
+                    showToast('\u2705 Image pasted!');_renderGantt2();
+                  }).catch(function(er){showToast('\u274C '+er.message);});
+                });
+              };
+              rd.readAsDataURL(blob);
+              break;
+            }
+          }
         });
 
       }catch(err){body.innerHTML='<div style="text-align:center;padding:10px;color:#e55;font-size:.5rem">\u26A0\uFE0F '+err.message+'</div>';}
