@@ -5577,18 +5577,34 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           })(sn,meta,ev);
 
           stickyLayer.appendChild(sn);
-          // Autofit text AFTER element is in DOM
+          // Autofit text AFTER element is in DOM — use measurement span
           var afEl=sn.querySelector('.zs-autofit');
           if(afEl){
             setTimeout(function(){
-              var bw=afEl.parentElement.clientWidth-16,bh=afEl.parentElement.clientHeight-30;
-              if(bw<20||bh<10)return;
-              var fs=Math.min(48,bh);
-              afEl.style.fontSize=fs+'px';
-              while((afEl.scrollWidth>bw||afEl.scrollHeight>bh)&&fs>6){
-                fs-=1;afEl.style.fontSize=fs+'px';
+              var bw=sn.clientWidth-16,bh=sn.clientHeight-34;
+              if(bw<20||bh<10){afEl.style.fontSize='10px';return;}
+              var txt=afEl.textContent||'';
+              if(!txt.trim()){afEl.style.fontSize='10px';return;}
+              // Create hidden measurement element
+              var m=document.createElement('span');
+              m.style.cssText='position:absolute;visibility:hidden;white-space:nowrap;font-weight:600;font-family:var(--font);';
+              document.body.appendChild(m);
+              m.textContent=txt;
+              var fs=Math.min(48,bh*0.9);
+              m.style.fontSize=fs+'px';
+              // Shrink until single-line fits width
+              while(m.offsetWidth>bw&&fs>6){fs-=1;m.style.fontSize=fs+'px';}
+              // Now check if wrapping is needed (multi-line)
+              var lines=Math.ceil(m.offsetWidth/bw);
+              if(lines>1){
+                // Allow wrapping, recalculate for multi-line
+                var areaNeeded=m.offsetWidth*fs*1.35;
+                var fsMl=Math.min(48,Math.floor(Math.sqrt(bw*bh*0.85/Math.max(1,txt.length))*1.6));
+                fs=Math.min(fs,Math.max(6,fsMl));
               }
-            },0);
+              document.body.removeChild(m);
+              afEl.style.fontSize=fs+'px';
+            },10);
           }
         });
 
