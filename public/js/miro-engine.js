@@ -5319,7 +5319,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           // --- Sticky note element ---
           var sn=document.createElement('div');
           sn.className='zooper-sticky';
-          sn.style.cssText='position:absolute;pointer-events:auto;left:'+meta.x+'px;top:'+meta.y+'px;width:'+meta.w+'px;min-height:'+meta.h+'px;'
+          sn.style.cssText='position:absolute;pointer-events:auto;left:'+meta.x+'px;top:'+meta.y+'px;width:'+meta.w+'px;height:'+meta.h+'px;min-height:'+meta.h+'px;'
             +'background:'+bgColor+';color:'+txtClr+';border-radius:6px;'
             +'box-shadow:0 2px 12px rgba(0,0,0,.18),0 1px 3px rgba(0,0,0,.12);'
             +'font-family:var(--font);cursor:grab;user-select:none;display:flex;flex-direction:column;'
@@ -5469,7 +5469,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           }else{
             var snBody=document.createElement('div');
             snBody.className='zs-autofit';
-            snBody.style.cssText='flex:1;padding:6px 8px;font-weight:600;line-height:1.3;word-break:break-word;overflow:hidden;display:flex;align-items:center;justify-content:center;text-align:center;'
+            snBody.style.cssText='flex:1;padding:6px 8px;font-weight:600;line-height:1.3;word-break:break-word;overflow:hidden;'
               +(isDonePlan?'text-decoration:line-through;opacity:.5;':'');
             snBody.textContent=meta.richText||displayName;
             snBody.contentEditable=false;
@@ -5529,11 +5529,15 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
                 var nw=Math.max(100,ow+(mv.clientX-sx));
                 var nh=Math.max(60,oh+(mv.clientY-sy));
                 meta.w=nw;meta.h=nh;
-                sn.style.width=nw+'px';sn.style.minHeight=nh+'px';
+                sn.style.width=nw+'px';sn.style.minHeight=nh+'px';sn.style.height=nh+'px';
+                var af=sn.querySelector('.zs-autofit');
+                if(af)autoSizeText(af,sn);
               }
               function onU(){
                 document.removeEventListener('mousemove',onM);
                 document.removeEventListener('mouseup',onU);
+                var af=sn.querySelector('.zs-autofit');
+                if(af)autoSizeText(af,sn);
                 saveStickyMeta(ev,meta);
               }
               document.addEventListener('mousemove',onM);
@@ -5577,34 +5581,10 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           })(sn,meta,ev);
 
           stickyLayer.appendChild(sn);
-          // Autofit text AFTER element is in DOM — use measurement span
+          // Autofit text using the existing global autoSizeText function
           var afEl=sn.querySelector('.zs-autofit');
           if(afEl){
-            setTimeout(function(){
-              var bw=sn.clientWidth-16,bh=sn.clientHeight-34;
-              if(bw<20||bh<10){afEl.style.fontSize='10px';return;}
-              var txt=afEl.textContent||'';
-              if(!txt.trim()){afEl.style.fontSize='10px';return;}
-              // Create hidden measurement element
-              var m=document.createElement('span');
-              m.style.cssText='position:absolute;visibility:hidden;white-space:nowrap;font-weight:600;font-family:var(--font);';
-              document.body.appendChild(m);
-              m.textContent=txt;
-              var fs=Math.min(48,bh*0.9);
-              m.style.fontSize=fs+'px';
-              // Shrink until single-line fits width
-              while(m.offsetWidth>bw&&fs>6){fs-=1;m.style.fontSize=fs+'px';}
-              // Now check if wrapping is needed (multi-line)
-              var lines=Math.ceil(m.offsetWidth/bw);
-              if(lines>1){
-                // Allow wrapping, recalculate for multi-line
-                var areaNeeded=m.offsetWidth*fs*1.35;
-                var fsMl=Math.min(48,Math.floor(Math.sqrt(bw*bh*0.85/Math.max(1,txt.length))*1.6));
-                fs=Math.min(fs,Math.max(6,fsMl));
-              }
-              document.body.removeChild(m);
-              afEl.style.fontSize=fs+'px';
-            },10);
+            setTimeout(function(){autoSizeText(afEl,sn);},20);
           }
         });
 
