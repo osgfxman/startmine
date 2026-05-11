@@ -5584,35 +5584,40 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           // --- Drag handling (no forbidden zones) ---
           (function(sn,meta,ev){
             var dragging=false,sx,sy,ox,oy;
+            function startDrag(cx,cy){
+              dragging=true;sx=cx;sy=cy;ox=meta.x;oy=meta.y;
+              sn.style.cursor='grabbing';sn.style.opacity='.85';sn.style.zIndex='30';
+            }
+            function moveDrag(cx,cy){
+              if(!dragging)return;
+              var nx=ox+(cx-sx),ny=oy+(cy-sy);
+              var maxX=cW-meta.w,maxY=cH-20;
+              nx=Math.max(0,Math.min(nx,maxX));ny=Math.max(0,Math.min(ny,maxY));
+              meta.x=nx;meta.y=ny;sn.style.left=nx+'px';sn.style.top=ny+'px';
+            }
+            function endDrag(){
+              if(!dragging)return;dragging=false;
+              sn.style.cursor='grab';sn.style.opacity='1';sn.style.zIndex='11';
+              saveStickyMeta(ev,meta);
+            }
+            // Mouse events
             sn.addEventListener('mousedown',function(e3){
               if(e3.target.closest('.zooper-sticky div[contenteditable="true"]'))return;
-              if(e3.button!==0)return;
-              e3.preventDefault();
-              dragging=true;
-              sx=e3.clientX;sy=e3.clientY;
-              ox=meta.x;oy=meta.y;
-              sn.style.cursor='grabbing';
-              sn.style.opacity='.85';
-              sn.style.zIndex='30';
+              if(e3.button!==0)return;e3.preventDefault();
+              startDrag(e3.clientX,e3.clientY);
             });
-            document.addEventListener('mousemove',function(mv){
-              if(!dragging)return;
-              var nx=ox+(mv.clientX-sx);
-              var ny=oy+(mv.clientY-sy);
-              var maxX=cW-meta.w,maxY=cH-20;
-              nx=Math.max(0,Math.min(nx,maxX));
-              ny=Math.max(0,Math.min(ny,maxY));
-              meta.x=nx;meta.y=ny;
-              sn.style.left=nx+'px';sn.style.top=ny+'px';
-            });
-            document.addEventListener('mouseup',function(){
-              if(!dragging)return;
-              dragging=false;
-              sn.style.cursor='grab';
-              sn.style.opacity='1';
-              sn.style.zIndex='11';
-              saveStickyMeta(ev,meta);
-            });
+            document.addEventListener('mousemove',function(mv){moveDrag(mv.clientX,mv.clientY);});
+            document.addEventListener('mouseup',function(){endDrag();});
+            // Touch events for Android
+            sn.addEventListener('touchstart',function(e3){
+              if(e3.target.closest('.zooper-sticky div[contenteditable="true"]'))return;
+              var t=e3.touches[0];startDrag(t.clientX,t.clientY);
+            },{passive:true});
+            document.addEventListener('touchmove',function(mv){
+              if(!dragging)return;var t=mv.touches[0];moveDrag(t.clientX,t.clientY);
+              mv.preventDefault();
+            },{passive:false});
+            document.addEventListener('touchend',function(){endDrag();});
           })(sn,meta,ev);
 
           stickyLayer.appendChild(sn);
@@ -5876,7 +5881,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         setTimeout(function() {
           if (body === targetBody) { body = origBody; }
           _state.page = origPage; _state.offset = origOff; _state.theme = origTh; _state.view = origV;
-        }, 5000);
+        }, 30000);
       }
     };
   }
@@ -6487,7 +6492,7 @@ function showCalendarEventForm(container, el, card, opts) {
           var fCal=cals.find(function(c){return(c.summary||'').toLowerCase()==="!40's fruit";});
           if(!fCal){showToast('❌ No fruit calendar');return;}
           createCalendarEvent(fCal.id,"!40's Fruit",startD,endD,'').then(function(){
-            showToast('🍎 Fruit added');form.closest('[style*="position:fixed"]').remove();_refresh();
+            showToast('🍎 Fruit added');var _ov=form.parentElement;if(_ov)_ov.remove();_refresh();
           }).catch(function(er){showToast('❌ '+er.message);});
         });
       } else if(qa.key==='alt'){
@@ -6498,7 +6503,7 @@ function showCalendarEventForm(container, el, card, opts) {
           var title=titleInp.value.trim()||prompt('Todo name:');
           if(!title||!title.trim())return;
           createCalendarEvent(pCal.id,title.trim(),startD,endD,'').then(function(){
-            showToast('☑️ Todo added');form.closest('[style*="position:fixed"]').remove();_refresh();
+            showToast('☑️ Todo added');var _ov=form.parentElement;if(_ov)_ov.remove();_refresh();
           }).catch(function(er){showToast('❌ '+er.message);});
         });
       } else if(qa.key==='shift'){
@@ -6514,7 +6519,7 @@ function showCalendarEventForm(container, el, card, opts) {
               var h2=startD.getHours()*60+startD.getMinutes(),h3=endD.getHours()*60+endD.getMinutes();
               var metaStr='<!--STICKYMETA:'+JSON.stringify({x:10,y:10,w:200,h:150,color:'white',imageUrl:url})+'-->';
               createCalendarEvent(pCal.id,'\uD83D\uDDBC '+fmtTime(h2)+'-'+fmtTime(h3),startD,endD,metaStr).then(function(){
-                showToast('🖼️ Image added');form.closest('[style*="position:fixed"]').remove();_refresh();
+                showToast('🖼️ Image added');var _ov=form.parentElement;if(_ov)_ov.remove();_refresh();
               }).catch(function(er){showToast('❌ '+er.message);});
             });
           };rd.readAsDataURL(f);};fi.click();
