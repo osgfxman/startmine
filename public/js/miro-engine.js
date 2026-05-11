@@ -6208,8 +6208,19 @@ async function fetchCalendarEvents(timeMin, timeMax) {
 }
 
 // ─── Create Event ───
+var _createEventDedup={};
 async function createCalendarEvent(calendarId, summary, startDateTime, endDateTime, description) {
   if (!_googleAccessToken) throw new Error('Not authenticated');
+  // Dedup guard: prevent creating identical events within 15 seconds
+  var dedupKey=calendarId+'|'+startDateTime.toISOString()+'|'+endDateTime.toISOString()+'|'+(summary||'');
+  var now=Date.now();
+  if(_createEventDedup[dedupKey]&&(now-_createEventDedup[dedupKey])<15000){
+    console.warn('[DEDUP] Skipping duplicate event creation:',summary);
+    return {id:'dedup_'+now,summary:summary};
+  }
+  _createEventDedup[dedupKey]=now;
+  // Clean old dedup entries
+  Object.keys(_createEventDedup).forEach(function(k){if(now-_createEventDedup[k]>60000)delete _createEventDedup[k];});
   const body = {
     summary,
     description: description || '',
@@ -6481,11 +6492,14 @@ function showCalendarEventForm(container, el, card, opts) {
     btn.onmouseleave = function(){btn.style.background=qa.color+'15';};
     btn.onclick = function(e){
       e.stopPropagation();
+      if(btn.disabled)return;
+      btn.disabled=true;btn.style.opacity='.4';btn.style.pointerEvents='none';
+      setTimeout(function(){btn.disabled=false;btn.style.opacity='1';btn.style.pointerEvents='';},5000);
       const calId = _selectedCalId;
       const startD = new Date(startDateInp.value + 'T' + startPicker.getTime());
       const endD = new Date(endDateInp.value + 'T' + endPicker.getTime());
-      if(isNaN(startD.getTime())||isNaN(endD.getTime())){showToast('❌ Invalid date');return;}
-      if(endD<=startD){showToast('❌ End must be after start');return;}
+      if(isNaN(startD.getTime())||isNaN(endD.getTime())){showToast('❌ Invalid date');btn.disabled=false;btn.style.opacity='1';btn.style.pointerEvents='';return;}
+      if(endD<=startD){showToast('❌ End must be after start');btn.disabled=false;btn.style.opacity='1';btn.style.pointerEvents='';return;}
       if(qa.key==='ctrl'){
         // Fruit toggle
         getCalendarList().then(function(cals){
