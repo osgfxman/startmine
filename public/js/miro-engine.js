@@ -4827,8 +4827,21 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         body._ganttRender=function(){_renderGantt2();};
         var CS=14,DW=2,CSbig=28;
         var dn=['Su','Mo','Tu','We','Th','Fr','Sa'];
+        if(typeof window._zooperFHD==='undefined') window._zooperFHD=false;
         var root=document.createElement('div');
-        root.style.cssText='display:flex;flex-direction:column;height:100%;box-sizing:border-box;font-family:var(--font);overflow:hidden;';
+        if(window._zooperFHD){
+          root.style.cssText='display:flex;flex-direction:column;width:1920px;min-height:1080px;box-sizing:border-box;font-family:var(--font);overflow:visible;';
+          body.style.overflow='auto';body.style.webkitOverflowScrolling='touch';
+        }else{
+          root.style.cssText='display:flex;flex-direction:column;height:100%;box-sizing:border-box;font-family:var(--font);overflow:hidden;';
+          body.style.overflow='hidden';
+        }
+        var fhdBtn=document.createElement('button');
+        fhdBtn.style.cssText='position:absolute;top:4px;right:40px;z-index:20;padding:2px 8px;border-radius:12px;border:1px solid '+(isDk?'rgba(255,255,255,.2)':'rgba(0,0,0,.2)')+';background:'+(isDk?'rgba(0,0,0,.4)':'rgba(255,255,255,.8)')+';color:'+txt+';font-size:.5rem;font-weight:700;cursor:pointer;font-family:var(--font);backdrop-filter:blur(4px);';
+        fhdBtn.textContent=window._zooperFHD?'\uD83D\uDCF1 Adaptive':'\uD83D\uDDA5\uFE0F FHD';
+        fhdBtn.title=window._zooperFHD?'Switch to adaptive':'Switch to FHD (1920x1080)';
+        fhdBtn.onclick=function(e){e.stopPropagation();window._zooperFHD=!window._zooperFHD;_renderGantt2();};
+        body.style.position='relative';body.appendChild(fhdBtn);
         // â”€â”€â”€ TOP HALF: DAY CARDS (50%) â”€â”€â”€
         var topHalf=document.createElement('div');
         topHalf.style.cssText='flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px;overflow:hidden;padding:2px;';
@@ -4948,8 +4961,10 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
               card.appendChild(sr);
             }
             // Drag handlers: normal=create event, Ctrl=fruit, Alt=todo, Shift=image
-            (function(ac,dm,fci,fsm){var mode=null,si2=-1,ei2=-1,isCtrl=false,isAlt=false,isShift=false,didDrag=false;function gCA(x,y){for(var i=0;i<ac.length;i++){var r=ac[i].ev.getBoundingClientRect();if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return i;}return-1;}function hl(a,b){ac.forEach(function(c,i){c.ev.style.outline=(i>=a&&i<=b)?'2px solid '+(isCtrl?'#e74c3c':(isAlt?'#f59e0b':(isShift?'#9b59b6':'#4285f4'))):'none';});}function clr(){ac.forEach(function(c){c.ev.style.outline='none';});}ac.forEach(function(c,i){c.ev.addEventListener('mousedown',function(e){if(e.button!==0)return;mode='ev';si2=i;ei2=i;isCtrl=e.ctrlKey||e.metaKey;isAlt=e.altKey;isShift=e.shiftKey;didDrag=false;hl(i,i);e.preventDefault();});});document.addEventListener('mousemove',function(e){if(!mode)return;var h=gCA(e.clientX,e.clientY);if(h<0)return;if(h!==ei2)didDrag=true;ei2=h;hl(Math.min(si2,h),Math.max(si2,h));});document.addEventListener('mouseup',function(){if(!mode)return;mode=null;var lo=Math.min(si2,ei2),hi=Math.max(si2,ei2);var sel=[];for(var ii=lo;ii<=hi;ii++){sel.push(ac[ii]);}clr();if(isShift&&sel.length>=2&&planCalId){
-              // Shift+drag: add image spanning selected time
+            // Also supports touch for Android
+            (function(ac,dm,fci,fsm){var mode=null,si2=-1,ei2=-1,isCtrl=false,isAlt=false,isShift=false,didDrag=false;function gCA(x,y){for(var i=0;i<ac.length;i++){var r=ac[i].ev.getBoundingClientRect();if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return i;}return-1;}function hl(a,b){ac.forEach(function(c,i){c.ev.style.outline=(i>=a&&i<=b)?'2px solid '+(isCtrl?'#e74c3c':(isAlt?'#f59e0b':(isShift?'#9b59b6':'#4285f4'))):'none';});}function clr(){ac.forEach(function(c){c.ev.style.outline='none';});}
+            function finishSel(){
+              if(!mode)return;mode=null;var lo=Math.min(si2,ei2),hi=Math.max(si2,ei2);var sel=[];for(var ii=lo;ii<=hi;ii++){sel.push(ac[ii]);}clr();if(isShift&&sel.length>=2&&planCalId){
               var sMin2=Math.min.apply(null,sel.map(function(h){return h.slotStartMin;}));
               var eMin2=Math.max.apply(null,sel.map(function(h){return h.slotEndMin;}));
               var fi=document.createElement('input');fi.type='file';fi.accept='image/*';fi.style.display='none';
@@ -4973,7 +4988,30 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
                   showToast('\u2705 Todo added');_renderGantt2();
                 }).catch(function(er){showToast('\u274C '+er.message);});
               }
-            }else if(isCtrl&&sel.length>=1&&fci){var hc=sel.filter(function(c2){return(fsm[c2.absSlot]||[]).length>0;}).length;var doDelete=hc>sel.length/2;var ops=[];sel.forEach(function(c2){var fEvs=fsm[c2.absSlot]||[];if(doDelete&&fEvs.length>0)ops.push(deleteCalendarEvent(fEvs[0].calendarId,fEvs[0].id));else if(!doDelete&&fEvs.length===0)ops.push(createCalendarEvent(fci,"!40's Fruit",new Date(dm+c2.slotStartMin*60000),new Date(dm+c2.slotEndMin*60000),''));});if(ops.length)Promise.all(ops).then(function(){_renderGantt2();}).catch(function(){_renderGantt2();});}else if(!isCtrl&&!isAlt&&!isShift&&sel.length>=2){var sMin=Math.min.apply(null,sel.map(function(h){return h.slotStartMin;}));var eMin=Math.max.apply(null,sel.map(function(h){return h.slotEndMin;}));showCalendarEventForm(body,body,null,{mode:'create',startTime:new Date(dm+sMin*60000),endTime:new Date(dm+eMin*60000)});}});
+            }else if(isCtrl&&sel.length>=1&&fci){var hc=sel.filter(function(c2){return(fsm[c2.absSlot]||[]).length>0;}).length;var doDelete=hc>sel.length/2;var ops=[];sel.forEach(function(c2){var fEvs=fsm[c2.absSlot]||[];if(doDelete&&fEvs.length>0)ops.push(deleteCalendarEvent(fEvs[0].calendarId,fEvs[0].id));else if(!doDelete&&fEvs.length===0)ops.push(createCalendarEvent(fci,"!40's Fruit",new Date(dm+c2.slotStartMin*60000),new Date(dm+c2.slotEndMin*60000),''));});if(ops.length)Promise.all(ops).then(function(){_renderGantt2();}).catch(function(){_renderGantt2();});}else if(!isCtrl&&!isAlt&&!isShift&&sel.length>=2){var sMin=Math.min.apply(null,sel.map(function(h){return h.slotStartMin;}));var eMin=Math.max.apply(null,sel.map(function(h){return h.slotEndMin;}));showCalendarEventForm(body,body,null,{mode:'create',startTime:new Date(dm+sMin*60000),endTime:new Date(dm+eMin*60000)});}}
+            // Mouse events
+            ac.forEach(function(c,i){c.ev.addEventListener('mousedown',function(e){if(e.button!==0)return;mode='ev';si2=i;ei2=i;isCtrl=e.ctrlKey||e.metaKey;isAlt=e.altKey;isShift=e.shiftKey;didDrag=false;hl(i,i);e.preventDefault();});});
+            document.addEventListener('mousemove',function(e){if(!mode)return;var h=gCA(e.clientX,e.clientY);if(h<0)return;if(h!==ei2)didDrag=true;ei2=h;hl(Math.min(si2,h),Math.max(si2,h));});
+            document.addEventListener('mouseup',function(){finishSel();});
+            // Touch events for Android multi-cell selection
+            var _touchTimer=null;
+            ac.forEach(function(c,i){c.ev.addEventListener('touchstart',function(e){
+              _touchTimer=setTimeout(function(){
+                mode='ev';si2=i;ei2=i;isCtrl=false;isAlt=false;isShift=false;didDrag=false;hl(i,i);
+                c.ev.style.outline='2px solid #4285f4';
+              },300);
+            },{passive:true});});
+            document.addEventListener('touchmove',function(e){
+              if(_touchTimer){clearTimeout(_touchTimer);_touchTimer=null;}
+              if(!mode)return;
+              var t=e.touches[0];var h=gCA(t.clientX,t.clientY);if(h<0)return;
+              if(h!==ei2)didDrag=true;ei2=h;hl(Math.min(si2,h),Math.max(si2,h));
+              e.preventDefault();
+            },{passive:false});
+            document.addEventListener('touchend',function(){
+              if(_touchTimer){clearTimeout(_touchTimer);_touchTimer=null;}
+              finishSel();
+            });
             })(allCells,dayMs,fruitCalId,frSlotMap);
             row.appendChild(card);
           }
@@ -6420,6 +6458,72 @@ function showCalendarEventForm(container, el, card, opts) {
   btnRow.appendChild(cancelBtn);
   btnRow.appendChild(saveBtn);
 
+  // ─── Quick-action icons for mobile (simulate modifier keys) ───
+  const qaRow = document.createElement('div');
+  qaRow.style.cssText = 'display:flex;gap:6px;margin-top:6px;justify-content:center;border-top:1px solid rgba(255,255,255,.08);padding-top:8px;';
+  const qaActions = [
+    {icon:'🍎',label:'Fruit',color:'#e74c3c',key:'ctrl'},
+    {icon:'☑️',label:'Todo',color:'#f59e0b',key:'alt'},
+    {icon:'🖼️',label:'Image',color:'#9b59b6',key:'shift'}
+  ];
+  qaActions.forEach(function(qa){
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 12px;border-radius:8px;border:1px solid '+qa.color+'44;background:'+qa.color+'15;color:'+qa.color+';cursor:pointer;font-family:var(--font);transition:all .15s;';
+    btn.innerHTML = '<span style="font-size:1.2rem;">'+qa.icon+'</span><span style="font-size:.5rem;font-weight:600;">'+qa.label+'</span>';
+    btn.title = qa.label+' ('+qa.key+'+click)';
+    btn.onmouseenter = function(){btn.style.background=qa.color+'30';};
+    btn.onmouseleave = function(){btn.style.background=qa.color+'15';};
+    btn.onclick = function(e){
+      e.stopPropagation();
+      const calId = _selectedCalId;
+      const startD = new Date(startDateInp.value + 'T' + startPicker.getTime());
+      const endD = new Date(endDateInp.value + 'T' + endPicker.getTime());
+      if(isNaN(startD.getTime())||isNaN(endD.getTime())){showToast('❌ Invalid date');return;}
+      if(endD<=startD){showToast('❌ End must be after start');return;}
+      if(qa.key==='ctrl'){
+        // Fruit toggle
+        getCalendarList().then(function(cals){
+          var fCal=cals.find(function(c){return(c.summary||'').toLowerCase()==="!40's fruit";});
+          if(!fCal){showToast('❌ No fruit calendar');return;}
+          createCalendarEvent(fCal.id,"!40's Fruit",startD,endD,'').then(function(){
+            showToast('🍎 Fruit added');form.closest('[style*="position:fixed"]').remove();_refresh();
+          }).catch(function(er){showToast('❌ '+er.message);});
+        });
+      } else if(qa.key==='alt'){
+        // Todo
+        getCalendarList().then(function(cals){
+          var pCal=cals.find(function(c){return(c.summary||'').toLowerCase()==='00aplan';});
+          if(!pCal){showToast('❌ No 00aplan calendar');return;}
+          var title=titleInp.value.trim()||prompt('Todo name:');
+          if(!title||!title.trim())return;
+          createCalendarEvent(pCal.id,title.trim(),startD,endD,'').then(function(){
+            showToast('☑️ Todo added');form.closest('[style*="position:fixed"]').remove();_refresh();
+          }).catch(function(er){showToast('❌ '+er.message);});
+        });
+      } else if(qa.key==='shift'){
+        // Image upload
+        getCalendarList().then(function(cals){
+          var pCal=cals.find(function(c){return(c.summary||'').toLowerCase()==='00aplan';});
+          if(!pCal){showToast('❌ No 00aplan calendar');return;}
+          var fi=document.createElement('input');fi.type='file';fi.accept='image/*';fi.style.display='none';
+          fi.onchange=function(){var f=fi.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(re){
+            showToast('⏳ Uploading image...');
+            uploadToImgBB(re.target.result).then(function(url){
+              if(!url){showToast('❌ Upload failed');return;}
+              var h2=startD.getHours()*60+startD.getMinutes(),h3=endD.getHours()*60+endD.getMinutes();
+              var metaStr='<!--STICKYMETA:'+JSON.stringify({x:10,y:10,w:200,h:150,color:'white',imageUrl:url})+'-->';
+              createCalendarEvent(pCal.id,'\uD83D\uDDBC '+fmtTime(h2)+'-'+fmtTime(h3),startD,endD,metaStr).then(function(){
+                showToast('🖼️ Image added');form.closest('[style*="position:fixed"]').remove();_refresh();
+              }).catch(function(er){showToast('❌ '+er.message);});
+            });
+          };rd.readAsDataURL(f);};fi.click();
+        });
+      }
+    };
+    qaRow.appendChild(btn);
+  });
+
   form.appendChild(titleLabel);
   form.appendChild(titleInp);
   form.appendChild(calLabel);
@@ -6429,6 +6533,7 @@ function showCalendarEventForm(container, el, card, opts) {
   form.appendChild(descLabel);
   form.appendChild(descInp);
   form.appendChild(btnRow);
+  form.appendChild(qaRow);
 
   // ─── Render as fixed overlay (centered on screen, unaffected by zoom) ───
   const overlay = document.createElement('div');
