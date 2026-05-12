@@ -14,6 +14,7 @@ const provider = new firebase.auth.GoogleAuthProvider();
 provider.addScope('https://www.googleapis.com/auth/drive.file');
 provider.addScope('https://www.googleapis.com/auth/calendar.events');
 provider.addScope('https://www.googleapis.com/auth/calendar.readonly');
+provider.addScope('https://www.googleapis.com/auth/tasks');
 
 let USER_ID = null;
 let DB_REF = null;
@@ -1692,6 +1693,7 @@ async function manualGoogleReAuth() {
   hintProvider.addScope('https://www.googleapis.com/auth/drive.file');
   hintProvider.addScope('https://www.googleapis.com/auth/calendar.events');
   hintProvider.addScope('https://www.googleapis.com/auth/calendar.readonly');
+  hintProvider.addScope('https://www.googleapis.com/auth/tasks');
   hintProvider.setCustomParameters({ login_hint: user.email });
   try {
     const result = await auth.signInWithPopup(hintProvider);

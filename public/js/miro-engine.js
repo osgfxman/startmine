@@ -4822,8 +4822,10 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         var allEv=await fetchCalendarEvents(sprintStart,sprintEnd);
         var evts=(allEv||[]).filter(function(e){return !e.allDay;});
         var fruitCalId='',planCalId=null;
-        try{var cals=await getCalendarList();var frCal=cals.find(function(c){return c.summary.toLowerCase()==="!40's fruit";});if(frCal)fruitCalId=frCal.id;var planCal=cals.find(function(c){return c.summary.toLowerCase()==='00aplan';});if(planCal)planCalId=planCal.id;}catch(e){}
-        var planEvents=(allEv||[]).filter(function(e){return(e.calendarName||'').toLowerCase()==='00aplan'&&!e.allDay;});
+        try{var cals=await getCalendarList();var frCal=cals.find(function(c){return c.summary.toLowerCase()==="!40's fruit";});if(frCal)fruitCalId=frCal.id;}catch(e){}
+        // Use Google Tasks for plan (instead of calendar)
+        var planEvents=[];
+        try{planCalId=await getOrCreateTaskList('00aplan');var allTasks=await fetchPlanTasks(planCalId);planEvents=allTasks;}catch(e){console.warn('Tasks API error:',e.message);}
         body._ganttRender=function(){_renderGantt2();};
         var CS=14,DW=2,CSbig=28;
         var dn=['Su','Mo','Tu','We','Th','Fr','Sa'];
@@ -4872,10 +4874,10 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
             var hR=document.createElement('span');hR.style.cssText='font-size:'+(isToday?'.6rem':'.48rem')+';font-weight:800;color:#27ae60;line-height:1;';hR.textContent=hijriDay(dayDate);
             hdr.appendChild(hL);hdr.appendChild(hM);hdr.appendChild(hR);card.appendChild(hdr);
             var allCells=[];
-            // Build plan (00aplan) slot map for this day
+            // Build plan (Tasks) slot map for this day
             var planSlotMap={};
-            var dayPlanEvts=dayEvts.filter(function(e2){return(e2.calendarName||'').toLowerCase()==='00aplan';});
-            dayPlanEvts.forEach(function(ev){var s2=new Date(ev.start).getTime(),e2=new Date(ev.end).getTime();var ss=Math.floor((s2-dayMs)/1800000),se=Math.ceil((e2-dayMs)/1800000);for(var x=ss;x<se&&x<48;x++){if(x>=0){if(!planSlotMap[x])planSlotMap[x]=[];planSlotMap[x].push(ev);}}});
+            var dayPlanEvts=planEvents.filter(function(ev){var s=ev.start||ev._meta&&ev._meta.start;if(!s)return false;var st=new Date(s).getTime();return st>=dayMs&&st<dayMs+86400000;});
+            dayPlanEvts.forEach(function(ev){var s2=new Date(ev.start||ev._meta&&ev._meta.start).getTime(),e2=new Date(ev.end||ev._meta&&ev._meta.end||s2+1800000).getTime();var ss=Math.floor((s2-dayMs)/1800000),se=Math.ceil((e2-dayMs)/1800000);for(var x=ss;x<se&&x<48;x++){if(x>=0){if(!planSlotMap[x])planSlotMap[x]=[];planSlotMap[x].push(ev);}}});
             for(var si=0;si<6;si++){
               var sess=sessions[si],f1z=hasZS(sess,[0,1,2,3]),f2z=hasZS(sess,[4,5,6,7]),sessOK=f1z&&f2z,isSpec=(si===0||si===1);
               var sessClr=sessOK?'#27ae60':(isDk?'rgba(255,255,255,.12)':'rgba(0,0,0,.1)');
@@ -4902,10 +4904,10 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
                 ec.style.cssText='width:'+cSize+'px;flex-shrink:0;position:relative;background:'+(cBg!=='transparent'?cBg:(isBr?'rgba(128,128,128,.06)':bg2))+';cursor:pointer;border-right:1px solid '+(isDk?'rgba(255,255,255,.06)':'rgba(0,0,0,.06)')+';display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;'+(isNow?'outline:2px solid #ff6b35;outline-offset:-1px;animation:pomoPulse 1.5s infinite;z-index:1;':'');
                 // Content layer: fruit + plan checkboxes stacked
                 if(hFr){var frS=document.createElement('span');frS.style.cssText='font-size:'+(Math.max(5,cSize-6))+'px;pointer-events:none;line-height:1;';frS.textContent='\uD83C\uDF4E';ec.appendChild(frS);}
-                // 00aplan checkboxes overlaid in cell
+                // Tasks checkboxes overlaid in cell
                 if(planCellEvts.length>0){
                   planCellEvts.forEach(function(pev){
-                    var isDonePlan=(pev.summary||'').toLowerCase().indexOf('done')!==-1;
+                    var isDonePlan=pev.isDone||(pev.summary||'').toLowerCase().indexOf('done')!==-1;
                     var pcb=document.createElement('span');
                     pcb.style.cssText='font-size:'+(Math.max(5,Math.min(cSize-4,10)))+'px;line-height:1;cursor:pointer;z-index:2;';
                     pcb.textContent=isDonePlan?'\u2611':'\u2610';
@@ -4914,9 +4916,8 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
                       pcb.addEventListener('click',function(ev3){
                         ev3.stopPropagation();ev3.preventDefault();
                         if(!planCalId)return;
-                        var newSummary=isDonePlan?((pev.summary||'').replace(/\s*done\s*/gi,'').trim()):(pev.summary+' done');
                         pcb.style.opacity='.4';
-                        updateCalendarEvent(pev.calendarId||planCalId,pev.id,{summary:newSummary}).then(function(){
+                        togglePlanTaskDone(planCalId,pev.id,!isDonePlan).then(function(){
                           showToast(isDonePlan?'\u23EA Unmarked':'\u2705 Done!');
                           _renderGantt2();
                         }).catch(function(er){showToast('\u274C '+er.message);pcb.style.opacity='1';});
@@ -4928,15 +4929,14 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
                 else if(!hFr&&sEvts.length===0){var tl=document.createElement('span');tl.style.cssText='font-size:'+Math.min(cSize-2,10)+'px;color:'+(isDk?'rgba(255,255,255,.25)':'rgba(0,0,0,.2)')+';font-weight:'+(m1===0?'700':'400')+';pointer-events:none;';tl.textContent=m1===0?String((h1v%12)||12):'30';ec.appendChild(tl);}
                 (function(ec,se,sd,ed,as,hf,fsm,fci,smn,emn){ec.addEventListener('click',function(ev2){ev2.stopPropagation();
                   if(ev2.shiftKey){
-                    // Shift+click: add image to 00aplan
-                    if(!planCalId){showToast('\u274C Calendar "00aplan" not found');return;}
+                    // Shift+click: add image to Tasks
+                    if(!planCalId){showToast('\u274C Tasks list "00aplan" not found');return;}
                     var fi=document.createElement('input');fi.type='file';fi.accept='image/*';fi.style.display='none';
                     fi.onchange=function(){var f=fi.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(re){
                       showToast('\u23F3 Uploading image...');
                       uploadToImgBB(re.target.result).then(function(url){
                         if(!url){showToast('\u274C Upload failed');return;}
-                        var metaStr='<!--STICKYMETA:'+JSON.stringify({x:10,y:10,w:200,h:150,color:'white',imageUrl:url})+'-->';
-                        createCalendarEvent(planCalId,'\uD83D\uDDBC '+fmtTime(smn)+'-'+fmtTime(emn),sd,ed,metaStr).then(function(){
+                        createPlanTask(planCalId,'\uD83D\uDDBC '+fmtTime(smn)+'-'+fmtTime(emn),sd,ed,{sticky:{x:10,y:10,w:200,h:150,color:'white'},imageUrl:url}).then(function(){
                           showToast('\u2705 Image added');_renderGantt2();
                         }).catch(function(er){showToast('\u274C '+er.message);});
                       });
@@ -4944,12 +4944,12 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
                     return;
                   }
                   if(ev2.altKey){
-                    if(!planCalId){showToast('\u274C Calendar "00aplan" not found');return;}
+                    if(!planCalId){showToast('\u274C Tasks list "00aplan" not found');return;}
                     var defName=se.length>0?(se[0].summary||''):'';
                     var taskName=prompt('Todo for '+fmtTime(smn)+'-'+fmtTime(emn)+':',defName);
                     if(taskName&&taskName.trim()){
-                      createCalendarEvent(planCalId,taskName.trim(),sd,ed,'').then(function(){
-                        planEvents.push({id:'temp',summary:taskName.trim(),description:'',start:sd.toISOString(),end:ed.toISOString(),calendarName:'00aplan',calendarId:planCalId});
+                      createPlanTask(planCalId,taskName.trim(),sd,ed).then(function(created){
+                        planEvents.push({id:created.id||'temp',summary:taskName.trim(),start:sd.toISOString(),end:ed.toISOString(),calendarName:'00aplan',taskListId:planCalId,isDone:false,_meta:{start:sd.toISOString(),end:ed.toISOString()}});
                         showToast('\u2705 Todo added');_renderGantt2();
                       }).catch(function(er){showToast('\u274C '+er.message);});
                     }
@@ -4972,8 +4972,8 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
                 showToast('\u23F3 Uploading image...');
                 uploadToImgBB(re.target.result).then(function(url){
                   if(!url){showToast('\u274C Upload failed');return;}
-                  var metaStr='<!--STICKYMETA:'+JSON.stringify({x:10,y:10,w:200,h:150,color:'white',imageUrl:url})+'-->';
-                  createCalendarEvent(planCalId,'\uD83D\uDDBC '+fmtTime(sMin2)+'-'+fmtTime(eMin2),new Date(dm+sMin2*60000),new Date(dm+eMin2*60000),metaStr).then(function(){
+                  var metaStr2={sticky:{x:10,y:10,w:200,h:150,color:'white'},imageUrl:url};
+                  createPlanTask(planCalId,'\uD83D\uDDBC '+fmtTime(sMin2)+'-'+fmtTime(eMin2),new Date(dm+sMin2*60000),new Date(dm+eMin2*60000),metaStr2).then(function(){
                     showToast('\u2705 Image added');_renderGantt2();
                   }).catch(function(er){showToast('\u274C '+er.message);});
                 });
@@ -4983,8 +4983,8 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
               var eMin2=Math.max.apply(null,sel.map(function(h){return h.slotEndMin;}));
               var taskName=prompt('Todo for '+fmtTime(sMin2)+' - '+fmtTime(eMin2)+':');
               if(taskName&&taskName.trim()){
-                createCalendarEvent(planCalId,taskName.trim(),new Date(dm+sMin2*60000),new Date(dm+eMin2*60000),'').then(function(){
-                  planEvents.push({id:'temp',summary:taskName.trim(),description:'',start:new Date(dm+sMin2*60000).toISOString(),end:new Date(dm+eMin2*60000).toISOString(),calendarName:'00aplan',calendarId:planCalId});
+                createPlanTask(planCalId,taskName.trim(),new Date(dm+sMin2*60000),new Date(dm+eMin2*60000)).then(function(created){
+                  planEvents.push({id:created.id||'temp',summary:taskName.trim(),start:new Date(dm+sMin2*60000).toISOString(),end:new Date(dm+eMin2*60000).toISOString(),calendarName:'00aplan',taskListId:planCalId,isDone:false,_meta:{start:new Date(dm+sMin2*60000).toISOString(),end:new Date(dm+eMin2*60000).toISOString()}});
                   showToast('\u2705 Todo added');_renderGantt2();
                 }).catch(function(er){showToast('\u274C '+er.message);});
               }
@@ -5100,7 +5100,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         botHalf.appendChild(makeStatsRow(ranges.slice(0,3)));
         botHalf.appendChild(makeStatsRow(ranges.slice(3)));
 
-        // ─── TODO CHECKLIST PANEL (synced with 00aplan calendar) ───
+        // ─── TODO CHECKLIST PANEL (synced with Google Tasks) ───
         var todoPanel=document.createElement('div');
         todoPanel.style.cssText='flex:0 0 220px;display:flex;flex-direction:column;border-left:1px solid '+bdr+';overflow:hidden;background:'+(isDk?'rgba(0,0,0,.15)':'rgba(0,0,0,.02)')+';';
         // Header
@@ -5108,7 +5108,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         todoHdr.style.cssText='display:flex;align-items:center;gap:4px;padding:4px 8px;border-bottom:1px solid '+bdr+';flex-shrink:0;';
         var todoTitle=document.createElement('span');
         todoTitle.style.cssText='font-size:.6rem;font-weight:700;color:'+txt+';';
-        todoTitle.textContent='\u2705 Plan (00aplan)';
+        todoTitle.textContent='\u2705 Plan (Tasks)';
         todoHdr.appendChild(todoTitle);
         todoPanel.appendChild(todoHdr);
         // Add input
@@ -5126,8 +5126,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         var todoList=document.createElement('div');
         todoList.style.cssText='flex:1;overflow-y:auto;padding:4px 6px;display:flex;flex-direction:column;gap:2px;';
         todoPanel.appendChild(todoList);
-        // Find 00aplan calendar and load events
-        // planCalId and planEvents already fetched at the top - reuse them
+        // planCalId (Tasks list ID) and planEvents already fetched at the top - reuse them
         function renderTodoItems(){
           todoList.innerHTML='';
           var sorted=planEvents.slice().sort(function(a,b){
@@ -5141,10 +5140,10 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
             return;
           }
           sorted.forEach(function(ev){
-            var isDone=(ev.summary||'').toLowerCase().indexOf('done')!==-1;
+            var isDone=ev.isDone||(ev.summary||'').toLowerCase().indexOf('done')!==-1;
             var displayName=(ev.summary||'(untitled)').replace(/\s*done\s*/gi,'').trim()||'(untitled)';
-            var evMeta=parseStickyMeta(ev.description||'');
-            var isImg=evMeta&&evMeta.imageUrl&&evMeta.imageUrl.length>10;
+            var evMeta=ev._meta||parseStickyMeta(ev.description||'');
+            var isImg=(evMeta&&evMeta.imageUrl&&evMeta.imageUrl.length>10)||(ev.imageUrl&&ev.imageUrl.length>10);
             var item=document.createElement('div');
             item.style.cssText='display:flex;align-items:flex-start;gap:4px;padding:3px 4px;border-radius:4px;background:'+(isDone?(isDk?'rgba(39,174,96,.08)':'rgba(39,174,96,.06)'):'transparent')+';cursor:pointer;transition:background .15s;';
             item.onmouseenter=function(){item.style.background=isDk?'rgba(255,255,255,.06)':'rgba(0,0,0,.04)';};
@@ -5157,10 +5156,9 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
             cb.onclick=function(e2){
               e2.stopPropagation();
               if(!planCalId)return;
-              var newSummary=isDone?((ev.summary||'').replace(/\s*done\s*/gi,'').trim()):(ev.summary+' done');
               cb.style.opacity='.4';
-              updateCalendarEvent(planCalId,ev.id,{summary:newSummary}).then(function(){
-                ev.summary=newSummary;
+              togglePlanTaskDone(planCalId,ev.id,!isDone).then(function(){
+                ev.isDone=!isDone;
                 showToast(isDone?'\u23EA Unmarked':'\u2705 Done!');
                 _renderGantt2();
               }).catch(function(er){showToast('\u274C '+er.message);cb.style.opacity='1';});
@@ -5201,7 +5199,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
               e2.stopPropagation();
               if(!planCalId)return;
               del.style.opacity='.2';
-              deleteCalendarEvent(planCalId,ev.id).then(function(){
+              deletePlanTask(planCalId,ev.id).then(function(){
                 planEvents=planEvents.filter(function(x){return x.id!==ev.id;});
                 showToast('\uD83D\uDDD1 Deleted');
                 _renderGantt2();
@@ -5223,7 +5221,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         function addTodoItem(){
           var val=todoInput.value.trim();
           if(!val)return;
-          if(!planCalId){showToast('\u274C Calendar "00aplan" not found. Create it in Google Calendar first.');return;}
+          if(!planCalId){showToast('\u274C Tasks list "00aplan" not found.');return;}
           todoAddBtn.disabled=true;todoAddBtn.textContent='...';
           var now2=new Date();
           var curMin=now2.getHours()*60+now2.getMinutes();
@@ -5233,15 +5231,14 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           // Detect image URL
           var isImgUrl=/^https?:\/\/.+\.(jpg|jpeg|png|gif|webp|bmp|svg)/i.test(val)||/imgbb\.com|imgur\.com|i\.ibb\.co/i.test(val);
           if(isImgUrl){
-            var metaStr='<!--STICKYMETA:'+JSON.stringify({x:10,y:10,w:200,h:150,color:'white',imageUrl:val})+'-->';
-            createCalendarEvent(planCalId,'\uD83D\uDDBC '+fmtTime(curMin),startT,endT,metaStr).then(function(){
+            createPlanTask(planCalId,'\uD83D\uDDBC '+fmtTime(curMin),startT,endT,{sticky:{x:10,y:10,w:200,h:150,color:'white'},imageUrl:val}).then(function(){
               todoInput.value='';
               showToast('\u2705 Image added');
               _renderGantt2();
             }).catch(function(er){showToast('\u274C '+er.message);}).finally(function(){todoAddBtn.disabled=false;todoAddBtn.textContent='+';});
           }else{
-            createCalendarEvent(planCalId,val,startT,endT,'').then(function(created){
-              planEvents.push({id:created.id,summary:val,description:'',start:startT.toISOString(),end:endT.toISOString(),calendarName:'00aplan',calendarId:planCalId});
+            createPlanTask(planCalId,val,startT,endT).then(function(created){
+              planEvents.push({id:created.id||'temp',summary:val,start:startT.toISOString(),end:endT.toISOString(),calendarName:'00aplan',taskListId:planCalId,isDone:false,_meta:{start:startT.toISOString(),end:endT.toISOString()}});
               todoInput.value='';
               showToast('\u2705 Task added');
               _renderGantt2();
@@ -5261,7 +5258,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         body.innerHTML='';body.appendChild(root);
 
         // ═══════════════════════════════════════════════════════════════
-        // ═══  STICKY NOTES LAYER (synced with 00aplan calendar)  ═══
+        // ═══  STICKY NOTES LAYER (synced with Google Tasks)  ═══
         // ═══════════════════════════════════════════════════════════════
 
         // --- Utility: parse/serialize sticky metadata from event description ---
@@ -5311,15 +5308,16 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           return positions;
         }
 
-        // --- Save sticky meta back to calendar (DEBOUNCED — saves bandwidth) ---
+        // --- Save sticky meta back to Tasks (DEBOUNCED) ---
         var _saveTimers={};
         function saveStickyMeta(ev,meta){
           if(!planCalId||!ev.id||ev.id==='temp')return;
           if(_saveTimers[ev.id])clearTimeout(_saveTimers[ev.id]);
           _saveTimers[ev.id]=setTimeout(function(){
-            var cleanDesc=getDescWithoutMeta(ev.description||'');
-            var newDesc=(cleanDesc?cleanDesc+'\n':'')+serializeStickyMeta(meta);
-            updateCalendarEvent(planCalId,ev.id,{description:newDesc}).catch(function(er){
+            var existingMeta=ev._meta||{};
+            Object.assign(existingMeta,{sticky:meta});
+            if(meta.imageUrl)existingMeta.imageUrl=meta.imageUrl;
+            updatePlanTask(planCalId,ev.id,{notes:serializeTaskNotes(existingMeta)}).catch(function(er){
               console.warn('[StickyMeta] Save failed:',er.message);
             });
           },1500);
@@ -5337,16 +5335,18 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         var autoPos=autoLayoutPositions(planEvents.length,cW,cH);
 
         planEvents.forEach(function(ev,idx){
-          var meta=parseStickyMeta(ev.description||'');
+          var meta=ev.sticky||ev._meta&&ev._meta.sticky||parseStickyMeta(ev.description||'');
           if(!meta){
             var ap=autoPos[idx]||{x:10+idx*40,y:cH*0.55+10,w:160,h:96};
             meta={x:ap.x,y:ap.y,w:ap.w,h:ap.h,color:'yellow',bgHex:null,richText:null};
+            if(ev._meta&&ev._meta.imageUrl)meta.imageUrl=ev._meta.imageUrl;
+            if(ev.imageUrl)meta.imageUrl=ev.imageUrl;
           }
           // Ensure minimum size
           if(!meta.w||meta.w<80)meta.w=160;
           if(!meta.h||meta.h<60)meta.h=96;
 
-          var isDonePlan=(ev.summary||'').toLowerCase().indexOf('done')!==-1;
+          var isDonePlan=ev.isDone||(ev.summary||'').toLowerCase().indexOf('done')!==-1;
           var displayName=(ev.summary||'(untitled)').replace(/\s*done\s*/gi,'').trim()||'(untitled)';
           var bgColor=meta.bgHex||(snColors[meta.color]||snColors.yellow);
           var txtClr=snTextColor(bgColor);
@@ -5377,10 +5377,9 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
             snCb.addEventListener('click',function(e2){
               e2.stopPropagation();
               if(!planCalId)return;
-              var newSummary=isDonePlan?((ev.summary||'').replace(/\s*done\s*/gi,'').trim()):(ev.summary+' done');
               snCb.style.opacity='.4';
-              updateCalendarEvent(planCalId,ev.id,{summary:newSummary}).then(function(){
-                ev.summary=newSummary;
+              togglePlanTaskDone(planCalId,ev.id,!isDonePlan).then(function(){
+                ev.isDone=!isDonePlan;
                 showToast(isDonePlan?'\u23EA Unmarked':'\u2705 Done!');
                 _renderGantt2();
               }).catch(function(er){showToast('\u274C '+er.message);snCb.style.opacity='1';});
@@ -6207,6 +6206,210 @@ async function fetchCalendarEvents(timeMin, timeMax) {
   return allEvents;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ─── Google Tasks API Layer ───
+// ═══════════════════════════════════════════════════════════════
+var _tasksListId = null;
+var _tasksListIdPromise = null;
+var _tasksCache = null;
+var _tasksCacheTs = 0;
+var TASKS_CACHE_MS = 30000; // 30 sec cache
+
+async function getOrCreateTaskList(name) {
+  if (_tasksListId) return _tasksListId;
+  if (_tasksListIdPromise) return _tasksListIdPromise;
+  _tasksListIdPromise = (async function() {
+    if (typeof ensureGoogleToken === 'function') await ensureGoogleToken();
+    if (!_googleAccessToken) throw new Error('Not authenticated');
+    // List all task lists
+    var res = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists', {
+      headers: { 'Authorization': 'Bearer ' + _googleAccessToken }
+    });
+    if (!res.ok) throw new Error('Tasks list fetch failed: ' + res.status);
+    var data = await res.json();
+    var lists = data.items || [];
+    var found = lists.find(function(l) { return (l.title || '').toLowerCase() === name.toLowerCase(); });
+    if (found) { _tasksListId = found.id; return found.id; }
+    // Create the list
+    var cres = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + _googleAccessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: name })
+    });
+    if (!cres.ok) throw new Error('Tasks list create failed: ' + cres.status);
+    var created = await cres.json();
+    _tasksListId = created.id;
+    return created.id;
+  })();
+  try { var id = await _tasksListIdPromise; return id; }
+  finally { _tasksListIdPromise = null; }
+}
+
+// Parse task notes JSON → { start, end, sticky, imageUrl, ... }
+function parseTaskNotes(notes) {
+  if (!notes) return {};
+  try {
+    var m = notes.match(/<!--TASKMETA:(.*?)-->/);
+    if (m) return JSON.parse(m[1]);
+    // Try raw JSON
+    if (notes.trim().startsWith('{')) return JSON.parse(notes);
+  } catch(e) {}
+  return {};
+}
+
+function serializeTaskNotes(meta) {
+  return '<!--TASKMETA:' + JSON.stringify(meta) + '-->';
+}
+
+async function fetchPlanTasks(listId, dateFilter) {
+  if (typeof ensureGoogleToken === 'function') await ensureGoogleToken();
+  if (!_googleAccessToken) throw new Error('Not authenticated');
+  // Fetch all non-deleted tasks (including completed)
+  var url = 'https://tasks.googleapis.com/tasks/v1/lists/' + encodeURIComponent(listId) + '/tasks?maxResults=100&showCompleted=true&showHidden=true';
+  var res = await fetch(url, {
+    headers: { 'Authorization': 'Bearer ' + _googleAccessToken }
+  });
+  if (!res.ok) throw new Error('Tasks fetch failed: ' + res.status);
+  var data = await res.json();
+  var tasks = (data.items || []).filter(function(t) { return t.title && t.title.trim(); });
+  // Parse notes meta and convert to unified format
+  return tasks.map(function(t) {
+    var meta = parseTaskNotes(t.notes || '');
+    return {
+      id: t.id,
+      taskListId: listId,
+      title: t.title || '',
+      summary: t.title || '',
+      notes: t.notes || '',
+      status: t.status, // 'needsAction' or 'completed'
+      isDone: t.status === 'completed',
+      start: meta.start || null,
+      end: meta.end || null,
+      sticky: meta.sticky || null,
+      imageUrl: meta.imageUrl || null,
+      calendarName: '00aplan', // compatibility
+      description: t.notes || '',
+      _meta: meta,
+      _raw: t
+    };
+  });
+}
+
+var _createTaskDedup = {};
+async function createPlanTask(listId, title, startDt, endDt, extraMeta) {
+  if (typeof ensureGoogleToken === 'function') await ensureGoogleToken();
+  if (!_googleAccessToken) throw new Error('Not authenticated');
+  // Dedup guard
+  var dedupKey = listId + '|' + (startDt ? startDt.toISOString() : '') + '|' + (endDt ? endDt.toISOString() : '') + '|' + (title || '');
+  var now = Date.now();
+  if (_createTaskDedup[dedupKey] && (now - _createTaskDedup[dedupKey]) < 15000) {
+    console.warn('[DEDUP] Skipping duplicate task creation:', title);
+    return { id: 'dedup_' + now, title: title };
+  }
+  _createTaskDedup[dedupKey] = now;
+  Object.keys(_createTaskDedup).forEach(function(k) { if (now - _createTaskDedup[k] > 60000) delete _createTaskDedup[k]; });
+
+  var meta = extraMeta || {};
+  if (startDt) meta.start = startDt.toISOString();
+  if (endDt) meta.end = endDt.toISOString();
+  var taskBody = {
+    title: title,
+    notes: serializeTaskNotes(meta)
+  };
+  if (startDt) taskBody.due = startDt.toISOString();
+  var res = await fetch('https://tasks.googleapis.com/tasks/v1/lists/' + encodeURIComponent(listId) + '/tasks', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + _googleAccessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify(taskBody)
+  });
+  if (!res.ok) { var err = await res.text(); throw new Error('Task create failed: ' + err); }
+  _tasksCache = null; // invalidate cache
+  return await res.json();
+}
+
+async function updatePlanTask(listId, taskId, updates) {
+  if (typeof ensureGoogleToken === 'function') await ensureGoogleToken();
+  if (!_googleAccessToken) throw new Error('Not authenticated');
+  var body = {};
+  if (updates.title !== undefined) body.title = updates.title;
+  if (updates.notes !== undefined) body.notes = updates.notes;
+  if (updates.status !== undefined) body.status = updates.status;
+  if (updates.due !== undefined) body.due = updates.due;
+  var res = await fetch('https://tasks.googleapis.com/tasks/v1/lists/' + encodeURIComponent(listId) + '/tasks/' + encodeURIComponent(taskId), {
+    method: 'PATCH',
+    headers: { 'Authorization': 'Bearer ' + _googleAccessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) { var err = await res.text(); throw new Error('Task update failed: ' + err); }
+  _tasksCache = null;
+  return await res.json();
+}
+
+async function deletePlanTask(listId, taskId) {
+  if (typeof ensureGoogleToken === 'function') await ensureGoogleToken();
+  if (!_googleAccessToken) throw new Error('Not authenticated');
+  var res = await fetch('https://tasks.googleapis.com/tasks/v1/lists/' + encodeURIComponent(listId) + '/tasks/' + encodeURIComponent(taskId), {
+    method: 'DELETE',
+    headers: { 'Authorization': 'Bearer ' + _googleAccessToken }
+  });
+  if (!res.ok && res.status !== 204) { var err = await res.text(); throw new Error('Task delete failed: ' + err); }
+  _tasksCache = null;
+}
+
+async function togglePlanTaskDone(listId, taskId, isDone) {
+  return updatePlanTask(listId, taskId, { status: isDone ? 'completed' : 'needsAction' });
+}
+
+// ─── Migration: Calendar 00aplan → Tasks ───
+async function migratePlanCalToTasks() {
+  showToast('⏳ Migrating 00aplan to Tasks...');
+  try {
+    var cals = await getCalendarList();
+    var planCal = cals.find(function(c) { return (c.summary || '').toLowerCase() === '00aplan'; });
+    if (!planCal) { showToast('❌ No 00aplan calendar found'); return; }
+    var listId = await getOrCreateTaskList('00aplan');
+    // Fetch all events from 00aplan (last 90 days + next 30 days)
+    var sd = new Date(); sd.setDate(sd.getDate() - 90);
+    var ed = new Date(); ed.setDate(ed.getDate() + 30);
+    var events = await fetchCalendarEvents(sd, ed);
+    var planEvts = events.filter(function(e) { return (e.calendarName || '').toLowerCase() === '00aplan'; });
+    var created = 0, skipped = 0;
+    for (var i = 0; i < planEvts.length; i++) {
+      var ev = planEvts[i];
+      var title = ev.summary || '';
+      if (!title.trim()) { skipped++; continue; }
+      var meta = {};
+      var stickyMeta = null;
+      if (ev.description) {
+        var sm = ev.description.match(/<!--STICKYMETA:(.*?)-->/);
+        if (sm) { try { stickyMeta = JSON.parse(sm[1]); } catch(e) {} }
+      }
+      meta.start = new Date(ev.start).toISOString();
+      meta.end = new Date(ev.end).toISOString();
+      if (stickyMeta) {
+        if (stickyMeta.imageUrl) meta.imageUrl = stickyMeta.imageUrl;
+        meta.sticky = stickyMeta;
+      }
+      var taskBody = {
+        title: title,
+        notes: serializeTaskNotes(meta),
+        due: new Date(ev.start).toISOString()
+      };
+      if (title.toLowerCase().indexOf('done') !== -1) taskBody.status = 'completed';
+      await fetch('https://tasks.googleapis.com/tasks/v1/lists/' + encodeURIComponent(listId) + '/tasks', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + _googleAccessToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify(taskBody)
+      });
+      created++;
+      if (created % 10 === 0) showToast('⏳ Migrated ' + created + '/' + planEvts.length + '...');
+    }
+    showToast('✅ Migration done! ' + created + ' tasks, ' + skipped + ' skipped');
+  } catch (err) {
+    showToast('❌ Migration error: ' + err.message);
+  }
+}
+
 // ─── Create Event ───
 var _createEventDedup={};
 async function createCalendarEvent(calendarId, summary, startDateTime, endDateTime, description) {
@@ -6510,29 +6713,24 @@ function showCalendarEventForm(container, el, card, opts) {
           }).catch(function(er){showToast('❌ '+er.message);});
         });
       } else if(qa.key==='alt'){
-        // Todo
-        getCalendarList().then(function(cals){
-          var pCal=cals.find(function(c){return(c.summary||'').toLowerCase()==='00aplan';});
-          if(!pCal){showToast('❌ No 00aplan calendar');return;}
+        // Todo via Tasks API
+        getOrCreateTaskList('00aplan').then(function(listId){
           var title=titleInp.value.trim()||prompt('Todo name:');
           if(!title||!title.trim())return;
-          createCalendarEvent(pCal.id,title.trim(),startD,endD,'').then(function(){
+          createPlanTask(listId,title.trim(),startD,endD).then(function(){
             showToast('☑️ Todo added');var _ov=form.parentElement;if(_ov)_ov.remove();_refresh();
           }).catch(function(er){showToast('❌ '+er.message);});
-        });
+        }).catch(function(er){showToast('❌ '+er.message);});
       } else if(qa.key==='shift'){
-        // Image upload
-        getCalendarList().then(function(cals){
-          var pCal=cals.find(function(c){return(c.summary||'').toLowerCase()==='00aplan';});
-          if(!pCal){showToast('❌ No 00aplan calendar');return;}
+        // Image upload via Tasks API
+        getOrCreateTaskList('00aplan').then(function(listId){
           var fi=document.createElement('input');fi.type='file';fi.accept='image/*';fi.style.display='none';
           fi.onchange=function(){var f=fi.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(re){
             showToast('⏳ Uploading image...');
             uploadToImgBB(re.target.result).then(function(url){
               if(!url){showToast('❌ Upload failed');return;}
               var h2=startD.getHours()*60+startD.getMinutes(),h3=endD.getHours()*60+endD.getMinutes();
-              var metaStr='<!--STICKYMETA:'+JSON.stringify({x:10,y:10,w:200,h:150,color:'white',imageUrl:url})+'-->';
-              createCalendarEvent(pCal.id,'\uD83D\uDDBC '+fmtTime(h2)+'-'+fmtTime(h3),startD,endD,metaStr).then(function(){
+              createPlanTask(listId,'\uD83D\uDDBC '+fmtTime(h2)+'-'+fmtTime(h3),startD,endD,{sticky:{x:10,y:10,w:200,h:150,color:'white'},imageUrl:url}).then(function(){
                 showToast('🖼️ Image added');var _ov=form.parentElement;if(_ov)_ov.remove();_refresh();
               }).catch(function(er){showToast('❌ '+er.message);});
             });
