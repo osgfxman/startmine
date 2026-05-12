@@ -5268,9 +5268,30 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
             var tab=document.createElement('div');
             tab.style.cssText='padding:3px 8px;font-size:.5rem;cursor:pointer;white-space:nowrap;color:'+txt+';border-bottom:2px solid transparent;transition:all .15s;flex-shrink:0;';
             tab.textContent=list.title||'Untitled';
-            tab.title=list.title;
+            tab.title='Click: switch | Double-click: rename';
             _tabEls[list.id]=tab;
             tab.onclick=function(){switchTab(list.id,list.title);};
+            // Double-click to rename
+            (function(list,tab){
+              tab.ondblclick=function(e){
+                e.stopPropagation();
+                var inp=document.createElement('input');
+                inp.type='text';inp.value=list.title||'';
+                inp.style.cssText='width:80px;font-size:.5rem;padding:1px 4px;border:1px solid #6c8fff;border-radius:3px;background:'+(isDk?'#1a1a2e':'#fff')+';color:'+txt+';outline:none;font-family:var(--font);';
+                tab.innerHTML='';tab.appendChild(inp);inp.focus();inp.select();
+                function doRename(){
+                  var nv=inp.value.trim();
+                  if(!nv||nv===list.title){tab.textContent=list.title||'Untitled';return;}
+                  tab.textContent='...';
+                  renameTaskList(list.id,nv).then(function(){
+                    list.title=nv;tab.textContent=nv;
+                    showToast('\u2705 Renamed to "'+nv+'"');
+                  }).catch(function(er){tab.textContent=list.title||'Untitled';showToast('\u274C '+er.message);});
+                }
+                inp.onblur=doRename;
+                inp.onkeydown=function(ek){if(ek.key==='Enter'){ek.preventDefault();inp.blur();}if(ek.key==='Escape'){tab.textContent=list.title||'Untitled';}};
+              };
+            })(list,tab);
             tabBar.appendChild(tab);
           });
           // Auto-select 00aplan or first list
@@ -5322,6 +5343,21 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         botRow.appendChild(botHalf);botRow.appendChild(todoPanel);
         root.appendChild(botRow);
         root.style.position='relative';
+
+        // ─── Sticky Notes Toggle Button ───
+        var _stickyVisible=true;
+        var stickyToggle=document.createElement('div');
+        stickyToggle.style.cssText='position:absolute;top:4px;right:248px;z-index:25;padding:2px 6px;font-size:.5rem;cursor:pointer;border-radius:4px;background:'+(isDk?'rgba(255,255,255,.08)':'rgba(0,0,0,.06)')+';color:'+txt+';opacity:.7;transition:opacity .15s;user-select:none;';
+        stickyToggle.textContent='\uD83D\uDCCC Hide Notes';
+        stickyToggle.title='Toggle sticky notes visibility';
+        stickyToggle.onmouseenter=function(){stickyToggle.style.opacity='1';};
+        stickyToggle.onmouseleave=function(){stickyToggle.style.opacity='.7';};
+        stickyToggle.onclick=function(){
+          _stickyVisible=!_stickyVisible;
+          stickyLayer.style.display=_stickyVisible?'':'none';
+          stickyToggle.textContent=_stickyVisible?'\uD83D\uDCCC Hide Notes':'\uD83D\uDCCC Show Notes';
+        };
+        root.appendChild(stickyToggle);
         body.innerHTML='';body.appendChild(root);
 
         // ═══════════════════════════════════════════════════════════════
@@ -5526,10 +5562,10 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
               e2.stopPropagation();
               if(!planCalId)return;
               sn.style.opacity='.3';
-              deleteCalendarEvent(planCalId,ev.id).then(function(){
+              deletePlanTask(planCalId,ev.id).then(function(){
                 planEvents=planEvents.filter(function(x){return x.id!==ev.id;});
+                sn.remove();
                 showToast('\uD83D\uDDD1 Deleted');
-                _renderGantt2();
               }).catch(function(er){showToast('\u274C '+er.message);sn.style.opacity='1';});
             });
           })(ev,sn);
@@ -6443,6 +6479,19 @@ async function getAllTaskLists() {
   if (!res.ok) throw new Error('Task lists fetch failed: ' + res.status);
   var data = await res.json();
   return (data.items || []);
+}
+
+// ─── Rename task list ───
+async function renameTaskList(listId, newTitle) {
+  if (typeof ensureGoogleToken === 'function') await ensureGoogleToken();
+  if (!_googleAccessToken) throw new Error('Not authenticated');
+  var res = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists/' + encodeURIComponent(listId), {
+    method: 'PATCH',
+    headers: { 'Authorization': 'Bearer ' + _googleAccessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: newTitle })
+  });
+  if (!res.ok) { var err = await res.text(); throw new Error('List rename failed: ' + err); }
+  return await res.json();
 }
 
 // ─── Migration: Calendar 00aplan → Tasks ───
