@@ -3870,7 +3870,6 @@ document.getElementById('mtb-calendar').onclick = async () => {
     } catch (e) {
       // Auth failed or cancelled
     } finally { window._authPopupInProgress = false; }
-    }
   }
   placeCalendarWidget();
 };
