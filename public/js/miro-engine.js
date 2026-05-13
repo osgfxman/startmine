@@ -4830,7 +4830,15 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         try{var cals=await getCalendarList();var frCal=cals.find(function(c){return c.summary.toLowerCase()==="!40's fruit";});if(frCal)fruitCalId=frCal.id;}catch(e){}
         // Use Google Tasks for plan (instead of calendar)
         var planEvents=[];
-        try{planCalId=await getOrCreateTaskList('00aplan');var allTasks=await fetchPlanTasks(planCalId);planEvents=allTasks;}catch(e){console.warn('Tasks API error:',e.message);}
+        try{
+          var _allTaskLists=await getAllTaskLists();
+          if(_allTaskLists.length>0){
+            // Use first list as default (no hardcoded name dependency)
+            planCalId=_allTaskLists[0].id;
+            var allTasks=await fetchPlanTasks(planCalId);
+            planEvents=allTasks;
+          }
+        }catch(e){console.warn('Tasks API error:',e.message);}
         body._ganttRender=function(){_renderGantt2();};
         var CS=14,DW=2,CSbig=28;
         var dn=['Su','Mo','Tu','We','Th','Fr','Sa'];
@@ -5245,6 +5253,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           if(listId===planCalId){
             _activeListTasks=planEvents;
             renderTodoItems(_activeListTasks,listId);
+            renderAllStickyNotes();
             return;
           }
           // Fetch tasks for this list
@@ -5252,6 +5261,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           fetchPlanTasks(listId).then(function(tasks){
             _activeListTasks=tasks;
             renderTodoItems(tasks,listId);
+            renderAllStickyNotes();
           }).catch(function(er){
             todoList.innerHTML='<div style="text-align:center;padding:12px;color:#e74c3c;font-size:.5rem;">\u274C '+er.message+'</div>';
           });
@@ -5456,6 +5466,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
               _leftListId=habList.id;
               _leftTasks=await fetchPlanTasks(_leftListId);
               renderLeftItems(_leftTasks,_leftListId);
+              renderAllStickyNotes();
             }
           }catch(e){
             leftList.innerHTML='<div style="text-align:center;padding:12px;color:#e74c3c;font-size:.5rem;">\u274C '+e.message+'</div>';
@@ -5580,34 +5591,39 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         }
 
         // --- Build & render all sticky notes from ALL lists ---
-        var rootRect=root.getBoundingClientRect();
-        var cW=rootRect.width,cH=rootRect.height;
-        // Collect all tasks from all loaded lists
-        var _allStickyTasks=[];
-        // Right panel tasks
-        if(_activeListTasks&&_activeListTasks.length){
-          _activeListTasks.forEach(function(t){t._listId=_activeListId;_allStickyTasks.push(t);});
-        }
-        // Left panel tasks (avoid duplicates)
-        if(_leftTasks&&_leftTasks.length){
-          _leftTasks.forEach(function(t){
-            if(!_allStickyTasks.find(function(x){return x.id===t.id;})){t._listId=_leftListId;_allStickyTasks.push(t);}
+        var _stickyRendered=false;
+        var _asyncLoaders=0; // count completed async loaders
+        function renderAllStickyNotes(){
+          stickyLayer.innerHTML=''; // clear previous
+          var rootRect2=root.getBoundingClientRect();
+          var cW=rootRect2.width,cH=rootRect2.height;
+          // Collect all tasks from all loaded lists
+          var _allStickyTasks=[];
+          // Right panel tasks
+          if(_activeListTasks&&_activeListTasks.length){
+            _activeListTasks.forEach(function(t){t._listId=_activeListId;_allStickyTasks.push(t);});
+          }
+          // Left panel tasks (avoid duplicates)
+          if(_leftTasks&&_leftTasks.length){
+            _leftTasks.forEach(function(t){
+              if(!_allStickyTasks.find(function(x){return x.id===t.id;})){t._listId=_leftListId;_allStickyTasks.push(t);}
+            });
+          }
+          // Also include planEvents if they aren't already included
+          if(planEvents&&planEvents.length){
+            planEvents.forEach(function(t){
+              if(!_allStickyTasks.find(function(x){return x.id===t.id;})){t._listId=planCalId;_allStickyTasks.push(t);}
+            });
+          }
+          // Filter to sprint range
+          _allStickyTasks=_allStickyTasks.filter(function(ev){
+            var s=ev.start||ev._meta&&ev._meta.start;
+            if(!s)return true;
+            var st=new Date(s).getTime();
+            return st>=sprintStart.getTime()&&st<sprintEnd.getTime();
           });
-        }
-        // Also include planEvents if they aren't already included
-        if(planEvents&&planEvents.length){
-          planEvents.forEach(function(t){
-            if(!_allStickyTasks.find(function(x){return x.id===t.id;})){t._listId=planCalId;_allStickyTasks.push(t);}
-          });
-        }
-        // Filter to sprint range
-        _allStickyTasks=_allStickyTasks.filter(function(ev){
-          var s=ev.start||ev._meta&&ev._meta.start;
-          if(!s)return true;
-          var st=new Date(s).getTime();
-          return st>=sprintStart.getTime()&&st<sprintEnd.getTime();
-        });
-        var autoPos=autoLayoutPositions(_allStickyTasks.length,cW,cH);
+          if(_allStickyTasks.length===0)return;
+          var autoPos=autoLayoutPositions(_allStickyTasks.length,cW,cH);
 
         _allStickyTasks.forEach(function(ev,idx){
           var meta=ev.sticky||ev._meta&&ev._meta.sticky||parseStickyMeta(ev.description||'');
@@ -5910,7 +5926,10 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
             setTimeout(function(){autoSizeText(afEl,sn);},20);
           }
         });
+        } // end renderAllStickyNotes
 
+        // Call renderAllStickyNotes after initial planEvents are loaded
+        setTimeout(function(){renderAllStickyNotes();},100);
         // ─── PASTE IMAGE handler (Ctrl+V with image in clipboard) ───
         root.addEventListener('paste',function(pe){
           if(!planCalId)return;
