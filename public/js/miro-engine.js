@@ -5560,13 +5560,14 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         // --- Save sticky meta back to Tasks (DEBOUNCED) ---
         var _saveTimers={};
         function saveStickyMeta(ev,meta){
-          if(!planCalId||!ev.id||ev.id==='temp')return;
+          var lid=ev.taskListId||ev._listId||planCalId;
+          if(!lid||!ev.id||ev.id==='temp')return;
           if(_saveTimers[ev.id])clearTimeout(_saveTimers[ev.id]);
           _saveTimers[ev.id]=setTimeout(function(){
             var existingMeta=ev._meta||{};
             Object.assign(existingMeta,{sticky:meta});
             if(meta.imageUrl)existingMeta.imageUrl=meta.imageUrl;
-            updatePlanTask(planCalId,ev.id,{notes:serializeTaskNotes(existingMeta)}).catch(function(er){
+            updatePlanTask(lid,ev.id,{notes:serializeTaskNotes(existingMeta)}).catch(function(er){
               console.warn('[StickyMeta] Save failed:',er.message);
             });
           },1500);
@@ -5578,12 +5579,37 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           return /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp|bmp|svg)/i.test(str)||/imgbb\.com|imgur\.com|i\.ibb\.co/i.test(str);
         }
 
-        // --- Build & render all sticky notes ---
+        // --- Build & render all sticky notes from ALL lists ---
         var rootRect=root.getBoundingClientRect();
         var cW=rootRect.width,cH=rootRect.height;
-        var autoPos=autoLayoutPositions(planEvents.length,cW,cH);
+        // Collect all tasks from all loaded lists
+        var _allStickyTasks=[];
+        // Right panel tasks
+        if(_activeListTasks&&_activeListTasks.length){
+          _activeListTasks.forEach(function(t){t._listId=_activeListId;_allStickyTasks.push(t);});
+        }
+        // Left panel tasks (avoid duplicates)
+        if(_leftTasks&&_leftTasks.length){
+          _leftTasks.forEach(function(t){
+            if(!_allStickyTasks.find(function(x){return x.id===t.id;})){t._listId=_leftListId;_allStickyTasks.push(t);}
+          });
+        }
+        // Also include planEvents if they aren't already included
+        if(planEvents&&planEvents.length){
+          planEvents.forEach(function(t){
+            if(!_allStickyTasks.find(function(x){return x.id===t.id;})){t._listId=planCalId;_allStickyTasks.push(t);}
+          });
+        }
+        // Filter to sprint range
+        _allStickyTasks=_allStickyTasks.filter(function(ev){
+          var s=ev.start||ev._meta&&ev._meta.start;
+          if(!s)return true;
+          var st=new Date(s).getTime();
+          return st>=sprintStart.getTime()&&st<sprintEnd.getTime();
+        });
+        var autoPos=autoLayoutPositions(_allStickyTasks.length,cW,cH);
 
-        planEvents.forEach(function(ev,idx){
+        _allStickyTasks.forEach(function(ev,idx){
           var meta=ev.sticky||ev._meta&&ev._meta.sticky||parseStickyMeta(ev.description||'');
           if(!meta){
             var ap=autoPos[idx]||{x:10+idx*40,y:cH*0.55+10,w:160,h:96};
@@ -5623,14 +5649,16 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           snCb.textContent=isDonePlan?'\u2713':'';
           snCb.title=isDonePlan?'Mark undone':'Mark done';
           (function(ev,snCb,isDonePlan,sn){
+            var lid=ev.taskListId||ev._listId||planCalId;
             snCb.addEventListener('click',function(e2){
               e2.stopPropagation();
-              if(!planCalId)return;
+              if(!lid)return;
               snCb.style.opacity='.4';
-              togglePlanTaskDone(planCalId,ev.id,!isDonePlan).then(function(){
-                ev.isDone=!isDonePlan;
+              togglePlanTaskDone(lid,ev.id,!isDonePlan).then(function(){
+                ev.isDone=!isDonePlan;ev.status=!isDonePlan?'completed':'needsAction';
                 showToast(isDonePlan?'\u23EA Unmarked':'\u2705 Done!');
-                _renderGantt2();
+                if(_activeListId)renderTodoItems(_activeListTasks,_activeListId);
+                if(_leftListId)renderLeftItems(_leftTasks,_leftListId);
               }).catch(function(er){showToast('\u274C '+er.message);snCb.style.opacity='1';});
             });
           })(ev,snCb,isDonePlan,sn);
@@ -5704,14 +5732,21 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
           snDel.addEventListener('mouseenter',function(){snDel.style.opacity='1';snDel.style.color='#e74c3c';});
           snDel.addEventListener('mouseleave',function(){snDel.style.opacity='.4';snDel.style.color='';});
           (function(ev,sn){
+            var lid=ev.taskListId||ev._listId||planCalId;
             snDel.addEventListener('click',function(e2){
               e2.stopPropagation();
-              if(!planCalId)return;
+              if(!lid)return;
               sn.style.opacity='.3';
-              deletePlanTask(planCalId,ev.id).then(function(){
+              deletePlanTask(lid,ev.id).then(function(){
+                // Remove from all local arrays
                 planEvents=planEvents.filter(function(x){return x.id!==ev.id;});
+                _activeListTasks=_activeListTasks.filter(function(x){return x.id!==ev.id;});
+                _leftTasks=_leftTasks.filter(function(x){return x.id!==ev.id;});
                 sn.remove();
                 showToast('\uD83D\uDDD1 Deleted');
+                // Refresh the todo lists
+                if(_activeListId)renderTodoItems(_activeListTasks,_activeListId);
+                if(_leftListId)renderLeftItems(_leftTasks,_leftListId);
               }).catch(function(er){showToast('\u274C '+er.message);sn.style.opacity='1';});
             });
           })(ev,sn);
@@ -5771,11 +5806,11 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
               if(newText&&newText!==displayName){
                 meta.richText=snBody.innerHTML;
                 var newSummary=newText+(isDonePlan?' done':'');
-                updateCalendarEvent(planCalId,ev.id,{summary:newSummary}).then(function(){
+                var lid2=ev.taskListId||ev._listId||planCalId;
+                updatePlanTask(lid2,ev.id,{title:newSummary}).then(function(){
                   ev.summary=newSummary;
                   saveStickyMeta(ev,meta);
                   showToast('\u2705 Updated');
-                  _renderGantt2();
                 }).catch(function(er){showToast('\u274C '+er.message);});
               }else{
                 saveStickyMeta(ev,meta);
