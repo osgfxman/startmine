@@ -1,77 +1,4 @@
-const firebaseConfig = {
-  apiKey: 'AIzaSyB-CeazTspR22753qVHzMlmgePPGVLhYdk',
-  authDomain: 'quran-gfx.firebaseapp.com',
-  databaseURL: 'https://quran-gfx-default-rtdb.asia-southeast1.firebasedatabase.app',
-  projectId: 'quran-gfx',
-  storageBucket: 'quran-gfx.firebasestorage.app',
-  messagingSenderId: '117000797680',
-  appId: '1:117000797680:web:8c3cb92817c79510e63135',
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-const auth = firebase.auth();
-const provider = new firebase.auth.GoogleAuthProvider();
-provider.addScope('https://www.googleapis.com/auth/drive.file');
-provider.addScope('https://www.googleapis.com/auth/calendar.events');
-provider.addScope('https://www.googleapis.com/auth/calendar.readonly');
-provider.addScope('https://www.googleapis.com/auth/tasks');
-
-let USER_ID = null;
-let DB_REF = null;
-let _googleAccessToken = null;
-let _googleTokenExpiry = 0; // Timestamp when token expires
-
-// ─── Token Persistence (tracked with expiry) ───
-const LS_G_TOKEN = 'sm_google_token';
-const LS_G_TOKEN_EXP = 'sm_google_token_expiry';
-const TOKEN_LIFETIME_MS = 4 * 60 * 60 * 1000; // 4 hours (proactive refresh runs every 5min anyway)
-
-function cacheGoogleToken(token) {
-  _googleAccessToken = token;
-  _googleTokenExpiry = Date.now() + TOKEN_LIFETIME_MS;
-  try {
-    localStorage.setItem(LS_G_TOKEN, token || '');
-    localStorage.setItem(LS_G_TOKEN_EXP, String(_googleTokenExpiry));
-  } catch (e) {}
-}
-
-function restoreGoogleToken() {
-  try {
-    const t = localStorage.getItem(LS_G_TOKEN);
-    const exp = parseInt(localStorage.getItem(LS_G_TOKEN_EXP) || '0');
-    if (t && exp > Date.now()) {
-      _googleAccessToken = t;
-      _googleTokenExpiry = exp;
-      return true;
-    }
-    // Token expired or missing — clear stale data
-    if (t) {
-      _googleAccessToken = null;
-      localStorage.removeItem(LS_G_TOKEN);
-      localStorage.removeItem(LS_G_TOKEN_EXP);
-    }
-  } catch (e) {}
-  return false;
-}
-
-function isGoogleTokenExpired() {
-  return !_googleAccessToken || Date.now() >= _googleTokenExpiry;
-}
-
-// Restore on load
-restoreGoogleToken();
-
-// ─── Auto-refresh Google token before expiry ───
-// Refresh proactively every 45 min to avoid 401s during API calls
-setInterval(async () => {
-  if (_googleAccessToken && Date.now() >= _googleTokenExpiry - 10 * 60 * 1000) {
-    console.log('[Token] Proactive refresh — will refresh on next user action');
-    // Don't auto-popup — just clear the token so next user-triggered action re-auths
-    _googleAccessToken = null;
-    _googleTokenExpiry = 0;
-    try { localStorage.removeItem(LS_G_TOKEN); localStorage.removeItem(LS_G_TOKEN_EXP); } catch(e) {}
-  }
-}, 5 * 60 * 1000); // Check every 5 minutes
+// Firebase initialization and token logic moved to js/data/firebase.js
 
 const ENGINES = [
   { k: 'bm', ic: '🔖', name: 'Bookmarks (local)', url: '' },
@@ -148,6 +75,7 @@ const BG_SOLID_SWATCHES = [
   '#1a2a2a',
   '#2a2a1a',
 ];
+
 const BG_GRADIENTS = [
   'linear-gradient(135deg,#0d0f18 0%,#1a1040 100%)',
   'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)',
@@ -160,7 +88,7 @@ const BG_GRADIENTS = [
   'linear-gradient(160deg,#0d0f18 0%,#16213e 50%,#0f3460 100%)',
 ];
 
-const DEF = {
+window.DEF = {
   settings: { engine: 'bm', accent: '#6c8fff' },
   cur: 'p0',
   curEnv: 'e0',
@@ -185,188 +113,34 @@ const DEF = {
   ],
 };
 
-let D = JSON.parse(JSON.stringify(DEF));
-let pColIdx = null,
-  pWidId = null,
-  renWid = null,
-  colWid = null,
-  dispWid = null;
+window.D = JSON.parse(JSON.stringify(window.DEF));
+window.pColIdx = null;
+window.pWidId = null;
+window.renWid = null;
+window.colWid = null;
+window.dispWid = null;
 let dragWid = null,
   pvTimer = null,
   _skipColor = false,
   tcPid = null;
-let _bgTempType = 'solid',
-  _bgTempValue = '';
-let isFirstLoad = true;
-let _ownWrite = false;
-let _ownWriteTs = 0;
-const OWN_WRITE_TIMEOUT = 5000; // Safety: auto-reset _ownWrite after 5 seconds
-function setOwnWrite(val) {
-  _ownWrite = val;
-  if (val) _ownWriteTs = Date.now();
-}
-function isOwnWrite() {
-  if (!_ownWrite) return false;
-  // Safety timeout: if _ownWrite has been true for too long, auto-reset
-  if (Date.now() - _ownWriteTs > OWN_WRITE_TIMEOUT) {
-    console.warn('[DATA GUARD] _ownWrite was stuck for >5s — auto-resetting');
-    _ownWrite = false;
-    return false;
-  }
-  return true;
-}
-let _svTimer = null;
-let _lastSyncedPageData = null;
-let _lastSyncedPagesMetaStr = null;
-let _lastSyncedMetaStr = null;
-let _pendingDeletePageIds = []; // Track page IDs that need Firebase cleanup
+window._bgTempType = 'solid';
+window._bgTempValue = '';
+window.isFirstLoad = true;
+window._svTimer = null;
+window._lastSyncedPageData = null;
+window._lastSyncedPagesMetaStr = null;
+window._lastSyncedMetaStr = null;
+window._pendingDeletePageIds = [];
 
-/* ─── Offline Mode (default ON) ─── */
-let _offlineMode = true;
-let _dirtyOffline = false;
-let _lastSvTs = 0; // Timestamp of last successful sv() for beacon dedup
-try {
-  const stored = localStorage.getItem('sm_offline_mode');
-  if (stored !== null) _offlineMode = stored === '1';
-  else localStorage.setItem('sm_offline_mode', '1'); // First visit: default to offline
-} catch(e) {}
-
-function setOfflineMode(val) {
-  _offlineMode = val;
-  try { localStorage.setItem('sm_offline_mode', val ? '1' : '0'); } catch(e) {}
-  updateOfflineUI();
-}
-
-function updateOfflineUI() {
-  const cb = document.getElementById('offline-toggle-cb');
-  const lbl = document.getElementById('offline-label');
-  const syncBtn = document.getElementById('sync-now-btn');
-  if (cb) cb.checked = _offlineMode;
-  if (lbl) lbl.textContent = _offlineMode ? '✈️ Offline' : '⚡ Realtime';
-  if (syncBtn) syncBtn.disabled = !_offlineMode;
-  // Update sync status display
-  if (_offlineMode) {
-    setSyncStatus('loading', _dirtyOffline ? '✈️ Offline Mode *' : '✈️ Offline Mode');
-  }
-}
-
-function markDirtyOffline() {
-  if (_offlineMode && !_dirtyOffline) {
-    _dirtyOffline = true;
-    updateOfflineUI();
-  }
-}
-
-function toggleOfflineMode() {
-  if (_offlineMode) {
-    // Switching to Realtime: sync first if dirty, then re-attach listeners
-    if (_dirtyOffline) {
-      syncNow().then(() => {
-        setOfflineMode(false);
-        _dirtyOffline = false;
-        setupShardedListeners();
-        setSyncStatus('ok', 'Realtime Sync Active \u2713');
-      }).catch(err => {
-        showToast('❌ Sync failed: ' + (err.message || err));
-      });
-    } else {
-      setOfflineMode(false);
-      setupShardedListeners();
-      setSyncStatus('ok', 'Realtime Sync Active \u2713');
-    }
-  } else {
-    // Switching to Offline: detach listeners
-    detachAllListeners();
-    setOfflineMode(true);
-    setSyncStatus('loading', '✈️ Offline Mode');
-    showToast('✈️ Offline Mode — changes saved locally');
-  }
-}
-
-function detachAllListeners() {
-  if (!USER_ID) return;
-  const metaRef = `users/${USER_ID}/startmine_meta`;
-  const pagesMetaRef = `users/${USER_ID}/startmine_pages_meta`;
-  db.ref(metaRef).off();
-  db.ref(pagesMetaRef).off();
-  db.ref('.info/connected').off();
-  if (_activePageListener) {
-    db.ref(_activePageListener).off();
-  }
-}
+/* ─── Offline Mode Stubs ─── */
+function setOfflineMode(val) { return window.SM.data.setOfflineMode(val); }
+function updateOfflineUI() { return window.SM.data.updateOfflineUI(); }
+function markDirtyOffline() { return window.SM.data.markDirtyOffline(); }
+function toggleOfflineMode() { return window.SM.data.toggleOfflineMode(); }
+function detachAllListeners() { return window.SM.data.detachAllListeners(); }
 
 function syncNow() {
-  if (!USER_ID) return Promise.resolve();
-  showToast('🔄 Syncing to cloud...');
-  setOwnWrite(true);
-
-  const metaRef = `users/${USER_ID}/startmine_meta`;
-  const pagesMetaRef = `users/${USER_ID}/startmine_pages_meta`;
-
-  const meta = {
-    settings: D.settings,
-    curEnv: D.curEnv,
-    curGroup: D.curGroup,
-    environments: D.environments,
-    groups: D.groups,
-    inbox: D.inbox
-  };
-
-  const pagesMeta = D.pages.map(p => ({
-    id: p.id, groupId: p.groupId, name: p.name,
-    pageType: p.pageType, zoom: p.zoom, panX: p.panX, panY: p.panY,
-    bg: p.bg, bgType: p.bgType, tabColor: p.tabColor || ''
-  }));
-
-  const updates = {};
-  updates[metaRef] = meta;
-  updates[pagesMetaRef] = pagesMeta;
-
-  // Push all page data (active page from memory, others from cache)
-  D.pages.forEach(p => {
-    let widgets, miroCards;
-    if (p.id === D.cur) {
-      // Active page: use live in-memory data
-      widgets = p.widgets || [];
-      miroCards = p.miroCards || [];
-    } else {
-      // Non-active page: always prefer cache (memory is evicted)
-      const cached = getCachedPageData(p.id);
-      if (cached && (cached.widgets?.length > 0 || cached.miroCards?.length > 0)) {
-        widgets = cached.widgets || [];
-        miroCards = cached.miroCards || [];
-      } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0)) {
-        widgets = p.widgets || [];
-        miroCards = p.miroCards || [];
-      } else {
-        // SAFETY: skip to avoid overwriting Firebase with empty data
-        console.warn(`[SYNC GUARD] Skipping page "${p.name}" (${p.id}) — no data available`);
-        return;
-      }
-    }
-    updates[`users/${USER_ID}/startmine_pages/${p.id}`] = { widgets, miroCards };
-  });
-
-  return db.ref().update(updates)
-    .then(() => {
-      setOwnWrite(false);
-      _dirtyOffline = false;
-      _lastSyncedMetaStr = JSON.stringify(meta);
-      _lastSyncedPagesMetaStr = JSON.stringify(pagesMeta);
-      const activePg = cp();
-      if (activePg) {
-        _lastSyncedPageData = {
-          widgets: JSON.stringify(activePg.widgets || []),
-          miroCards: JSON.stringify(activePg.miroCards || [])
-        };
-      }
-      updateOfflineUI();
-      showToast('✅ Synced successfully!');
-    })
-    .catch(err => {
-      setOwnWrite(false);
-      throw err;
-    });
+  return window.SM.data.syncNow();
 }
 
 /* ─── LocalStorage + IndexedDB Cache ─── */
@@ -841,132 +615,7 @@ function initDB() {
 let _activePageListener = null;
 
 function setupShardedListeners() {
-  const metaRef = `users/${USER_ID}/startmine_meta`;
-  const pagesMetaRef = `users/${USER_ID}/startmine_pages_meta`;
-
-  // ─── Instant load from localStorage cache ───
-  if (isFirstLoad) {
-    const cachedMeta = getCachedMeta();
-    const cachedPagesMeta = getCachedPagesMeta();
-    if (cachedMeta && cachedPagesMeta) {
-      D.settings = cachedMeta.settings || D.settings;
-      D.curEnv = cachedMeta.curEnv || D.curEnv;
-      D.curGroup = cachedMeta.curGroup || D.curGroup;
-      D.environments = cachedMeta.environments || D.environments;
-      D.groups = cachedMeta.groups || D.groups;
-      D.inbox = cachedMeta.inbox || D.inbox;
-      D.pages = cachedPagesMeta;
-      const dg = D.settings.defaultGroup || '__last__';
-      const dp = D.settings.defaultPage || '__last__';
-      if (dg !== '__last__' && D.groups.some((g) => g.id === dg)) D.curGroup = dg;
-      if (dp !== '__last__' && D.pages.some((p) => p.id === dp)) D.cur = dp;
-      else {
-        try {
-          const lastPid = localStorage.getItem(LS_CUR_PAGE);
-          if (lastPid && D.pages.some(p => p.id === lastPid)) D.cur = lastPid;
-        } catch(e) {}
-      }
-      if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
-      // Ensure curGroup matches the restored page
-      const rp2 = D.pages.find(p => p.id === D.cur);
-      if (rp2 && rp2.groupId) D.curGroup = rp2.groupId;
-      // Load cached page data for instant render
-      const cachedPage = getCachedPageData(D.cur);
-      const pg = cp();
-      if (pg && cachedPage) {
-        pg.widgets = cachedPage.widgets || [];
-        pg.miroCards = cachedPage.miroCards || [];
-        _lastSyncedPageData = {
-          widgets: JSON.stringify(pg.widgets),
-          miroCards: JSON.stringify(pg.miroCards)
-        };
-      }
-      renderMeta();
-      buildCols();
-      setSyncStatus('ok', 'Loaded from cache — syncing…');
-    }
-  }
-
-  // Listen to Metadata (settings, environments, groups, inbox, active selections)
-  db.ref(metaRef).on('value', (snap) => {
-    if (isOwnWrite()) return;
-    const meta = snap.val() || {
-      settings: { engine: 'bm', accent: '#6c8fff' },
-      curEnv: 'e0',
-      curGroup: 'g0',
-      environments: [{ id: 'e0', name: 'Main Env' }],
-      groups: [{ id: 'g0', name: 'Main Group', envId: 'e0' }],
-      inbox: []
-    };
-    D.settings = meta.settings || { engine: 'bm', accent: '#6c8fff' };
-    D.curEnv = meta.curEnv || 'e0';
-    D.curGroup = meta.curGroup || 'g0';
-    D.environments = meta.environments || [{ id: 'e0', name: 'Main Env' }];
-    D.groups = meta.groups || [{ id: 'g0', name: 'Main Group', envId: 'e0' }];
-    D.inbox = meta.inbox || [];
-    cacheMeta(meta); // Cache to localStorage
-    renderMeta();
-  });
-
-  // Listen to Pages Directory (names, ids, group associations)
-  db.ref(pagesMetaRef).on('value', (snap) => {
-    if (isOwnWrite()) return;
-    const pagesMeta = snap.val() || [{ id: 'p0', groupId: 'g0', name: 'Home', pageType: 'miro', zoom: 100, panX: 0, panY: 0, bg: '', bgType: 'none' }];
-
-    // FIX: Preserve heavy data (widgets/miroCards) for ALL loaded pages, not just active
-    const heavyDataMap = {};
-    D.pages.forEach(p => {
-      if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0)) {
-        heavyDataMap[p.id] = { widgets: p.widgets || [], miroCards: p.miroCards || [] };
-      }
-    });
-
-    D.pages = pagesMeta;
-    cachePagesMeta(pagesMeta); // Cache to localStorage
-
-    // Re-inject heavy data into ALL pages that had it loaded
-    D.pages.forEach(p => {
-      if (heavyDataMap[p.id]) {
-        p.widgets = heavyDataMap[p.id].widgets;
-        p.miroCards = heavyDataMap[p.id].miroCards;
-      }
-    });
-
-    // Establish baseline for smart pagesMeta diffing in sv()
-    _lastSyncedPagesMetaStr = JSON.stringify(pagesMeta.map(p => ({
-      id: p.id, groupId: p.groupId, name: p.name, pageType: p.pageType,
-      zoom: p.zoom, panX: p.panX, panY: p.panY, bg: p.bg, bgType: p.bgType,
-      tabColor: p.tabColor || ''
-    })));
-
-    if (isFirstLoad) {
-      const dg = D.settings.defaultGroup || '__last__';
-      const dp = D.settings.defaultPage || '__last__';
-      if (dg !== '__last__' && D.groups.some((g) => g.id === dg)) D.curGroup = dg;
-      if (dp !== '__last__' && D.pages.some((p) => p.id === dp)) D.cur = dp;
-      else {
-        try {
-          const lastPid = localStorage.getItem(LS_CUR_PAGE);
-          if (lastPid && D.pages.some(p => p.id === lastPid)) D.cur = lastPid;
-        } catch(e) {}
-      }
-      if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
-      // Ensure curGroup matches the restored page
-      const rp3 = D.pages.find(p => p.id === D.cur);
-      if (rp3 && rp3.groupId) D.curGroup = rp3.groupId;
-      isFirstLoad = false;
-      switchActivePage(D.cur); // This will render All
-    } else {
-      renderMeta();
-    }
-
-    setSyncStatus('ok', 'Realtime Sync Active \u2713');
-  });
-
-  db.ref('.info/connected').on('value', (snap) => {
-    if (!snap.val() && !isFirstLoad) setSyncStatus('err', 'Offline \u2014 changes will sync when reconnected');
-    else if (snap.val() && !isFirstLoad) setSyncStatus('ok', 'Realtime Sync Active \u2713');
-  });
+  return window.SM.data.setupShardedListeners();
 }
 
 function renderMeta() {
@@ -1094,283 +743,12 @@ function switchActivePage(pageId) {
 
 
 function sv(saveAll = false, immediate = false) {
-  if (!USER_ID) return;
-  // Capture undo snapshot before saving (for Miro pages)
-  if (typeof pushUndo === 'function') { try { pushUndo(); } catch(e) {} }
-
-  // ─── Offline Mode: save to localStorage only ───
-  if (_offlineMode) {
-    const activePg = cp();
-    if (activePg) {
-      cachePageData(activePg.id, { widgets: activePg.widgets || [], miroCards: activePg.miroCards || [] });
-    }
-    const meta = {
-      settings: D.settings, curEnv: D.curEnv, curGroup: D.curGroup,
-      environments: D.environments, groups: D.groups, inbox: D.inbox
-    };
-    cacheMeta(meta);
-    cachePagesMeta(D.pages.map(p => ({
-      id: p.id, groupId: p.groupId, name: p.name, pageType: p.pageType,
-      zoom: p.zoom, panX: p.panX, panY: p.panY, bg: p.bg, bgType: p.bgType,
-      tabColor: p.tabColor || ''
-    })));
-    markDirtyOffline();
-    return;
-  }
-
-  const doSave = () => {
-    setOwnWrite(true);
-
-    const metaRef = `users/${USER_ID}/startmine_meta`;
-    const pagesMetaRef = `users/${USER_ID}/startmine_pages_meta`;
-
-    // Extract metadata without payloads
-    const meta = {
-      settings: D.settings,
-      curEnv: D.curEnv,
-      curGroup: D.curGroup,
-      environments: D.environments,
-      groups: D.groups,
-      inbox: D.inbox
-    };
-
-    const pagesMeta = D.pages.map(p => ({
-      id: p.id,
-      groupId: p.groupId,
-      name: p.name,
-      pageType: p.pageType,
-      zoom: p.zoom,
-      panX: p.panX,
-      panY: p.panY,
-      bg: p.bg,
-      bgType: p.bgType,
-      tabColor: p.tabColor || ''
-    }));
-
-    const updates = {};
-
-    // Smart meta sync: only write if changed
-    const curMetaStr = JSON.stringify(meta);
-    if (curMetaStr !== _lastSyncedMetaStr) {
-      updates[metaRef] = meta;
-      _lastSyncedMetaStr = curMetaStr;
-    }
-
-    // Smart pagesMeta sync: only upload what changed
-    const curPagesMetaStr = JSON.stringify(pagesMeta);
-    if (curPagesMetaStr !== _lastSyncedPagesMetaStr) {
-      // Check if only zoom/pan changed on the active page (most common case)
-      let onlyZoomPanChanged = false;
-      if (_lastSyncedPagesMetaStr) {
-        try {
-          const oldPM = JSON.parse(_lastSyncedPagesMetaStr);
-          if (oldPM.length === pagesMeta.length) {
-            let diffIdx = -1;
-            let multiDiff = false;
-            for (let i = 0; i < pagesMeta.length; i++) {
-              const o = oldPM[i], n = pagesMeta[i];
-              if (o.id === n.id && o.groupId === n.groupId && o.name === n.name &&
-                o.pageType === n.pageType && o.bg === n.bg && o.bgType === n.bgType &&
-                (o.tabColor || '') === (n.tabColor || '')) {
-                if (o.zoom !== n.zoom || o.panX !== n.panX || o.panY !== n.panY) {
-                  if (diffIdx >= 0) { multiDiff = true; break; }
-                  diffIdx = i;
-                }
-              } else {
-                diffIdx = -2; break; // structural change
-              }
-            }
-            if (diffIdx >= 0 && !multiDiff) {
-              // Only one page's zoom/pan changed — write just that page's meta entry
-              onlyZoomPanChanged = true;
-              updates[`${pagesMetaRef}/${diffIdx}/zoom`] = pagesMeta[diffIdx].zoom;
-              updates[`${pagesMetaRef}/${diffIdx}/panX`] = pagesMeta[diffIdx].panX;
-              updates[`${pagesMetaRef}/${diffIdx}/panY`] = pagesMeta[diffIdx].panY;
-            }
-          }
-        } catch (e) { /* fallback to full write */ }
-      }
-      if (!onlyZoomPanChanged) {
-        updates[pagesMetaRef] = pagesMeta;
-      }
-      _lastSyncedPagesMetaStr = curPagesMetaStr;
-    }
-
-    if (saveAll) {
-      let _savedCount = 0, _skippedCount = 0;
-      D.pages.forEach(p => {
-        let widgets, miroCards;
-        if (p.id === D.cur) {
-          // Active page — use live data
-          widgets = p.widgets || [];
-          miroCards = p.miroCards || [];
-        } else {
-          // NON-ACTIVE page — try cache, then memory
-          const cached = getCachedPageData(p.id);
-          if (cached && (cached.widgets?.length > 0 || cached.miroCards?.length > 0)) {
-            widgets = cached.widgets || [];
-            miroCards = cached.miroCards || [];
-          } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0)) {
-            widgets = p.widgets || [];
-            miroCards = p.miroCards || [];
-          } else {
-            // ⛔ ABSOLUTE GUARD: NEVER write empty data to Firebase
-            // This page has no data anywhere — skip it entirely
-            console.warn(`[SV GUARD ⛔] Skipping page "${p.name}" (${p.id}) — EMPTY. Firebase data preserved.`);
-            _skippedCount++;
-            return;
-          }
-        }
-        // ⛔ DOUBLE CHECK: Even after loading from cache, if still empty → skip
-        if (widgets.length === 0 && miroCards.length === 0) {
-          console.warn(`[SV GUARD ⛔] Page "${p.name}" resolved to 0 items — refusing to write.`);
-          _skippedCount++;
-          return;
-        }
-        updates[`users/${USER_ID}/startmine_pages/${p.id}`] = { widgets, miroCards };
-        _savedCount++;
-      });
-      if (_skippedCount > 0) {
-        console.warn(`[SV SUMMARY] Saved: ${_savedCount} pages, Skipped (protected): ${_skippedCount} pages`);
-      }
-    } else {
-      // Only upload the heavy data for the active page
-      const activePg = cp();
-      if (activePg) {
-        // ─── DATA LOSS GUARD: Don't overwrite non-empty Firebase data with empty data ───
-        const curHasData = (activePg.widgets && activePg.widgets.length > 0) || (activePg.miroCards && activePg.miroCards.length > 0);
-        if (!curHasData && _lastSyncedPageData) {
-          const oldHadWidgets = JSON.parse(_lastSyncedPageData.widgets || '[]').length > 0;
-          const oldHadCards = JSON.parse(_lastSyncedPageData.miroCards || '[]').length > 0;
-          if (oldHadWidgets || oldHadCards) {
-            console.error(`[SV GUARD] 🚨 Refusing to overwrite page "${activePg.name}" — was non-empty, now empty!`);
-            if (typeof showToast === 'function') showToast('⚠️ Data loss prevented — page was not saved (empty data detected)', 5000);
-            setOwnWrite(false);
-            return;
-          }
-        }
-        // ─── VERSION REGRESSION GUARD ───
-        if (isVersionRegression(activePg.id, activePg.widgets, activePg.miroCards)) {
-          console.error(`[SV GUARD] 🚨 Version regression on "${activePg.name}" — save blocked!`);
-          if (typeof showToast === 'function') showToast('⚠️ Suspicious data drop detected — save blocked', 5000);
-          setOwnWrite(false);
-          return;
-        }
-        trackPageVersion(activePg.id, activePg.widgets, activePg.miroCards);
-        if (_lastSyncedPageData) {
-          const curWidgetsStr = JSON.stringify(activePg.widgets || []);
-          const curCardsStr = JSON.stringify(activePg.miroCards || []);
-
-          const oldWidgets = JSON.parse(_lastSyncedPageData.widgets || '[]');
-          const oldCards = JSON.parse(_lastSyncedPageData.miroCards || '[]');
-          const curWidgets = activePg.widgets || [];
-          const curCards = activePg.miroCards || [];
-
-          let widgetsChanged = false;
-          if (oldWidgets.length !== curWidgets.length) widgetsChanged = true;
-          else {
-            for (let i = 0; i < curWidgets.length; i++) {
-              if (curWidgets[i].id !== oldWidgets[i].id) { widgetsChanged = true; break; }
-            }
-          }
-
-          if (widgetsChanged) {
-            updates[`users/${USER_ID}/startmine_pages/${activePg.id}/widgets`] = curWidgets;
-          } else {
-            for (let i = 0; i < curWidgets.length; i++) {
-              if (JSON.stringify(curWidgets[i]) !== JSON.stringify(oldWidgets[i])) {
-                updates[`users/${USER_ID}/startmine_pages/${activePg.id}/widgets/${i}`] = curWidgets[i];
-              }
-            }
-          }
-
-          let cardsChanged = false;
-          if (oldCards.length !== curCards.length) cardsChanged = true;
-          else {
-            for (let i = 0; i < curCards.length; i++) {
-              if (curCards[i].id !== oldCards[i].id) { cardsChanged = true; break; }
-            }
-          }
-
-          if (cardsChanged) {
-            updates[`users/${USER_ID}/startmine_pages/${activePg.id}/miroCards`] = curCards;
-          } else {
-            for (let i = 0; i < curCards.length; i++) {
-              if (JSON.stringify(curCards[i]) !== JSON.stringify(oldCards[i])) {
-                updates[`users/${USER_ID}/startmine_pages/${activePg.id}/miroCards/${i}`] = curCards[i];
-              }
-            }
-          }
-
-          // Update baseline payload
-          _lastSyncedPageData.widgets = curWidgetsStr;
-          _lastSyncedPageData.miroCards = curCardsStr;
-        } else {
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}`] = {
-            widgets: activePg.widgets || [],
-            miroCards: activePg.miroCards || []
-          };
-        }
-      }
-    }
-
-    // Skip empty updates (nothing changed)
-    if (Object.keys(updates).length === 0) {
-      setOwnWrite(false);
-      return;
-    }
-
-    db.ref().update(updates)
-      .then(() => {
-        setOwnWrite(false);
-        _lastSvTs = Date.now();
-        // Cache active page data to localStorage after successful save
-        const activePg = cp();
-        if (activePg) {
-          cachePageData(activePg.id, { widgets: activePg.widgets || [], miroCards: activePg.miroCards || [] });
-        }
-        // Clean up any pending deleted page nodes from Firebase
-        if (_pendingDeletePageIds.length > 0) {
-          const delUpdates = {};
-          _pendingDeletePageIds.forEach(pid => {
-            delUpdates[`users/${USER_ID}/startmine_pages/${pid}`] = null;
-            // Also remove from localStorage cache
-            try { localStorage.removeItem(lsPageKey(pid)); } catch(e) {}
-          });
-          _pendingDeletePageIds = [];
-          db.ref().update(delUpdates).catch(e => console.warn('[DELETE CLEANUP]', e));
-        }
-      })
-      .catch((err) => {
-        setOwnWrite(false);
-        setSyncStatus('err', 'Sync error: ' + (err.code || err.message));
-      });
-  };
-
-  clearTimeout(_svTimer);
-  if (immediate) doSave();
-  else _svTimer = setTimeout(doSave, 800);
+  return window.SM.data.sv(saveAll, immediate);
 }
 
 // ─── Save Guards: force-save to localStorage on tab close ───
 function forceLocalSave() {
-  try {
-    localStorage.setItem(LS_CUR_PAGE, D.cur);
-    const activePg = cp();
-    if (activePg) {
-      cachePageData(activePg.id, { widgets: activePg.widgets || [], miroCards: activePg.miroCards || [] });
-    }
-    const meta = {
-      settings: D.settings, curEnv: D.curEnv, curGroup: D.curGroup,
-      environments: D.environments, groups: D.groups, inbox: D.inbox
-    };
-    cacheMeta(meta);
-    cachePagesMeta(D.pages.map(p => ({
-      id: p.id, groupId: p.groupId, name: p.name, pageType: p.pageType,
-      zoom: p.zoom, panX: p.panX, panY: p.panY, bg: p.bg, bgType: p.bgType,
-      tabColor: p.tabColor || ''
-    })));
-  } catch(e) { console.warn('[FORCE SAVE]', e); }
+  return window.SM.data.forceLocalSave();
 }
 
 window.addEventListener('beforeunload', (e) => {
@@ -1662,51 +1040,7 @@ function closeSnapshotModal() {
 const GDRIVE_FOLDER_NAME = 'Startmine Backups';
 const GDRIVE_BACKUP_PREFIX = 'startmine_backup_';
 
-// Ensure we have a valid Google access token
-// NEVER opens a popup — returns cached token or throws NEEDS_AUTH.
-// Popups should only be triggered by direct user clicks (login button, calendar connect button).
-async function ensureGoogleToken() {
-  if (!_googleAccessToken) restoreGoogleToken();
-  if (!_googleAccessToken) {
-    // No token — callers should show a "connect" button
-    const e = new Error('NEEDS_AUTH'); e.needsAuth = true; throw e;
-  }
-  // If expired, still return the token — let the API call try it.
-  // If it 401s, the retry logic will call ensureGoogleTokenFresh → manualGoogleReAuth from a user click.
-  return _googleAccessToken;
-}
-// Force-refresh token (called from user-triggered retry after 401)
-async function ensureGoogleTokenFresh() {
-  try {
-    return await manualGoogleReAuth();
-  } catch(e) {
-    // Don't show toast here — let callers handle it
-    return null;
-  }
-}
 
-// Re-auth with login_hint for minimal friction (account is pre-selected)
-async function manualGoogleReAuth() {
-  const user = auth.currentUser;
-  if (!user) throw new Error('Not signed in to Firebase');
-  const hintProvider = new firebase.auth.GoogleAuthProvider();
-  hintProvider.addScope('https://www.googleapis.com/auth/drive.file');
-  hintProvider.addScope('https://www.googleapis.com/auth/calendar.events');
-  hintProvider.addScope('https://www.googleapis.com/auth/calendar.readonly');
-  hintProvider.addScope('https://www.googleapis.com/auth/tasks');
-  hintProvider.setCustomParameters({ login_hint: user.email });
-  try {
-    const result = await auth.signInWithPopup(hintProvider);
-    if (result.credential) {
-      cacheGoogleToken(result.credential.accessToken);
-      return _googleAccessToken;
-    }
-  } catch (e) {
-    showToast('❌ Auth failed: ' + e.message, 4000);
-    throw e;
-  }
-  throw new Error('Could not get Google access token');
-}
 
 // Find or create the Startmine Backups folder on Google Drive
 async function getOrCreateDriveFolder(token) {
@@ -2470,95 +1804,6 @@ async function saveAllBackups() {
   );
 }
 
-function uid() {
-  return 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-}
-function esc(s) {
-  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-function cp() {
-  return D.pages.find((p) => p.id === D.cur) || D.pages[0];
-}
-function fw(id) {
-  for (const p of D.pages) {
-    let w = (p.widgets || []).find((x) => x.id === id);
-    if (w) return w;
-    w = (p.miroCards || []).find((x) => x.id === id);
-    if (w) return w;
-    // Search localStorage cache for evicted pages
-    const cached = getCachedPageData(p.id);
-    if (cached) {
-      w = (cached.widgets || []).find((x) => x.id === id);
-      if (w) return w;
-      w = (cached.miroCards || []).find((x) => x.id === id);
-      if (w) return w;
-    }
-  }
-  return null;
-}
-function clamp(v, a, b) {
-  return Math.max(a, Math.min(b, v));
-}
-function rgba(c) {
-  return `rgba(${c.r},${c.g},${c.b},${c.a})`;
-}
-function getFav(url) {
-  try {
-    const d = new URL(url).hostname;
-    return `https://www.google.com/s2/favicons?domain=${d}&sz=64`;
-  } catch (e) {
-    return '';
-  }
-}
-function letterOf(label, url) {
-  if (label) return label.trim()[0].toUpperCase();
-  try {
-    return new URL(url).hostname.replace('www.', '')[0].toUpperCase();
-  } catch (e) {
-    return '?';
-  }
-}
-function letterColor(ch) {
-  const c = ['#6c8fff', '#e8c97a', '#7ed4a4', '#ff8fa3', '#c4a0ff', '#ff9f6b', '#4dd0e1'];
-  return c[(ch.charCodeAt(0) || 0) % c.length];
-}
-function domainOf(url) {
-  try {
-    return new URL(url).hostname.replace('www.', '');
-  } catch (e) {
-    return url;
-  }
-}
-function mkFav(bm, w, h, rad) {
-  const el = document.createElement('div');
-  el.className = 'fav';
-  el.style.cssText = `width:${w}px;height:${h}px;border-radius:${rad}px;font-size:${w * 0.38}px`;
-  if (bm.emoji) {
-    el.textContent = bm.emoji;
-    el.style.background = 'rgba(255,255,255,.08)';
-    return el;
-  }
-  const furl = getFav(bm.url || '');
-  if (furl) {
-    const img = document.createElement('img');
-    img.src = furl;
-    img.alt = '';
-    img.onerror = () => {
-      img.remove();
-      showLetter(el, bm);
-    };
-    el.appendChild(img);
-  } else {
-    showLetter(el, bm);
-  }
-  return el;
-}
-function showLetter(el, bm) {
-  const l = letterOf(bm.label, bm.url || '');
-  el.textContent = l;
-  el.style.background = letterColor(l);
-  el.style.color = '#fff';
-}
 
 document.getElementById('bg-btn').onclick = () => {
   const pg = cp();
@@ -2737,77 +1982,7 @@ function allBm() {
     }
   return r;
 }
-function renderSR(q) {
-  srIdx = -1;
-  const c = $sr();
-  if (!q) {
-    c.classList.remove('show');
-    return;
-  }
-  const matches = allBm()
-    .filter(
-      (b) =>
-        (b.label || '').toLowerCase().includes(q.toLowerCase()) ||
-        (b.url || '').toLowerCase().includes(q.toLowerCase()),
-    )
-    .slice(0, 10);
-  c.innerHTML = '';
-  if (matches.length) {
-    const hd = document.createElement('div');
-    hd.className = 'sr-sec';
-    hd.textContent = 'Bookmarks';
-    c.appendChild(hd);
-    matches.forEach((bm) => {
-      const a = document.createElement('a');
-      a.className = 'sr-it';
-      a.href = bm.url;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      const fv = document.createElement('div');
-      fv.className = 'sr-fv';
-      if (bm.emoji) {
-        fv.textContent = bm.emoji;
-      } else {
-        const img = document.createElement('img');
-        img.src = getFav(bm.url);
-        img.onerror = () => {
-          img.style.display = 'none';
-          const l = letterOf(bm.label, bm.url);
-          fv.textContent = l;
-          fv.style.cssText = `background:${letterColor(l)};color:#fff;font-weight:700;font-size:.55rem;border-radius:4px;display:flex;align-items:center;justify-content:center`;
-        };
-        fv.appendChild(img);
-      }
-      const nm = document.createElement('span');
-      nm.className = 'sr-nm';
-      nm.textContent = bm.label;
-      const pg = document.createElement('span');
-      pg.className = 'sr-pg';
-      pg.textContent = bm._pg;
-      a.appendChild(fv);
-      a.appendChild(nm);
-      a.appendChild(pg);
-      c.appendChild(a);
-    });
-  }
-  const eng = ENGINES.find((e) => e.k === D.settings.engine) || ENGINES[1];
-  if (eng.url) {
-    const hd2 = document.createElement('div');
-    hd2.className = 'sr-sec';
-    hd2.textContent = 'Web';
-    c.appendChild(hd2);
-    const wb = document.createElement('div');
-    wb.className = 'sr-web';
-    wb.innerHTML = `<span>${eng.ic}</span> Search "${q}" on ${eng.name}`;
-    wb.onclick = () => {
-      window.open(eng.url + encodeURIComponent(q), '_blank');
-      $si().value = '';
-      c.classList.remove('show');
-    };
-    c.appendChild(wb);
-  }
-  c.classList.toggle('show', matches.length > 0 || !!eng.url);
-}
+function renderSR() { return window.renderSR(...arguments); }
 $si().addEventListener('input', (e) => {
   clearTimeout(srTimer);
   srTimer = setTimeout(() => renderSR(e.target.value.trim()), 80);
@@ -2850,77 +2025,14 @@ $si().addEventListener('keydown', (e) => {
     $si().blur();
   }
 });
-function buildEP() {
-  const ep = document.getElementById('ep');
-  ep.innerHTML = '';
-  ENGINES.forEach((eng) => {
-    const d = document.createElement('div');
-    d.className = 'eopt' + (eng.k === D.settings.engine ? ' on' : '');
-    d.innerHTML = `<span>${eng.ic}</span><span>${eng.name}</span>`;
-    d.onclick = () => {
-      D.settings.engine = eng.k;
-      sv();
-      buildEP();
-      document.getElementById('seb').textContent =
-        ENGINES.find((e) => e.k === D.settings.engine)?.ic || '🔍';
-      ep.classList.remove('open');
-    };
-    ep.appendChild(d);
-  });
-  document.getElementById('seb').textContent =
-    ENGINES.find((e) => e.k === D.settings.engine)?.ic || '🔍';
-}
-document.getElementById('seb').onclick = (ev) => {
-  ev.stopPropagation();
-  document.getElementById('ep').classList.toggle('open');
-};
-function buildAcPop() {
-  const pop = document.getElementById('ac-pop');
-  pop.innerHTML = '';
-  SWATCHES.forEach((hex) => {
-    const s = document.createElement('div');
-    s.className = 'ac-sw';
-    s.style.background = hex;
-    s.style.borderColor = hex === D.settings.accent ? '#fff' : 'transparent';
-    s.onclick = () => {
-      D.settings.accent = hex;
-      document.documentElement.style.setProperty('--ac', hex);
-      document.getElementById('ac-dot').style.background = hex;
-      sv();
-      buildAcPop();
-    };
-    pop.appendChild(s);
-  });
-}
-document.getElementById('io-btn').onclick = (ev) => {
-  ev.stopPropagation();
-  document.getElementById('io-pop').classList.toggle('open');
-};
+function buildEP() { return window.buildEP(...arguments); }
+// Moved to search.js;
+function buildAcPop() { return window.buildAcPop(...arguments); }
+// Moved to toolbar.js;
 
-document.getElementById('exp-json').onclick = () => {
-  const b = new Blob([JSON.stringify(D, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(b);
-  a.download = 'startmine.json';
-  a.click();
-  document.getElementById('io-pop').classList.remove('open');
-};
+// Moved to toolbar.js;
 
-document.getElementById('exp-csv').onclick = () => {
-  let csv = 'Title,URL,Widget,Page\n';
-  for (const pg of D.pages)
-    for (const w of pg.widgets || []) {
-      if (!w.items) continue;
-      for (const bm of w.items)
-        csv += `"${(bm.label || '').replace(/"/g, '""')}","${(bm.url || '').replace(/"/g, '""')}","${(w.title || '').replace(/"/g, '""')}","${(pg.name || '').replace(/"/g, '""')}"\n`;
-    }
-  const b = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(b);
-  a.download = 'startmine.csv';
-  a.click();
-  document.getElementById('io-pop').classList.remove('open');
-};
+// Moved to toolbar.js;
 
 document.getElementById('imp-json').onchange = function (e) {
   const file = e.target.files[0];
@@ -3330,32 +2442,14 @@ function parseBookmarks(dl, widget) {
 }
 
 // Google Drive buttons
-document.getElementById('gdrive-export').onclick = () => {
-  document.getElementById('io-pop').classList.remove('open');
-  exportToGoogleDrive();
-};
-document.getElementById('gdrive-restore').onclick = () => {
-  document.getElementById('io-pop').classList.remove('open');
-  restoreFromGoogleDrive();
-};
+// Moved to toolbar.js;
+// Moved to toolbar.js;
 
 // GitHub buttons
-document.getElementById('github-export').onclick = () => {
-  document.getElementById('io-pop').classList.remove('open');
-  exportToGitHub();
-};
-document.getElementById('github-restore').onclick = () => {
-  document.getElementById('io-pop').classList.remove('open');
-  restoreFromGitHub();
-};
+// Moved to toolbar.js;
+// Moved to toolbar.js;
 
-document.getElementById('reset-btn').onclick = () => {
-  if (!confirm('Reset all data?')) return;
-  D = JSON.parse(JSON.stringify(DEF));
-  sv();
-  renderAll();
-  document.getElementById('io-pop').classList.remove('open');
-};
+// Moved to toolbar.js;
 
 
 let _dragEnvId = null;
@@ -3881,90 +2975,12 @@ document.getElementById('inbox-input').addEventListener('paste', (e) => {
     }
   }
 });
-function addToInbox() {
-  const input = document.getElementById('inbox-input');
-  const text = input.value.trim();
-  if (!text) return;
-  if (!D.inbox) D.inbox = [];
-  // Detect if it's a URL
-  const urlRegex = /^(https?:\/\/[^\s]+)$/i;
-  if (urlRegex.test(text) || /^(www\.[^\s]+)$/i.test(text)) {
-    let url = text;
-    if (!url.startsWith('http')) url = 'https://' + url;
-    let label = url;
-    try { label = new URL(url).hostname.replace('www.', '').split('.')[0].replace(/^./, c => c.toUpperCase()); } catch (e) {}
-    D.inbox.push({ id: uid(), type: 'url', url, label, ts: Date.now() });
-  } else {
-    D.inbox.push({ id: uid(), type: 'text', text, label: text.substring(0, 40), ts: Date.now() });
-  }
-  input.value = '';
-  sv(); buildInbox();
-}
+function addToInbox() { return window.addToInbox(...arguments); }
 let _dragInboxId = null;
 let _dragBmId = null;
 let _dragBmSrcWid = null;
 
-function buildInbox() {
-  const list = document.getElementById('inbox-list');
-  list.innerHTML = '';
-  if (!D.inbox || !D.inbox.length) {
-    list.innerHTML =
-      '<div style="padding:1.5rem;text-align:center;color:var(--mu);font-size:.7rem">Empty — add text, URLs, or images</div>';
-    return;
-  }
-  D.inbox.forEach((item) => {
-    const row = document.createElement('div');
-    row.className = 'inbox-it';
-    row.draggable = true;
-    row.addEventListener('dragstart', (e) => {
-      _dragInboxId = item.id;
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', item.id);
-      e.dataTransfer.setData('application/x-inbox-type', item.type || 'url');
-      row.style.opacity = '.4';
-    });
-    row.addEventListener('dragend', () => {
-      _dragInboxId = null;
-      row.style.opacity = '1';
-    });
-    const icon = document.createElement('span');
-    icon.style.cssText = 'font-size:.8rem;flex-shrink:0';
-    if (item.type === 'image') {
-      icon.textContent = '🖼️';
-      const thumb = document.createElement('img');
-      thumb.src = item.data;
-      thumb.style.cssText = 'width:30px;height:30px;object-fit:cover;border-radius:3px;flex-shrink:0';
-      row.appendChild(thumb);
-    } else if (item.type === 'url') {
-      icon.textContent = '🔗';
-      row.appendChild(icon);
-    } else {
-      icon.textContent = '📝';
-      row.appendChild(icon);
-    }
-    const lbl = document.createElement('span');
-    lbl.className = 'inbox-lbl';
-    lbl.textContent = item.label || item.text || item.url || '';
-    const rm = document.createElement('button');
-    rm.className = 'inbox-rm';
-    rm.textContent = '✕';
-    rm.onclick = () => {
-      D.inbox = D.inbox.filter((x) => x.id !== item.id);
-      sv(); buildInbox();
-    };
-    row.appendChild(lbl);
-    if (item.type === 'url') {
-      const open = document.createElement('a');
-      open.href = item.url;
-      open.target = '_blank';
-      open.style.cssText = 'color:var(--ac);font-size:.6rem;text-decoration:none;flex-shrink:0';
-      open.textContent = '↗';
-      row.appendChild(open);
-    }
-    row.appendChild(rm);
-    list.appendChild(row);
-  });
-}
+function buildInbox() { return window.buildInbox(...arguments); }
 
 // Quick inbox input in toolbar
 document.getElementById('qi').addEventListener('keydown', (e) => {
@@ -4026,102 +3042,13 @@ document.getElementById('qi').addEventListener('keydown', (e) => {
 const INBOX_BACKUP_KEY = 'startmine_inbox_backup';
 
 // 💾 Save Inbox - saves to localStorage AND Firebase dedicated node
-document.getElementById('inbox-save-btn').onclick = () => {
-  if (!D.inbox || !D.inbox.length) {
-    showToast('📥 Inbox is empty — nothing to save', 'warn');
-    return;
-  }
-  // Save to localStorage
-  try {
-    localStorage.setItem(INBOX_BACKUP_KEY, JSON.stringify(D.inbox));
-    localStorage.setItem(INBOX_BACKUP_KEY + '_ts', Date.now().toString());
-  } catch(e) {}
-
-  // Save to Firebase dedicated inbox backup
-  if (USER_ID) {
-    db.ref(`users/${USER_ID}/startmine_inbox_backup`).set({
-      inbox: D.inbox,
-      ts: Date.now()
-    }).catch(e => console.warn('Inbox backup to Firebase failed:', e));
-  }
-
-  const count = D.inbox.length;
-  showToast(`💾 Inbox saved! (${count} item${count > 1 ? 's' : ''})`, 'ok');
-};
+// Moved to inbox-ui.js;
 
 // 🔄 Restore Inbox - from localStorage or Firebase
-document.getElementById('inbox-restore-btn').onclick = async () => {
-  // Try localStorage first
-  let restored = null;
-  let source = '';
-  const localBackup = localStorage.getItem(INBOX_BACKUP_KEY);
-  const localTs = parseInt(localStorage.getItem(INBOX_BACKUP_KEY + '_ts') || '0');
-
-  if (localBackup) {
-    try { restored = JSON.parse(localBackup); source = 'local'; } catch(e) {}
-  }
-
-  // Also try Firebase backup
-  if (USER_ID) {
-    try {
-      const snap = await db.ref(`users/${USER_ID}/startmine_inbox_backup`).once('value');
-      const fbBackup = snap.val();
-      if (fbBackup && fbBackup.inbox && fbBackup.inbox.length) {
-        // Use whichever is newer
-        if (!restored || (fbBackup.ts && fbBackup.ts > localTs)) {
-          restored = fbBackup.inbox;
-          source = 'cloud';
-        }
-      }
-    } catch(e) {}
-  }
-
-  if (!restored || !restored.length) {
-    showToast('🔄 No inbox backup found', 'warn');
-    return;
-  }
-
-  // Merge: don't replace, add missing items
-  if (!D.inbox) D.inbox = [];
-  const existingIds = new Set(D.inbox.map(x => x.id));
-  let added = 0;
-  restored.forEach(item => {
-    if (!existingIds.has(item.id)) {
-      D.inbox.push(item);
-      added++;
-    }
-  });
-
-  if (added === 0) {
-    showToast(`🔄 All ${restored.length} items already in inbox (from ${source})`, 'ok');
-  } else {
-    sv();
-    buildInbox();
-    showToast(`🔄 Restored ${added} items from ${source} backup!`, 'ok');
-  }
-};
+// Moved to inbox-ui.js;
 
 // 📤 Export Inbox as JSON file
-document.getElementById('inbox-export-btn').onclick = () => {
-  if (!D.inbox || !D.inbox.length) {
-    showToast('📥 Inbox is empty — nothing to export', 'warn');
-    return;
-  }
-  const data = {
-    type: 'startmine_inbox',
-    version: 1,
-    exported: new Date().toISOString(),
-    count: D.inbox.length,
-    inbox: D.inbox
-  };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `startmine-inbox-${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-  showToast(`📤 Exported ${D.inbox.length} inbox items`, 'ok');
-};
+// Moved to inbox-ui.js;
 
 // 📥 Import Inbox from JSON file
 document.getElementById('inbox-import-file').addEventListener('change', (e) => {
@@ -4163,158 +3090,12 @@ document.getElementById('inbox-import-file').addEventListener('change', (e) => {
 });
 
 // ─── Export Inbox to Page (inbox env → inbox gr → timestamped page) ───
-document.getElementById('inbox-export-page-btn').onclick = () => {
-  if (!D.inbox || !D.inbox.length) {
-    showToast('📥 Inbox is empty — nothing to export', 2000);
-    return;
-  }
-
-  // 1. Generate page name: "4APR26-2:29PM" format
-  const now = new Date();
-  const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-  const day = now.getDate();
-  const mon = months[now.getMonth()];
-  const yr = String(now.getFullYear()).slice(-2);
-  let hrs = now.getHours();
-  const mins = String(now.getMinutes()).padStart(2, '0');
-  const ampm = hrs >= 12 ? 'PM' : 'AM';
-  hrs = hrs % 12 || 12;
-  const pageName = `${day}${mon}${yr}-${hrs}:${mins}${ampm}`;
-
-  // 2. Find or create "inbox env" environment
-  let inboxEnv = D.environments.find(e => e.name === 'inbox env');
-  if (!inboxEnv) {
-    const envId = uid();
-    inboxEnv = { id: envId, name: 'inbox env' };
-    D.environments.push(inboxEnv);
-  }
-
-  // 3. Find or create "inbox gr" group under that environment
-  let inboxGrp = D.groups.find(g => g.name === 'inbox gr' && g.envId === inboxEnv.id);
-  if (!inboxGrp) {
-    const grpId = uid();
-    inboxGrp = { id: grpId, name: 'inbox gr', envId: inboxEnv.id };
-    D.groups.push(inboxGrp);
-  }
-
-  // 4. Create miroCards from inbox items in a grid layout
-  const GAP = 40;
-  const COLS_PER_ROW = 4;
-  const START_X = 80;
-  const START_Y = 80;
-  let curX = START_X;
-  let curY = START_Y;
-  let rowMaxH = 0;
-  let colCount = 0;
-  const miroCards = [];
-
-  D.inbox.forEach(item => {
-    const itemType = item.type || 'url';
-    let card;
-
-    if (itemType === 'text') {
-      card = {
-        id: uid(), type: 'sticky',
-        text: item.text || item.label || '',
-        bg: '#ffe599',
-        x: curX, y: curY,
-        w: 200, h: 200
-      };
-    } else if (itemType === 'image') {
-      card = {
-        id: uid(), type: 'image',
-        imageUrl: item.data,
-        label: item.label || 'Image',
-        x: curX, y: curY,
-        w: 300, h: 200
-      };
-    } else {
-      // URL → bookmark card
-      const url = item.url || '';
-      card = {
-        id: uid(), type: 'card',
-        url: url,
-        label: item.label || '',
-        x: curX, y: curY,
-        w: 280, h: 240
-      };
-    }
-
-    miroCards.push(card);
-
-    // Advance grid position
-    const cardW = card.w || 280;
-    const cardH = card.h || 240;
-    curX += cardW + GAP;
-    rowMaxH = Math.max(rowMaxH, cardH);
-    colCount++;
-
-    if (colCount % COLS_PER_ROW === 0) {
-      curX = START_X;
-      curY += rowMaxH + GAP;
-      rowMaxH = 0;
-    }
-  });
-
-  // 5. Create the new page
-  const pageId = uid();
-  D.pages.push({
-    id: pageId,
-    groupId: inboxGrp.id,
-    name: pageName,
-    pageType: 'miro',
-    miroCards: miroCards,
-    zoom: 100,
-    panX: 0,
-    panY: 0,
-    bg: '',
-    bgType: 'none',
-    widgets: [],
-  });
-
-  // 6. Clear inbox
-  const exportedCount = D.inbox.length;
-  D.inbox = [];
-
-  // 7. Navigate to the new page
-  D.curEnv = inboxEnv.id;
-  D.curGroup = inboxGrp.id;
-  sv();
-  switchActivePage(pageId);
-
-  // 8. Close inbox sidebar and show toast
-  document.getElementById('inbox-side').classList.remove('open');
-  document.getElementById('inbox-btn').classList.remove('active-toggle');
-  showToast(`📄 Exported ${exportedCount} items to "${pageName}"`, 3000);
-};
+// Moved to inbox-ui.js;
 
 // Duplicate link detection
-let _dupScope = 'page'; // 'page' or 'all'
-document.getElementById('dup-btn').onclick = () => {
-  _dupScope = 'page';
-  document.getElementById('dup-page').classList.add('ba');
-  document.getElementById('dup-page').classList.remove('bg-btn');
-  document.getElementById('dup-all').classList.add('bg-btn');
-  document.getElementById('dup-all').classList.remove('ba');
-  buildDupReport();
-  openM('m-dup');
-};
-document.getElementById('dup-page').onclick = () => {
-  _dupScope = 'page';
-  document.getElementById('dup-page').classList.add('ba');
-  document.getElementById('dup-page').classList.remove('bg-btn');
-  document.getElementById('dup-all').classList.add('bg-btn');
-  document.getElementById('dup-all').classList.remove('ba');
-  buildDupReport();
-};
-document.getElementById('dup-all').onclick = () => {
-  _dupScope = 'all';
-  document.getElementById('dup-all').classList.add('ba');
-  document.getElementById('dup-all').classList.remove('bg-btn');
-  document.getElementById('dup-page').classList.add('bg-btn');
-  document.getElementById('dup-page').classList.remove('ba');
-  buildDupReport();
-};
+window._dupScope = 'page'; // 'page' or 'all'
+// Moved to toolbar.js;
+// Moved to toolbar.js
 function findDups(scope) {
   const urlMap = {}; // url -> [{pageId, pageName, widgetId, widgetTitle, itemId}]
   const pages = scope === 'page' ? [cp()] : D.pages;
@@ -4555,75 +3336,11 @@ function buildTabs() {
   });
 }
 
-document.getElementById('add-env').onclick = () => {
-  const id = uid();
-  D.environments.push({ id, name: 'Env ' + (D.environments.length + 1) });
-  const gid = uid();
-  D.groups.push({ id: gid, name: 'Group 1', envId: id });
-  const pid = uid();
-  D.pages.push({
-    id: pid,
-    groupId: gid,
-    name: 'Miro 1',
-    pageType: 'miro',
-    miroCards: [],
-    zoom: 100,
-    panX: 0,
-    panY: 0,
-    bg: '',
-    bgType: 'none',
-    widgets: [],
-  });
-  D.curEnv = id;
-  D.curGroup = gid;
-  sv();
-  switchActivePage(pid);
-};
+// Moved to toolbar.js;
 
-document.getElementById('add-grp').onclick = () => {
-  const id = uid();
-  const targetEnv = D.curEnv === '__all__' ? D.environments[0].id : D.curEnv;
-  const envGroups = D.groups.filter((g) => g.envId === targetEnv);
-  D.groups.push({ id, name: 'Group ' + (envGroups.length + 1), envId: targetEnv });
-  const pid = uid();
-  D.pages.push({
-    id: pid,
-    groupId: id,
-    name: 'Miro 1',
-    pageType: 'miro',
-    miroCards: [],
-    zoom: 100,
-    panX: 0,
-    panY: 0,
-    bg: '',
-    bgType: 'none',
-    widgets: [],
-  });
-  D.curGroup = id;
-  sv();
-  switchActivePage(pid);
-};
+// Moved to toolbar.js;
 
-document.getElementById('add-pg').onclick = () => {
-  const id = uid();
-  const targetGroup = D.curGroup === '__all__' ? D.groups[0].id : D.curGroup;
-  const groupPages = D.pages.filter((p) => p.groupId === targetGroup);
-  D.pages.push({
-    id,
-    groupId: targetGroup,
-    name: 'Miro ' + (groupPages.length + 1),
-    pageType: 'miro',
-    miroCards: [],
-    zoom: 100,
-    panX: 0,
-    panY: 0,
-    bg: '',
-    bgType: 'none',
-    widgets: [],
-  });
-  sv();
-  switchActivePage(id);
-};
+// Moved to toolbar.js;
 
 function delEnv(eid) {
   if (D.environments.length <= 1) {

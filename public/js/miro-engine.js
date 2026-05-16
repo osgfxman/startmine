@@ -1,17 +1,8 @@
 /* ─── Miro Page Engine ─── */
-let _miroMode = true;
-let _miroPanning = false,
-  _miroPanStartX = 0,
-  _miroPanStartY = 0;
-let _miroCardDrag = null,
-  _miroCardResize = null;
-const _miroSelected = new Set();
-let _alignDragging = false;
-let _justRubberBanded = false;
-let _stickyCreateMode = false;
+// State moved to miro-state.js
 
 /* ─── Edge Auto-Pan: pan canvas when mouse is near screen edge during drag ─── */
-let _edgePanRAF = null;
+// State moved to miro-state.js
 function startEdgeAutoPan(e) {
   const edge = 40, speed = 8;
   const page = cp();
@@ -308,521 +299,24 @@ function convertSelectedTo(targetType) {
 }
 
 /* ─── Miro Infinite Zoom Grid ─── */
-function updateMiroGrid() {
-  const page = cp();
-  const zoom = (page.zoom || 100) / 100;
-  const panX = page.panX || 0;
-  const panY = page.panY || 0;
-  const canvas = document.getElementById('miro-canvas');
+function updateMiroGrid() { return window.updateMiroGrid(...arguments); }
 
-  // Base board-space grid unit
-  const BASE = 10;
-  const FACTOR = 5;
+function buildMiroCanvas() { return window.buildMiroCanvas(...arguments); }
 
-  // Find the fine grid level: scale BASE until fine * zoom is in [8, 200) px range
-  let fine = BASE;
-  while (fine * zoom < 8) fine *= FACTOR;
-  while (fine * zoom > 200) fine /= FACTOR;
-
-  const medium = fine * FACTOR;
-  const coarse = medium * FACTOR;
-
-  // Screen-space pixel sizes
-  const fineScreen = fine * zoom;
-  const medScreen = medium * zoom;
-  const coarseScreen = coarse * zoom;
-
-  // Opacity: fade in based on screen pixel spacing — tuned to match Miro.com
-  const fineAlpha = clamp((fineScreen - 6) / 25, 0, 1) * 0.05;
-  const medAlpha = clamp((medScreen - 6) / 40, 0, 1) * 0.10;
-  const coarseAlpha = clamp((coarseScreen - 6) / 60, 0, 1) * 0.16;
-
-  // Build CSS background layers (horizontal + vertical lines per level)
-  const layers = [];
-  const sizes = [];
-  const positions = [];
-
-  function addLevel(screenSize, alpha) {
-    if (alpha < 0.002) return;
-    const c = `rgba(0,0,0,${alpha.toFixed(4)})`;
-    layers.push(
-      `linear-gradient(${c} 1px, transparent 1px)`,
-      `linear-gradient(90deg, ${c} 1px, transparent 1px)`,
-    );
-    const s = `${screenSize}px ${screenSize}px`;
-    sizes.push(s, s);
-    const ox = panX % screenSize;
-    const oy = panY % screenSize;
-    const p = `${ox}px ${oy}px`;
-    positions.push(p, p);
-  }
-
-  addLevel(fineScreen, fineAlpha);
-  addLevel(medScreen, medAlpha);
-  addLevel(coarseScreen, coarseAlpha);
-
-  if (layers.length) {
-    canvas.style.backgroundImage = layers.join(',');
-    canvas.style.backgroundSize = sizes.join(',');
-    canvas.style.backgroundPosition = positions.join(',');
-  }
-}
-
-function buildMiroCanvas() {
-  const page = cp();
-  if (!page.miroCards) page.miroCards = [];
-  const board = document.getElementById('miro-board');
-  // Clear pinned layer (elements from previous page)
-  const _pl = document.getElementById('miro-pinned-layer');
-  if (_pl) _pl.innerHTML = '';
-  // Remove only card elements, preserve selection overlays
-  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed, .miro-overlay-widget').forEach((el) => el.remove());
-  // Clean up grid toolbars that live in document.body
-  document.querySelectorAll('.mg-toolbar[data-grid-id]').forEach(t => t.remove());
-  // Clear selection state
-  _miroSelected.clear();
-  document.getElementById('miro-sel-frame').style.display = 'none';
-  document.getElementById('miro-sel-box').style.display = 'none';
-  const zoom = (page.zoom || 100) / 100;
-  const px = page.panX || 0,
-    py = page.panY || 0;
-  board.style.transform = `translate(${px}px,${py}px) scale(${zoom})`;
-  // Set inverse zoom so floating UI (toolbars, delete buttons) stays constant screen size
-  board.style.setProperty('--inv-zoom', Math.min(3, Math.max(0.25, 1 / zoom)));
-  document.getElementById('mz-slider').value = page.zoom || 100;
-  document.getElementById('mz-pct').textContent = (page.zoom || 100) + '%';
-
-  page.miroCards.forEach((card) => {
-    try {
-    if (card.type === 'sticky') board.appendChild(buildMiroSticky(card));
-    else if (card.type === 'image') board.appendChild(buildMiroImage(card));
-    else if (card.type === 'text') board.appendChild(buildMiroText(card));
-    else if (card.type === 'shape') board.appendChild(buildMiroShape(card));
-    else if (card.type === 'pen') board.appendChild(buildMiroPen(card));
-    else if (card.type === 'grid') board.appendChild(buildMiroGridCard(card));
-    else if (card.type === 'mindmap') board.appendChild(buildMiroMindMap(card));
-    else if (card.type === 'trello') board.appendChild(buildMiroTrello(card));
-    else if (card.type === 'bwidget') board.appendChild(buildMiroBookmarkWidget(card));
-    else if (card.type === 'array') board.appendChild(buildMiroArray(card));
-    else if (card.type === 'calendar' || card.type === 'gantt') board.appendChild(buildMiroGantt(card));
-    else if (card.type === 'embed') board.appendChild(buildMiroEmbed(card));
-    else if (card.type === 'overlay-page') board.appendChild(buildMiroOverlayWidget(card));
-    else board.appendChild(buildMiroCard(card));
-    } catch (err) { console.error('[RENDER ERROR]', card.type, card.id, err); }
-  });
-  updateMiroGrid();
-  updateMiroScrollbars();
-  // Auto-fix any base64 images on this page
-  if (typeof _fixBase64ImagesOnPage === 'function') setTimeout(_fixBase64ImagesOnPage, 1000);
-}
-
-function updateMiroScrollbars() {
-  const page = cp();
-  if (page.pageType !== 'miro') return;
-  const canvas = document.getElementById('miro-canvas');
-  if (!canvas) return;
-
-  // Remove existing
-  canvas.querySelectorAll('.miro-sb').forEach(el => el.remove());
-
-  if (!page.miroCards || page.miroCards.length === 0) return;
-
-  // Find canvas content bounds
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  page.miroCards.forEach(c => {
-    minX = Math.min(minX, c.x || 0);
-    minY = Math.min(minY, c.y || 0);
-    maxX = Math.max(maxX, (c.x || 0) + (c.w || 280));
-    maxY = Math.max(maxY, (c.y || 0) + (c.h || 240));
-  });
-
-  if (minX === Infinity) return;
-
-  // Add 500px padding around content bounds
-  minX -= 500; minY -= 500;
-  maxX += 500; maxY += 500;
-  const contentW = maxX - minX;
-  const contentH = maxY - minY;
-
-  const zoom = (page.zoom || 100) / 100;
-  const vw = canvas.clientWidth / zoom;
-  const vh = canvas.clientHeight / zoom;
-
-  const panX = (page.panX || 0) / zoom;
-  const panY = (page.panY || 0) / zoom;
-
-  // Visible rect in world coordinates
-  const visX = -panX;
-  const visY = -panY;
-
-  // If content is smaller than viewport, no scrollbars needed
-  const needX = contentW > vw;
-  const needY = contentH > vh;
-
-  if (needX) {
-    const sb = document.createElement('div');
-    sb.className = 'miro-sb miro-sb-x';
-    const thumb = document.createElement('div');
-    thumb.className = 'miro-sb-thumb';
-
-    const thumbW = Math.max(20, (vw / contentW) * canvas.clientWidth);
-    const scrollPct = clamp((visX - minX) / (contentW - vw), 0, 1);
-    const thumbLeft = scrollPct * (canvas.clientWidth - 8 - thumbW);
-
-    thumb.style.width = thumbW + 'px';
-    thumb.style.transform = `translateX(${thumbLeft}px)`;
-
-    thumb.onmousedown = (e) => {
-      e.stopPropagation(); e.preventDefault();
-      const startX = e.clientX;
-      const startPan = page.panX || 0;
-      const trackW = canvas.clientWidth - 8 - thumbW;
-
-      const onMove = (me) => {
-        const dx = me.clientX - startX;
-        const scrollDelta = dx / trackW;
-        const worldDelta = scrollDelta * (contentW - vw) * zoom;
-        page.panX = startPan - worldDelta;
-        sv(); buildMiroCanvas();
-      };
-      const onUp = () => {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-      };
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-    };
-
-    sb.appendChild(thumb);
-    canvas.appendChild(sb);
-  }
-
-  if (needY) {
-    const sb = document.createElement('div');
-    sb.className = 'miro-sb miro-sb-y';
-    const thumb = document.createElement('div');
-    thumb.className = 'miro-sb-thumb';
-
-    const thumbH = Math.max(20, (vh / contentH) * canvas.clientHeight);
-    const scrollPct = clamp((visY - minY) / (contentH - vh), 0, 1);
-    const thumbTop = scrollPct * (canvas.clientHeight - 8 - thumbH);
-
-    thumb.style.height = thumbH + 'px';
-    thumb.style.transform = `translateY(${thumbTop}px)`;
-
-    thumb.onmousedown = (e) => {
-      e.stopPropagation(); e.preventDefault();
-      const startY = e.clientY;
-      const startPan = page.panY || 0;
-      const trackH = canvas.clientHeight - 8 - thumbH;
-
-      const onMove = (me) => {
-        const dy = me.clientY - startY;
-        const scrollDelta = dy / trackH;
-        const worldDelta = scrollDelta * (contentH - vh) * zoom;
-        page.panY = startPan - worldDelta;
-        sv(); buildMiroCanvas();
-      };
-      const onUp = () => {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-      };
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-    };
-
-    sb.appendChild(thumb);
-    canvas.appendChild(sb);
-  }
-}
+function updateMiroScrollbars() { return window.updateMiroScrollbars(...arguments); }
 
 // ─── Video URL Detection ───
-function detectVideoUrl(url) {
-  if (!url) return null;
-  // YouTube (watch, shorts, youtu.be, embed)
-  let m = url.match(/(?:youtube\.com\/(?:watch\?.*v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{11})/);
-  if (m) return { platform: 'YouTube', videoId: m[1], embedUrl: `https://www.youtube.com/embed/${m[1]}?autoplay=1&rel=0` };
-  // TikTok (video IDs are numeric)
-  m = url.match(/tiktok\.com\/@[^/]+\/video\/(\d+)/);
-  if (m) return { platform: 'TikTok', videoId: m[1], embedUrl: `https://www.tiktok.com/embed/v2/${m[1]}` };
-  // TikTok short URLs (vm.tiktok.com)
-  if (/vm\.tiktok\.com|vt\.tiktok\.com/.test(url)) return { platform: 'TikTok', videoId: '', embedUrl: '' , shortUrl: url };
-  // Facebook video
-  m = url.match(/facebook\.com.*\/(?:videos?|watch|reel)[\/?]/);
-  if (m) return { platform: 'Facebook', videoId: '', embedUrl: `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false&autoplay=true&width=560` };
-  // Facebook reel
-  if (/facebook\.com\/reel\//.test(url)) return { platform: 'Facebook', videoId: '', embedUrl: `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false&autoplay=true&width=560` };
-  return null;
-}
+function detectVideoUrl() { return window.detectVideoUrl(...arguments); }
 
 // Resolve TikTok short URLs to full URLs
-async function resolveTikTokShortUrl(shortUrl) {
-  try {
-    // Use a HEAD request to follow redirects
-    const resp = await fetch(`https://jsonlink.io/api/extract?url=${encodeURIComponent(shortUrl)}`, { signal: AbortSignal.timeout(5000) });
-    if (resp.ok) {
-      const data = await resp.json();
-      if (data.url) {
-        const m = data.url.match(/tiktok\.com\/@[^/]+\/video\/(\d+)/);
-        if (m) return { platform: 'TikTok', videoId: m[1], embedUrl: `https://www.tiktok.com/embed/v2/${m[1]}` };
-      }
-    }
-  } catch (e) { /* timeout */ }
-  return null;
-}
+function resolveTikTokShortUrl() { return window.resolveTikTokShortUrl(...arguments); }
 
-function buildMiroCard(card) {
-  const el = document.createElement('div');
-  el.className = 'miro-card';
-  el.dataset.cid = card.id;
-  el.style.left = (card.x || 0) + 'px';
-  el.style.top = (card.y || 0) + 'px';
-  el.style.width = (card.w || 280) + 'px';
-  el.style.height = (card.h || 240) + 'px';
-
-  // Delete button (overlaid)
-  const del = document.createElement('button');
-  del.className = 'mc-del';
-  del.textContent = '✕';
-  del.onclick = (e) => {
-    e.stopPropagation();
-    deleteMiroCard(card.id);
-  };
-
-  // Open link button
-  const openBtn = document.createElement('a');
-  openBtn.className = 'mc-open';
-  openBtn.href = card.url;
-  openBtn.target = '_blank';
-  openBtn.rel = 'noopener noreferrer';
-  openBtn.textContent = '↗';
-  openBtn.onclick = (e) => e.stopPropagation();
-
-  // Thumbnail
-  const thumb = document.createElement('div');
-  thumb.className = 'mc-thumb';
-
-  // Helper: replace thumb content without destroying overlays on el
-  function setThumbImage(src) {
-    // Remove any existing img or placeholder inside thumb
-    const oldImg = thumb.querySelector('img');
-    if (oldImg) oldImg.remove();
-    const oldPh = thumb.querySelector('.mc-placeholder');
-    if (oldPh) oldPh.remove();
-    // Remove any iframe too (from video stop)
-    const oldIframe = thumb.querySelector('iframe');
-    if (oldIframe) oldIframe.remove();
-
-    const img = document.createElement('img');
-    img.src = src;
-    img.alt = card.label || '';
-    img.loading = 'lazy';
-    img.onerror = () => {
-      img.remove();
-      if (!thumb.querySelector('.mc-placeholder')) {
-        thumb.appendChild(buildMiroPlaceholder(card, true));
-      }
-    };
-    thumb.insertBefore(img, thumb.firstChild);
-  }
-
-  function setThumbPlaceholder(showSpinner) {
-    const oldImg = thumb.querySelector('img');
-    if (oldImg) oldImg.remove();
-    const oldPh = thumb.querySelector('.mc-placeholder');
-    if (oldPh) oldPh.remove();
-    thumb.insertBefore(buildMiroPlaceholder(card, showSpinner), thumb.firstChild);
-  }
-
-  if (card.thumbUrl) {
-    // Show placeholder first, then load from IDB cache
-    setThumbPlaceholder(false);
-    if (typeof loadThumbCached === 'function') {
-      loadThumbCached(card.thumbUrl).then(blobUrl => {
-        if (blobUrl) {
-          setThumbImage(blobUrl);
-        } else {
-          setThumbImage(card.thumbUrl);
-        }
-      });
-    } else {
-      setThumbImage(card.thumbUrl);
-    }
-  } else {
-    setThumbPlaceholder(true);
-    queueCardFetch(card);
-  }
-
-  // ─── Click-to-open / Click-to-play detection ───
-  // Track mousedown position to distinguish click from drag
-  let _mdX = 0, _mdY = 0, _mdTime = 0;
-  thumb.addEventListener('mousedown', (e) => {
-    _mdX = e.clientX; _mdY = e.clientY; _mdTime = Date.now();
-  });
-  thumb.addEventListener('click', (e) => {
-    // Ignore clicks on buttons/links/controls
-    if (e.target.closest('.mc-del, .mc-open, .mc-play-btn, .mc-video-close, .mc-lock')) return;
-    // Check if this was a click (not a drag): short time + small distance
-    const dt = Date.now() - _mdTime;
-    const dist = Math.hypot(e.clientX - _mdX, e.clientY - _mdY);
-    if (dt > 350 || dist > 8) return; // It was a drag, ignore
-
-    e.stopPropagation();
-    const videoInfo = detectVideoUrl(card.url);
-    if (videoInfo) {
-      _playVideoInCard(el, thumb, card, videoInfo);
-    } else {
-      window.open(card.url, '_blank', 'noopener');
-    }
-  });
-
-  // Drag logic
-  if (typeof miroSetupCardDrag === 'function') {
-    miroSetupCardDrag(thumb, card, ['.mc-del', '.mc-open', '.mc-resize', '.mc-lock', '.mc-play-btn', '.mc-video-close']);
-  }
-
-  // Metadata footer
-  const meta = document.createElement('div');
-  meta.className = 'mc-meta';
-  const favicon = document.createElement('img');
-  favicon.src = getFav(card.url);
-  favicon.onerror = () => {
-    favicon.style.display = 'none';
-  };
-  const info = document.createElement('div');
-  info.className = 'mc-meta-info';
-  const title = document.createElement('div');
-  title.className = 'mc-title';
-  title.textContent = card.label || domainOf(card.url);
-  const domain = document.createElement('div');
-  domain.className = 'mc-domain';
-  domain.textContent = domainOf(card.url);
-  info.appendChild(title);
-  info.appendChild(domain);
-  meta.appendChild(favicon);
-  meta.appendChild(info);
-
-  // 4-corner resize handles
-  attach8WayResize(el, card, 160, 100);
-
-  // Lock UI
-  if (typeof attachLockUI === 'function') {
-    attachLockUI(el, card);
-  }
-
-  el.appendChild(del);
-  el.appendChild(openBtn);
-  el.appendChild(thumb);
-  el.appendChild(meta);
-
-  // ─── Video badge + play button (on card el, NOT inside thumb) ───
-  const videoInfo = detectVideoUrl(card.url);
-  if (videoInfo) {
-    const badge = document.createElement('div');
-    badge.className = 'mc-video-badge';
-    badge.textContent = videoInfo.platform === 'YouTube' ? '▶ YouTube' : videoInfo.platform === 'TikTok' ? '♪ TikTok' : '▶ Facebook';
-    el.appendChild(badge);
-
-    const playBtn = document.createElement('div');
-    playBtn.className = 'mc-play-btn';
-    playBtn.title = 'Play video';
-    playBtn.onclick = (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      _playVideoInCard(el, thumb, card, videoInfo);
-    };
-    el.appendChild(playBtn);
-  }
-
-  return el;
-}
+function buildMiroCard() { return window.buildMiroCard(...arguments); }
 
 // ─── Play video inside card ───
-async function _playVideoInCard(el, thumb, card, videoInfo) {
-  let embedUrl = videoInfo.embedUrl;
+function _playVideoInCard() { return window._playVideoInCard(...arguments); }
 
-  // Handle TikTok short URLs
-  if (videoInfo.shortUrl && !embedUrl) {
-    if (typeof showToast === 'function') showToast('Resolving TikTok link…', 2000);
-    const resolved = await resolveTikTokShortUrl(videoInfo.shortUrl);
-    if (resolved) {
-      embedUrl = resolved.embedUrl;
-    } else {
-      window.open(card.url, '_blank');
-      return;
-    }
-  }
-
-  if (!embedUrl) {
-    window.open(card.url, '_blank');
-    return;
-  }
-
-  el.classList.add('mc-video-active');
-
-  // Hide badge + play btn
-  const badge = el.querySelector('.mc-video-badge');
-  const playBtn = el.querySelector('.mc-play-btn');
-  if (badge) badge.style.display = 'none';
-  if (playBtn) playBtn.style.display = 'none';
-
-  // Clear thumb content and insert iframe
-  thumb.innerHTML = '';
-  const iframe = document.createElement('iframe');
-  iframe.src = embedUrl;
-  iframe.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
-  iframe.allowFullscreen = true;
-  iframe.style.cssText = 'width:100%;height:100%;border:none;';
-  thumb.appendChild(iframe);
-
-  // Add close/stop button
-  let closeBtn = el.querySelector('.mc-video-close');
-  if (!closeBtn) {
-    closeBtn = document.createElement('button');
-    closeBtn.className = 'mc-video-close';
-    closeBtn.textContent = '■';
-    closeBtn.title = 'Stop video';
-    closeBtn.onclick = (ev) => {
-      ev.stopPropagation();
-      el.classList.remove('mc-video-active');
-
-      // Remove iframe
-      thumb.innerHTML = '';
-
-      // Restore thumbnail
-      if (card.thumbUrl) {
-        const img = document.createElement('img');
-        img.src = card.thumbUrl;
-        img.alt = card.label || '';
-        img.loading = 'lazy';
-        img.onerror = () => { img.remove(); thumb.appendChild(buildMiroPlaceholder(card, false)); };
-        thumb.appendChild(img);
-        if (typeof loadThumbCached === 'function') {
-          loadThumbCached(card.thumbUrl).then(blobUrl => {
-            if (blobUrl) img.src = blobUrl;
-          });
-        }
-      } else {
-        thumb.appendChild(buildMiroPlaceholder(card, false));
-      }
-
-      // Restore badge + play btn
-      if (badge) badge.style.display = '';
-      if (playBtn) playBtn.style.display = '';
-      closeBtn.remove();
-    };
-    el.appendChild(closeBtn);
-  }
-}
-
-function deleteMiroCard(cid) {
-  const page = cp();
-  if (!page.miroCards) return;
-  page.miroCards = page.miroCards.filter((c) => c.id !== cid);
-  sv();
-  buildMiroCanvas();
-  buildOutline();
-}
+function deleteMiroCard() { return window.deleteMiroCard(...arguments); }
 
 // Canvas Pan + Rubber-band selection
 (function () {
@@ -1411,7 +905,7 @@ document.getElementById('ok-miro-add').onclick = () => {
 };
 
 // ─── Image Upload ───
-let _miroImgData = null; // { imgbbUrl, naturalW, naturalH }
+// State moved to miro-state.js
 
 document.getElementById('miro-opt-image').onclick = () => {
   document.getElementById('miro-add-menu').classList.remove('show');
@@ -1747,12 +1241,7 @@ document.getElementById('miro-canvas').addEventListener('drop', (e) => {
 });
 
 // ─── Vertical Toolbar Handlers ───
-let _activeTool = 'select';
-let _penMode = false;
-let _shapeMode = false;
-let _activeShapeType = 'rect';
-let _penPoints = [];
-let _penDrawing = false;
+// State moved to miro-state.js
 
 function setActiveTool(tool) {
   _activeTool = tool;
@@ -1788,14 +1277,7 @@ function setActiveTool(tool) {
   if (!_shapeMode) document.getElementById('miro-shape-panel').classList.remove('show');
 }
 
-let _textCreateMode = false;
-let _gridCreateMode = false;
-let _mindmapCreateMode = false;
-let _widgetCreateMode = false;
-let _trelloCreateMode = false;
-let _embedCreateMode = false;
-let _overlayPageCreateMode = false;
-let _overlayPageCreateIdx = 0;
+// State moved to miro-state.js
 
 document.getElementById('mtb-select').onclick = () => setActiveTool('select');
 document.getElementById('mtb-sticky').onclick = () => setActiveTool('sticky');
@@ -1929,7 +1411,7 @@ document.querySelectorAll('.msp-item').forEach(item => {
 });
 document.getElementById('mtb-pen').onclick = () => setActiveTool('pen');
 /* ─── Grid Size Picker ─── */
-let _gridPickerRows = 3, _gridPickerCols = 3;
+// State moved to miro-state.js
 (function initGridPicker() {
   const panel = document.getElementById('miro-grid-picker');
   const grid = document.getElementById('mgp-grid');
@@ -2029,7 +1511,7 @@ document.getElementById('mtb-mindmap').onclick = () => {
 };
 
 // Track mouse to paste at cursor
-let _mouseX = 0, _mouseY = 0;
+// State moved to miro-state.js
 document.addEventListener('mousemove', e => { _mouseX = e.clientX; _mouseY = e.clientY; });
 
 document.addEventListener('keydown', (e) => {
@@ -3336,7 +2818,7 @@ window.createWidgetFromSelection = function () {
 };
 
 /* ─── Z-Order System (Context Menu) ─── */
-let _ctxTargetCid = null;
+// State moved to miro-state.js
 
 function getCardIndex(page, cid) {
   return (page.miroCards || []).findIndex(c => c.id === cid);
@@ -3850,9 +3332,7 @@ document.getElementById('mtb-more-close').onclick = () => {
 };
 
 // ─── Google Calendar Widget ───
-let _calendarCreateMode = false;
-let _cachedCalendarList = null;
-let _cachedCalendarListTs = 0;
+// State moved to miro-state.js
 const CALENDAR_LIST_CACHE_MS = 5 * 60 * 1000; // 5 min cache
 
 document.getElementById('mtb-calendar').onclick = async () => {
@@ -6275,172 +5755,7 @@ async function placeOverlayPageWidget(pageIdx) {
   showToast(_overlayPageEmojis[pageIdx] + ' ' + _overlayPageNames[pageIdx] + ' widget added');
 }
 
-function buildMiroOverlayWidget(card) {
-  var pIdx = card.overlayPage || 0;
-  // Default to near-fullscreen size if not set
-  if (!card.w || card.w < 100) card.w = Math.max(900, window.innerWidth * 0.85);
-  if (!card.h || card.h < 100) card.h = Math.max(500, window.innerHeight * 0.8);
-
-  var el = document.createElement('div');
-  el.className = 'miro-overlay-widget';
-  el.dataset.cid = card.id;
-  el.style.left = (card.x||0)+'px';
-  el.style.top = (card.y||0)+'px';
-  el.style.width = card.w+'px';
-  el.style.height = card.h+'px';
-
-  // â”€â”€ Header (identical to overlay) â”€â”€
-  var hdr = document.createElement('div');
-  hdr.className = 'ow-hdr';
-
-  // Page switch buttons
-  var pageEmojis = ['\u2600\uFE0F','\uD83D\uDCCA','\uD83D\uDCC8','\uD83C\uDF4E','\uD83C\uDFC3'];
-  var pageNames = ['Today','Gantt','Stats','Fruit','Sprint'];
-  var pageBtns = [];
-  pageEmojis.forEach(function(emoji, i) {
-    var pb = document.createElement('button');
-    pb.textContent = emoji;
-    pb.title = pageNames[i];
-    pb.className = 'ow-page-btn' + (i === pIdx ? ' active' : '');
-    pb.onclick = function(e) {
-      e.stopPropagation();
-      card.overlayPage = i; pIdx = i; card.calOffset = 0;
-      pageBtns.forEach(function(b,j){ b.className = 'ow-page-btn' + (j===i?' active':''); });
-      sv(); _rw();
-    };
-    pageBtns.push(pb);
-    hdr.appendChild(pb);
-  });
-
-  // Separator
-  var sep = document.createElement('div');
-  sep.style.cssText = 'width:1px;height:16px;background:rgba(128,128,128,.3);margin:0 4px;';
-  hdr.appendChild(sep);
-
-  // Nav buttons
-  var _cb = function(txt,tip,fn){
-    var b = document.createElement('button'); b.textContent = txt; b.title = tip;
-    b.onclick = function(e){ e.stopPropagation(); fn(); }; return b;
-  };
-  var _days = function(){ return card.ganttView==='month'?30:card.ganttView==='2week'?14:7; };
-  hdr.appendChild(_cb('\u25C0','Prev',function(){card.calOffset=(card.calOffset||0)-_days();sv();_rw();}));
-  hdr.appendChild(_cb('\u2039','Prev day',function(){card.calOffset=(card.calOffset||0)-1;sv();_rw();}));
-  hdr.appendChild(_cb('Today','Reset',function(){card.calOffset=0;sv();_rw();}));
-  hdr.appendChild(_cb('\u203A','Next day',function(){card.calOffset=(card.calOffset||0)+1;sv();_rw();}));
-  hdr.appendChild(_cb('\u25B6','Next',function(){card.calOffset=(card.calOffset||0)+_days();sv();_rw();}));
-
-  // View toggle
-  var vl = {week:'Wk','2week':'2W',month:'Mo'}, vc = ['week','2week','month'];
-  var vb = _cb(vl[card.ganttView||'2week'],'View',function(){
-    var i = vc.indexOf(card.ganttView||'2week');
-    card.ganttView = vc[(i+1)%vc.length]; card.calOffset=0;
-    vb.textContent = vl[card.ganttView]; sv(); _rw();
-  });
-  hdr.appendChild(vb);
-
-  // Theme toggle
-  var ths = ['light','dark','transparent'];
-  var thI = {light:'\u2600\uFE0F',dark:'\uD83C\uDF19',transparent:'\uD83D\uDC41'};
-  var thB = _cb(thI[card.calTheme||'light'],'Theme',function(){
-    var i = ths.indexOf(card.calTheme||'light');
-    card.calTheme = ths[(i+1)%ths.length]; thB.textContent = thI[card.calTheme];
-    _applyTheme(); sv(); _rw();
-  });
-  hdr.appendChild(thB);
-  hdr.appendChild(_cb('\uD83D\uDD04','Refresh',function(){ _rw(); }));
-  hdr.appendChild(_cb('\uD83D\uDD11','Re-authenticate Google',function(){ if(typeof manualGoogleReAuth==='function'){manualGoogleReAuth().then(function(){_rw();}).catch(function(){});} }));
-
-  // Spacer + delete
-  var spacer = document.createElement('div');
-  spacer.style.flex = '1';
-  hdr.appendChild(spacer);
-
-  var lockBtn = document.createElement('button');
-  lockBtn.textContent = card.locked ? '\uD83D\uDD12' : '\uD83D\uDD13';
-  lockBtn.title = 'Lock/Unlock';
-  lockBtn.className = 'ow-lock-btn';
-  lockBtn.onclick = function(e) {
-    e.stopPropagation();
-    card.locked = !card.locked;
-    lockBtn.textContent = card.locked ? '\uD83D\uDD12' : '\uD83D\uDD13';
-    el.classList.toggle('is-locked', card.locked);
-    sv();
-  };
-  hdr.appendChild(lockBtn);
-
-  var del = _cb('\u2715','Delete',function(){ deleteMiroCard(card.id); });
-  hdr.appendChild(del);
-
-  // â”€â”€ Body â”€â”€
-  var body = document.createElement('div');
-  body.className = 'ow-body';
-  el.appendChild(hdr);
-  el.appendChild(body);
-
-  // â”€â”€ Theme â”€â”€
-  function _applyTheme() {
-    var t = card.calTheme || 'light';
-    el.classList.remove('ow-light','ow-dark','ow-transparent');
-    el.classList.add('ow-' + t);
-  }
-  _applyTheme();
-
-  // â”€â”€ Render (uses overlay API for identical content) â”€â”€
-  var _rendering = false;
-  async function _rw() {
-    if (_rendering) return;
-    _rendering = true;
-    try {
-      // Try to use overlay's exact render functions
-      if (window._overlayAPI && typeof window._overlayAPI.renderInto === 'function') {
-        window._overlayAPI.renderInto(body, pIdx, card.calOffset||0, card.calTheme||'light', card.ganttView||'2week');
-      } else {
-        // Bootstrap: silently open overlay to initialize API, then retry
-        if (typeof window._openGanttOverlay === 'function') {
-          window._openGanttOverlay(0);
-          await new Promise(function(r){ setTimeout(r, 300); });
-          if (typeof window._closeGanttOverlay === 'function') window._closeGanttOverlay();
-          // Now try again
-          if (window._overlayAPI && typeof window._overlayAPI.renderInto === 'function') {
-            window._overlayAPI.renderInto(body, pIdx, card.calOffset||0, card.calTheme||'light', card.ganttView||'2week');
-          } else {
-            body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;">Initializing...</div>';
-            setTimeout(function(){ _rendering = false; _rw(); }, 1500);
-            return;
-          }
-        }
-      }
-    } catch(err) {
-      body.innerHTML = '<div style="text-align:center;padding:40px;color:#e55;">' + err.message + '</div>';
-    }
-    _rendering = false;
-  }
-
-  // â”€â”€ Drag (from header) â”€â”€
-  miroSetupCardDrag(el, card, ['.ow-body','button','.mc-resize-br','.mc-resize-bl','.mc-resize-tr','.mc-resize-tl','.mc-resize-t','.mc-resize-b','.mc-resize-l','.mc-resize-r']);
-
-  // â”€â”€ 8-way Resize â”€â”€
-  attach8WayResize(el, card, 400, 300);
-
-  // â”€â”€ Auto-fit on resize â”€â”€
-  var _rt = null, _lw = 0, _lh = 0;
-  var ro = new ResizeObserver(function() {
-    clearTimeout(_rt);
-    _rt = setTimeout(function() {
-      var w = el.offsetWidth, h = el.offsetHeight;
-      if (w < 50 || h < 50) return;
-      if (Math.abs(w-_lw) < 5 && Math.abs(h-_lh) < 5) return;
-      _lw = w; _lh = h;
-      card.w = w; card.h = h;
-      _rw();
-    }, 600);
-  });
-  ro.observe(el);
-
-  // Initial render
-  requestAnimationFrame(function() { _rw(); });
-  return el;
-}
+function buildMiroOverlayWidget() { return window.buildMiroOverlayWidget(...arguments); }
 document.getElementById('mtb-embed').onclick = () => setActiveTool('embed');
 
 // ─── Calendar List (cached) ───
