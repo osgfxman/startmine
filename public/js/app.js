@@ -1,3 +1,4 @@
+console.log('[APP.JS] ✅ Loaded at', new Date().toISOString());
 // Firebase initialization and token logic moved to js/data/firebase.js
 
 const ENGINES = [
@@ -430,70 +431,22 @@ function sanitizeData(d) {
 
   if (!d.curGroup) d.curGroup = d.groups[0].id;
   if (!d.pages) d.pages = JSON.parse(JSON.stringify(DEF.pages));
+  
   d.pages.forEach((p) => {
     if (!p.groupId) p.groupId = d.groups[0].id;
-    if (p.pageType !== 'miro') {
-      p.pageType = 'miro';
-      if (!p.miroCards) p.miroCards = [];
-      p.zoom = 100;
-      p.panX = 0;
-      p.panY = 0;
-    }
-    if (p.pageType === 'miro' && p.widgets && p.widgets.length > 0) {
-      const startX = 100;
-      const startY = 100;
-      const gap = 40;
-      let cursX = startX;
-      let cursY = startY;
-      let rowMaxH = 0;
-      const colsPerRow = 4;
-      let addedCount = 0;
-      p.widgets.forEach((w) => {
-        let cardW = 320; let cardH = 400;
-        if (w.items && w.items.length > 0) {
-          const wCols = 6; const itemPx = 94;
-          const reqRows = Math.ceil(w.items.length / wCols);
-          cardW = 540; cardH = Math.max(200, 70 + (reqRows * itemPx));
-        } else if (w.type === 'note') {
-          cardW = 280; cardH = 280;
-        } else if (w.type === 'todo') {
-          const items = w.items || [];
-          cardW = 300; cardH = Math.max(200, 70 + (items.length * 40));
-        }
-        p.miroCards.push({
-          id: (typeof uid === 'function' ? uid() : Math.random().toString(36).substr(2, 9)),
-          type: 'bwidget',
-          wType: w.type,
-          title: w.title || 'Widget',
-          emoji: w.emoji || '',
-          content: w.content || '',
-          items: w.items ? JSON.parse(JSON.stringify(w.items)) : [],
-          color: w.color || { r: 255, g: 255, b: 255, a: 1 },
-          x: cursX,
-          y: cursY,
-          w: cardW,
-          h: cardH,
-          display: w.display || 'spark',
-          size: w.size || 'md'
-        });
-        cursX += cardW + gap;
-        rowMaxH = Math.max(rowMaxH, cardH);
-        addedCount++;
-        if (addedCount % colsPerRow === 0) {
-          cursX = startX;
-          cursY += rowMaxH + gap;
-          rowMaxH = 0;
-        }
-      });
-      p.widgets = [];
-      p.cols = undefined;
-    }
     if (!p.widgets) p.widgets = [];
     p.widgets.forEach((w) => {
       if (w.type !== 'note' && !w.items) w.items = [];
-      if (!w.color || (w.color.r < 30 && w.color.g < 30 && w.color.b < 40))
+      if (!w.color || (w.color.r < 30 && w.color.g < 30 && w.color.b < 40)) {
         w.color = { ...DEF_COLOR };
+      }
     });
+    if (p.pageType === 'miro') {
+      if (!p.miroCards) p.miroCards = [];
+      if (p.zoom === undefined) p.zoom = 100;
+      if (p.panX === undefined) p.panX = 0;
+      if (p.panY === undefined) p.panY = 0;
+    }
   });
   if (!d.cur) d.cur = d.pages[0]?.id || 'p0';
   if (!d.inbox) d.inbox = [];
@@ -501,6 +454,7 @@ function sanitizeData(d) {
 }
 
 function initDB() {
+  if (window.__miroBuildersOk) window.__miroBuildersOk();
   isFirstLoad = true;
 
   // If in offline mode, just load from cache and render
@@ -1532,8 +1486,12 @@ async function restoreFromGoogleDrive() {
     modal.querySelectorAll('.gdrive-restore-btn').forEach(btn => {
       btn.onclick = async () => {
         const fileId = btn.dataset.fid;
-        if (!confirm('Restore this backup from Google Drive?\\nCurrent state will be saved as a snapshot first.')) return;
+        if (!confirm('Restore this backup from Google Drive?\
+Current state will be saved as a snapshot first.')) return;
         try {
+          console.log('[RESTORE] Starting restore...');
+          console.log('[RESTORE] Current D:', JSON.stringify(D).substring(0, 500));
+
           // Save current state first
           showToast('💾 Saving current state…');
           await saveSnapshot(true);
@@ -1552,6 +1510,7 @@ async function restoreFromGoogleDrive() {
             showToast('❌ Could not parse backup file', 3000);
             return;
           }
+
           D = imported;
           sanitizeData(D);
           sv(true, true);
@@ -1559,8 +1518,9 @@ async function restoreFromGoogleDrive() {
           modal.style.display = 'none';
           showToast('✅ Restored from Google Drive!', 3000);
         } catch (err) {
-          console.error('[GDRIVE RESTORE ERROR]', err);
-          showToast('❌ Restore failed: ' + err.message, 4000);
+          console.error('[RESTORE FAILED]', err);
+          if (typeof showToast === 'function') showToast('❌ Restore failed: ' + err.message, 8000);
+          return;
         }
       };
     });
@@ -1982,7 +1942,7 @@ function allBm() {
     }
   return r;
 }
-function renderSR() { return window.renderSR(...arguments); }
+
 $si().addEventListener('input', (e) => {
   clearTimeout(srTimer);
   srTimer = setTimeout(() => renderSR(e.target.value.trim()), 80);
@@ -2025,10 +1985,7 @@ $si().addEventListener('keydown', (e) => {
     $si().blur();
   }
 });
-function buildEP() { return window.buildEP(...arguments); }
-// Moved to search.js;
-function buildAcPop() { return window.buildAcPop(...arguments); }
-// Moved to toolbar.js;
+
 
 // Moved to toolbar.js;
 
@@ -2975,12 +2932,12 @@ document.getElementById('inbox-input').addEventListener('paste', (e) => {
     }
   }
 });
-function addToInbox() { return window.addToInbox(...arguments); }
+
 let _dragInboxId = null;
 let _dragBmId = null;
 let _dragBmSrcWid = null;
 
-function buildInbox() { return window.buildInbox(...arguments); }
+
 
 // Quick inbox input in toolbar
 document.getElementById('qi').addEventListener('keydown', (e) => {
@@ -3459,15 +3416,72 @@ function setTabColor(pid, color) {
   buildTabs();
 }
 function buildCols() {
-  document.getElementById('cw').style.display = 'none';
-  document.getElementById('miro-canvas').classList.remove('hidden');
+  const page = cp();
+  const isMiro = page.pageType === 'miro';
+  
+  // Diagnostic Log inside the main render function
+  console.log('[RENDER] Rendering page:', page.name, 'pageType:', page.pageType, 'widgets:', (page.widgets||[]).length, 'miroCards:', (page.miroCards||[]).length);
+  
+  document.getElementById('cw').style.display = isMiro ? 'none' : '';
+  document.getElementById('miro-canvas').classList.toggle('hidden', !isMiro);
+  
   const mz = document.getElementById('miro-zoom');
-  if (mz) mz.classList.add('show');
+  if (mz) mz.classList.toggle('show', isMiro);
+  
   const maf = document.getElementById('miro-add-float');
-  if (maf) maf.classList.add('show');
+  if (maf) maf.classList.toggle('show', isMiro);
+  
   const mtb = document.getElementById('miro-toolbar');
-  if (mtb) mtb.classList.add('show');
-  if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+  if (mtb) mtb.classList.toggle('show', isMiro);
+  
+  const colsWrap = document.getElementById('cols-wrap');
+  if (colsWrap) colsWrap.style.display = isMiro ? 'none' : 'flex';
+  
+  if (isMiro) {
+    if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+    if (typeof buildOutline === 'function') buildOutline();
+    return;
+  }
+  
+  const wrap = document.getElementById('cw');
+  wrap.innerHTML = '';
+  wrap.style.gridTemplateColumns = `repeat(${page.cols || 3},minmax(0,1fr))`;
+  for (let ci = 0; ci < (page.cols || 3); ci++) {
+    const col = document.createElement('div');
+    col.className = 'col';
+    col.dataset.ci = ci;
+    col.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      col.classList.add('dragover');
+    });
+    col.addEventListener('dragleave', () => col.classList.remove('dragover'));
+    col.addEventListener('drop', (e) => {
+      e.preventDefault();
+      col.classList.remove('dragover');
+      if (!dragWid) return;
+      const w = (page.widgets || []).find((x) => x.id === dragWid);
+      if (w) {
+        w.col = ci;
+        sv();
+        buildCols();
+      }
+      dragWid = null;
+    });
+    const colWidgets = (page.widgets || []).filter((w) => w.col === ci);
+    if (ci === (page.cols || 3) - 1) {
+      (page.widgets || []).filter((w) => w.col >= (page.cols || 3)).forEach((w) => colWidgets.push(w));
+    }
+    colWidgets.forEach((w) => col.appendChild(buildWidget(w)));
+    const ab = document.createElement('button');
+    ab.className = 'add-w';
+    ab.innerHTML = '＋ Add Widget';
+    ab.onclick = () => {
+      pColIdx = ci;
+      openM('m-aw');
+    };
+    col.appendChild(ab);
+    wrap.appendChild(col);
+  }
   if (typeof buildOutline === 'function') buildOutline();
 }
 function luma(c) {
@@ -4316,6 +4330,14 @@ document.addEventListener('keydown', (e) => {
   }
 });
 function renderAll() {
+  console.log('[DATA CHECK] Total pages:', D.pages ? D.pages.length : 0);
+  D.pages && D.pages.forEach((p, i) => {
+    const wc = (p.widgets || []).length;
+    const mc = (p.miroCards || []).length;
+    const totalBookmarks = (p.widgets || []).reduce((sum, w) => sum + (w.items || []).length, 0);
+    if (wc > 0 || mc > 0) console.log('[DATA CHECK] Page', i, p.name, '| widgets:', wc, '| miroCards:', mc, '| totalBookmarks:', totalBookmarks);
+  });
+
   buildEnvs();
   buildGroups();
   buildTabs();
@@ -4328,7 +4350,6 @@ function renderAll() {
   buildInbox();
   document.documentElement.style.setProperty('--ac', D.settings.accent || '#6c8fff');
   document.getElementById('ac-dot').style.background = D.settings.accent || '#6c8fff';
-  // FIX: Removed conflicting startmine_cache layer — the proper sm_meta/sm_pages_meta/sm_page_{id} system handles caching
 }
 
 // ─── Export Bookmark Widget to Miro Clipboard (Copy Paste) ───

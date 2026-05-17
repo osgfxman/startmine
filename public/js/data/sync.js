@@ -79,133 +79,143 @@
 
   // Extracted setupShardedListeners
   window.setupShardedListeners = function () {
-  const metaRef = `users/${USER_ID}/startmine_meta`;
-  const pagesMetaRef = `users/${USER_ID}/startmine_pages_meta`;
+    console.log('[SYNC] setupShardedListeners called');
+    try {
+      const metaRef = `users/${USER_ID}/startmine_meta`;
+      const pagesMetaRef = `users/${USER_ID}/startmine_pages_meta`;
 
-  // ─── Instant load from localStorage cache ───
-  if (isFirstLoad) {
-    const cachedMeta = getCachedMeta();
-    const cachedPagesMeta = getCachedPagesMeta();
-    if (cachedMeta && cachedPagesMeta) {
-      D.settings = cachedMeta.settings || D.settings;
-      D.curEnv = cachedMeta.curEnv || D.curEnv;
-      D.curGroup = cachedMeta.curGroup || D.curGroup;
-      D.environments = cachedMeta.environments || D.environments;
-      D.groups = cachedMeta.groups || D.groups;
-      D.inbox = cachedMeta.inbox || D.inbox;
-      D.pages = cachedPagesMeta;
-      const dg = D.settings.defaultGroup || '__last__';
-      const dp = D.settings.defaultPage || '__last__';
-      if (dg !== '__last__' && D.groups.some((g) => g.id === dg)) D.curGroup = dg;
-      if (dp !== '__last__' && D.pages.some((p) => p.id === dp)) D.cur = dp;
-      else {
-        try {
-          const lastPid = localStorage.getItem(LS_CUR_PAGE);
-          if (lastPid && D.pages.some(p => p.id === lastPid)) D.cur = lastPid;
-        } catch(e) {}
+      // ─── Instant load from localStorage cache ───
+      if (isFirstLoad) {
+        const cachedMeta = getCachedMeta();
+        const cachedPagesMeta = getCachedPagesMeta();
+        if (cachedMeta && cachedPagesMeta) {
+          D.settings = cachedMeta.settings || D.settings;
+          D.curEnv = cachedMeta.curEnv || D.curEnv;
+          D.curGroup = cachedMeta.curGroup || D.curGroup;
+          D.environments = cachedMeta.environments || D.environments;
+          D.groups = cachedMeta.groups || D.groups;
+          D.inbox = cachedMeta.inbox || D.inbox;
+          D.pages = cachedPagesMeta;
+          const dg = D.settings.defaultGroup || '__last__';
+          const dp = D.settings.defaultPage || '__last__';
+          if (dg !== '__last__' && D.groups.some((g) => g.id === dg)) D.curGroup = dg;
+          if (dp !== '__last__' && D.pages.some((p) => p.id === dp)) D.cur = dp;
+          else {
+            try {
+              const lastPid = localStorage.getItem(LS_CUR_PAGE);
+              if (lastPid && D.pages.some(p => p.id === lastPid)) D.cur = lastPid;
+            } catch(e) {}
+          }
+          if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
+          // Ensure curGroup matches the restored page
+          const rp2 = D.pages.find(p => p.id === D.cur);
+          if (rp2 && rp2.groupId) D.curGroup = rp2.groupId;
+          // Load cached page data for instant render
+          const cachedPage = getCachedPageData(D.cur);
+          const pg = cp();
+          if (pg && cachedPage) {
+            pg.widgets = cachedPage.widgets || [];
+            pg.miroCards = cachedPage.miroCards || [];
+            _lastSyncedPageData = {
+              widgets: JSON.stringify(pg.widgets),
+              miroCards: JSON.stringify(pg.miroCards)
+            };
+          }
+          renderMeta();
+          buildCols();
+          setSyncStatus('ok', 'Loaded from cache — syncing…');
+        }
       }
-      if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
-      // Ensure curGroup matches the restored page
-      const rp2 = D.pages.find(p => p.id === D.cur);
-      if (rp2 && rp2.groupId) D.curGroup = rp2.groupId;
-      // Load cached page data for instant render
-      const cachedPage = getCachedPageData(D.cur);
-      const pg = cp();
-      if (pg && cachedPage) {
-        pg.widgets = cachedPage.widgets || [];
-        pg.miroCards = cachedPage.miroCards || [];
-        _lastSyncedPageData = {
-          widgets: JSON.stringify(pg.widgets),
-          miroCards: JSON.stringify(pg.miroCards)
+
+      // Listen to Metadata (settings, environments, groups, inbox, active selections)
+      db.ref(metaRef).on('value', (snap) => {
+        if (isOwnWrite()) return;
+        const meta = snap.val() || {
+          settings: { engine: 'bm', accent: '#6c8fff' },
+          curEnv: 'e0',
+          curGroup: 'g0',
+          environments: [{ id: 'e0', name: 'Main Env' }],
+          groups: [{ id: 'g0', name: 'Main Group', envId: 'e0' }],
+          inbox: []
         };
-      }
-      renderMeta();
-      buildCols();
-      setSyncStatus('ok', 'Loaded from cache — syncing…');
+        D.settings = meta.settings || { engine: 'bm', accent: '#6c8fff' };
+        D.curEnv = meta.curEnv || 'e0';
+        D.curGroup = meta.curGroup || 'g0';
+        D.environments = meta.environments || [{ id: 'e0', name: 'Main Env' }];
+        D.groups = meta.groups || [{ id: 'g0', name: 'Main Group', envId: 'e0' }];
+        D.inbox = meta.inbox || [];
+        cacheMeta(meta); // Cache to localStorage
+        renderMeta();
+      });
+
+      // Listen to Pages Directory (names, ids, group associations)
+      db.ref(pagesMetaRef).on('value', (snap) => {
+        if (isOwnWrite()) return;
+        const pagesMeta = snap.val() || [{ id: 'p0', groupId: 'g0', name: 'Home', pageType: 'miro', zoom: 100, panX: 0, panY: 0, bg: '', bgType: 'none' }];
+
+        // FIX: Preserve heavy data (widgets/miroCards) for ALL loaded pages, not just active
+        const heavyDataMap = {};
+        D.pages.forEach(p => {
+          if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0)) {
+            heavyDataMap[p.id] = { widgets: p.widgets || [], miroCards: p.miroCards || [] };
+          }
+        });
+
+        D.pages = pagesMeta;
+        cachePagesMeta(pagesMeta); // Cache to localStorage
+
+        // Re-inject heavy data into ALL pages that had it loaded
+        D.pages.forEach(p => {
+          if (heavyDataMap[p.id]) {
+            p.widgets = heavyDataMap[p.id].widgets;
+            p.miroCards = heavyDataMap[p.id].miroCards;
+          }
+        });
+
+        // Establish baseline for smart pagesMeta diffing in sv()
+        _lastSyncedPagesMetaStr = JSON.stringify(pagesMeta.map(p => ({
+          id: p.id, groupId: p.groupId, name: p.name, pageType: p.pageType,
+          zoom: p.zoom, panX: p.panX, panY: p.panY, bg: p.bg, bgType: p.bgType,
+          tabColor: p.tabColor || ''
+        })));
+
+        if (isFirstLoad) {
+          const dg = D.settings.defaultGroup || '__last__';
+          const dp = D.settings.defaultPage || '__last__';
+          if (dg !== '__last__' && D.groups.some((g) => g.id === dg)) D.curGroup = dg;
+          if (dp !== '__last__' && D.pages.some((p) => p.id === dp)) D.cur = dp;
+          else {
+            try {
+              const lastPid = localStorage.getItem(LS_CUR_PAGE);
+              if (lastPid && D.pages.some(p => p.id === lastPid)) D.cur = lastPid;
+            } catch(e) {}
+          }
+          if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
+          // Ensure curGroup matches the restored page
+          const rp3 = D.pages.find(p => p.id === D.cur);
+          if (rp3 && rp3.groupId) D.curGroup = rp3.groupId;
+          isFirstLoad = false;
+          switchActivePage(D.cur); // This will render All
+        } else {
+          renderMeta();
+        }
+
+        setSyncStatus('ok', 'Realtime Sync Active \u2713');
+      });
+
+      db.ref('.info/connected').on('value', (snap) => {
+        if (snap.val()) {
+          console.log('[SYNC] Connected successfully');
+        } else {
+          console.warn('[SYNC] Disconnected / Offline');
+        }
+        if (!snap.val() && !isFirstLoad) setSyncStatus('err', 'Offline \u2014 changes will sync when reconnected');
+        else if (snap.val() && !isFirstLoad) setSyncStatus('ok', 'Realtime Sync Active \u2713');
+      });
+    } catch(error) {
+      console.error('[SYNC] Connection failed:', error);
     }
-  }
-
-  // Listen to Metadata (settings, environments, groups, inbox, active selections)
-  db.ref(metaRef).on('value', (snap) => {
-    if (isOwnWrite()) return;
-    const meta = snap.val() || {
-      settings: { engine: 'bm', accent: '#6c8fff' },
-      curEnv: 'e0',
-      curGroup: 'g0',
-      environments: [{ id: 'e0', name: 'Main Env' }],
-      groups: [{ id: 'g0', name: 'Main Group', envId: 'e0' }],
-      inbox: []
-    };
-    D.settings = meta.settings || { engine: 'bm', accent: '#6c8fff' };
-    D.curEnv = meta.curEnv || 'e0';
-    D.curGroup = meta.curGroup || 'g0';
-    D.environments = meta.environments || [{ id: 'e0', name: 'Main Env' }];
-    D.groups = meta.groups || [{ id: 'g0', name: 'Main Group', envId: 'e0' }];
-    D.inbox = meta.inbox || [];
-    cacheMeta(meta); // Cache to localStorage
-    renderMeta();
-  });
-
-  // Listen to Pages Directory (names, ids, group associations)
-  db.ref(pagesMetaRef).on('value', (snap) => {
-    if (isOwnWrite()) return;
-    const pagesMeta = snap.val() || [{ id: 'p0', groupId: 'g0', name: 'Home', pageType: 'miro', zoom: 100, panX: 0, panY: 0, bg: '', bgType: 'none' }];
-
-    // FIX: Preserve heavy data (widgets/miroCards) for ALL loaded pages, not just active
-    const heavyDataMap = {};
-    D.pages.forEach(p => {
-      if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0)) {
-        heavyDataMap[p.id] = { widgets: p.widgets || [], miroCards: p.miroCards || [] };
-      }
-    });
-
-    D.pages = pagesMeta;
-    cachePagesMeta(pagesMeta); // Cache to localStorage
-
-    // Re-inject heavy data into ALL pages that had it loaded
-    D.pages.forEach(p => {
-      if (heavyDataMap[p.id]) {
-        p.widgets = heavyDataMap[p.id].widgets;
-        p.miroCards = heavyDataMap[p.id].miroCards;
-      }
-    });
-
-    // Establish baseline for smart pagesMeta diffing in sv()
-    _lastSyncedPagesMetaStr = JSON.stringify(pagesMeta.map(p => ({
-      id: p.id, groupId: p.groupId, name: p.name, pageType: p.pageType,
-      zoom: p.zoom, panX: p.panX, panY: p.panY, bg: p.bg, bgType: p.bgType,
-      tabColor: p.tabColor || ''
-    })));
-
-    if (isFirstLoad) {
-      const dg = D.settings.defaultGroup || '__last__';
-      const dp = D.settings.defaultPage || '__last__';
-      if (dg !== '__last__' && D.groups.some((g) => g.id === dg)) D.curGroup = dg;
-      if (dp !== '__last__' && D.pages.some((p) => p.id === dp)) D.cur = dp;
-      else {
-        try {
-          const lastPid = localStorage.getItem(LS_CUR_PAGE);
-          if (lastPid && D.pages.some(p => p.id === lastPid)) D.cur = lastPid;
-        } catch(e) {}
-      }
-      if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
-      // Ensure curGroup matches the restored page
-      const rp3 = D.pages.find(p => p.id === D.cur);
-      if (rp3 && rp3.groupId) D.curGroup = rp3.groupId;
-      isFirstLoad = false;
-      switchActivePage(D.cur); // This will render All
-    } else {
-      renderMeta();
-    }
-
-    setSyncStatus('ok', 'Realtime Sync Active \u2713');
-  });
-
-  db.ref('.info/connected').on('value', (snap) => {
-    if (!snap.val() && !isFirstLoad) setSyncStatus('err', 'Offline \u2014 changes will sync when reconnected');
-    else if (snap.val() && !isFirstLoad) setSyncStatus('ok', 'Realtime Sync Active \u2713');
-  });
-};
+  };
   window.SM.data.setupShardedListeners = window.setupShardedListeners;
   window.SM.core.expose('setupShardedListeners', window.setupShardedListeners);
 

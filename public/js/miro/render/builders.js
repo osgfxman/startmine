@@ -1,51 +1,72 @@
 // js/miro/render/builders.js
 (function() {
+  let _buildingCanvas = false;
   window.buildMiroCanvas = function buildMiroCanvas() {
-  const page = cp();
-  if (!page.miroCards) page.miroCards = [];
-  const board = document.getElementById('miro-board');
-  // Clear pinned layer (elements from previous page)
-  const _pl = document.getElementById('miro-pinned-layer');
-  if (_pl) _pl.innerHTML = '';
-  // Remove only card elements, preserve selection overlays
-  board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed, .miro-overlay-widget').forEach((el) => el.remove());
-  // Clean up grid toolbars that live in document.body
-  document.querySelectorAll('.mg-toolbar[data-grid-id]').forEach(t => t.remove());
-  // Clear selection state
-  _miroSelected.clear();
-  document.getElementById('miro-sel-frame').style.display = 'none';
-  document.getElementById('miro-sel-box').style.display = 'none';
-  const zoom = (page.zoom || 100) / 100;
-  const px = page.panX || 0,
-    py = page.panY || 0;
-  board.style.transform = `translate(${px}px,${py}px) scale(${zoom})`;
-  // Set inverse zoom so floating UI (toolbars, delete buttons) stays constant screen size
-  board.style.setProperty('--inv-zoom', Math.min(3, Math.max(0.25, 1 / zoom)));
-  document.getElementById('mz-slider').value = page.zoom || 100;
-  document.getElementById('mz-pct').textContent = (page.zoom || 100) + '%';
+  if (_buildingCanvas) { console.warn('[RECURSION BLOCKED]'); return; }
+  _buildingCanvas = true;
+  try {
+    const page = cp();
+    if (!page.miroCards) page.miroCards = [];
+    const board = document.getElementById('miro-board');
+    // Clear pinned layer (elements from previous page)
+    const _pl = document.getElementById('miro-pinned-layer');
+    if (_pl) _pl.innerHTML = '';
+    // Remove only card elements, preserve selection overlays
+    board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed, .miro-overlay-widget').forEach((el) => el.remove());
+    // Clean up grid toolbars that live in document.body
+    document.querySelectorAll('.mg-toolbar[data-grid-id]').forEach(t => t.remove());
+    // Clear selection state
+    _miroSelected.clear();
+    document.getElementById('miro-sel-frame').style.display = 'none';
+    document.getElementById('miro-sel-box').style.display = 'none';
+    const zoom = (page.zoom || 100) / 100;
+    const px = page.panX || 0,
+      py = page.panY || 0;
+    board.style.transform = `translate(${px}px,${py}px) scale(${zoom})`;
+    // Set inverse zoom so floating UI (toolbars, delete buttons) stays constant screen size
+    board.style.setProperty('--inv-zoom', Math.min(3, Math.max(0.25, 1 / zoom)));
+    document.getElementById('mz-slider').value = page.zoom || 100;
+    document.getElementById('mz-pct').textContent = (page.zoom || 100) + '%';
 
-  page.miroCards.forEach((card) => {
+    const buildersMap = {
+      sticky: 'buildMiroSticky',
+      image: 'buildMiroImage',
+      text: 'buildMiroText',
+      shape: 'buildMiroShape',
+      pen: 'buildMiroPen',
+      grid: 'buildMiroGridCard',
+      mindmap: 'buildMiroMindMap',
+      trello: 'buildMiroTrello',
+      bwidget: 'buildMiroBookmarkWidget',
+      array: 'buildMiroArray',
+      calendar: 'buildMiroGantt',
+      gantt: 'buildMiroGantt',
+      embed: 'buildMiroEmbed',
+      'overlay-page': 'buildMiroOverlayWidget',
+    };
     try {
-    if (card.type === 'sticky') board.appendChild(buildMiroSticky(card));
-    else if (card.type === 'image') board.appendChild(buildMiroImage(card));
-    else if (card.type === 'text') board.appendChild(buildMiroText(card));
-    else if (card.type === 'shape') board.appendChild(buildMiroShape(card));
-    else if (card.type === 'pen') board.appendChild(buildMiroPen(card));
-    else if (card.type === 'grid') board.appendChild(buildMiroGridCard(card));
-    else if (card.type === 'mindmap') board.appendChild(buildMiroMindMap(card));
-    else if (card.type === 'trello') board.appendChild(buildMiroTrello(card));
-    else if (card.type === 'bwidget') board.appendChild(buildMiroBookmarkWidget(card));
-    else if (card.type === 'array') board.appendChild(buildMiroArray(card));
-    else if (card.type === 'calendar' || card.type === 'gantt') board.appendChild(buildMiroGantt(card));
-    else if (card.type === 'embed') board.appendChild(buildMiroEmbed(card));
-    else if (card.type === 'overlay-page') board.appendChild(buildMiroOverlayWidget(card));
-    else board.appendChild(buildMiroCard(card));
-    } catch (err) { console.error('[RENDER ERROR]', card.type, card.id, err); }
-  });
-  updateMiroGrid();
-  updateMiroScrollbars();
-  // Auto-fix any base64 images on this page
-  if (typeof _fixBase64ImagesOnPage === 'function') setTimeout(_fixBase64ImagesOnPage, 1000);
+      page.miroCards.forEach((card) => {
+        try {
+          const fnName = buildersMap[card.type];
+          const fn = fnName ? window[fnName] : null;
+          const fallback = window.buildMiroCard;
+          if (typeof fn === 'function') board.appendChild(fn(card));
+          else if (typeof fallback === 'function') board.appendChild(fallback(card));
+        } catch (err) {
+          console.error('[RENDER ERROR]', card && card.type, card && card.id, err);
+        }
+      });
+      if (typeof window.updateMiroGrid === 'function') window.updateMiroGrid();
+      if (typeof window.updateMiroScrollbars === 'function') window.updateMiroScrollbars();
+    } catch (fatal) {
+      console.error('[BUILD MIRO CANVAS FATAL]', fatal);
+      if (typeof showToast === 'function') showToast('❌ Canvas render crashed: ' + fatal.message, 8000);
+    }
+    // Auto-fix any base64 images on this page
+    if (typeof _fixBase64ImagesOnPage === 'function') setTimeout(_fixBase64ImagesOnPage, 1000);
+  } finally {
+    _buildingCanvas = false;
+  }
 };
   window.buildMiroCard = function buildMiroCard(card) {
   const el = document.createElement('div');

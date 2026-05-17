@@ -1,3 +1,4 @@
+console.log('[MIRO-ENGINE.JS] ✅ Loaded at', new Date().toISOString());
 /* ─── Miro Page Engine ─── */
 // State moved to miro-state.js
 
@@ -299,24 +300,24 @@ function convertSelectedTo(targetType) {
 }
 
 /* ─── Miro Infinite Zoom Grid ─── */
-function updateMiroGrid() { return window.updateMiroGrid(...arguments); }
 
-function buildMiroCanvas() { return window.buildMiroCanvas(...arguments); }
 
-function updateMiroScrollbars() { return window.updateMiroScrollbars(...arguments); }
+
+
+
 
 // ─── Video URL Detection ───
-function detectVideoUrl() { return window.detectVideoUrl(...arguments); }
+
 
 // Resolve TikTok short URLs to full URLs
-function resolveTikTokShortUrl() { return window.resolveTikTokShortUrl(...arguments); }
 
-function buildMiroCard() { return window.buildMiroCard(...arguments); }
+
+
 
 // ─── Play video inside card ───
-function _playVideoInCard() { return window._playVideoInCard(...arguments); }
 
-function deleteMiroCard() { return window.deleteMiroCard(...arguments); }
+
+
 
 // Canvas Pan + Rubber-band selection
 (function () {
@@ -5755,7 +5756,7 @@ async function placeOverlayPageWidget(pageIdx) {
   showToast(_overlayPageEmojis[pageIdx] + ' ' + _overlayPageNames[pageIdx] + ' widget added');
 }
 
-function buildMiroOverlayWidget() { return window.buildMiroOverlayWidget(...arguments); }
+
 document.getElementById('mtb-embed').onclick = () => setActiveTool('embed');
 
 // ─── Calendar List (cached) ───
