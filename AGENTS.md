@@ -1,3 +1,5 @@
+⚠️ FIRST: Read ARCHITECTURE.md completely before making ANY changes.
+
 # Startmine — AI Agent Guide
 
 ## Before You Start
