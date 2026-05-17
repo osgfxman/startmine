@@ -1,3 +1,11 @@
+/**
+ * @module InboxUI
+ * @description Manages the inbox quick capture UI and selective import/export
+ * @namespace SM.ui
+ * @depends namespace.js, sync.js
+ * @provides window.buildInbox, window.addToInbox, window.openSelIO, window.closeSelIO, window.selIOSelectAll, window.doSelectiveExport, window.handleSelIOImport, window.doImportFromDrive
+ * @safety Imported data must be carefully merged to prevent accidental overwrite of existing pages
+ */
 // js/ui/inbox-ui.js
 (function() {
   window._dragInboxId = null;
@@ -297,4 +305,22 @@
   document.getElementById('inbox-btn').classList.remove('active-toggle');
   showToast(`📄 Exported ${exportedCount} items to "${pageName}"`, 3000);
 }
+
+SM.ui.buildInbox = typeof buildInbox !== 'undefined' ? buildInbox : window.buildInbox;
+SM.ui.addToInbox = typeof addToInbox !== 'undefined' ? addToInbox : window.addToInbox;
+SM.ui.openSelIO = typeof openSelIO !== 'undefined' ? openSelIO : window.openSelIO;
+SM.ui.closeSelIO = typeof closeSelIO !== 'undefined' ? closeSelIO : window.closeSelIO;
+SM.ui.selIOSelectAll = typeof selIOSelectAll !== 'undefined' ? selIOSelectAll : window.selIOSelectAll;
+SM.ui.doSelectiveExport = typeof doSelectiveExport !== 'undefined' ? doSelectiveExport : window.doSelectiveExport;
+SM.ui.handleSelIOImport = typeof handleSelIOImport !== 'undefined' ? handleSelIOImport : window.handleSelIOImport;
+SM.ui.doImportFromDrive = typeof doImportFromDrive !== 'undefined' ? doImportFromDrive : window.doImportFromDrive;
+
+window.buildInbox = SM.ui.buildInbox;
+window.addToInbox = SM.ui.addToInbox;
+window.openSelIO = SM.ui.openSelIO;
+window.closeSelIO = SM.ui.closeSelIO;
+window.selIOSelectAll = SM.ui.selIOSelectAll;
+window.doSelectiveExport = SM.ui.doSelectiveExport;
+window.handleSelIOImport = SM.ui.handleSelIOImport;
+window.doImportFromDrive = SM.ui.doImportFromDrive;
 })();

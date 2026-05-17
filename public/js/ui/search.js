@@ -1,3 +1,11 @@
+/**
+ * @module Search
+ * @description Provides global search functionality across pages and items
+ * @namespace SM.ui
+ * @depends namespace.js
+ * @provides window.buildEP, window.renderSR
+ * @safety Debounce input to avoid freezing the UI with excessive DOM queries
+ */
 // js/ui/search.js
 (function() {
   let srIdx = -1, srTimer = null;
@@ -96,4 +104,10 @@
   ev.stopPropagation();
   document.getElementById('ep').classList.toggle('open');
 }
+
+SM.ui.buildEP = typeof buildEP !== 'undefined' ? buildEP : window.buildEP;
+SM.ui.renderSR = typeof renderSR !== 'undefined' ? renderSR : window.renderSR;
+
+window.buildEP = SM.ui.buildEP;
+window.renderSR = SM.ui.renderSR;
 })();

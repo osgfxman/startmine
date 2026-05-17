@@ -1,3 +1,11 @@
+/**
+ * @module MiroState
+ * @description Holds the shared state and coordinate variables for the Miro engine
+ * @namespace SM.miro.state
+ * @depends namespace.js
+ * @provides SM.miro.state variables (activeTool, panX, zoom, selection bounds, etc.)
+ * @safety Do not overwrite the entire state object, only mutate its properties
+ */
 // js/miro/miro-state.js
 (function() {
   // We use window assignments or var to ensure they are available globally

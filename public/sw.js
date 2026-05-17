@@ -1,4 +1,4 @@
-/* ─── Startmine Service Worker ─── */
+/**\n * @module ServiceWorker\n * @description Intercepts fetch requests to provide offline capability and precaching\n * @namespace N/A (ServiceWorkerScope)\n * @depends none\n * @provides install, activate, fetch event listeners\n * @safety Always test caching logic carefully. Never cache Firebase API endpoints.\n */\n/* ─── Startmine Service Worker ─── */
 const CACHE_NAME = 'startmine-1778990675';
 const STATIC_ASSETS = [
   '/',
@@ -8,6 +8,7 @@ const STATIC_ASSETS = [
   '/css/base.css?v=1778990675',
   '/css/miro.css?v=1778990675',
   '/js/core/namespace.js?v=1778990675',
+  '/js/core/events.js?v=1778990675',
   '/js/core/utils.js?v=1778990675',
   '/js/data/firebase.js?v=1778990675',
   '/js/data/offline.js?v=1778990675',
@@ -20,6 +21,7 @@ const STATIC_ASSETS = [
   '/js/miro/miro-state.js?v=1778990675',
   '/js/miro/render/builders.js?v=1778990675',
   '/js/miro/layout/grid.js?v=1778990675',
+  '/js/core/health.js?v=1778990675',
   '/js/app.js?v=1778990675',
   '/js/miro-engine.js?v=1778990675',
   '/js/thumbnails.js?v=1778990675',

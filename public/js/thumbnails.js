@@ -1,3 +1,11 @@
+/**
+ * @module Thumbnails
+ * @description Handles fetching and generating thumbnail previews for URLs
+ * @namespace SM.ui
+ * @depends namespace.js
+ * @provides window.updateImageDimensions, window.refreshThumbnails, window.generateThumbnailsForSelection
+ * @safety Do not overload external thumbnail services (use caching headers)
+ */
 /* ─── Fast Thumbnail Cache Engine ─── */
 
 // ─── Thumbnail IndexedDB Cache (separate DB to avoid version conflicts) ───
@@ -5773,3 +5781,12 @@ function _startCropMode(el, card, iframe, iframeWrap, applyCrop, glass, resetCro
   document.addEventListener('keydown', onEscape);
 }
 
+
+// Window aliases for backward compatibility
+SM.ui.updateImageDimensions = typeof updateImageDimensions !== 'undefined' ? updateImageDimensions : window.updateImageDimensions;
+SM.ui.refreshThumbnails = typeof refreshThumbnails !== 'undefined' ? refreshThumbnails : window.refreshThumbnails;
+SM.ui.generateThumbnailsForSelection = typeof generateThumbnailsForSelection !== 'undefined' ? generateThumbnailsForSelection : window.generateThumbnailsForSelection;
+
+window.updateImageDimensions = SM.ui.updateImageDimensions;
+window.refreshThumbnails = SM.ui.refreshThumbnails;
+window.generateThumbnailsForSelection = SM.ui.generateThumbnailsForSelection;

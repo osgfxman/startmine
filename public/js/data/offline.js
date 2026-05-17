@@ -1,3 +1,11 @@
+/**
+ * @module Offline
+ * @description Manages offline mode toggles and local caching fallback
+ * @namespace SM.data
+ * @depends namespace.js
+ * @provides window.toggleOfflineMode, window.setOfflineMode, window.updateOfflineUI, window.markDirtyOffline
+ * @safety Do not trigger live DB reads while in offline mode
+ */
 // js/data/offline.js
 (function() {
   /* ─── Offline Mode (default ON) ─── */
@@ -221,4 +229,14 @@
   window.SM.core.expose('getCachedPageData', getCachedPageData);
   window.SM.core.expose('getLsUsage', getLsUsage);
   window.SM.core.expose('getLsCapacity', getLsCapacity);
+
+SM.data.toggleOfflineMode = typeof toggleOfflineMode !== 'undefined' ? toggleOfflineMode : window.toggleOfflineMode;
+SM.data.setOfflineMode = typeof setOfflineMode !== 'undefined' ? setOfflineMode : window.setOfflineMode;
+SM.data.updateOfflineUI = typeof updateOfflineUI !== 'undefined' ? updateOfflineUI : window.updateOfflineUI;
+SM.data.markDirtyOffline = typeof markDirtyOffline !== 'undefined' ? markDirtyOffline : window.markDirtyOffline;
+
+window.toggleOfflineMode = SM.data.toggleOfflineMode;
+window.setOfflineMode = SM.data.setOfflineMode;
+window.updateOfflineUI = SM.data.updateOfflineUI;
+window.markDirtyOffline = SM.data.markDirtyOffline;
 })();

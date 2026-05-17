@@ -1,3 +1,11 @@
+/**
+ * @module Firebase
+ * @description Initializes Firebase app and authentication services
+ * @namespace SM.data
+ * @depends namespace.js
+ * @provides window.auth, window.db, window.provider
+ * @safety Ensure Firebase SDKs are loaded before this file runs
+ */
 // js/data/firebase.js
 const firebaseConfig = {
   apiKey: 'AIzaSyB-CeazTspR22753qVHzMlmgePPGVLhYdk',
@@ -127,3 +135,7 @@ window.SM.core.expose('isGoogleTokenExpired', isGoogleTokenExpired);
 window.SM.core.expose('ensureGoogleToken', ensureGoogleToken);
 window.SM.core.expose('ensureGoogleTokenFresh', ensureGoogleTokenFresh);
 window.SM.core.expose('manualGoogleReAuth', manualGoogleReAuth);
+
+// Window aliases for backward compatibility
+SM.data.auth = window.auth;
+SM.data.db = window.db;

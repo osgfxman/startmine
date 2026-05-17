@@ -1,3 +1,11 @@
+/**
+ * @module Grid
+ * @description Handles grid snapping, background dot rendering, and coordinate alignments
+ * @namespace SM.miro.layout
+ * @depends namespace.js, miro-state.js
+ * @provides window.updateMiroGrid, window.snapToGrid
+ * @safety Performance critical during pan/zoom. Keep calculations lightweight.
+ */
 // js/miro/layout/grid.js
 (function() {
   window.updateMiroGrid = function updateMiroGrid() {
@@ -178,4 +186,11 @@
     canvas.appendChild(sb);
   }
 };
+
+SM.miro.layout = SM.miro.layout || {};
+SM.miro.layout.updateMiroGrid = typeof updateMiroGrid !== 'undefined' ? updateMiroGrid : window.updateMiroGrid;
+SM.miro.layout.snapToGrid = typeof snapToGrid !== 'undefined' ? snapToGrid : window.snapToGrid;
+
+window.updateMiroGrid = SM.miro.layout.updateMiroGrid;
+window.snapToGrid = SM.miro.layout.snapToGrid;
 })();

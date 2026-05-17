@@ -1,3 +1,11 @@
+/**
+ * @module Namespace
+ * @description Creates the global SM namespace and expose helper
+ * @namespace SM, SM.core
+ * @depends none (must load first)
+ * @provides window.SM, SM.core.expose(name, fn)
+ * @safety This file must be the first JS to load
+ */
 // js/core/namespace.js
 window.SM = window.SM || {};
 window.SM.core = window.SM.core || {};

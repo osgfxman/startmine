@@ -1,3 +1,11 @@
+/**
+ * @module Utils
+ * @description Global utility functions for DOM, colors, and layout helpers
+ * @namespace SM.core
+ * @depends namespace.js
+ * @provides SM.core.uid, SM.core.esc, SM.core.cp, SM.core.fw, etc.
+ * @safety Pure functions mostly, do not mutate state directly
+ */
 // js/core/utils.js
 (function() {
   function uid() {

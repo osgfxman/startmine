@@ -1,3 +1,11 @@
+/**
+ * @module Outline
+ * @description Renders the hierarchical outline view of the canvas
+ * @namespace SM.miro.outline
+ * @depends namespace.js, miro-state.js
+ * @provides window.toggleOutline, window.updateOutline
+ * @safety Only load elements currently visible in the outline panel to save memory
+ */
 /* ─── Enhanced Outline Sidebar ─── */
 function toggleOutline() {
   const side = document.getElementById('outline-side');
@@ -479,3 +487,11 @@ function scrollToMiroCard(cid) {
   if (typeof addMiroSelect === 'function') addMiroSelect(cid);
   zoomToFitCard(cid);
 }
+
+// Window aliases for backward compatibility
+SM.miro.outline = SM.miro.outline || {};
+SM.miro.outline.toggleOutline = typeof toggleOutline !== 'undefined' ? toggleOutline : window.toggleOutline;
+SM.miro.outline.updateOutline = typeof updateOutline !== 'undefined' ? updateOutline : window.updateOutline;
+
+window.toggleOutline = SM.miro.outline.toggleOutline;
+window.updateOutline = SM.miro.outline.updateOutline;

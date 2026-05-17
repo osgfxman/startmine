@@ -1,3 +1,11 @@
+/**
+ * @module Toasts
+ * @description Displays temporary toast notifications to the user
+ * @namespace SM.ui
+ * @depends namespace.js
+ * @provides window.showToast
+ * @safety Safe to call from anywhere, does not mutate app state
+ */
 // js/ui/toasts.js
 (function() {
   let _toastTimer;
@@ -22,4 +30,8 @@
 
   window.SM.ui.showToast = showToast;
   window.SM.core.expose('showToast', showToast);
+
+SM.ui = SM.ui || {};
+SM.ui.showToast = typeof showToast !== 'undefined' ? showToast : window.showToast;
+window.showToast = SM.ui.showToast;
 })();

@@ -1,3 +1,11 @@
+/**
+ * @module Modals
+ * @description Handles opening and closing of modal dialogs
+ * @namespace SM.ui
+ * @depends namespace.js
+ * @provides window.openM, window.closeM
+ * @safety Ensure modal IDs passed actually exist in the DOM
+ */
 // js/ui/modals.js
 (function() {
   function openM(id) {
@@ -58,4 +66,10 @@
 
   window.SM.core.expose('openM', openM);
   window.SM.core.expose('closeM', closeM);
+
+SM.ui.openM = typeof openM !== 'undefined' ? openM : window.openM;
+SM.ui.closeM = typeof closeM !== 'undefined' ? closeM : window.closeM;
+
+window.openM = SM.ui.openM;
+window.closeM = SM.ui.closeM;
 })();

@@ -1,3 +1,11 @@
+/**
+ * @module Sync
+ * @description Handles data synchronization between local cache and Firebase
+ * @namespace SM.data
+ * @depends namespace.js, firebase.js, offline.js
+ * @provides window.syncNow, window.sv, window.setupShardedListeners, window.forceLocalSave, window.detachAllListeners
+ * @safety Never write empty page data to Firebase. Always verify cache before push.
+ */
 // js/data/sync.js
 (function() {
   // Extracted syncNow
@@ -526,4 +534,16 @@
   window.SM.data.isOwnWrite = window.isOwnWrite;
   window.SM.core.expose('isOwnWrite', window.isOwnWrite);
 
+
+SM.data.syncNow = typeof syncNow !== 'undefined' ? syncNow : window.syncNow;
+SM.data.sv = typeof sv !== 'undefined' ? sv : window.sv;
+SM.data.setupShardedListeners = typeof setupShardedListeners !== 'undefined' ? setupShardedListeners : window.setupShardedListeners;
+SM.data.forceLocalSave = typeof forceLocalSave !== 'undefined' ? forceLocalSave : window.forceLocalSave;
+SM.data.detachAllListeners = typeof detachAllListeners !== 'undefined' ? detachAllListeners : window.detachAllListeners;
+
+window.syncNow = SM.data.syncNow;
+window.sv = SM.data.sv;
+window.setupShardedListeners = SM.data.setupShardedListeners;
+window.forceLocalSave = SM.data.forceLocalSave;
+window.detachAllListeners = SM.data.detachAllListeners;
 })();

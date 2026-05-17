@@ -31,12 +31,21 @@
   document.getElementById('io-pop').classList.remove('open');
 }
   document.getElementById('exp-csv').onclick = () => {
-  let csv = 'Title,URL,Widget,Page\n';
+  let csv = 'Title,URL,Widget,Page\/**
+ * @module Toolbar
+ * @description Manages toolbar interactions and action popups
+ * @namespace SM.ui
+ * @depends namespace.js
+ * @provides window.buildAcPop, window.buildSettings, window.buildImpJson
+ * @safety Do not duplicate listeners if rebuilt multiple times
+ */
+n';
   for (const pg of D.pages)
     for (const w of pg.widgets || []) {
       if (!w.items) continue;
       for (const bm of w.items)
-        csv += `"${(bm.label || '').replace(/"/g, '""')}","${(bm.url || '').replace(/"/g, '""')}","${(w.title || '').replace(/"/g, '""')}","${(pg.name || '').replace(/"/g, '""')}"\n`;
+        csv += `"${(bm.label || '').replace(/"/g, '""')}","${(bm.url || '').replace(/"/g, '""')}","${(w.title || '').replace(/"/g, '""')}","${(pg.name || '').replace(/"/g, '""')}"
+`;
     }
   const b = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
@@ -160,4 +169,7 @@ document.getElementById('dup-all').onclick = () => {
   document.getElementById('dup-page').classList.remove('ba');
   buildDupReport();
 };
+
+SM.ui.buildAcPop = typeof buildAcPop !== 'undefined' ? buildAcPop : window.buildAcPop;
+window.buildAcPop = SM.ui.buildAcPop;
 })();

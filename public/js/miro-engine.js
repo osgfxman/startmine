@@ -1,3 +1,11 @@
+/**
+ * @module MiroEngine
+ * @description Core event loop, interaction handling, and tools for the Miro canvas
+ * @namespace SM.miro.engine
+ * @depends namespace.js, miro-state.js, builders.js, grid.js
+ * @provides window.setActiveTool, window.deleteMiroCard, window.performUndo, window.unpinAll, window.createWidgetFromSelection
+ * @safety Prevent conflicting touch and mouse interactions
+ */
 console.log('[MIRO-ENGINE.JS] ✅ Loaded at', new Date().toISOString());
 /* ─── Miro Page Engine ─── */
 // State moved to miro-state.js
@@ -3655,7 +3663,9 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
       bar.style.cssText='position:absolute;left:'+lP+'%;width:'+wP+'%;height:'+bH+'px;top:'+tP+'px;background:'+_barColor+';border-radius:3px;font-size:'+Math.min(.75,Math.max(.4,bH/18))+'rem;color:'+_barTxt+';padding:0 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:grab;display:flex;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,.3);z-index:2;font-weight:500;';
       var eS=new Date(ev.start),eE=new Date(ev.end);
       var fm=function(t){return t.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});};
-      bar.title=ev.summary+'\n'+fm(eS)+' \u2014 '+fm(eE)+'\n'+ev.calendarName;bar.textContent=ev.summary||'';
+      bar.title=ev.summary+'
+'+fm(eS)+' \u2014 '+fm(eE)+'
+'+ev.calendarName;bar.textContent=ev.summary||'';
       bar.addEventListener('click',function(e2){if(bar._dr){bar._dr=false;return;}e2.stopPropagation();if(typeof showCalendarEventForm==='function')showCalendarEventForm(body,el,card,{mode:'edit',calendarId:ev.calendarId,eventId:ev.id,summary:ev.summary,description:ev.description,startTime:eS,endTime:eE});});
       bar.addEventListener('mousedown',function(e3){if(e3.button!==0)return;e3.stopPropagation();e3.preventDefault();bar._dr=false;var sx=e3.clientX,sy=e3.clientY,tcR=tc.getBoundingClientRect(),tcW=tcR.width;var oL=parseFloat(bar.style.left),oW=parseFloat(bar.style.width),oDMs=dMs;var tip=document.createElement('div');tip.style.cssText='position:fixed;padding:4px 10px;background:rgba(0,0,0,.9);color:#fff;border-radius:6px;font-size:.75rem;z-index:99999;pointer-events:none;font-family:var(--font);white-space:nowrap;';document.body.appendChild(tip);bar.style.cursor='grabbing';bar.style.zIndex='100';bar.style.opacity='.8';var tT=function(pc2){var m=Math.round(pc2/100*1440),h=Math.floor(m/60),mi=m%60,ap=h>=12?'pm':'am';h=h%12||12;return h+':'+String(mi).padStart(2,'0')+ap;};var cDMs=oDMs;
       var onM=function(mv){bar._dr=true;var dx=mv.clientX-sx;var nl=oL+(dx/tcW)*100;var _sn=mv.ctrlKey?(100/1440):mv.altKey?(snap/2):snap;nl=Math.round(nl/_sn)*_sn;if(nl<0)nl=0;if(nl+oW>100)nl=100-oW;bar.style.left=nl+'%';var rows=wrap.querySelectorAll('[data-day-ms]');for(var i=0;i<rows.length;i++){var rr=rows[i].getBoundingClientRect();if(mv.clientY>=rr.top&&mv.clientY<rr.bottom){cDMs=parseInt(rows[i].dataset.dayMs);break;}}tip.textContent=tT(nl)+' \u2014 '+tT(nl+oW);tip.style.left=(mv.clientX+12)+'px';tip.style.top=(mv.clientY-22)+'px';};
@@ -4085,7 +4095,8 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
               var cellTitle = '';
               if (slotEvts.length > 0) {
                 cellBg = slotEvts[0].color || '#4285f4';
-                cellTitle = slotEvts.map(function(e2) { return (e2.summary||'') + ' \u2022 ' + (e2.calendarName||''); }).join('\n');
+                cellTitle = slotEvts.map(function(e2) { return (e2.summary||'') + ' \u2022 ' + (e2.calendarName||''); }).join('
+');
               }
 
               var hasFruit = (frSlotMap[absSlotIdx] || []).length > 0;
@@ -4390,9 +4401,11 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
                 var planCellEvts=planSlotMap[absSlot]||[];
                 // Tooltip
                 var tipText=isSpec?sessTips[si]:(fmtTime(sMn)+'-'+fmtTime(eMn));
-                if(sEvts.length>0)tipText=sEvts.map(function(e2){return(e2.summary||'')+' '+fmtTime(sMn)+'-'+fmtTime(eMn);}).join('\n');
+                if(sEvts.length>0)tipText=sEvts.map(function(e2){return(e2.summary||'')+' '+fmtTime(sMn)+'-'+fmtTime(eMn);}).join('
+');
                 if(hFr)tipText+=(' \uD83C\uDF4E');
-                if(planCellEvts.length>0)tipText+=('\n\u2705 '+planCellEvts.map(function(pe){return pe.summary||'';}).join(', '));
+                if(planCellEvts.length>0)tipText+=('
+\u2705 '+planCellEvts.map(function(pe){return pe.summary||'';}).join(', '));
                 var ec=document.createElement('div');ec.className='pomo-ev';
                 ec.title=tipText;
                 ec.style.cssText='width:'+cSize+'px;flex-shrink:0;position:relative;background:'+(cBg!=='transparent'?cBg:(isBr?'rgba(128,128,128,.06)':bg2))+';cursor:pointer;border-right:1px solid '+(isDk?'rgba(255,255,255,.06)':'rgba(0,0,0,.06)')+';display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;'+(isNow?'outline:2px solid #ff6b35;outline-offset:-1px;animation:pomoPulse 1.5s infinite;z-index:1;':'');
@@ -6901,7 +6914,9 @@ function _renderCalGrid(container, el, card, events, startDate, days, now) {
       }
       const txtColor = _textColor(color);
       evEl.style.cssText = `position:absolute;top:${top}px;left:${leftPct}%;width:${widthPct}%;height:${displayH}px;background:${color};border-radius:3px;padding:1px 3px;font-size:.42rem;color:${txtColor};overflow:hidden;cursor:pointer;z-index:2;opacity:.9;line-height:1.15;box-sizing:border-box;font-weight:600;text-shadow:${txtColor==='#fff'?'0 1px 2px rgba(0,0,0,.4)':'none'};`;
-      evEl.title = `${ev.summary}\n${ev.calendarName}\n${ev._start.toLocaleTimeString([], {hour:'numeric',minute:'2-digit',hour12:true})} - ${ev._end.toLocaleTimeString([], {hour:'numeric',minute:'2-digit',hour12:true})}`;
+      evEl.title = `${ev.summary}
+${ev.calendarName}
+${ev._start.toLocaleTimeString([], {hour:'numeric',minute:'2-digit',hour12:true})} - ${ev._end.toLocaleTimeString([], {hour:'numeric',minute:'2-digit',hour12:true})}`;
       evEl.textContent = ev.summary;
 
       evEl.addEventListener('mouseenter', () => { evEl.style.opacity = '1'; evEl.style.boxShadow = '0 0 6px rgba(255,255,255,.3)'; });
@@ -7130,4 +7145,17 @@ function _renderCalGrid(container, el, card, events, startDate, days, now) {
 
   // Apply saved state on load
   applyHiddenState();
+
+SM.miro.engine = SM.miro.engine || {};
+SM.miro.engine.setActiveTool = typeof setActiveTool !== 'undefined' ? setActiveTool : window.setActiveTool;
+SM.miro.engine.deleteMiroCard = typeof deleteMiroCard !== 'undefined' ? deleteMiroCard : window.deleteMiroCard;
+SM.miro.engine.performUndo = typeof performUndo !== 'undefined' ? performUndo : window.performUndo;
+SM.miro.engine.unpinAll = typeof unpinAll !== 'undefined' ? unpinAll : window.unpinAll;
+SM.miro.engine.createWidgetFromSelection = typeof createWidgetFromSelection !== 'undefined' ? createWidgetFromSelection : window.createWidgetFromSelection;
+
+window.setActiveTool = SM.miro.engine.setActiveTool;
+window.deleteMiroCard = SM.miro.engine.deleteMiroCard;
+window.performUndo = SM.miro.engine.performUndo;
+window.unpinAll = SM.miro.engine.unpinAll;
+window.createWidgetFromSelection = SM.miro.engine.createWidgetFromSelection;
 })();

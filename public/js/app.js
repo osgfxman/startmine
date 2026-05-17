@@ -1,3 +1,11 @@
+/**
+ * @module App
+ * @description Main application entry point. Initializes DB, handles primary UI rendering.
+ * @namespace SM
+ * @depends All other modules (must load last)
+ * @provides window.renderAll, window.buildCols, window.saveAllBackups, window.openSnapshotModal
+ * @safety NEVER create duplicate function declarations here that override window aliases.
+ */
 console.log('[APP.JS] ✅ Loaded at', new Date().toISOString());
 // Firebase initialization and token logic moved to js/data/firebase.js
 
@@ -396,6 +404,7 @@ auth.onAuthStateChanged((user) => {
     if (!_googleAccessToken) {
       restoreGoogleToken();
     }
+    if (SM.core.runHealthCheck) SM.core.runHealthCheck();
     initDB();
   } else {
     USER_ID = null;
@@ -976,7 +985,8 @@ function openSnapshotModal() {
         </div>
         <button class="snap-restore-btn" title="Restore this version">Restore</button>`;
       row.querySelector('.snap-restore-btn').onclick = () => {
-        if (confirm('Are you sure you want to restore this snapshot?\\nCurrent state will be saved first as a safety backup.')) {
+        if (confirm('Are you sure you want to restore this snapshot?
+Current state will be saved first as a safety backup.')) {
           restoreSnapshot(s.key);
         }
       };
@@ -1272,7 +1282,11 @@ async function doImportFromDrive() {
     if (files.length === 0) { showToast('No backups found on Google Drive', 3000); return; }
     
     // Show file picker
-    const pick = prompt('Available backups:\\n' + files.map((f, i) => `${i+1}. ${f.name}`).join('\\n') + '\\n\\nEnter number:');
+    const pick = prompt('Available backups:
+' + files.map((f, i) => `${i+1}. ${f.name}`).join('
+') + '
+
+Enter number:');
     const idx = parseInt(pick) - 1;
     if (isNaN(idx) || idx < 0 || idx >= files.length) return;
     
@@ -1536,7 +1550,10 @@ Current state will be saved as a snapshot first.')) return;
 function getGitHubPAT() {
   let pat = localStorage.getItem('gh_pat');
   if (!pat) {
-    pat = prompt('Enter your GitHub Personal Access Token (PAT).\nThis is stored locally and only needs to be entered once.\n\nGet one from: github.com/settings/tokens');
+    pat = prompt('Enter your GitHub Personal Access Token (PAT).
+This is stored locally and only needs to be entered once.
+
+Get one from: github.com/settings/tokens');
     if (pat && pat.trim()) {
       localStorage.setItem('gh_pat', pat.trim());
     } else {
@@ -1696,7 +1713,8 @@ async function restoreFromGitHub() {
     modal.querySelectorAll('.github-restore-btn').forEach(btn => {
       btn.onclick = async () => {
         const sha = btn.dataset.sha;
-        if (!confirm('Restore this version from GitHub?\\nCurrent state will be saved as a snapshot first.')) return;
+        if (!confirm('Restore this version from GitHub?
+Current state will be saved as a snapshot first.')) return;
         try {
           showToast('💾 Saving current state…');
           await saveSnapshot(true);
@@ -1709,7 +1727,8 @@ async function restoreFromGitHub() {
           );
           if (!fileResp.ok) throw new Error('Could not download version');
           const fileData = await fileResp.json();
-          const raw = JSON.parse(decodeURIComponent(escape(atob(fileData.content.replace(/\n/g, '')))));
+          const raw = JSON.parse(decodeURIComponent(escape(atob(fileData.content.replace(/
+/g, '')))));
 
           const imported = _parseImport(raw);
           if (!imported) {
@@ -2138,7 +2157,8 @@ function _importCSV(text) {
     cols.push(cur.trim());
     return cols.map((c) => c.replace(/^"|"$/g, '').replace(/""/g, '"'));
   }
-  const lines = text.trim().split(/\r?\n/);
+  const lines = text.trim().split(/\r?
+/);
   const result = JSON.parse(JSON.stringify(DEF));
   result.pages = [];
   result.groups = [{ id: 'g0', name: 'Imported CSV', envId: result.environments[0].id }];
@@ -2350,7 +2370,8 @@ document.getElementById('imp-startme').onchange = function (e) {
           result.pages.length +
           ' folders containing ' +
           result.pages.reduce((s, p) => s + (p.miroCards || []).length, 0) +
-          ' clusters?\nThis will REPLACE all current data.',
+          ' clusters?
+This will REPLACE all current data.',
         )
       )
         return;
@@ -4377,7 +4398,8 @@ function exportToMiroClipboard(widgetId) {
   };
 
   localStorage.setItem('miro_clipboard', JSON.stringify([miroCard]));
-  alert('✅ Widget copied!\nOpen a Miro page and press Ctrl+V to paste the fully interactive widget.');
+  alert('✅ Widget copied!
+Open a Miro page and press Ctrl+V to paste the fully interactive widget.');
 }
 
 // ─── Export Bookmark Widget to Miro Page (Legacy Grid) ───
@@ -4522,3 +4544,14 @@ window.convertPageToMiro = function (pageId) {
 // in setupShardedListeners() for instant loading.
 // Clean up any leftover stale cache on first load:
 try { localStorage.removeItem('startmine_cache'); localStorage.removeItem('startmine_cache_ts'); } catch(e) {}
+
+// Window aliases for backward compatibility
+SM.renderAll = typeof renderAll !== 'undefined' ? renderAll : window.renderAll;
+SM.buildCols = typeof buildCols !== 'undefined' ? buildCols : window.buildCols;
+SM.saveAllBackups = typeof saveAllBackups !== 'undefined' ? saveAllBackups : window.saveAllBackups;
+SM.openSnapshotModal = typeof openSnapshotModal !== 'undefined' ? openSnapshotModal : window.openSnapshotModal;
+
+window.renderAll = SM.renderAll;
+window.buildCols = SM.buildCols;
+window.saveAllBackups = SM.saveAllBackups;
+window.openSnapshotModal = SM.openSnapshotModal;

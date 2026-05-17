@@ -1,3 +1,11 @@
+/**
+ * @module Alignment
+ * @description Provides tools for aligning, distributing, and locking selected elements
+ * @namespace SM.miro.alignment
+ * @depends namespace.js, miro-state.js
+ * @provides window.alignSelected, window.distributeSelected, window.groupSelected
+ * @safety Calculate bounding boxes correctly before mutating child coordinates
+ */
 // ─── Alignment Handle Drag (Miro-style progressive spacing) ───
 (function () {
   const handle = document.getElementById('miro-align-handle');
@@ -426,4 +434,13 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
       document.addEventListener('mouseup', onUp);
     });
   });
+
+SM.miro.alignment = SM.miro.alignment || {};
+SM.miro.alignment.alignSelected = typeof alignSelected !== 'undefined' ? alignSelected : window.alignSelected;
+SM.miro.alignment.distributeSelected = typeof distributeSelected !== 'undefined' ? distributeSelected : window.distributeSelected;
+SM.miro.alignment.groupSelected = typeof groupSelected !== 'undefined' ? groupSelected : window.groupSelected;
+
+window.alignSelected = SM.miro.alignment.alignSelected;
+window.distributeSelected = SM.miro.alignment.distributeSelected;
+window.groupSelected = SM.miro.alignment.groupSelected;
 })();

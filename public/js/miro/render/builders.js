@@ -1,3 +1,11 @@
+/**
+ * @module Builders
+ * @description DOM builders and rendering loops for Miro canvas cards
+ * @namespace SM.miro.render
+ * @depends namespace.js, miro-state.js, utils.js
+ * @provides window.buildMiroCanvas, window.buildMiroSticky, window.buildMiroImage, window.buildMiroText, etc.
+ * @safety Must use buildersMap with fallbacks. Recursion guard (_buildingCanvas) must wrap execution.
+ */
 // js/miro/render/builders.js
 (function() {
   let _buildingCanvas = false;
@@ -514,4 +522,19 @@
   buildMiroCanvas();
   if (typeof buildOutline === 'function') buildOutline();
 };
+
+SM.miro.render = SM.miro.render || {};
+SM.miro.render.buildMiroCanvas = typeof buildMiroCanvas !== 'undefined' ? buildMiroCanvas : window.buildMiroCanvas;
+SM.miro.render.buildMiroSticky = typeof buildMiroSticky !== 'undefined' ? buildMiroSticky : window.buildMiroSticky;
+SM.miro.render.buildMiroImage = typeof buildMiroImage !== 'undefined' ? buildMiroImage : window.buildMiroImage;
+SM.miro.render.buildMiroText = typeof buildMiroText !== 'undefined' ? buildMiroText : window.buildMiroText;
+SM.miro.render.buildMiroShape = typeof buildMiroShape !== 'undefined' ? buildMiroShape : window.buildMiroShape;
+SM.miro.render.buildMiroPen = typeof buildMiroPen !== 'undefined' ? buildMiroPen : window.buildMiroPen;
+
+window.buildMiroCanvas = SM.miro.render.buildMiroCanvas;
+window.buildMiroSticky = SM.miro.render.buildMiroSticky;
+window.buildMiroImage = SM.miro.render.buildMiroImage;
+window.buildMiroText = SM.miro.render.buildMiroText;
+window.buildMiroShape = SM.miro.render.buildMiroShape;
+window.buildMiroPen = SM.miro.render.buildMiroPen;
 })();
