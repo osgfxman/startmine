@@ -3663,9 +3663,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
       bar.style.cssText='position:absolute;left:'+lP+'%;width:'+wP+'%;height:'+bH+'px;top:'+tP+'px;background:'+_barColor+';border-radius:3px;font-size:'+Math.min(.75,Math.max(.4,bH/18))+'rem;color:'+_barTxt+';padding:0 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:grab;display:flex;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,.3);z-index:2;font-weight:500;';
       var eS=new Date(ev.start),eE=new Date(ev.end);
       var fm=function(t){return t.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});};
-      bar.title=ev.summary+'
-'+fm(eS)+' \u2014 '+fm(eE)+'
-'+ev.calendarName;bar.textContent=ev.summary||'';
+      bar.title=ev.summary+'\n'+fm(eS)+' \u2014 '+fm(eE)+'\n'+ev.calendarName;bar.textContent=ev.summary||'';
       bar.addEventListener('click',function(e2){if(bar._dr){bar._dr=false;return;}e2.stopPropagation();if(typeof showCalendarEventForm==='function')showCalendarEventForm(body,el,card,{mode:'edit',calendarId:ev.calendarId,eventId:ev.id,summary:ev.summary,description:ev.description,startTime:eS,endTime:eE});});
       bar.addEventListener('mousedown',function(e3){if(e3.button!==0)return;e3.stopPropagation();e3.preventDefault();bar._dr=false;var sx=e3.clientX,sy=e3.clientY,tcR=tc.getBoundingClientRect(),tcW=tcR.width;var oL=parseFloat(bar.style.left),oW=parseFloat(bar.style.width),oDMs=dMs;var tip=document.createElement('div');tip.style.cssText='position:fixed;padding:4px 10px;background:rgba(0,0,0,.9);color:#fff;border-radius:6px;font-size:.75rem;z-index:99999;pointer-events:none;font-family:var(--font);white-space:nowrap;';document.body.appendChild(tip);bar.style.cursor='grabbing';bar.style.zIndex='100';bar.style.opacity='.8';var tT=function(pc2){var m=Math.round(pc2/100*1440),h=Math.floor(m/60),mi=m%60,ap=h>=12?'pm':'am';h=h%12||12;return h+':'+String(mi).padStart(2,'0')+ap;};var cDMs=oDMs;
       var onM=function(mv){bar._dr=true;var dx=mv.clientX-sx;var nl=oL+(dx/tcW)*100;var _sn=mv.ctrlKey?(100/1440):mv.altKey?(snap/2):snap;nl=Math.round(nl/_sn)*_sn;if(nl<0)nl=0;if(nl+oW>100)nl=100-oW;bar.style.left=nl+'%';var rows=wrap.querySelectorAll('[data-day-ms]');for(var i=0;i<rows.length;i++){var rr=rows[i].getBoundingClientRect();if(mv.clientY>=rr.top&&mv.clientY<rr.bottom){cDMs=parseInt(rows[i].dataset.dayMs);break;}}tip.textContent=tT(nl)+' \u2014 '+tT(nl+oW);tip.style.left=(mv.clientX+12)+'px';tip.style.top=(mv.clientY-22)+'px';};
@@ -4095,8 +4093,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
               var cellTitle = '';
               if (slotEvts.length > 0) {
                 cellBg = slotEvts[0].color || '#4285f4';
-                cellTitle = slotEvts.map(function(e2) { return (e2.summary||'') + ' \u2022 ' + (e2.calendarName||''); }).join('
-');
+                cellTitle = slotEvts.map(function(e2) { return (e2.summary||'') + ' \u2022 ' + (e2.calendarName||''); }).join('\n');
               }
 
               var hasFruit = (frSlotMap[absSlotIdx] || []).length > 0;
@@ -4401,11 +4398,9 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
                 var planCellEvts=planSlotMap[absSlot]||[];
                 // Tooltip
                 var tipText=isSpec?sessTips[si]:(fmtTime(sMn)+'-'+fmtTime(eMn));
-                if(sEvts.length>0)tipText=sEvts.map(function(e2){return(e2.summary||'')+' '+fmtTime(sMn)+'-'+fmtTime(eMn);}).join('
-');
+                if(sEvts.length>0)tipText=sEvts.map(function(e2){return(e2.summary||'')+' '+fmtTime(sMn)+'-'+fmtTime(eMn);}).join('\n');
                 if(hFr)tipText+=(' \uD83C\uDF4E');
-                if(planCellEvts.length>0)tipText+=('
-\u2705 '+planCellEvts.map(function(pe){return pe.summary||'';}).join(', '));
+                if(planCellEvts.length>0)tipText+=('\n\u2705 '+planCellEvts.map(function(pe){return pe.summary||'';}).join(', '));
                 var ec=document.createElement('div');ec.className='pomo-ev';
                 ec.title=tipText;
                 ec.style.cssText='width:'+cSize+'px;flex-shrink:0;position:relative;background:'+(cBg!=='transparent'?cBg:(isBr?'rgba(128,128,128,.06)':bg2))+';cursor:pointer;border-right:1px solid '+(isDk?'rgba(255,255,255,.06)':'rgba(0,0,0,.06)')+';display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;'+(isNow?'outline:2px solid #ff6b35;outline-offset:-1px;animation:pomoPulse 1.5s infinite;z-index:1;':'');
@@ -5699,6 +5694,11 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
       else { openGanttOverlay(cfg.page); }
     };
   });
+  var lifeBtn = document.getElementById('overlay-life-btn');
+  if (lifeBtn) lifeBtn.onclick = function () {
+    if (window._lifeOverlayEl) window._closeLifeOverlay();
+    else if (typeof window._openLifeOverlay === 'function') window._openLifeOverlay();
+  };
   // Bind 4 vertical toolbar buttons (widget placement mode)
   var _vtbBtns = [
     {id:'mtb-today', page:0},
@@ -5713,6 +5713,10 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
       placeOverlayPageWidget(cfg.page);
     };
   });
+  var mtbLife = document.getElementById('mtb-life');
+  if (mtbLife) mtbLife.onclick = function() {
+    if (typeof window.createLifeWidget === 'function') window.createLifeWidget();
+  };
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.contentEditable === 'true') return;
     if (e.key === 'Escape' && _overlayEl) { closeGanttOverlay(); e.preventDefault(); return; }
@@ -5724,6 +5728,11 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
         else { openGanttOverlay(pageMap[e.key]); }
         e.preventDefault(); return;
       }
+    }
+    if (!e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.key === '6') {
+      if (window._lifeOverlayEl) window._closeLifeOverlay();
+      else if (typeof window._openLifeOverlay === 'function') window._openLifeOverlay();
+      e.preventDefault(); return;
     }
     // Shift+1-4 to place widget on canvas
     if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {

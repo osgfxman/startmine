@@ -20,7 +20,7 @@
     const _pl = document.getElementById('miro-pinned-layer');
     if (_pl) _pl.innerHTML = '';
     // Remove only card elements, preserve selection overlays
-    board.querySelectorAll('.miro-card, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed, .miro-overlay-widget').forEach((el) => el.remove());
+    board.querySelectorAll('.miro-card, .miro-life, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed, .miro-overlay-widget').forEach((el) => el.remove());
     // Clean up grid toolbars that live in document.body
     document.querySelectorAll('.mg-toolbar[data-grid-id]').forEach(t => t.remove());
     // Clear selection state
@@ -51,6 +51,7 @@
       gantt: 'buildMiroGantt',
       embed: 'buildMiroEmbed',
       'overlay-page': 'buildMiroOverlayWidget',
+      life: 'buildMiroLifeWidget',
     };
     try {
       page.miroCards.forEach((card) => {

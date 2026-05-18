@@ -1,0 +1,154 @@
+/* life-widget-additions.css */
+.miro-life {
+  position: absolute;
+  background: #f6f7fb;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(0,0,0,0.05);
+  pointer-events: auto;
+}
+.miro-life:focus {
+  outline: 2px solid #00b894;
+}
+
+.life-header {
+  height: 40px;
+  background: #fff;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.life-crumb {
+  flex: 1;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.life-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  margin-left: 4px;
+  border-radius: 4px;
+  font-size: 1rem;
+  color: #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.life-btn:hover {
+  background: rgba(0,0,0,0.05);
+  color: #333;
+}
+
+.life-eye-btn { }
+.life-sync { }
+.life-today-btn { }
+
+.life-canvas {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Tooltip */
+.life-tooltip {
+  position: absolute;
+  background: rgba(0,0,0,0.8);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+  margin-top: -8px;
+  white-space: nowrap;
+  z-index: 20;
+  transition: opacity 0.2s;
+  opacity: 0;
+}
+
+/* Editor Overlay */
+.life-editor {
+  position: absolute;
+  top: 50px;
+  right: 12px;
+  width: 260px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  padding: 12px;
+  z-index: 30;
+  font-family: 'DM Sans', sans-serif;
+}
+.le-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #333;
+}
+.le-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  margin-bottom: 12px;
+  outline: none;
+}
+.le-input:focus {
+  border-color: #00b894;
+}
+.le-colors {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.le-csw {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+.le-csw.sel {
+  border-color: #333;
+  transform: scale(1.1);
+}
+.le-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.le-save, .le-del {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.le-save {
+  background: #00b894;
+  color: #fff;
+}
+.le-del {
+  background: #ff7675;
+  color: #fff;
+}

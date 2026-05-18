@@ -1,32 +1,42 @@
-/**\n * @module ServiceWorker\n * @description Intercepts fetch requests to provide offline capability and precaching\n * @namespace N/A (ServiceWorkerScope)\n * @depends none\n * @provides install, activate, fetch event listeners\n * @safety Always test caching logic carefully. Never cache Firebase API endpoints.\n */\n/* ─── Startmine Service Worker ─── */
-const CACHE_NAME = 'startmine-1778990675';
+/**
+ * @module ServiceWorker
+ * @description Intercepts fetch requests to provide offline capability and precaching
+ * @namespace N/A (ServiceWorkerScope)
+ * @depends none
+ * @provides install, activate, fetch event listeners
+ * @safety Always test caching logic carefully. Never cache Firebase API endpoints.
+ */
+/* ─── Startmine Service Worker ─── */
+const CACHE_NAME = 'startmine-1779103321';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/inbox.html',
   '/manifest.json',
-  '/css/base.css?v=1778990675',
-  '/css/miro.css?v=1778990675',
-  '/js/core/namespace.js?v=1778990675',
-  '/js/core/events.js?v=1778990675',
-  '/js/core/utils.js?v=1778990675',
-  '/js/data/firebase.js?v=1778990675',
-  '/js/data/offline.js?v=1778990675',
-  '/js/data/sync.js?v=1778990675',
-  '/js/ui/toasts.js?v=1778990675',
-  '/js/ui/modals.js?v=1778990675',
-  '/js/ui/toolbar.js?v=1778990675',
-  '/js/ui/search.js?v=1778990675',
-  '/js/ui/inbox-ui.js?v=1778990675',
-  '/js/miro/miro-state.js?v=1778990675',
-  '/js/miro/render/builders.js?v=1778990675',
-  '/js/miro/layout/grid.js?v=1778990675',
-  '/js/core/health.js?v=1778990675',
-  '/js/app.js?v=1778990675',
-  '/js/miro-engine.js?v=1778990675',
-  '/js/thumbnails.js?v=1778990675',
-  '/js/outline.js?v=1778990675',
-  '/js/alignment.js?v=1778990675',
+  '/css/base.css?v=1779103321',
+  '/css/miro.css?v=1779103321',
+  '/css/life-widget-additions.css?v=1779103321',
+  '/js/core/namespace.js?v=1779103321',
+  '/js/core/events.js?v=1779103321',
+  '/js/core/utils.js?v=1779103321',
+  '/js/data/firebase.js?v=1779103321',
+  '/js/data/offline.js?v=1779103321',
+  '/js/data/sync.js?v=1779103321',
+  '/js/ui/toasts.js?v=1779103321',
+  '/js/ui/modals.js?v=1779103321',
+  '/js/ui/toolbar.js?v=1779103321',
+  '/js/ui/search.js?v=1779103321',
+  '/js/ui/inbox-ui.js?v=1779103321',
+  '/js/miro/miro-state.js?v=1779103321',
+  '/js/miro/render/builders.js?v=1779103321',
+  '/js/miro/layout/grid.js?v=1779103321',
+  '/js/core/health.js?v=1779103321',
+  '/js/app.js?v=1779103321',
+  '/js/miro-engine.js?v=1779103321',
+  '/js/life-widget.js?v=1779103321',
+  '/js/thumbnails.js?v=1779103321',
+  '/js/outline.js?v=1779103321',
+  '/js/alignment.js?v=1779103321',
 ];
 
 // External CDN assets to cache

@@ -8,6 +8,10 @@
  */
 // js/data/sync.js
 (function() {
+  let _ownWrite = false;
+  let _ownWriteTs = 0;
+  const OWN_WRITE_TIMEOUT = 5000;
+
   // Extracted syncNow
   window.syncNow = function () {
   if (!USER_ID) return Promise.resolve();

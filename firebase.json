@@ -3,7 +3,7 @@
     "public": "public",
     "ignore": [
       "firebase.json",
-      "**/.*",
+      "**/.* ",
       "**/node_modules/**"
     ],
     "rewrites": [
@@ -16,7 +16,8 @@
       {
         "source": "**/*.html",
         "headers": [
-          { "key": "Cache-Control", "value": "no-cache" }
+          { "key": "Cache-Control", "value": "no-cache" },
+          { "key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups" }
         ]
       },
       {

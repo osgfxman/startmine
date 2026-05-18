@@ -1,3 +1,11 @@
+/**
+ * @module Toolbar
+ * @description Manages toolbar interactions and action popups
+ * @namespace SM.ui
+ * @depends namespace.js
+ * @provides window.buildAcPop, window.buildSettings, window.buildImpJson
+ * @safety Do not duplicate listeners if rebuilt multiple times
+ */
 // js/ui/toolbar.js
 (function() {
   window.buildAcPop = function buildAcPop() {
@@ -31,15 +39,7 @@
   document.getElementById('io-pop').classList.remove('open');
 }
   document.getElementById('exp-csv').onclick = () => {
-  let csv = 'Title,URL,Widget,Page\/**
- * @module Toolbar
- * @description Manages toolbar interactions and action popups
- * @namespace SM.ui
- * @depends namespace.js
- * @provides window.buildAcPop, window.buildSettings, window.buildImpJson
- * @safety Do not duplicate listeners if rebuilt multiple times
- */
-n';
+  let csv = 'Title,URL,Widget,Page\n';
   for (const pg of D.pages)
     for (const w of pg.widgets || []) {
       if (!w.items) continue;
