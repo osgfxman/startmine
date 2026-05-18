@@ -38,7 +38,7 @@
       { name: 'performUndo', test: () => typeof window.performUndo === 'function' },
 
       // State
-      { name: 'SM.miro.state', test: () => SM.miro && SM.miro.state && typeof SM.miro.state._miroSelected !== 'undefined' },
+      { name: 'SM.miro.state', test: () => SM.miro && SM.miro.state && typeof SM.miro.state.miroSelected !== 'undefined' },
 
       // Data integrity
       { name: 'D exists', test: () => typeof window.D !== 'undefined' },
