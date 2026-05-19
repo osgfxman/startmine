@@ -261,8 +261,8 @@
   hdr.className = 'ow-hdr';
 
   // Page switch buttons
-  var pageEmojis = ['\u2600\uFE0F','\uD83D\uDCCA','\uD83D\uDCC8','\uD83C\uDF4E','\uD83C\uDFC3'];
-  var pageNames = ['Today','Gantt','Stats','Fruit','Sprint'];
+  var pageEmojis = ['\u2600\uFE0F','\uD83D\uDCCA','\uD83D\uDCC8','\uD83C\uDF4E','\uD83C\uDFC3','\uD83E\uDDEC'];
+  var pageNames = ['Today','Gantt','Stats','Fruit','Sprint','Life'];
   var pageBtns = [];
   pageEmojis.forEach(function(emoji, i) {
     var pb = document.createElement('button');

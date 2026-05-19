@@ -489,6 +489,13 @@
     var cv = document.createElement('canvas');
     cv.className = 'life-canvas'; el.appendChild(cv);
 
+    var _dayCardContainer = document.createElement('div');
+    _dayCardContainer.style.cssText = 'position:absolute;left:0;top:32px;width:100%;height:calc(100% - 32px);pointer-events:none;overflow:hidden;z-index:5;';
+    el.appendChild(_dayCardContainer);
+
+    var _lastVisibleKeys = '';
+    var _zoomWrapper = null;
+
     /* ── Tooltip (Phase 4) ── */
     var tooltip = document.createElement('div');
     tooltip.className = 'life-tooltip'; tooltip.style.display = 'none';
@@ -676,17 +683,22 @@
     cv.addEventListener('mouseleave', function(){ tooltip.style.display = 'none'; });
 
     /* Wheel zoom — cursor-anchored, internal camera (Phase 2) */
-    cv.addEventListener('wheel', function(e) {
+    function wheelZoom(e) {
       e.stopPropagation(); e.preventDefault();
       var life = ensLife(card), cam = life.cam, wh = getWH();
       clampCam(cam, wh.W, wh.H);
-      var before = s2w(e.offsetX, e.offsetY, cam);
+      /* Compute offset relative to cv, even if event fires on overlay */
+      var rect = cv.getBoundingClientRect();
+      var ox = e.clientX - rect.left, oy = e.clientY - rect.top;
+      var before = s2w(ox, oy, cam);
       cam.z *= (e.deltaY < 0 ? 1.14 : 0.88);
-      cam.x = before.x - e.offsetX / cam.z;
-      cam.y = before.y - e.offsetY / cam.z;
+      cam.x = before.x - ox / cam.z;
+      cam.y = before.y - oy / cam.z;
       clampCam(cam, wh.W, wh.H);
       if (typeof sv==='function') sv(false, true);
-    }, { passive: false });
+    }
+    cv.addEventListener('wheel', wheelZoom, { passive: false });
+    _dayCardContainer.addEventListener('wheel', wheelZoom, { passive: false });
 
     /* Double-click = zoom out one level (Phase 2) */
     cv.addEventListener('dblclick', function(e) {
@@ -762,6 +774,179 @@
       setTimeout(function(){ fetchCalEvents(card); }, 2000);
     }
 
+    function updateDOMOverlays(life, W, H, level, cam) {
+      if (level !== 'D' && level !== 'H') {
+        if (_zoomWrapper) { _dayCardContainer.innerHTML = ''; _zoomWrapper = null; }
+        if (life._domMap) { life._domMap.clear(); }
+        _lastVisibleKeys = '';
+        life._evCache = null;
+        life._evCacheKey = '';
+        return;
+      }
+
+      if (!life._domMap) life._domMap = new Map();
+
+      var visibleDays = [];
+      var capHit = false;
+      
+      for (var i = 0; i < 50 && !capHit; i++) {
+        var yr = yR(i, W, H);
+        var yrScreenX = (yr.x - cam.x) * cam.z;
+        var yrScreenY = (yr.y - cam.y) * cam.z;
+        var yrScreenW = yr.w * cam.z;
+        var yrScreenH = yr.h * cam.z;
+        
+        if (yrScreenX + yrScreenW <= 0 || yrScreenX >= W || yrScreenY + yrScreenH <= 0 || yrScreenY >= H) {
+          continue;
+        }
+        
+        var y = CFG.startYear + i;
+        for (var m = 0; m < 12 && !capHit; m++) {
+          var mr2 = mR(i, m, W, H);
+          var mrScreenX = (mr2.x - cam.x) * cam.z;
+          var mrScreenY = (mr2.y - cam.y) * cam.z;
+          var mrScreenW = mr2.w * cam.z;
+          var mrScreenH = mr2.h * cam.z;
+          
+          if (mrScreenX + mrScreenW <= 0 || mrScreenX >= W || mrScreenY + mrScreenH <= 0 || mrScreenY >= H) {
+            continue;
+          }
+          
+          var ds = dim(y, m);
+          for (var d = 0; d < ds; d++) {
+            var r = dR(i, m, d, W, H);
+            var screenX = (r.x - cam.x) * cam.z;
+            var screenY = (r.y - cam.y) * cam.z;
+            var screenW = r.w * cam.z;
+            var screenH = r.h * cam.z;
+            
+            /* Frustum test */
+            if (screenX + screenW <= 0 || screenX >= W || screenY + screenH <= 0 || screenY >= H) continue;
+            /* Min screen size threshold — skip tiny cards */
+            if (screenW < 120 || screenH < 90) continue;
+
+            var key = y + '-' + m + '-' + d;
+            visibleDays.push({ key: key, r: r, date: new Date(y, m, d + 1) });
+            /* Hard cap */
+            if (visibleDays.length >= 140) { capHit = true; break; }
+          }
+        }
+      }
+
+      /* Build a Set of currently visible keys for fast lookup */
+      var visibleSet = {};
+      for (var vi = 0; vi < visibleDays.length; vi++) visibleSet[visibleDays[vi].key] = true;
+
+      /* Ensure wrapper exists */
+      if (!_zoomWrapper) {
+        _dayCardContainer.innerHTML = '';
+        _zoomWrapper = document.createElement('div');
+        _zoomWrapper.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;transform-origin:0 0;pointer-events:none;';
+        _dayCardContainer.appendChild(_zoomWrapper);
+        life._domMap.clear();
+      }
+
+      /* Remove cards no longer visible */
+      var toRemove = [];
+      life._domMap.forEach(function(entry, key) {
+        if (!visibleSet[key]) toRemove.push(key);
+      });
+      for (var ri = 0; ri < toRemove.length; ri++) {
+        var old = life._domMap.get(toRemove[ri]);
+        if (old && old.el && old.el.parentNode) old.el.parentNode.removeChild(old.el);
+        life._domMap.delete(toRemove[ri]);
+      }
+
+      /* ── FIX 3: Fetch calendar events for visible date range ── */
+      var evts = life._evCache || [];
+      if (visibleDays.length > 0) {
+        var minMs = visibleDays[0].date.getTime();
+        var maxMs = minMs;
+        for (var ei = 1; ei < visibleDays.length; ei++) {
+          var t = visibleDays[ei].date.getTime();
+          if (t < minMs) minMs = t;
+          if (t > maxMs) maxMs = t;
+        }
+        var rangeStart = new Date(minMs);
+        var rangeEnd = new Date(maxMs + 86400000); /* +1 day */
+        var cacheKey = rangeStart.toISOString().slice(0,10) + '_' + rangeEnd.toISOString().slice(0,10);
+
+        if (cacheKey !== life._evCacheKey && !life._evFetching) {
+          life._evFetching = true;
+          /* Async fetch — don't block render */
+          (function(ck) {
+            if (typeof fetchCalendarEvents === 'function') {
+              fetchCalendarEvents(rangeStart, rangeEnd).then(function(allEv) {
+                life._evCache = (allEv || []).filter(function(e) { return !e.allDay; });
+                life._evCacheKey = ck;
+                life._evFetching = false;
+                /* Force DOM rebuild with new data */
+                life._domMap.forEach(function(entry) {
+                  if (entry.el && entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
+                });
+                life._domMap.clear();
+              }).catch(function() { life._evFetching = false; });
+            } else {
+              life._evFetching = false;
+            }
+          })(cacheKey);
+        }
+        evts = life._evCache || [];
+      }
+
+      var gapPx = 6;
+      var cardW = 142, cardH = 104;
+      for (var di = 0; di < visibleDays.length; di++) {
+        var vd = visibleDays[di];
+        var r2 = vd.r;
+        var padWorld = gapPx / cam.z;
+        var innerW = Math.max(10, r2.w - 2 * padWorld);
+        var innerH = Math.max(10, r2.h - 2 * padWorld);
+        /* FIX 2: Uniform scale preserving aspect ratio + centering */
+        var s = Math.min(innerW / cardW, innerH / cardH);
+        var posL = r2.x + padWorld + (innerW - cardW * s) / 2;
+        var posT = r2.y + padWorld + (innerH - cardH * s) / 2;
+
+        var existing = life._domMap.get(vd.key);
+        if (existing) {
+          /* Update position/scale only */
+          existing.el.style.left = posL + 'px';
+          existing.el.style.top = posT + 'px';
+          existing.el.style.transform = 'scale(' + s + ')';
+        } else {
+          /* Create new card */
+          var wrapper = document.createElement('div');
+          wrapper.style.cssText = 'position:absolute;left:' + posL + 'px;top:' + posT + 'px;width:' + cardW + 'px;height:' + cardH + 'px;transform-origin:0 0;pointer-events:auto;overflow:hidden;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.12);';
+          wrapper.style.transform = 'scale(' + s + ')';
+          
+          if (typeof window.renderZooperDayCard === 'function') {
+            window.renderZooperDayCard(wrapper, vd.date, {
+              theme: card.calTheme || 'light',
+              evts: evts,
+              fruitCalId: '',
+              planEvents: [],
+              planCalId: '',
+              allGridCells: [],
+              popupBody: el,
+              onRefresh: function() {
+                if (typeof sv === 'function') sv();
+              }
+            });
+          }
+          
+          _zoomWrapper.appendChild(wrapper);
+          life._domMap.set(vd.key, { el: wrapper });
+        }
+      }
+
+      /* Update wrapper transform every frame */
+      if (_zoomWrapper) {
+        var tx = -cam.x * cam.z;
+        var ty = -cam.y * cam.z;
+        _zoomWrapper.style.transform = 'translate3d(' + tx + 'px,' + ty + 'px,0) scale(' + cam.z + ')';
+      }
+    }
+
     /* ─────────────────────────────────────────────────────────
        Render Loop (requestAnimationFrame)
        ───────────────────────────────────────────────────────── */
@@ -786,16 +971,34 @@
 
       /* LOD-based drawing */
       var level = lod(cam.z);
+      var hasDOMCards = life._domMap && life._domMap.size > 0;
+
+      /* FIX 1: When DOM cards are active, only draw light month grid behind them.
+         Suppress drawDays/drawHours to avoid visual noise (slot numbers, grid lines). */
       if (level === 'Y')      { drawYears(ctx, W, H); }
       else if (level === 'M') { drawYears(ctx, W, H); drawMonths(ctx, W, H); }
+      else if (hasDOMCards)    { drawMonths(ctx, W, H); }
       else if (level === 'D') { drawMonths(ctx, W, H); drawDays(ctx, W, H); }
-      else                    { drawDays(ctx, W, H); drawHours(ctx, W, H); }
+      else                    { drawMonths(ctx, W, H); drawDays(ctx, W, H); drawHours(ctx, W, H); }
 
       /* Manual overlays */
       drawOverlays(ctx, life.ov, W);
 
-      /* Google Calendar events (Phase 3) */
-      drawCalEvents(ctx, life.calEvents, W, H, level);
+      /* Google Calendar events (Phase 3) — canvas only at zoomed-out levels */
+      if (level === 'Y' || level === 'M') {
+        drawCalEvents(ctx, life.calEvents, W, H, level);
+      }
+
+      /* Update DOM Overlays — throttled: full diff every 3rd frame, transform-only otherwise */
+      life._domFrame = (life._domFrame || 0) + 1;
+      if (life._domFrame % 3 !== 0 && _zoomWrapper) {
+        /* Transform-only update (cheap) */
+        var tx2 = -cam.x * cam.z;
+        var ty2 = -cam.y * cam.z;
+        _zoomWrapper.style.transform = 'translate3d(' + tx2 + 'px,' + ty2 + 'px,0) scale(' + cam.z + ')';
+      } else {
+        updateDOMOverlays(life, W, H, level, cam);
+      }
 
       /* Breadcrumb text (Phase 2) */
       crumb.textContent = '\uD83E\uDDEC Life \u2014 ' + lodLabel(level);
