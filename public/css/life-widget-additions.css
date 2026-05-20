@@ -56,7 +56,27 @@
 }
 
 .life-eye-btn { }
-.life-sync { }
+.life-sync {
+  background: rgba(0, 184, 148, 0.08);
+  border: 1px solid rgba(0, 184, 148, 0.20);
+  color: #00b894;
+  padding: 4px 10px;
+  border-radius: 5px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 500;
+  cursor: pointer;
+  margin-left: 6px;
+  transition: all 0.2s ease;
+}
+.life-sync:hover {
+  background: rgba(0, 184, 148, 0.15);
+  border-color: rgba(0, 184, 148, 0.30);
+  transform: translateY(-1px);
+}
+.life-sync:active {
+  transform: translateY(0);
+}
 .life-today-btn { }
 
 .life-canvas {

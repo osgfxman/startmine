@@ -51,3 +51,7 @@ Run this mental checklist:
 - data/: Firebase, sync, offline, caching
 - ui/: User interface components
 - miro/: Canvas engine (state, render, layout)
+
+## Language & Formatting (لغة التحدث والتنسيق)
+- Always reply to the user in Egyptian Arabic (العامية المصرية).
+- Always wrap all chat responses in `<div dir="rtl" style="text-align: right; direction: rtl;">...</div>` to ensure proper Right-to-Left formatting, especially when mixed with English words.

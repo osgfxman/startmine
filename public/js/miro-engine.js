@@ -4044,6 +4044,7 @@ window.renderZooperDayCard = function(container, dayDate, options) {
 (function initGanttOverlay() {
   const _state = { view: '2week', offset: 0, theme: 'light', page: 0 }; // page: 0=today, 1=gantt, 2=stats, 3=fruit
   let _overlayEl = null;
+  let _overlayLifeCard = null;
   var _updatePageDotsRef = function() {};
   var _renderPageRef = function() {};
   function openGanttOverlay(page) {
@@ -4103,7 +4104,7 @@ window.renderZooperDayCard = function(container, dayDate, options) {
       d.title = 'Sprint '+s;
       d.onmouseenter=function(){d.style.height='14px';};
       d.onmouseleave=function(){d.style.height=isCur?'14px':'6px';};
-      (function(sn){d.onclick=function(e){e.stopPropagation();_state.offset=(sn-_sp)*2;_state.page=4;_renderPage();_buildOverlay();};})(s);
+      (function(sn){d.onclick=function(e){e.stopPropagation();_state.offset=(sn-_sp)*14;if(_state.page!==5)_state.page=4;_updatePageDots();_renderPage();};})(s);
       _spBar.appendChild(d);
     }
     hdr.appendChild(_spBar);
@@ -4192,56 +4193,42 @@ window.renderZooperDayCard = function(container, dayDate, options) {
       else if (_state.page === 2) _renderStats();
       else if (_state.page === 3) _renderFruit();
       else if (_state.page === 4) _renderGantt2();
-      else _renderLifeOverlay();
-    }
-
-    async function _renderLifeOverlay() {
-      body.innerHTML = '';
-      body.style.position = 'relative';
-      body.style.overflow = 'hidden';
-
-      if (typeof window.buildMiroLifeWidget !== 'function') {
-        body.innerHTML = '<div style="text-align:center;padding:40px;color:#e55;font-size:.6rem;">\u26A0\uFE0F Life widget not loaded</div>';
+      else {
+        /* Life page — embed the real Life Widget with zoom/LOD */
+        body.innerHTML = '';
+        body.style.position = 'relative';
+        body.style.overflow = 'hidden';
+        if (!_overlayLifeCard) {
+          _overlayLifeCard = {
+            id: 'life_overlay_page',
+            type: 'life',
+            x: 0, y: 0,
+            w: body.clientWidth || 900,
+            h: body.clientHeight || 500,
+            _overlayMode: true,
+            life: { ov: [], cam: { z: 0.5, x: 0, y: 0 }, calEvents: [], _calTS: 0, sel: null }
+          };
+        } else {
+          _overlayLifeCard.w = body.clientWidth || 900;
+          _overlayLifeCard.h = body.clientHeight || 500;
+        }
+        if (typeof window.buildMiroLifeWidget === 'function') {
+          var lifeEl = window.buildMiroLifeWidget(_overlayLifeCard);
+          lifeEl.style.position = 'absolute';
+          lifeEl.style.left = '0';
+          lifeEl.style.top = '0';
+          lifeEl.style.width = '100%';
+          lifeEl.style.height = '100%';
+          var delBtn2 = lifeEl.querySelector('.mc-del');
+          if (delBtn2) delBtn2.style.display = 'none';
+          var lockBtn2 = lifeEl.querySelector('.mc-lock');
+          if (lockBtn2) lockBtn2.style.display = 'none';
+          body.appendChild(lifeEl);
+        } else {
+          body.textContent = 'Life widget not loaded';
+        }
         return;
       }
-
-      var fakeCard = {
-        id: 'life_overlay_' + Date.now(),
-        type: 'life',
-        x: 0, y: 0,
-        w: body.clientWidth || 900,
-        h: body.clientHeight || 500,
-        life: { cam: { z: 1, x: 0, y: 0 }, ov: [], calEvents: [], _calTS: 0, sel: null }
-      };
-
-      var lifeEl = window.buildMiroLifeWidget(fakeCard);
-      if (!lifeEl) {
-        body.innerHTML = '<div style="text-align:center;padding:40px;color:#e55;font-size:.6rem;">\u26A0\uFE0F Life widget build failed</div>';
-        return;
-      }
-
-      /* Override positioning — fill overlay body completely */
-      lifeEl.style.position = 'relative';
-      lifeEl.style.left = '0';
-      lifeEl.style.top = '0';
-      lifeEl.style.width = '100%';
-      lifeEl.style.height = '100%';
-
-      /* Remove delete / lock buttons from embedded widget */
-      var delBtn = lifeEl.querySelector('.mc-del');
-      if (delBtn) delBtn.remove();
-      var lockBtn = lifeEl.querySelector('.mc-lock');
-      if (lockBtn) lockBtn.remove();
-
-      /* Optionally hide the life-header since overlay has its own */
-      var lifeHdr = lifeEl.querySelector('.life-header');
-      if (lifeHdr) lifeHdr.style.display = 'none';
-
-      /* Expand canvas to fill the space that header was using */
-      var lifeCv = lifeEl.querySelector('.life-canvas');
-      if (lifeCv) lifeCv.style.height = '100%';
-
-      body.appendChild(lifeEl);
     }
 
     function getContrastColor(hexColor) {

@@ -82,6 +82,7 @@
     if (!L.cam) L.cam = { z:1, x:0, y:0 };
     if (!L.calEvents) L.calEvents = [];
     if (!L._calTS) L._calTS = 0;
+    if (typeof L._monthFocus === 'undefined') L._monthFocus = null;
     return L;
   }
   function clampCam(cam, W, H) {
@@ -459,14 +460,16 @@
                         'px;width:'+(card.w||1200)+'px;height:'+(card.h||700)+'px;';
 
     /* Delete button */
-    var del = document.createElement('button');
-    del.className = 'mc-del'; del.textContent = '\u2715';
-    del.onclick = function(e){ e.stopPropagation();
-      if (typeof deleteMiroCard==='function') deleteMiroCard(card.id); };
-    el.appendChild(del);
+    if (!card._overlayMode) {
+      var del = document.createElement('button');
+      del.className = 'mc-del'; del.textContent = '\u2715';
+      del.onclick = function(e){ e.stopPropagation();
+        if (typeof deleteMiroCard==='function') deleteMiroCard(card.id); };
+      el.appendChild(del);
 
-    /* Lock UI */
-    if (typeof attachLockUI==='function') try { attachLockUI(el, card); } catch(e){}
+      /* Lock UI */
+      if (typeof attachLockUI==='function') try { attachLockUI(el, card); } catch(e){}
+    }
 
     /* ── Header bar (Phase 2 breadcrumb) ── */
     var hdr = document.createElement('div');
@@ -484,6 +487,29 @@
     syncBtn.title = 'Fetch Google Calendar (14h)';
     syncBtn.onclick = function(e){ e.stopPropagation(); fetchCalEvents(card); };
     hdr.appendChild(syncBtn);
+
+    /* Sprint toggle button */
+    var sprBtn = document.createElement('button');
+    sprBtn.className = 'life-sync';
+    sprBtn.textContent = '\u21C4 Sprint';
+    sprBtn.title = 'Toggle Sprint 1/2';
+    sprBtn.style.display = 'none';
+    sprBtn.onclick = function(e) {
+      e.stopPropagation();
+      var L = ensLife(card);
+      if (!L._monthFocus) return;
+      L._monthFocus.half = L._monthFocus.half ? 0 : 1;
+      /* Clear DOM cache to rebuild cards */
+      if (L._domMap) {
+        L._domMap.forEach(function(entry) {
+          if (entry.el && entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
+        });
+        L._domMap.clear();
+      }
+      if (typeof sv === 'function') sv(false, true);
+    };
+    hdr.appendChild(sprBtn);
+    card._sprBtn = sprBtn;
 
     /* ── Canvas ── */
     var cv = document.createElement('canvas');
@@ -570,12 +596,14 @@
     rsz();
     try { new ResizeObserver(rsz).observe(el); } catch(e){}
 
-    /* Drag via header */
-    if (typeof miroSetupCardDrag==='function')
-      try { miroSetupCardDrag(hdr, card, ['.mc-del','.mc-lock','.life-sync']); } catch(e){}
-    /* 8-way resize handles */
-    if (typeof attach8WayResize==='function')
-      try { attach8WayResize(el, card, 600, 350); } catch(e){}
+    /* Drag via header (skip in overlay mode) */
+    if (!card._overlayMode) {
+      if (typeof miroSetupCardDrag==='function')
+        try { miroSetupCardDrag(hdr, card, ['.mc-del','.mc-lock','.life-sync']); } catch(e){}
+      /* 8-way resize handles */
+      if (typeof attach8WayResize==='function')
+        try { attach8WayResize(el, card, 600, 350); } catch(e){}
+    }
 
     cv.oncontextmenu = function(e){ e.preventDefault(); };
 
@@ -619,9 +647,13 @@
           }
           tooltip.textContent = txt;
           tooltip.style.display = 'block';
+          tooltip.style.opacity = '1';
           tooltip.style.left = (e.offsetX + 14) + 'px';
           tooltip.style.top = (e.offsetY + 14 + 32) + 'px';
-        } else { tooltip.style.display = 'none'; }
+        } else {
+          tooltip.style.display = 'none';
+          tooltip.style.opacity = '0';
+        }
       }
       if (!ST.dn && !ST.panning) return;
       var dx = e.offsetX - (ST.panning ? ST.px : ST.sx);
@@ -673,14 +705,17 @@
         var hit = pickCell(wp.x, wp.y, wh.W, wh.H, curLOD);
         if (!hit) return;
         if (hit.type==='year')       zoomToRect(life, hit.rect, wh.W, wh.H, 1.6);
-        else if (hit.type==='month') zoomToRect(life, hit.rect, wh.W, wh.H, 4.0);
+        else if (hit.type==='month') {
+          life._monthFocus = { y: hit.y, m: hit.m, half: 0 };
+          zoomToRect(life, hit.rect, wh.W, wh.H, 4.0);
+        }
         else if (hit.type==='day')   zoomToRect(life, hit.rect, wh.W, wh.H, 12.0);
         else if (hit.type==='slot')  life.sel = { y:hit.y, m:hit.m, d:hit.d, sl:hit.sl };
         if (typeof sv==='function') sv(false, true);
       }
     });
 
-    cv.addEventListener('mouseleave', function(){ tooltip.style.display = 'none'; });
+    cv.addEventListener('mouseleave', function(){ tooltip.style.display = 'none'; tooltip.style.opacity = '0'; });
 
     /* Wheel zoom — cursor-anchored, internal camera (Phase 2) */
     function wheelZoom(e) {
@@ -705,10 +740,10 @@
       e.stopPropagation(); e.preventDefault();
       var life = ensLife(card), cam = life.cam, wh = getWH();
       var center = s2w(wh.W/2, wh.H/2, cam);
-      if (cam.z > 6.5) cam.z = 4.0;
-      else if (cam.z > 2.2) cam.z = 1.6;
-      else if (cam.z > 0.9) cam.z = 0.5;
-      else cam.z = 0.35;
+      if (cam.z > 6.5) { cam.z = 4.0; }
+      else if (cam.z > 2.2) { cam.z = 1.6; life._monthFocus = null; }
+      else if (cam.z > 0.9) { cam.z = 0.5; life._monthFocus = null; }
+      else { cam.z = 0.35; life._monthFocus = null; }
       cam.x = center.x - (wh.W/2) / cam.z;
       cam.y = center.y - (wh.H/2) / cam.z;
       clampCam(cam, wh.W, wh.H);
@@ -722,10 +757,10 @@
         e.stopPropagation(); e.preventDefault();
         if (editorPanel.style.display !== 'none') { closeEditor(); return; }
         var life = ensLife(card), cam = life.cam, wh = getWH();
-        if (cam.z > 6.5) cam.z = 4.0;
-        else if (cam.z > 2.2) cam.z = 1.6;
-        else if (cam.z > 0.9) cam.z = 0.5;
-        else cam.z = 0.35;
+        if (cam.z > 6.5) { cam.z = 4.0; }
+        else if (cam.z > 2.2) { cam.z = 1.6; life._monthFocus = null; }
+        else if (cam.z > 0.9) { cam.z = 0.5; life._monthFocus = null; }
+        else { cam.z = 0.35; life._monthFocus = null; }
         clampCam(cam, wh.W, wh.H);
         if (typeof sv==='function') sv(false, true);
       }
@@ -825,6 +860,13 @@
             /* Min screen size threshold — skip tiny cards */
             if (screenW < 120 || screenH < 90) continue;
 
+            /* Sprint split: filter to half-month when _monthFocus is set */
+            if (level === 'D' && life._monthFocus) {
+              if (y !== life._monthFocus.y || m !== life._monthFocus.m) continue;
+              if (!life._monthFocus.half) { if (d > 13) continue; }
+              else { if (d < 14) continue; }
+            }
+
             var key = y + '-' + m + '-' + d;
             visibleDays.push({ key: key, r: r, date: new Date(y, m, d + 1) });
             /* Hard cap */
@@ -895,17 +937,118 @@
       }
 
       var gapPx = 6;
-      var cardW = 142, cardH = 104;
+      var padWorld = gapPx / cam.z;
+
+      // Calculate uniform scale factor based on normal day card (142x104)
+      var dummyR = dR(0, 0, 0, W, H);
+      var innerW = Math.max(0.1, dummyR.w - 2 * padWorld);
+      var innerH = Math.max(0.1, dummyR.h - 2 * padWorld);
+      var s_base = Math.min(innerW / 142, innerH / 104);
+
+      // Group visible days by month key: "y-m"
+      var monthsMap = {};
       for (var di = 0; di < visibleDays.length; di++) {
         var vd = visibleDays[di];
-        var r2 = vd.r;
-        var padWorld = gapPx / cam.z;
-        var innerW = Math.max(10, r2.w - 2 * padWorld);
-        var innerH = Math.max(10, r2.h - 2 * padWorld);
-        /* FIX 2: Uniform scale preserving aspect ratio + centering */
-        var s = Math.min(innerW / cardW, innerH / cardH);
-        var posL = r2.x + padWorld + (innerW - cardW * s) / 2;
-        var posT = r2.y + padWorld + (innerH - cardH * s) / 2;
+        var y = vd.date.getFullYear();
+        var m = vd.date.getMonth();
+        var monthKey = y + '-' + m;
+
+        if (!monthsMap[monthKey]) {
+          var yi = y - CFG.startYear;
+          var mRect = mR(yi, m, W, H);
+          monthsMap[monthKey] = {
+            mRect: mRect,
+            days: []
+          };
+        }
+        monthsMap[monthKey].days.push(vd);
+      }
+
+      // For each month, compute non-overlapping layout
+      Object.keys(monthsMap).forEach(function(monthKey) {
+        var mData = monthsMap[monthKey];
+        var mRect = mData.mRect;
+        var cw = mRect.w / CFG.dCols; // cell width
+        var ch = mRect.h / CFG.dRows; // cell height
+
+        // Group days of this month by row index (0 to 4)
+        var rows = [[], [], [], [], []];
+        mData.days.forEach(function(vd) {
+          var d = vd.date.getDate() - 1;
+          var rIdx = Math.floor(d / 7);
+          if (rIdx >= 0 && rIdx < 5) {
+            rows[rIdx].push(vd);
+          }
+        });
+
+        // Sort each row chronologically
+        for (var rIdx = 0; rIdx < 5; rIdx++) {
+          rows[rIdx].sort(function(a, b) { return a.date - b.date; });
+        }
+
+        // Calculate heights of each row in world coordinates
+        var rowHeights = [ch, ch, ch, ch, ch];
+        var todayH = 196 * s_base;
+
+        for (var rIdx = 0; rIdx < 5; rIdx++) {
+          var hasTodayInRow = rows[rIdx].some(function(vd) {
+            return vd.date.toDateString() === new Date().toDateString();
+          });
+          if (hasTodayInRow) {
+            rowHeights[rIdx] = todayH + 2 * padWorld;
+          }
+        }
+
+        // Calculate vertical start of each row
+        var rowStarts = [0, 0, 0, 0, 0];
+        rowStarts[0] = 0;
+        for (var rIdx = 1; rIdx < 5; rIdx++) {
+          rowStarts[rIdx] = rowStarts[rIdx - 1] + rowHeights[rIdx - 1];
+        }
+
+        // Position cards in each row
+        for (var rIdx = 0; rIdx < 5; rIdx++) {
+          var rowDays = rows[rIdx];
+          var nextX = 0;
+
+          for (var rdi = 0; rdi < rowDays.length; rdi++) {
+            var vd = rowDays[rdi];
+            var d = vd.date.getDate() - 1;
+            var col = d % 7;
+            var isToday = (vd.date.toDateString() === new Date().toDateString());
+
+            var cardW = isToday ? 282 : 142;
+            var cardH = isToday ? 196 : 104;
+            var wWorld = cardW * s_base;
+
+            // X position in the row (relative to month start)
+            var defaultColStart = col * cw;
+            var X = Math.max(defaultColStart, nextX);
+
+            // Update nextX for next card
+            nextX = X + wWorld + 2 * padWorld;
+
+            vd.calculated = {
+              posL: mRect.x + X + padWorld,
+              posT: mRect.y + rowStarts[rIdx] + padWorld,
+              s: s_base,
+              cardW: cardW,
+              cardH: cardH
+            };
+          }
+        }
+      });
+
+      for (var di = 0; di < visibleDays.length; di++) {
+        var vd = visibleDays[di];
+        var calc = vd.calculated;
+        if (!calc) continue;
+
+        var posL = calc.posL;
+        var posT = calc.posT;
+        var s = calc.s;
+        var cardW = calc.cardW;
+        var cardH = calc.cardH;
 
         var existing = life._domMap.get(vd.key);
         if (existing) {
@@ -918,6 +1061,7 @@
           var wrapper = document.createElement('div');
           wrapper.style.cssText = 'position:absolute;left:' + posL + 'px;top:' + posT + 'px;width:' + cardW + 'px;height:' + cardH + 'px;transform-origin:0 0;pointer-events:auto;overflow:hidden;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.12);';
           wrapper.style.transform = 'scale(' + s + ')';
+          wrapper.addEventListener('wheel', wheelZoom, { passive: false });
           
           if (typeof window.renderZooperDayCard === 'function') {
             window.renderZooperDayCard(wrapper, vd.date, {
@@ -971,14 +1115,21 @@
 
       /* LOD-based drawing */
       var level = lod(cam.z);
+
+      /* Show/hide Sprint toggle based on LOD */
+      if (card._sprBtn) {
+        card._sprBtn.style.display = (level === 'D' && life._monthFocus) ? '' : 'none';
+        if (life._monthFocus) {
+          card._sprBtn.textContent = life._monthFocus.half ? '\u21C4 Sprint 2' : '\u21C4 Sprint 1';
+        }
+      }
       var hasDOMCards = life._domMap && life._domMap.size > 0;
 
       /* FIX 1: When DOM cards are active, only draw light month grid behind them.
          Suppress drawDays/drawHours to avoid visual noise (slot numbers, grid lines). */
       if (level === 'Y')      { drawYears(ctx, W, H); }
       else if (level === 'M') { drawYears(ctx, W, H); drawMonths(ctx, W, H); }
-      else if (hasDOMCards)    { drawMonths(ctx, W, H); }
-      else if (level === 'D') { drawMonths(ctx, W, H); drawDays(ctx, W, H); }
+      else if (level === 'D' || level === 'H') { drawMonths(ctx, W, H); }
       else                    { drawMonths(ctx, W, H); drawDays(ctx, W, H); drawHours(ctx, W, H); }
 
       /* Manual overlays */
