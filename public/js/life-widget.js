@@ -117,12 +117,28 @@
 
     var cx = cam.x + (W / 2) / cam.z;
     var cy = cam.y + (H / 2) / cam.z;
-    var tx = cx - (W / 2) / targetZ;
-    var ty = cy - (H / 2) / targetZ;
 
     if (level === 'Y' || level === 'M') {
       life._monthFocus = null;
+    } else if ((level === 'H' || level === 'D' || level === 'W') && !life._monthFocus) {
+      var cell = pickCell(cx, cy, W, H, 'M');
+      if (cell && cell.type === 'month') {
+        life._monthFocus = { y: cell.y, m: cell.m, half: 0 };
+      } else {
+        var n = nowInfo();
+        life._monthFocus = { y: n.y, m: n.m, half: 0 };
+      }
     }
+
+    if (level === 'H' && life._monthFocus) {
+      var yi = life._monthFocus.y - CFG.startYear;
+      var mRect = mR(yi, life._monthFocus.m, W, H);
+      zoomToRect(life, mRect, W, H, 14.0);
+      return;
+    }
+
+    var tx = cx - (W / 2) / targetZ;
+    var ty = cy - (H / 2) / targetZ;
 
     animateCam(life, tx, ty, targetZ, W, H, function() {
       if (typeof sv === 'function') sv();
@@ -265,10 +281,10 @@
     for (var i = 0; i < 50; i++) {
       var r = yR(i, W, H), y = CFG.startYear + i;
       if (!isRectVisible(r, cam, W, H)) continue;
-      ctx.strokeStyle = CFG.grid1; ctx.lineWidth = 1;
+      ctx.strokeStyle = CFG.grid1; ctx.lineWidth = 1 / cam.z;
       ctx.strokeRect(r.x+.5, r.y+.5, r.w-1, r.h-1);
       if (y === n.y) {
-        ctx.strokeStyle = CFG.accent; ctx.lineWidth = 1.8;
+        ctx.strokeStyle = CFG.accent; ctx.lineWidth = 1.8 / cam.z;
         ctx.strokeRect(r.x+.5, r.y+.5, r.w-1, r.h-1);
       }
       var fs = Math.min(14 / cam.z, r.h * 0.18);
@@ -284,7 +300,7 @@
     for (var i = 0; i < 50; i++) {
       var yr = yR(i, W, H), y = CFG.startYear + i;
       if (!isRectVisible(yr, cam, W, H)) continue;
-      ctx.strokeStyle = CFG.grid1; ctx.lineWidth = 1.5;
+      ctx.strokeStyle = CFG.grid1; ctx.lineWidth = 1.5 / cam.z;
       ctx.strokeRect(yr.x+.5, yr.y+.5, yr.w-1, yr.h-1);
       
       // Draw Year watermark in the background centered
@@ -300,10 +316,10 @@
       for (var m = 0; m < 12; m++) {
         var mr = mR(i, m, W, H);
         if (!isRectVisible(mr, cam, W, H)) continue;
-        ctx.strokeStyle = CFG.grid2; ctx.lineWidth = .7;
+        ctx.strokeStyle = CFG.grid2; ctx.lineWidth = .7 / cam.z;
         ctx.strokeRect(mr.x+.5, mr.y+.5, mr.w-1, mr.h-1);
         if (y===n.y && m===n.m) {
-          ctx.strokeStyle = CFG.accent; ctx.lineWidth = 1.5;
+          ctx.strokeStyle = CFG.accent; ctx.lineWidth = 1.5 / cam.z;
           ctx.strokeRect(mr.x+.5, mr.y+.5, mr.w-1, mr.h-1);
         }
         
@@ -414,10 +430,10 @@
         for (var d = 0; d < ds; d++) {
           var r = dR(i, m, d, W, H);
           if (!isRectVisible(r, cam, W, H)) continue;
-          ctx.strokeStyle = CFG.grid3; ctx.lineWidth = .6;
+          ctx.strokeStyle = CFG.grid3; ctx.lineWidth = .6 / cam.z;
           ctx.strokeRect(r.x+.5, r.y+.5, r.w-1, r.h-1);
           if (new Date(y, m, d+1).getTime() === td) {
-            ctx.strokeStyle = CFG.accent; ctx.lineWidth = 1.5;
+            ctx.strokeStyle = CFG.accent; ctx.lineWidth = 1.5 / cam.z;
             ctx.strokeRect(r.x+.5, r.y+.5, r.w-1, r.h-1);
           }
           var screenW = r.w * cam.z;
@@ -1802,6 +1818,19 @@
         return;
       }
 
+      // Automatically set _monthFocus if null at level H
+      if (!life._monthFocus) {
+        var cx = cam.x + (W / 2) / cam.z;
+        var cy = cam.y + (H / 2) / cam.z;
+        var cell = pickCell(cx, cy, W, H, 'M');
+        if (cell && cell.type === 'month') {
+          life._monthFocus = { y: cell.y, m: cell.m, half: 0 };
+        } else {
+          var n = nowInfo();
+          life._monthFocus = { y: n.y, m: n.m, half: 0 };
+        }
+      }
+
       if (!life._domMap) life._domMap = new Map();
 
       var visibleDays = [];
@@ -1840,14 +1869,13 @@
             
             /* Frustum test */
             if (screenX + screenW <= 0 || screenX >= W || screenY + screenH <= 0 || screenY >= H) continue;
-            /* Min screen size threshold — skip tiny cards */
-            if (screenW < 120 || screenH < 90) continue;
+            
+            /* Bypass size check in H mode, otherwise do frustum test */
+            if (level !== 'H' && (screenW < 120 || screenH < 90)) continue;
 
-            /* Sprint split: filter to half-month when _monthFocus is set */
+            /* Filter to focused month in H mode (no sprint split) */
             if (level === 'H' && life._monthFocus) {
               if (y !== life._monthFocus.y || m !== life._monthFocus.m) continue;
-              if (!life._monthFocus.half) { if (d > 13) continue; }
-              else { if (d < 14) continue; }
             }
 
             var key = y + '-' + m + '-' + d;
@@ -1922,12 +1950,6 @@
       var gapPx = 6;
       var padWorld = gapPx / cam.z;
 
-      // Calculate uniform scale factor based on normal day card (142x104)
-      var dummyR = dR(0, 0, 0, W, H);
-      var innerW = Math.max(0.1, dummyR.w - 2 * padWorld);
-      var innerH = Math.max(0.1, dummyR.h - 2 * padWorld);
-      var s_base = Math.min(innerW / 142, innerH / 104);
-
       // Group visible days by month key: "y-m"
       var monthsMap = {};
       for (var di = 0; di < visibleDays.length; di++) {
@@ -1947,12 +1969,20 @@
         monthsMap[monthKey].days.push(vd);
       }
 
+      // Remove separators for months no longer visible
+      var visibleMonthKeys = Object.keys(monthsMap);
+      var separators = _zoomWrapper.querySelectorAll('.sprint-separator');
+      separators.forEach(function(sep) {
+        var mKey = sep.id.replace('sep-', '');
+        if (visibleMonthKeys.indexOf(mKey) === -1) {
+          if (sep.parentNode) sep.parentNode.removeChild(sep);
+        }
+      });
+
       // For each month, compute non-overlapping layout
       Object.keys(monthsMap).forEach(function(monthKey) {
         var mData = monthsMap[monthKey];
         var mRect = mData.mRect;
-        var cw = mRect.w / CFG.dCols; // cell width
-        var ch = mRect.h / CFG.dRows; // cell height
 
         // Group days of this month by row index (0 to 4)
         var rows = [[], [], [], [], []];
@@ -1969,55 +1999,84 @@
           rows[rIdx].sort(function(a, b) { return a.date - b.date; });
         }
 
-        // Calculate heights of each row in world coordinates
-        var rowHeights = [ch, ch, ch, ch, ch];
-        var todayH = 196 * s_base;
+        // Check if today is present in the month
+        var hasToday = mData.days.some(function(vd) {
+          return vd.date.toDateString() === new Date().toDateString();
+        });
 
+        // Define safe inner boundary: Inset by 8 screen pixels to avoid overlap with grids & highlights
+        var borderPadding = 8 / cam.z;
+        var safeRect = {
+          x: mRect.x + borderPadding,
+          y: mRect.y + borderPadding,
+          w: mRect.w - 2 * borderPadding,
+          h: mRect.h - 2 * borderPadding
+        };
+
+        // Width and height limits to calculate s_base proportionally
+        var reqWUnits = hasToday ? 1134 : 994;
+        var reqHUnits = hasToday ? 642 : 550;
+        
+        var s_w = (safeRect.w - 14 * padWorld) / reqWUnits;
+        var s_h = (safeRect.h - 10 * padWorld) / reqHUnits;
+        var s_base = Math.min(s_w, s_h);
+        if (s_base < 0.01) s_base = 0.01;
+
+        // Calculate heights of each row
+        var rowHeights = [0, 0, 0, 0, 0];
         for (var rIdx = 0; rIdx < 5; rIdx++) {
           var hasTodayInRow = rows[rIdx].some(function(vd) {
             return vd.date.toDateString() === new Date().toDateString();
           });
-          if (hasTodayInRow) {
-            rowHeights[rIdx] = todayH + 2 * padWorld;
-          }
+          rowHeights[rIdx] = (hasTodayInRow ? 196 : 104) * s_base + 2 * padWorld;
         }
 
         // Calculate vertical start of each row
         var rowStarts = [0, 0, 0, 0, 0];
         rowStarts[0] = 0;
         for (var rIdx = 1; rIdx < 5; rIdx++) {
-          rowStarts[rIdx] = rowStarts[rIdx - 1] + rowHeights[rIdx - 1];
+          var gap = (rIdx === 2) ? (30 * s_base) : 0;
+          rowStarts[rIdx] = rowStarts[rIdx - 1] + rowHeights[rIdx - 1] + gap;
         }
 
-        // Position cards in each row
+        // Append sprint divider line between row 1 and row 2
+        var separatorId = 'sep-' + monthKey;
+        var sepEl = _zoomWrapper.querySelector('#' + separatorId);
+        if (!sepEl) {
+          sepEl = document.createElement('div');
+          sepEl.id = separatorId;
+          sepEl.className = 'sprint-separator';
+          sepEl.style.cssText = 'position:absolute;pointer-events:none;border-top:2px dashed rgba(0, 184, 148, 0.4);';
+          _zoomWrapper.appendChild(sepEl);
+        }
+        var sepY = safeRect.y + rowStarts[2] - 15 * s_base;
+        sepEl.style.left = (safeRect.x + padWorld) + 'px';
+        sepEl.style.top = sepY + 'px';
+        sepEl.style.width = (safeRect.w - 2 * padWorld) + 'px';
+        sepEl.style.height = '0px';
+
+        // Position cards sequentially in each row
         for (var rIdx = 0; rIdx < 5; rIdx++) {
           var rowDays = rows[rIdx];
-          var nextX = 0;
+          var currentX = 0;
 
           for (var rdi = 0; rdi < rowDays.length; rdi++) {
             var vd = rowDays[rdi];
-            var d = vd.date.getDate() - 1;
-            var col = d % 7;
             var isToday = (vd.date.toDateString() === new Date().toDateString());
 
             var cardW = isToday ? 282 : 142;
             var cardH = isToday ? 196 : 104;
             var wWorld = cardW * s_base;
 
-            // X position in the row (relative to month start)
-            var defaultColStart = col * cw;
-            var X = Math.max(defaultColStart, nextX);
-
-            // Update nextX for next card
-            nextX = X + wWorld + 2 * padWorld;
-
             vd.calculated = {
-              posL: mRect.x + X + padWorld,
-              posT: mRect.y + rowStarts[rIdx] + padWorld,
+              posL: safeRect.x + currentX + padWorld,
+              posT: safeRect.y + rowStarts[rIdx] + padWorld,
               s: s_base,
               cardW: cardW,
               cardH: cardH
             };
+
+            currentX += wWorld + 2 * padWorld;
           }
         }
       });
@@ -2161,10 +2220,7 @@
 
       /* Show/hide Sprint toggle based on LOD */
       if (card._sprBtn) {
-        card._sprBtn.style.display = (level === 'H' && life._monthFocus) ? '' : 'none';
-        if (life._monthFocus) {
-          card._sprBtn.textContent = life._monthFocus.half ? '\u21C4 Sprint 2' : '\u21C4 Sprint 1';
-        }
+        card._sprBtn.style.display = 'none';
       }
       var hasDOMCards = life._domMap && life._domMap.size > 0;
 
@@ -2179,7 +2235,7 @@
       drawOverlays(ctx, life.ov, W, cam);
 
       /* Google Calendar events (Phase 3) — canvas only at zoomed-out levels */
-      if (level === 'Y' || level === 'M' || level === 'W') {
+      if (level === 'Y' || level === 'M' || level === 'W' || level === 'D') {
         drawCalEventsAsStickyNotes(ctx, life.calEvents, W, H, level, cam);
       }
 
