@@ -182,7 +182,7 @@
     return 'H';
   }
   function lodLabel(l) {
-    return l==='Y' ? 'Years' : l==='M' ? 'Months' : l==='W' ? 'Weeks' : l==='D' ? 'Days' : 'Hours';
+    return l==='Y' ? 'Years' : l==='M' ? 'Months' : l==='W' ? 'Weeks' : l==='D' ? 'Days' : 'Zooper';
   }
 
   /* ── Rect mappers (world-space coordinates) ── */
@@ -1148,7 +1148,7 @@
     var switches = document.createElement('div');
     switches.className = 'life-zoom-switches';
     var lvls = ['Y', 'M', 'W', 'D', 'H'];
-    var labels = { Y: 'Years', M: 'Months', W: 'Weeks', D: 'Days', H: 'Hours' };
+    var labels = { Y: 'Years', M: 'Months', W: 'Weeks', D: 'Days', H: 'Zooper' };
     var btnMap = {};
     lvls.forEach(function(lvl) {
       var btn = document.createElement('button');
@@ -1793,7 +1793,7 @@
     }
 
     function updateDOMOverlays(life, W, H, level, cam) {
-      if (level !== 'D' && level !== 'H') {
+      if (level !== 'H') {
         if (_zoomWrapper) { _dayCardContainer.innerHTML = ''; _zoomWrapper = null; }
         if (life._domMap) { life._domMap.clear(); }
         _lastVisibleKeys = '';
@@ -1844,7 +1844,7 @@
             if (screenW < 120 || screenH < 90) continue;
 
             /* Sprint split: filter to half-month when _monthFocus is set */
-            if (level === 'D' && life._monthFocus) {
+            if (level === 'H' && life._monthFocus) {
               if (y !== life._monthFocus.y || m !== life._monthFocus.m) continue;
               if (!life._monthFocus.half) { if (d > 13) continue; }
               else { if (d < 14) continue; }
@@ -2161,7 +2161,7 @@
 
       /* Show/hide Sprint toggle based on LOD */
       if (card._sprBtn) {
-        card._sprBtn.style.display = (level === 'D' && life._monthFocus) ? '' : 'none';
+        card._sprBtn.style.display = (level === 'H' && life._monthFocus) ? '' : 'none';
         if (life._monthFocus) {
           card._sprBtn.textContent = life._monthFocus.half ? '\u21C4 Sprint 2' : '\u21C4 Sprint 1';
         }
@@ -2172,8 +2172,8 @@
       else if (level === 'M') { drawYears(ctx, W, H, cam); drawMonths(ctx, W, H, cam); }
       else if (level === 'W') { drawWeeks(ctx, W, H, cam); }
       else if (level === 'D') { drawMonths(ctx, W, H, cam); drawDays(ctx, W, H, cam); }
-      else if (level === 'H') { drawMonths(ctx, W, H, cam); drawDays(ctx, W, H, cam); drawHours(ctx, W, H, cam); }
-      else                    { drawMonths(ctx, W, H, cam); drawDays(ctx, W, H, cam); drawHours(ctx, W, H, cam); }
+      else if (level === 'H') { drawMonths(ctx, W, H, cam); }
+      else                    { drawMonths(ctx, W, H, cam); }
 
       /* Manual overlays */
       drawOverlays(ctx, life.ov, W, cam);
