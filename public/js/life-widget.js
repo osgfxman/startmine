@@ -1161,7 +1161,14 @@
               popupBody: el,
               onRefresh: function() {
                 var L = ensLife(card);
+                L._evCache = null;
                 L._evCacheKey = '';
+                if (L._domMap) {
+                  L._domMap.forEach(function(entry) {
+                    if (entry.el && entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
+                  });
+                  L._domMap.clear();
+                }
                 if (typeof sv === 'function') sv();
               }
             });

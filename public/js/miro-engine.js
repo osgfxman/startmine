@@ -5717,6 +5717,9 @@ window.renderZooperDayCard = function(container, dayDate, options) {
         var isDragging = false;
         var dragMode = null;
         var draggedBoxes = [];
+        var clickTimeout = null;
+        var pendingSaveFn = null;
+        var pendingBox = null;
 
         var onMouseUp = async function() {
           if (!isDragging) return;
@@ -5725,114 +5728,144 @@ window.renderZooperDayCard = function(container, dayDate, options) {
 
           if (draggedBoxes.length === 0) return;
 
-          if (typeof ensureGoogleToken === 'function') await ensureGoogleToken();
+          var executeSave = async function() {
+            if (typeof ensureGoogleToken === 'function') await ensureGoogleToken();
 
-          showToast("⏳ Saving " + draggedBoxes.length + " changes...");
+            showToast("⏳ Saving " + draggedBoxes.length + " changes...");
 
-          try {
-            if (dragMode === 'check') {
-              var additionsByDate = {};
-              draggedBoxes.forEach(function(box) {
-                var dDate = box.getAttribute('data-date');
-                if (!additionsByDate[dDate]) additionsByDate[dDate] = 0;
-                additionsByDate[dDate]++;
-              });
-
-              var fruitCalId = '';
-              try {
-                var cals = await getCalendarList();
-                var fCal = cals.find(function(c) { return (c.summary||'').toLowerCase() === "!40's fruit"; });
-                if (fCal) fruitCalId = fCal.id;
-              } catch(e) {}
-
-              if (!fruitCalId) {
-                showToast("❌ Could not find '!40's Fruit' calendar!");
-                _renderFruit();
-                return;
-              }
-
-              var promises = [];
-              var dates = Object.keys(additionsByDate);
-              for (var i = 0; i < dates.length; i++) {
-                var dyDate = dates[i];
-                var count = additionsByDate[dyDate];
-
-                var parts = dyDate.split('-');
-                var dayDate = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
-                var dayMs = dayDate.getTime();
-
-                var dayEvtsForClick = fruitEv.filter(function(e) {
-                  return getLocalDateStr(new Date(e.start)) === dyDate;
+            try {
+              if (dragMode === 'check') {
+                var additionsByDate = {};
+                draggedBoxes.forEach(function(box) {
+                  var dDate = box.getAttribute('data-date');
+                  if (!additionsByDate[dDate]) additionsByDate[dDate] = 0;
+                  additionsByDate[dDate]++;
                 });
 
-                var occupiedSlots = {};
-                dayEvtsForClick.forEach(function(e) {
-                  var startMs = new Date(e.start).getTime();
-                  var slotIdx = Math.floor((startMs - dayMs) / 1800000);
-                  if (slotIdx >= 0 && slotIdx < 48) {
-                    occupiedSlots[slotIdx] = true;
-                  }
-                });
+                var fruitCalId = '';
+                try {
+                  var cals = await getCalendarList();
+                  var fCal = cals.find(function(c) { return (c.summary||'').toLowerCase() === "!40's fruit"; });
+                  if (fCal) fruitCalId = fCal.id;
+                } catch(e) {}
 
-                var preferred = [12, 13, 14, 33, 34, 35];
-                var allSlots = [];
-                preferred.forEach(function(s) { allSlots.push(s); });
-                for (var s = 0; s < 48; s++) {
-                  if (preferred.indexOf(s) === -1) {
-                    allSlots.push(s);
-                  }
+                if (!fruitCalId) {
+                  showToast("❌ Could not find '!40's Fruit' calendar!");
+                  _renderFruit();
+                  return;
                 }
 
-                for (var c = 0; c < count; c++) {
-                  var targetSlot = -1;
-                  for (var j = 0; j < allSlots.length; j++) {
-                    var slotCandidate = allSlots[j];
-                    if (!occupiedSlots[slotCandidate]) {
-                      targetSlot = slotCandidate;
-                      break;
+                var promises = [];
+                var dates = Object.keys(additionsByDate);
+                for (var i = 0; i < dates.length; i++) {
+                  var dyDate = dates[i];
+                  var count = additionsByDate[dyDate];
+
+                  var parts = dyDate.split('-');
+                  var dayDate = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+                  var dayMs = dayDate.getTime();
+
+                  var dayEvtsForClick = fruitEv.filter(function(e) {
+                    return getLocalDateStr(new Date(e.start)) === dyDate;
+                  });
+
+                  var occupiedSlots = {};
+                  dayEvtsForClick.forEach(function(e) {
+                    var startMs = new Date(e.start).getTime();
+                    var slotIdx = Math.floor((startMs - dayMs) / 1800000);
+                    if (slotIdx >= 0 && slotIdx < 48) {
+                      occupiedSlots[slotIdx] = true;
+                    }
+                  });
+
+                  var preferred = [12, 13, 14, 33, 34, 35];
+                  var allSlots = [];
+                  preferred.forEach(function(s) { allSlots.push(s); });
+                  for (var s = 0; s < 48; s++) {
+                    if (preferred.indexOf(s) === -1) {
+                      allSlots.push(s);
                     }
                   }
 
-                  if (targetSlot === -1) {
-                    showToast("⚠️ No empty slots left on " + dyDate);
-                    break;
+                  for (var c = 0; c < count; c++) {
+                    var targetSlot = -1;
+                    for (var j = 0; j < allSlots.length; j++) {
+                      var slotCandidate = allSlots[j];
+                      if (!occupiedSlots[slotCandidate]) {
+                        targetSlot = slotCandidate;
+                        break;
+                      }
+                    }
+
+                    if (targetSlot === -1) {
+                      showToast("⚠️ No empty slots left on " + dyDate);
+                      break;
+                    }
+
+                    occupiedSlots[targetSlot] = true;
+
+                    var slotStartMs = dayMs + targetSlot * 1800000;
+                    var slotEndMs = dayMs + (targetSlot + 1) * 1800000;
+                    var startD = new Date(slotStartMs);
+                    var endD = new Date(slotEndMs);
+
+                    promises.push(createCalendarEvent(fruitCalId, "!40's Fruit", startD, endD, ''));
                   }
-
-                  occupiedSlots[targetSlot] = true;
-
-                  var slotStartMs = dayMs + targetSlot * 1800000;
-                  var slotEndMs = dayMs + (targetSlot + 1) * 1800000;
-                  var startD = new Date(slotStartMs);
-                  var endD = new Date(slotEndMs);
-
-                  promises.push(createCalendarEvent(fruitCalId, "!40's Fruit", startD, endD, ''));
                 }
-              }
-              await Promise.all(promises);
-            } else {
-              // Deletions
-              var promises = [];
-              for (var i = 0; i < draggedBoxes.length; i++) {
-                var box = draggedBoxes[i];
-                var evId = box.getAttribute('data-ev-id');
-                var calId = box.getAttribute('data-cal-id');
-                if (evId && calId) {
-                  promises.push(deleteCalendarEvent(calId, evId));
+                await Promise.all(promises);
+              } else {
+                // Deletions
+                var promises = [];
+                for (var i = 0; i < draggedBoxes.length; i++) {
+                  var box = draggedBoxes[i];
+                  var evId = box.getAttribute('data-ev-id');
+                  var calId = box.getAttribute('data-cal-id');
+                  if (evId && calId) {
+                    promises.push(deleteCalendarEvent(calId, evId));
+                  }
                 }
+                await Promise.all(promises);
               }
-              await Promise.all(promises);
+              showToast("✅ Changes saved!");
+            } catch (e) {
+              showToast("❌ " + e.message);
             }
-            showToast("✅ Changes saved!");
-          } catch (e) {
-            showToast("❌ " + e.message);
+            _renderFruit();
+          };
+
+          if (draggedBoxes.length === 1) {
+            pendingBox = draggedBoxes[0];
+            pendingSaveFn = executeSave;
+            clickTimeout = setTimeout(function() {
+              if (pendingSaveFn) {
+                pendingSaveFn();
+                pendingSaveFn = null;
+                clickTimeout = null;
+                pendingBox = null;
+              }
+            }, 220);
+          } else {
+            await executeSave();
           }
-          _renderFruit();
         };
 
         var boxes = body.querySelectorAll('.fruit-tracker-box');
         boxes.forEach(function(box) {
           box.addEventListener('mousedown', function(e) {
             if (e.button !== 0) return;
+
+            // Clear any active clickTimeout (single click pending save)
+            if (clickTimeout) {
+              clearTimeout(clickTimeout);
+              clickTimeout = null;
+              if (pendingBox && pendingBox !== box && pendingSaveFn) {
+                // If it's a different box, execute its pending save immediately
+                pendingSaveFn();
+              }
+              pendingSaveFn = null;
+              pendingBox = null;
+            }
+
             isDragging = true;
             var isBoxChecked = !!box.getAttribute('data-ev-id');
             dragMode = isBoxChecked ? 'uncheck' : 'check';
@@ -5863,6 +5896,132 @@ window.renderZooperDayCard = function(container, dayDate, options) {
               box.innerHTML = '';
               box.style.opacity = '0.5';
             }
+          });
+
+          box.addEventListener('dblclick', async function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (clickTimeout) {
+              clearTimeout(clickTimeout);
+              clickTimeout = null;
+            }
+            pendingSaveFn = null;
+            pendingBox = null;
+
+            var evId = box.getAttribute('data-ev-id');
+            var calId = box.getAttribute('data-cal-id');
+            var currentSummary = box.getAttribute('data-summary') || '';
+            var dyDate = box.getAttribute('data-date');
+
+            // Restore visual state
+            if (evId) {
+              box.innerHTML = '🍎';
+            } else {
+              box.innerHTML = '';
+            }
+            box.style.opacity = '1';
+
+            if (typeof ensureGoogleToken === 'function') await ensureGoogleToken();
+
+            if (evId) {
+              var newSummary = prompt("Edit text for this fruit entry:", currentSummary);
+              if (newSummary === null) return; // user cancelled
+              newSummary = newSummary.trim();
+              if (newSummary === "") {
+                // Delete
+                showToast("⏳ Deleting entry...");
+                try {
+                  await deleteCalendarEvent(calId, evId);
+                  showToast("✅ Entry deleted!");
+                } catch(err) {
+                  showToast("❌ " + err.message);
+                }
+              } else {
+                // Update
+                showToast("⏳ Updating entry...");
+                try {
+                  await updateCalendarEvent(calId, evId, { summary: newSummary });
+                  showToast("✅ Entry updated!");
+                } catch(err) {
+                  showToast("❌ " + err.message);
+                }
+              }
+            } else {
+              var newSummary = prompt("Enter text for new fruit entry:", "!40's Fruit");
+              if (newSummary === null) return; // user cancelled
+              newSummary = newSummary.trim();
+              if (newSummary === "") return;
+
+              showToast("⏳ Creating entry...");
+              try {
+                var fruitCalId = '';
+                try {
+                  var cals = await getCalendarList();
+                  var fCal = cals.find(function(c) { return (c.summary||'').toLowerCase() === "!40's fruit"; });
+                  if (fCal) fruitCalId = fCal.id;
+                } catch(e) {}
+
+                if (!fruitCalId) {
+                  showToast("❌ Could not find '!40's Fruit' calendar!");
+                  _renderFruit();
+                  return;
+                }
+
+                // Find slot following priority
+                var parts = dyDate.split('-');
+                var dayDate = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+                var dayMs = dayDate.getTime();
+
+                var dayEvtsForClick = fruitEv.filter(function(evObj) {
+                  return getLocalDateStr(new Date(evObj.start)) === dyDate;
+                });
+
+                var occupiedSlots = {};
+                dayEvtsForClick.forEach(function(evObj) {
+                  var startMs = new Date(evObj.start).getTime();
+                  var slotIdx = Math.floor((startMs - dayMs) / 1800000);
+                  if (slotIdx >= 0 && slotIdx < 48) {
+                    occupiedSlots[slotIdx] = true;
+                  }
+                });
+
+                var preferred = [12, 13, 14, 33, 34, 35];
+                var allSlots = [];
+                preferred.forEach(function(s) { allSlots.push(s); });
+                for (var s = 0; s < 48; s++) {
+                  if (preferred.indexOf(s) === -1) {
+                    allSlots.push(s);
+                  }
+                }
+
+                var targetSlot = -1;
+                for (var j = 0; j < allSlots.length; j++) {
+                  var slotCandidate = allSlots[j];
+                  if (!occupiedSlots[slotCandidate]) {
+                    targetSlot = slotCandidate;
+                    break;
+                  }
+                }
+
+                if (targetSlot === -1) {
+                  showToast("⚠️ No empty slots left on " + dyDate);
+                  _renderFruit();
+                  return;
+                }
+
+                var slotStartMs = dayMs + targetSlot * 1800000;
+                var slotEndMs = dayMs + (targetSlot + 1) * 1800000;
+                var startD = new Date(slotStartMs);
+                var endD = new Date(slotEndMs);
+
+                await createCalendarEvent(fruitCalId, newSummary, startD, endD, '');
+                showToast("✅ Entry created!");
+              } catch(err) {
+                showToast("❌ " + err.message);
+              }
+            }
+            _renderFruit();
           });
         });
       } catch(err) {

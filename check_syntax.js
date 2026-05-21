@@ -2,7 +2,9 @@ const fs = require('fs');
 const vm = require('vm');
 
 const files = [
-  './public/js/app.js'
+  './public/js/app.js',
+  './public/js/miro-engine.js',
+  './public/js/life-widget.js'
 ];
 
 let allOk = true;
