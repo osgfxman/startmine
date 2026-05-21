@@ -15,9 +15,9 @@
     dCols: 7,  dRows: 5,              // up to 35 cells per month
     slots: 48, sects: 6,              // half-hour slots, 4-hour sections
     bg:      '#f6f7fb',               // light background
-    grid1:   'rgba(0,0,0,0.13)',      // year grid
-    grid2:   'rgba(0,0,0,0.07)',      // month grid
-    grid3:   'rgba(0,0,0,0.04)',      // day grid
+    grid1:   'rgba(0,0,0,0.22)',      // year grid
+    grid2:   'rgba(0,0,0,0.18)',      // month grid
+    grid3:   'rgba(0,0,0,0.15)',      // day grid
     tx:      'rgba(20,25,40,0.82)',   // primary text
     tx2:     'rgba(20,25,40,0.50)',   // secondary text
     accent:  '#00b894',               // highlight / today
@@ -108,12 +108,12 @@
 
   function zoomToLevel(life, level, W, H) {
     var cam = life.cam;
-    var targetZ = 0.5;
-    if (level === 'Y') targetZ = 0.5;
-    else if (level === 'M') targetZ = 1.6;
-    else if (level === 'W') targetZ = 3.0;
+    var targetZ = 1.0;
+    if (level === 'Y') targetZ = 1.0;
+    else if (level === 'M') targetZ = 2.0;
+    else if (level === 'W') targetZ = 4.0;
     else if (level === 'D') targetZ = 8.0;
-    else if (level === 'H') targetZ = 12.0;
+    else if (level === 'H') targetZ = 14.0;
 
     var cx = cam.x + (W / 2) / cam.z;
     var cy = cam.y + (H / 2) / cam.z;
@@ -124,7 +124,9 @@
       life._monthFocus = null;
     }
 
-    animateCam(life, tx, ty, targetZ, W, H);
+    animateCam(life, tx, ty, targetZ, W, H, function() {
+      if (typeof sv === 'function') sv();
+    });
   }
 
   function flyToToday(life, W, H) {
@@ -145,32 +147,38 @@
     if (!cell) return null;
     var startD, endD;
     if (cell.type === 'year') {
-      startD = new Date(cell.y, 0, 1);
-      endD = new Date(cell.y, 11, 31);
+      startD = new Date(cell.y, 0, 1, 0, 0, 0, 0);
+      endD = new Date(cell.y, 11, 31, 23, 59, 59, 999);
     } else if (cell.type === 'month') {
-      startD = new Date(cell.y, cell.m, 1);
-      endD = new Date(cell.y, cell.m, dim(cell.y, cell.m));
+      startD = new Date(cell.y, cell.m, 1, 0, 0, 0, 0);
+      endD = new Date(cell.y, cell.m, dim(cell.y, cell.m), 23, 59, 59, 999);
     } else if (cell.type === 'week') {
-      startD = new Date(cell.y, cell.m, cell.wRow * 7 + 1);
-      endD = new Date(cell.y, cell.m, Math.min(dim(cell.y, cell.m), (cell.wRow + 1) * 7));
+      startD = new Date(cell.y, cell.m, cell.wRow * 7 + 1, 0, 0, 0, 0);
+      endD = new Date(cell.y, cell.m, Math.min(dim(cell.y, cell.m), (cell.wRow + 1) * 7), 23, 59, 59, 999);
     } else if (cell.type === 'day') {
-      startD = new Date(cell.y, cell.m, cell.d + 1);
-      endD = new Date(cell.y, cell.m, cell.d + 1);
+      startD = new Date(cell.y, cell.m, cell.d + 1, 0, 0, 0, 0);
+      endD = new Date(cell.y, cell.m, cell.d + 1, 23, 59, 59, 999);
     } else if (cell.type === 'slot') {
       var sh = Math.floor(cell.sl / 2);
       var sm = (cell.sl % 2) * 30;
-      startD = new Date(cell.y, cell.m, cell.d + 1, sh, sm);
-      endD = new Date(cell.y, cell.m, cell.d + 1, sh, sm + 30);
+      startD = new Date(cell.y, cell.m, cell.d + 1, sh, sm, 0, 0);
+      endD = new Date(cell.y, cell.m, cell.d + 1, sh, sm + 29, 59, 999);
     }
     return { start: startD, end: endD };
   }
 
+  /* ── Frustum Visible Helper ── */
+  function isRectVisible(r, cam, W, H) {
+    var vw = W / cam.z, vh = H / cam.z;
+    return !(r.x + r.w <= cam.x || r.x >= cam.x + vw || r.y + r.h <= cam.y || r.y >= cam.y + vh);
+  }
+
   /* ── LOD — thresholds based on INTERNAL camera zoom (not Miro page zoom) ── */
   function lod(z) {
-    if (z < 0.9)  return 'Y';
-    if (z < 2.2)  return 'M';
-    if (z < 4.5)  return 'W';
-    if (z < 10.0) return 'D';
+    if (z <= 1.2)  return 'Y';
+    if (z <= 2.5)  return 'M';
+    if (z <= 5.0)  return 'W';
+    if (z <= 11.0) return 'D';
     return 'H';
   }
   function lodLabel(l) {
@@ -244,68 +252,108 @@
     var ty = rect.y + rect.h/2 - vh/2;
     tx = clamp(tx, 0, Math.max(0, W - vw));
     ty = clamp(ty, 0, Math.max(0, H - vh));
-    animateCam(life, tx, ty, targetZ, W, H);
+    animateCam(life, tx, ty, targetZ, W, H, function() {
+      if (typeof sv === 'function') sv();
+    });
   }
 
   /* ─────────────────────────────────────────────────────────
      PHASE 1 — Drawing Functions (Light Theme)
      ───────────────────────────────────────────────────────── */
-  function drawYears(ctx, W, H) {
+  function drawYears(ctx, W, H, cam) {
     var n = nowInfo();
-    ctx.font = 'bold 14px system-ui'; ctx.textBaseline = 'top';
     for (var i = 0; i < 50; i++) {
       var r = yR(i, W, H), y = CFG.startYear + i;
+      if (!isRectVisible(r, cam, W, H)) continue;
       ctx.strokeStyle = CFG.grid1; ctx.lineWidth = 1;
       ctx.strokeRect(r.x+.5, r.y+.5, r.w-1, r.h-1);
       if (y === n.y) {
         ctx.strokeStyle = CFG.accent; ctx.lineWidth = 1.8;
         ctx.strokeRect(r.x+.5, r.y+.5, r.w-1, r.h-1);
       }
-      ctx.fillStyle = (y === n.y) ? CFG.accent : CFG.tx;
-      ctx.fillText(''+y, r.x+8, r.y+6);
+      var fs = Math.min(14 / cam.z, r.h * 0.18);
+      ctx.font = 'bold ' + fs + 'px system-ui';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = (y === n.y) ? 'rgba(0, 184, 148, 0.8)' : 'rgba(20, 25, 40, 0.35)';
+      ctx.fillText(''+y, r.x + 8 / cam.z, r.y + 6 / cam.z);
     }
   }
 
-  function drawMonths(ctx, W, H) {
+  function drawMonths(ctx, W, H, cam) {
     var n = nowInfo();
-    ctx.textBaseline = 'top';
     for (var i = 0; i < 50; i++) {
       var yr = yR(i, W, H), y = CFG.startYear + i;
+      if (!isRectVisible(yr, cam, W, H)) continue;
       ctx.strokeStyle = CFG.grid1; ctx.lineWidth = 1.5;
       ctx.strokeRect(yr.x+.5, yr.y+.5, yr.w-1, yr.h-1);
-      ctx.font = 'bold 11px system-ui';
-      ctx.fillStyle = (y === n.y) ? CFG.accent : CFG.tx;
-      ctx.fillText(''+y, yr.x+6, yr.y+4);
+      
+      // Draw Year watermark in the background centered
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      var yrFs = Math.min(48 / cam.z, yr.h * 0.25);
+      ctx.font = 'bold ' + yrFs + 'px system-ui';
+      ctx.fillStyle = (y === n.y) ? 'rgba(0, 184, 148, 0.04)' : 'rgba(20, 25, 40, 0.025)';
+      ctx.fillText(''+y, yr.x + yr.w / 2, yr.y + yr.h / 2);
+      ctx.restore();
+
       for (var m = 0; m < 12; m++) {
         var mr = mR(i, m, W, H);
+        if (!isRectVisible(mr, cam, W, H)) continue;
         ctx.strokeStyle = CFG.grid2; ctx.lineWidth = .7;
         ctx.strokeRect(mr.x+.5, mr.y+.5, mr.w-1, mr.h-1);
         if (y===n.y && m===n.m) {
           ctx.strokeStyle = CFG.accent; ctx.lineWidth = 1.5;
           ctx.strokeRect(mr.x+.5, mr.y+.5, mr.w-1, mr.h-1);
         }
-        ctx.font = '9px system-ui';
-        ctx.fillStyle = (y===n.y && m===n.m) ? CFG.accent : CFG.tx2;
-        ctx.fillText(MN[m], mr.x+4, mr.y+3);
+        
+        // Draw Month watermark in the background centered
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        var mFs = Math.min(20 / cam.z, mr.h * 0.25);
+        ctx.font = 'bold ' + mFs + 'px system-ui';
+        ctx.fillStyle = (y===n.y && m===n.m) ? 'rgba(0, 184, 148, 0.08)' : 'rgba(20, 25, 40, 0.05)';
+        ctx.fillText(MN[m], mr.x + mr.w / 2, mr.y + mr.h / 2);
+        ctx.restore();
       }
     }
   }
 
-  function drawWeeks(ctx, W, H) {
+  function drawWeeks(ctx, W, H, cam) {
     var n = nowInfo();
-    ctx.textBaseline = 'top';
     for (var i = 0; i < 50; i++) {
       var yr = yR(i, W, H), y = CFG.startYear + i;
+      if (!isRectVisible(yr, cam, W, H)) continue;
       ctx.strokeStyle = CFG.grid1; ctx.lineWidth = 1.5;
       ctx.strokeRect(yr.x+.5, yr.y+.5, yr.w-1, yr.h-1);
-      ctx.font = 'bold 11px system-ui';
-      ctx.fillStyle = (y === n.y) ? CFG.accent : CFG.tx;
-      ctx.fillText(''+y, yr.x+6, yr.y+4);
+      
+      // Year watermark
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      var yrFs = Math.min(48 / cam.z, yr.h * 0.25);
+      ctx.font = 'bold ' + yrFs + 'px system-ui';
+      ctx.fillStyle = (y === n.y) ? 'rgba(0, 184, 148, 0.04)' : 'rgba(20, 25, 40, 0.025)';
+      ctx.fillText(''+y, yr.x + yr.w / 2, yr.y + yr.h / 2);
+      ctx.restore();
+
       for (var m = 0; m < 12; m++) {
         var mr = mR(i, m, W, H);
+        if (!isRectVisible(mr, cam, W, H)) continue;
         ctx.strokeStyle = CFG.grid2; ctx.lineWidth = .7;
         ctx.strokeRect(mr.x+.5, mr.y+.5, mr.w-1, mr.h-1);
         
+        // Month watermark
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        var mFs = Math.min(20 / cam.z, mr.h * 0.25);
+        ctx.font = 'bold ' + mFs + 'px system-ui';
+        ctx.fillStyle = (y===n.y && m===n.m) ? 'rgba(0, 184, 148, 0.08)' : 'rgba(20, 25, 40, 0.05)';
+        ctx.fillText(MN[m], mr.x + mr.w / 2, mr.y + mr.h / 2);
+        ctx.restore();
+
         var rh = mr.h / CFG.dRows; // 5 rows
         for (var r = 0; r < CFG.dRows; r++) {
           var ry = mr.y + r * rh;
@@ -338,56 +386,80 @@
             ctx.strokeRect(mr.x+.5, ry+.5, mr.w-1, rh-1);
           }
 
-          if (mr.w > 25 && rh > 10) {
-            ctx.font = '7px system-ui';
-            ctx.fillStyle = isTodayWeek ? CFG.accent : CFG.tx2;
-            ctx.fillText('Wk ' + wkNum, mr.x + 3, ry + 2);
+          var screenMrW = mr.w * cam.z;
+          var screenRh = rh * cam.z;
+          if (screenMrW > 25 && screenRh > 10) {
+            var wkFs = Math.min(8 / cam.z, rh * 0.6);
+            ctx.font = wkFs + 'px system-ui';
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = isTodayWeek ? CFG.accent : 'rgba(20, 25, 40, 0.35)';
+            ctx.fillText('Wk ' + wkNum, mr.x + 3 / cam.z, ry + 2 / cam.z);
           }
         }
       }
     }
   }
 
-  function drawDays(ctx, W, H) {
+  function drawDays(ctx, W, H, cam) {
     var n = nowInfo(), td = new Date(n.y, n.m, n.d).getTime();
+    ctx.textBaseline = 'top';
     for (var i = 0; i < 50; i++) {
+      var yr = yR(i, W, H);
+      if (!isRectVisible(yr, cam, W, H)) continue;
       var y = CFG.startYear + i;
       for (var m = 0; m < 12; m++) {
+        var mr = mR(i, m, W, H);
+        if (!isRectVisible(mr, cam, W, H)) continue;
         var ds = dim(y, m);
         for (var d = 0; d < ds; d++) {
           var r = dR(i, m, d, W, H);
+          if (!isRectVisible(r, cam, W, H)) continue;
           ctx.strokeStyle = CFG.grid3; ctx.lineWidth = .6;
           ctx.strokeRect(r.x+.5, r.y+.5, r.w-1, r.h-1);
           if (new Date(y, m, d+1).getTime() === td) {
             ctx.strokeStyle = CFG.accent; ctx.lineWidth = 1.5;
             ctx.strokeRect(r.x+.5, r.y+.5, r.w-1, r.h-1);
           }
-          if (r.w > 18 && r.h > 14) {
-            ctx.font = '8px system-ui'; ctx.textBaseline = 'top';
-            ctx.fillStyle = (new Date(y, m, d+1).getTime() === td) ? CFG.accent : CFG.tx2;
-            ctx.fillText(''+(d+1), r.x+2, r.y+2);
+          var screenW = r.w * cam.z;
+          var screenH = r.h * cam.z;
+          if (screenW > 18 && screenH > 14) {
+            var dayFs = Math.min(9 / cam.z, r.h * 0.5);
+            ctx.font = dayFs + 'px system-ui';
+            ctx.fillStyle = (new Date(y, m, d+1).getTime() === td) ? CFG.accent : 'rgba(20, 25, 40, 0.4)';
+            ctx.fillText(''+(d+1), r.x + 3 / cam.z, r.y + 2 / cam.z);
           }
         }
       }
     }
   }
 
-  function drawHours(ctx, W, H) {
+  function drawHours(ctx, W, H, cam) {
     var n = nowInfo();
     for (var i = 0; i < 50; i++) {
+      var yr = yR(i, W, H);
+      if (!isRectVisible(yr, cam, W, H)) continue;
       var y = CFG.startYear + i;
       for (var m = 0; m < 12; m++) {
+        var mr = mR(i, m, W, H);
+        if (!isRectVisible(mr, cam, W, H)) continue;
         var ds = dim(y, m);
         for (var d = 0; d < ds; d++) {
           var r = dR(i, m, d, W, H);
-          if (r.w < 80 || r.h < 80) continue;
+          if (!isRectVisible(r, cam, W, H)) continue;
+          var screenW = r.w * cam.z;
+          var screenH = r.h * cam.z;
+          if (screenW < 80 || screenH < 80) continue;
           var isToday = (y===n.y && m===n.m && d+1===n.d);
           var sh = r.h / CFG.slots, eh = r.h / CFG.sects;
           for (var s = 0; s < CFG.sects; s++) {
             ctx.strokeStyle = CFG.grid2; ctx.lineWidth = 1;
             ctx.strokeRect(r.x, r.y + s*eh, r.w, eh);
-            ctx.font = '8px system-ui'; ctx.fillStyle = CFG.tx2; ctx.textBaseline = 'top';
-            ctx.fillText((s*4)+':00', r.x+3, r.y + s*eh + 2);
+            
+            var hrFs = Math.min(8 / cam.z, eh * 0.5);
+            ctx.font = hrFs + 'px system-ui';
+            ctx.fillStyle = 'rgba(20, 25, 40, 0.35)';
+            ctx.textBaseline = 'top';
+            ctx.fillText((s*4)+':00', r.x + 3 / cam.z, r.y + s*eh + 2 / cam.z);
           }
           for (var sl = 0; sl < CFG.slots; sl++) {
             var sy = r.y + sl * sh;
@@ -397,9 +469,12 @@
           }
           ctx.strokeStyle = isToday ? CFG.accent : CFG.grid1; ctx.lineWidth = isToday ? 2 : 1;
           ctx.strokeRect(r.x, r.y, r.w, r.h);
-          ctx.font = 'bold 10px system-ui'; ctx.fillStyle = isToday ? CFG.accent : CFG.tx;
+          
+          var titleFs = Math.min(10 / cam.z, sh * 1.5);
+          ctx.font = 'bold ' + titleFs + 'px system-ui';
+          ctx.fillStyle = isToday ? CFG.accent : 'rgba(20, 25, 40, 0.5)';
           ctx.textBaseline = 'bottom';
-          ctx.fillText((d+1)+' '+MN[m]+' '+y, r.x+4, r.y-3);
+          ctx.fillText((d+1)+' '+MN[m]+' '+y, r.x + 4 / cam.z, r.y - 3 / cam.z);
         }
       }
     }
@@ -421,7 +496,7 @@
     }
   }
 
-  function drawOverlays(ctx, ov, W) {
+  function drawOverlays(ctx, ov, W, cam) {
     if (!ov || !ov.length) return;
     layoutOverlays(ov);
     var T = totalDays();
@@ -433,15 +508,18 @@
       var py = 8 + ev._l * 26;
       ctx.fillStyle = ev.color || CFG.ovFill;
       ctx.strokeStyle = ev.bc || CFG.ovStroke;
-      ctx.lineWidth = 1;
+      ctx.lineWidth = Math.max(0.5, 1 / cam.z);
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(sx, py, w, 22, 4);
       else ctx.rect(sx, py, w, 22);
       ctx.fill(); ctx.stroke();
-      if (w > 36) {
-        ctx.fillStyle = '#1a1a1a'; ctx.font = '10px system-ui'; ctx.textBaseline = 'middle';
+      var minW = 36 / cam.z;
+      if (w > minW) {
+        var ovFs = Math.min(10 / cam.z, 14);
+        var padX = 6 / cam.z;
+        ctx.fillStyle = '#1a1a1a'; ctx.font = ovFs + 'px system-ui'; ctx.textBaseline = 'middle';
         ctx.save(); ctx.beginPath(); ctx.rect(sx, py, w, 22); ctx.clip();
-        ctx.fillText(ev.title || '', sx+6, py+11);
+        ctx.fillText(ev.title || '', sx + padX, py + 11);
         ctx.restore();
       }
     }
@@ -454,12 +532,9 @@
     if (level === 'Y') {
       for (var i = 0; i < 50; i++) {
         var y = CFG.startYear + i;
-        var sCell = new Date(y, 0, 1, 0, 0, 0, 0);
-        var eCell = new Date(y, 11, 31, 23, 59, 59, 999);
-        var overlaps = sTime === eTime ? 
-          (sTime >= sCell.getTime() && sTime <= eCell.getTime()) : 
-          (Math.max(sCell.getTime(), sTime) < Math.min(eCell.getTime(), eTime));
-        if (overlaps) {
+        var sCell = new Date(y, 0, 1, 0, 0, 0, 0).getTime();
+        var eCell = new Date(y, 11, 31, 23, 59, 59, 999).getTime();
+        if (sCell <= eTime && eCell >= sTime) {
           cells.push(yR(i, W, H));
         }
       }
@@ -467,12 +542,9 @@
       for (var i = 0; i < 50; i++) {
         var y = CFG.startYear + i;
         for (var m = 0; m < 12; m++) {
-          var sCell = new Date(y, m, 1, 0, 0, 0, 0);
-          var eCell = new Date(y, m, dim(y, m), 23, 59, 59, 999);
-          var overlaps = sTime === eTime ? 
-            (sTime >= sCell.getTime() && sTime <= eCell.getTime()) : 
-            (Math.max(sCell.getTime(), sTime) < Math.min(eCell.getTime(), eTime));
-          if (overlaps) {
+          var sCell = new Date(y, m, 1, 0, 0, 0, 0).getTime();
+          var eCell = new Date(y, m, dim(y, m), 23, 59, 59, 999).getTime();
+          if (sCell <= eTime && eCell >= sTime) {
             cells.push(mR(i, m, W, H));
           }
         }
@@ -482,12 +554,9 @@
         var y = CFG.startYear + i;
         for (var m = 0; m < 12; m++) {
           for (var r = 0; r < CFG.dRows; r++) {
-            var sCell = new Date(y, m, r * 7 + 1, 0, 0, 0, 0);
-            var eCell = new Date(y, m, Math.min(dim(y, m), (r + 1) * 7), 23, 59, 59, 999);
-            var overlaps = sTime === eTime ? 
-              (sTime >= sCell.getTime() && sTime <= eCell.getTime()) : 
-              (Math.max(sCell.getTime(), sTime) < Math.min(eCell.getTime(), eTime));
-            if (overlaps) {
+            var sCell = new Date(y, m, r * 7 + 1, 0, 0, 0, 0).getTime();
+            var eCell = new Date(y, m, Math.min(dim(y, m), (r + 1) * 7), 23, 59, 59, 999).getTime();
+            if (sCell <= eTime && eCell >= sTime) {
               var mr = mR(i, m, W, H);
               var rh = mr.h / CFG.dRows;
               cells.push({ x: mr.x, y: mr.y + r * rh, w: mr.w, h: rh });
@@ -501,12 +570,9 @@
         for (var m = 0; m < 12; m++) {
           var ds = dim(y, m);
           for (var d = 0; d < ds; d++) {
-            var sCell = new Date(y, m, d + 1, 0, 0, 0, 0);
-            var eCell = new Date(y, m, d + 1, 23, 59, 59, 999);
-            var overlaps = sTime === eTime ? 
-              (sTime >= sCell.getTime() && sTime <= eCell.getTime()) : 
-              (Math.max(sCell.getTime(), sTime) < Math.min(eCell.getTime(), eTime));
-            if (overlaps) {
+            var sCell = new Date(y, m, d + 1, 0, 0, 0, 0).getTime();
+            var eCell = new Date(y, m, d + 1, 23, 59, 59, 999).getTime();
+            if (sCell <= eTime && eCell >= sTime) {
               cells.push(dR(i, m, d, W, H));
             }
           }
@@ -524,12 +590,9 @@
             for (var sl = 0; sl < CFG.slots; sl++) {
               var sh = Math.floor(sl / 2);
               var sm = (sl % 2) * 30;
-              var sCell = new Date(y, m, d + 1, sh, sm, 0, 0);
-              var eCell = new Date(y, m, d + 1, sh, sm + 30, 0, 0);
-              var overlaps = sTime === eTime ? 
-                (sTime >= sCell.getTime() && sTime <= eCell.getTime()) : 
-                (Math.max(sCell.getTime(), sTime) < Math.min(eCell.getTime(), eTime));
-              if (overlaps) {
+              var sCell = new Date(y, m, d + 1, sh, sm, 0, 0).getTime();
+              var eCell = new Date(y, m, d + 1, sh, sm + 29, 59, 999).getTime();
+              if (sCell <= eTime && eCell >= sTime) {
                 cells.push({ x: r.x, y: r.y + sl * slotH, w: r.w, h: slotH });
               }
             }
@@ -540,36 +603,39 @@
     return cells;
   }
 
-  function drawStickyNote(ctx, x, y, w, h, ev, color, strokeColor) {
+  function drawStickyNote(ctx, x, y, w, h, ev, color, strokeColor, cam) {
     ctx.save();
     
     ctx.fillStyle = color;
     ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.5 / cam.z;
     
     ctx.beginPath();
     if (ctx.roundRect) {
-      ctx.roundRect(x + 2, y + 2, w - 4, h - 4, 4);
+      ctx.roundRect(x + 2 / cam.z, y + 2 / cam.z, w - 4 / cam.z, h - 4 / cam.z, 4 / cam.z);
     } else {
-      ctx.rect(x + 2, y + 2, w - 4, h - 4);
+      ctx.rect(x + 2 / cam.z, y + 2 / cam.z, w - 4 / cam.z, h - 4 / cam.z);
     }
     ctx.fill();
     ctx.stroke();
     
     var title = ev.title || '';
     if (title) {
-      var maxW = w - 8;
-      var maxH = h - 8;
-      if (maxW > 10 && maxH > 8) {
+      var maxW = w - 8 / cam.z;
+      var maxH = h - 8 / cam.z;
+      if (maxW > 10 / cam.z && maxH > 8 / cam.z) {
         ctx.fillStyle = '#1e272e';
         ctx.textBaseline = 'middle';
         ctx.textAlign = 'center';
         
-        var fontSize = Math.min(18, Math.max(7, Math.floor(h * 0.4)));
+        var maxFsScreen = 12;
+        var minFsScreen = 6;
+        var targetFsScreen = Math.min(maxFsScreen, Math.max(minFsScreen, Math.floor(h * cam.z * 0.4)));
+        var fontSize = targetFsScreen / cam.z;
         var words = title.split(' ');
         var lines = [];
         
-        while (fontSize >= 6) {
+        while (fontSize * cam.z >= minFsScreen) {
           ctx.font = 'bold ' + fontSize + 'px system-ui, -apple-system, sans-serif';
           lines = [];
           var currentLine = words[0];
@@ -590,7 +656,7 @@
           if (totalHeight <= maxH) {
             break;
           }
-          fontSize--;
+          fontSize -= 1 / cam.z;
         }
         
         ctx.font = 'bold ' + fontSize + 'px system-ui, -apple-system, sans-serif';
@@ -599,7 +665,7 @@
         
         ctx.save();
         ctx.beginPath();
-        ctx.rect(x + 4, y + 4, w - 8, h - 8);
+        ctx.rect(x + 4 / cam.z, y + 4 / cam.z, w - 8 / cam.z, h - 8 / cam.z);
         ctx.clip();
         
         for (var l = 0; l < lines.length; l++) {
@@ -611,7 +677,7 @@
     ctx.restore();
   }
 
-  function drawCalEventsAsStickyNotes(ctx, events, W, H, level) {
+  function drawCalEventsAsStickyNotes(ctx, events, W, H, level, cam) {
     if (!events || !events.length) return;
     if (level === 'H') return;
     
@@ -654,12 +720,12 @@
           if (c.x - (lastCell.x + lastCell.w) < 5) {
             lastCell = c;
           } else {
-            drawStickyNote(ctx, startCell.x, startCell.y, (lastCell.x + lastCell.w) - startCell.x, startCell.h, ev, color, strokeColor);
+            drawStickyNote(ctx, startCell.x, startCell.y, (lastCell.x + lastCell.w) - startCell.x, startCell.h, ev, color, strokeColor, cam);
             startCell = c;
             lastCell = c;
           }
         }
-        drawStickyNote(ctx, startCell.x, startCell.y, (lastCell.x + lastCell.w) - startCell.x, startCell.h, ev, color, strokeColor);
+        drawStickyNote(ctx, startCell.x, startCell.y, (lastCell.x + lastCell.w) - startCell.x, startCell.h, ev, color, strokeColor, cam);
       }
     }
   }
@@ -1048,7 +1114,7 @@
      BUILD — DOM + Render Loop + Interactions
      ───────────────────────────────────────────────────────── */
   function build(card) {
-    ensLife(card);
+    var life = ensLife(card);
 
     /* ── Container ── */
     var el = document.createElement('div');
@@ -1415,6 +1481,14 @@
       if (typeof sv === 'function') sv(false, true);
     }
 
+    function getMousePos(e) {
+      var rect = cv.getBoundingClientRect();
+      return {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      };
+    }
+
     /* Mouse-down */
     cv.addEventListener('mousedown', function(e) {
       e.stopPropagation();
@@ -1422,27 +1496,55 @@
       clampCam(cam, wh.W, wh.H);
       ST.moved = false;
 
+      var pos = getMousePos(e);
+
       // Check if clicking inside the minimap region
       var mmW = 140, mmH = 80, pad = 10;
       var mmX = wh.W - mmW - pad, mmY = wh.H - mmH - pad;
-      if (e.offsetX >= mmX && e.offsetX <= mmX + mmW && e.offsetY >= mmY && e.offsetY <= mmY + mmH) {
+      if (pos.x >= mmX && pos.x <= mmX + mmW && pos.y >= mmY && pos.y <= mmY + mmH) {
         ST.minimapDragging = true;
-        updateCamFromMinimap(e.offsetX - mmX, e.offsetY - mmY, cam, wh.W, wh.H);
+        updateCamFromMinimap(pos.x - mmX, pos.y - mmY, cam, wh.W, wh.H);
         e.preventDefault();
+        
+        window.addEventListener('mousemove', onWindowMouseMove);
+        window.addEventListener('mouseup', onWindowMouseUp);
         return;
       }
 
       // Alt + Click or middle/right click starts panning
       if (e.button === 1 || e.button === 2 || (e.altKey && e.button === 0)) {
-        ST.panning = true; ST.px = e.offsetX; ST.py = e.offsetY;
-        e.preventDefault(); return;
+        ST.panning = true; ST.px = pos.x; ST.py = pos.y;
+        e.preventDefault();
+        
+        window.addEventListener('mousemove', onWindowMouseMove);
+        window.addEventListener('mouseup', onWindowMouseUp);
+        return;
       }
 
-      // Left click starts drag-selection
+      // Left click starts drag-selection (or single selection on click)
       if (e.button === 0) {
-        ST.dn = true; ST.sx = e.offsetX; ST.sy = e.offsetY;
-        var wp = s2w(e.offsetX, e.offsetY, cam);
+        ST.dn = true; ST.sx = pos.x; ST.sy = pos.y;
+        var wp = s2w(pos.x, pos.y, cam);
         var curLOD = lod(cam.z);
+        
+        // Check for click on overlays / calEvents first before initiating cell selection
+        layoutOverlays(life.ov);
+        var ovHit = hitOverlay(wp.x, wp.y, life.ov, wh.W);
+        var calHit = hitCalEvent(wp.x, wp.y, life.calEvents, wh.W, wh.H, curLOD);
+        
+        if (ovHit && ovHit.source !== 'gcal') {
+          ST.dn = false; // Cancel cell selection drag
+          openEditor(ovHit);
+          e.preventDefault();
+          return;
+        }
+        if (calHit) {
+          ST.dn = false; // Cancel cell selection drag
+          openEditor(calHit);
+          e.preventDefault();
+          return;
+        }
+
         var startCell = pickCell(wp.x, wp.y, wh.W, wh.H, curLOD);
         if (startCell) {
           life.selStart = startCell;
@@ -1451,108 +1553,57 @@
           life.selStart = null;
           life.selEnd = null;
         }
-        e.preventDefault(); return;
+        e.preventDefault();
+        
+        window.addEventListener('mousemove', onWindowMouseMove);
+        window.addEventListener('mouseup', onWindowMouseUp);
+        return;
       }
     });
 
-    /* Mouse-move */
-    cv.addEventListener('mousemove', function(e) {
+    function onWindowMouseMove(e) {
+      var pos = getMousePos(e);
       var wh = getWH();
-      var mmW = 140, mmH = 80, pad = 10;
-      var mmX = wh.W - mmW - pad, mmY = wh.H - mmH - pad;
-
+      var life = ensLife(card), cam = life.cam;
+      
       if (ST.minimapDragging) {
-        var life = ensLife(card), cam = life.cam;
-        updateCamFromMinimap(e.offsetX - mmX, e.offsetY - mmY, cam, wh.W, wh.H);
-        e.preventDefault();
+        var mmW = 140, mmH = 80, pad = 10;
+        var mmX = wh.W - mmW - pad, mmY = wh.H - mmH - pad;
+        updateCamFromMinimap(pos.x - mmX, pos.y - mmY, cam, wh.W, wh.H);
         return;
       }
-
-      /* Tooltip (Phase 4) */
-      if (!ST.dn && !ST.panning) {
-        var life = ensLife(card), cam = life.cam;
+      
+      var dx = pos.x - (ST.panning ? ST.px : ST.sx);
+      var dy = pos.y - (ST.panning ? ST.py : ST.sy);
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) ST.moved = true;
+      
+      if (ST.panning) {
+        cam.x -= dx / cam.z; cam.y -= dy / cam.z;
+        ST.px = pos.x; ST.py = pos.y;
         clampCam(cam, wh.W, wh.H);
-
-        // Hide tooltip & set pointer cursor when hovering minimap
-        if (e.offsetX >= mmX && e.offsetX <= mmX + mmW && e.offsetY >= mmY && e.offsetY <= mmY + mmH) {
-          tooltip.style.display = 'none';
-          tooltip.style.opacity = '0';
-          cv.style.cursor = 'pointer';
-        } else {
-          cv.style.cursor = '';
-          var wp = s2w(e.offsetX, e.offsetY, cam);
-          var curLOD = lod(cam.z);
-          
-          var eventHit = hitCalEvent(wp.x, wp.y, life.calEvents, wh.W, wh.H, curLOD) || hitOverlay(wp.x, wp.y, life.ov, wh.W);
-          if (eventHit) {
-            var txt = eventHit.title || '(No Title)';
-            if (eventHit.description) {
-              txt += ': ' + eventHit.description;
-            }
-            tooltip.textContent = txt;
-            tooltip.style.display = 'block';
-            tooltip.style.opacity = '1';
-            tooltip.style.left = (e.offsetX + 14) + 'px';
-            tooltip.style.top = (e.offsetY + 14 + 32) + 'px';
-            cv.style.cursor = 'pointer';
-          } else {
-            var hit = pickCell(wp.x, wp.y, wh.W, wh.H, curLOD);
-            if (hit) {
-              var txt = '';
-              if (hit.type==='year')  txt = ''+hit.y;
-              else if (hit.type==='month') txt = MN[hit.m]+' '+hit.y;
-              else if (hit.type==='week') txt = 'Wk ' + getWeekNumber(new Date(hit.y, hit.m, hit.wRow * 7 + 1)) + ' ' + MN[hit.m] + ' ' + hit.y;
-              else if (hit.type==='day')   txt = (hit.d+1)+' '+MN[hit.m]+' '+hit.y;
-              else if (hit.type==='slot') {
-                var h = Math.floor(hit.sl/2);
-                txt = (hit.d+1)+' '+MN[hit.m]+' '+hit.y+' '+h+':'+(hit.sl%2?'30':'00');
-              }
-              tooltip.textContent = txt;
-              tooltip.style.display = 'block';
-              tooltip.style.opacity = '1';
-              tooltip.style.left = (e.offsetX + 14) + 'px';
-              tooltip.style.top = (e.offsetY + 14 + 32) + 'px';
-            } else {
-              tooltip.style.display = 'none';
-              tooltip.style.opacity = '0';
-            }
-          }
-        }
-      }
-      if (!ST.dn && !ST.panning) return;
-      if (ST.dn && life.selStart) {
-        var life = ensLife(card), cam = life.cam;
-        var wp = s2w(e.offsetX, e.offsetY, cam);
+      } else if (ST.dn && life.selStart) {
+        var wp = s2w(pos.x, pos.y, cam);
         var curLOD = lod(cam.z);
         var currentCell = pickCell(wp.x, wp.y, wh.W, wh.H, curLOD);
         if (currentCell) {
           life.selEnd = currentCell;
         }
       }
-      var dx = e.offsetX - (ST.panning ? ST.px : ST.sx);
-      var dy = e.offsetY - (ST.panning ? ST.py : ST.sy);
-      if (Math.abs(dx)>3 || Math.abs(dy)>3) ST.moved = true;
-      if (ST.panning) {
-        var life2 = ensLife(card), cam2 = life2.cam, wh2 = getWH();
-        cam2.x -= dx / cam2.z; cam2.y -= dy / cam2.z;
-        ST.px = e.offsetX; ST.py = e.offsetY;
-        clampCam(cam2, wh2.W, wh2.H);
-        e.preventDefault();
-      }
-    });
+    }
 
-    /* Mouse-up */
-    cv.addEventListener('mouseup', function(e) {
-      e.stopPropagation();
+    function onWindowMouseUp(e) {
+      window.removeEventListener('mousemove', onWindowMouseMove);
+      window.removeEventListener('mouseup', onWindowMouseUp);
+      
       if (ST.minimapDragging) {
         ST.minimapDragging = false;
         if (typeof sv === 'function') sv();
         return;
       }
+      
       var life = ensLife(card), cam = life.cam, wh = getWH();
       clampCam(cam, wh.W, wh.H);
 
-      /* Finish overlay creation */
       if (ST.dn) {
         ST.dn = false;
         var sStart = life.selStart;
@@ -1560,7 +1611,7 @@
         life.selStart = null;
         life.selEnd = null;
 
-        if (ST.moved && sStart && sEnd) {
+        if (sStart && sEnd) {
           var rStart = getCellDateRange(sStart);
           var rEnd = getCellDateRange(sEnd);
           if (rStart && rEnd) {
@@ -1579,32 +1630,66 @@
           return;
         }
       }
-      /* Finish pan */
-      if (ST.panning) { ST.panning = false; if (typeof sv==='function') sv(); return; }
+      
+      if (ST.panning) {
+        ST.panning = false;
+        if (typeof sv==='function') sv();
+        return;
+      }
+    }
 
-      /* Single-click actions */
-      if (!ST.moved && e.button === 0) {
-        var wp = s2w(e.offsetX, e.offsetY, cam);
-        layoutOverlays(life.ov);
-        var ovHit = hitOverlay(wp.x, wp.y, life.ov, wh.W);
-        if (ovHit && ovHit.source !== 'gcal') { openEditor(ovHit); return; }
-        
+    /* Mouse-move for hover tooltip and custom cursor */
+    cv.addEventListener('mousemove', function(e) {
+      if (ST.dn || ST.panning || ST.minimapDragging) return;
+      var wh = getWH();
+      var mmW = 140, mmH = 80, pad = 10;
+      var mmX = wh.W - mmW - pad, mmY = wh.H - mmH - pad;
+      var pos = getMousePos(e);
+
+      // Hide tooltip & set pointer cursor when hovering minimap
+      if (pos.x >= mmX && pos.x <= mmX + mmW && pos.y >= mmY && pos.y <= mmY + mmH) {
+        tooltip.style.display = 'none';
+        tooltip.style.opacity = '0';
+        cv.style.cursor = 'pointer';
+      } else {
+        cv.style.cursor = '';
+        var wp = s2w(pos.x, pos.y, cam);
         var curLOD = lod(cam.z);
-        var calHit = hitCalEvent(wp.x, wp.y, life.calEvents, wh.W, wh.H, curLOD);
-        if (calHit) { openEditor(calHit); return; }
-
-        /* Navigation drill-down (Phase 2) */
-        var hit = pickCell(wp.x, wp.y, wh.W, wh.H, curLOD);
-        if (!hit) return;
-        if (hit.type==='year')       zoomToRect(life, hit.rect, wh.W, wh.H, 1.6);
-        else if (hit.type==='month') {
-          life._monthFocus = { y: hit.y, m: hit.m, half: 0 };
-          zoomToRect(life, hit.rect, wh.W, wh.H, 4.0);
+        
+        var eventHit = hitCalEvent(wp.x, wp.y, life.calEvents, wh.W, wh.H, curLOD) || hitOverlay(wp.x, wp.y, life.ov, wh.W);
+        if (eventHit) {
+          var txt = eventHit.title || '(No Title)';
+          if (eventHit.description) {
+            txt += ': ' + eventHit.description;
+          }
+          tooltip.textContent = txt;
+          tooltip.style.display = 'block';
+          tooltip.style.opacity = '1';
+          tooltip.style.left = (pos.x + 14) + 'px';
+          tooltip.style.top = (pos.y + 14 + 32) + 'px';
+          cv.style.cursor = 'pointer';
+        } else {
+          var hit = pickCell(wp.x, wp.y, wh.W, wh.H, curLOD);
+          if (hit) {
+            var txt = '';
+            if (hit.type==='year')  txt = ''+hit.y;
+            else if (hit.type==='month') txt = MN[hit.m]+' '+hit.y;
+            else if (hit.type==='week') txt = 'Wk ' + getWeekNumber(new Date(hit.y, hit.m, hit.wRow * 7 + 1)) + ' ' + MN[hit.m] + ' ' + hit.y;
+            else if (hit.type==='day')   txt = (hit.d+1)+' '+MN[hit.m]+' '+hit.y;
+            else if (hit.type==='slot') {
+              var h = Math.floor(hit.sl/2);
+              txt = (hit.d+1)+' '+MN[hit.m]+' '+hit.y+' '+h+':'+(hit.sl%2?'30':'00');
+            }
+            tooltip.textContent = txt;
+            tooltip.style.display = 'block';
+            tooltip.style.opacity = '1';
+            tooltip.style.left = (pos.x + 14) + 'px';
+            tooltip.style.top = (pos.y + 14 + 32) + 'px';
+          } else {
+            tooltip.style.display = 'none';
+            tooltip.style.opacity = '0';
+          }
         }
-        else if (hit.type==='week')  zoomToRect(life, hit.rect, wh.W, wh.H, 8.0);
-        else if (hit.type==='day')   zoomToRect(life, hit.rect, wh.W, wh.H, 12.0);
-        else if (hit.type==='slot')  life.sel = { y:hit.y, m:hit.m, d:hit.d, sl:hit.sl };
-        if (typeof sv==='function') sv(false, true);
       }
     });
 
@@ -2083,20 +2168,19 @@
       }
       var hasDOMCards = life._domMap && life._domMap.size > 0;
 
-      /* FIX 1: When DOM cards are active, only draw light month grid behind them.
-         Suppress drawDays/drawHours to avoid visual noise (slot numbers, grid lines). */
-      if (level === 'Y')      { drawYears(ctx, W, H); }
-      else if (level === 'M') { drawYears(ctx, W, H); drawMonths(ctx, W, H); }
-      else if (level === 'W') { drawWeeks(ctx, W, H); }
-      else if (level === 'D' || level === 'H') { drawMonths(ctx, W, H); }
-      else                    { drawMonths(ctx, W, H); drawDays(ctx, W, H); drawHours(ctx, W, H); }
+      if (level === 'Y')      { drawYears(ctx, W, H, cam); }
+      else if (level === 'M') { drawYears(ctx, W, H, cam); drawMonths(ctx, W, H, cam); }
+      else if (level === 'W') { drawWeeks(ctx, W, H, cam); }
+      else if (level === 'D') { drawMonths(ctx, W, H, cam); drawDays(ctx, W, H, cam); }
+      else if (level === 'H') { drawMonths(ctx, W, H, cam); drawDays(ctx, W, H, cam); drawHours(ctx, W, H, cam); }
+      else                    { drawMonths(ctx, W, H, cam); drawDays(ctx, W, H, cam); drawHours(ctx, W, H, cam); }
 
       /* Manual overlays */
-      drawOverlays(ctx, life.ov, W);
+      drawOverlays(ctx, life.ov, W, cam);
 
       /* Google Calendar events (Phase 3) — canvas only at zoomed-out levels */
       if (level === 'Y' || level === 'M' || level === 'W') {
-        drawCalEventsAsStickyNotes(ctx, life.calEvents, W, H, level);
+        drawCalEventsAsStickyNotes(ctx, life.calEvents, W, H, level, cam);
       }
 
       /* Draw Shift selection overlay */
