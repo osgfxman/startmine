@@ -5680,7 +5680,7 @@ window.renderZooperDayCard = function(container, dayDate, options) {
           }
           var isToday = dy.date === todayStr;
           var isFri = dy.dow === 5;
-          html += '<div style="display:flex;align-items:center;gap:2px;margin-bottom:1px;'+(isToday?'background:rgba(108,143,255,.1);border-radius:3px;padding:1px 2px;':'')+(isFri?'opacity:.5;':'')+'">';
+          html += '<div style="display:flex;align-items:center;gap:2px;margin-bottom:1px;padding:1px 2px;border-radius:3px;'+(isToday?'border:1px solid #4285f4;box-shadow:0 0 6px rgba(66,133,244,.4);':'border:1px solid transparent;')+(isFri?'opacity:.5;':'')+'">';
           html += '<span style="width:24px;font-size:.4rem;opacity:.6;">'+dn[dy.dow].slice(0,2)+'</span>';
           html += '<span style="width:16px;font-size:.4rem;opacity:.5;">'+dt.getDate()+'</span>';
           

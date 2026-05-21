@@ -138,9 +138,12 @@
     ctx.font = 'bold 14px system-ui'; ctx.textBaseline = 'top';
     for (var i = 0; i < 50; i++) {
       var r = yR(i, W, H), y = CFG.startYear + i;
-      if (y === n.y) { ctx.fillStyle = CFG.hi; ctx.fillRect(r.x, r.y, r.w, r.h); }
       ctx.strokeStyle = CFG.grid1; ctx.lineWidth = 1;
       ctx.strokeRect(r.x+.5, r.y+.5, r.w-1, r.h-1);
+      if (y === n.y) {
+        ctx.strokeStyle = CFG.accent; ctx.lineWidth = 1.8;
+        ctx.strokeRect(r.x+.5, r.y+.5, r.w-1, r.h-1);
+      }
       ctx.fillStyle = (y === n.y) ? CFG.accent : CFG.tx;
       ctx.fillText(''+y, r.x+8, r.y+6);
     }
@@ -158,9 +161,12 @@
       ctx.fillText(''+y, yr.x+6, yr.y+4);
       for (var m = 0; m < 12; m++) {
         var mr = mR(i, m, W, H);
-        if (y===n.y && m===n.m) { ctx.fillStyle = CFG.hi; ctx.fillRect(mr.x, mr.y, mr.w, mr.h); }
         ctx.strokeStyle = CFG.grid2; ctx.lineWidth = .7;
         ctx.strokeRect(mr.x+.5, mr.y+.5, mr.w-1, mr.h-1);
+        if (y===n.y && m===n.m) {
+          ctx.strokeStyle = CFG.accent; ctx.lineWidth = 1.5;
+          ctx.strokeRect(mr.x+.5, mr.y+.5, mr.w-1, mr.h-1);
+        }
         ctx.font = '9px system-ui';
         ctx.fillStyle = (y===n.y && m===n.m) ? CFG.accent : CFG.tx2;
         ctx.fillText(MN[m], mr.x+4, mr.y+3);
@@ -176,11 +182,12 @@
         var ds = dim(y, m);
         for (var d = 0; d < ds; d++) {
           var r = dR(i, m, d, W, H);
-          if (new Date(y, m, d+1).getTime() === td) {
-            ctx.fillStyle = CFG.hi2; ctx.fillRect(r.x, r.y, r.w, r.h);
-          }
           ctx.strokeStyle = CFG.grid3; ctx.lineWidth = .6;
           ctx.strokeRect(r.x+.5, r.y+.5, r.w-1, r.h-1);
+          if (new Date(y, m, d+1).getTime() === td) {
+            ctx.strokeStyle = CFG.accent; ctx.lineWidth = 1.5;
+            ctx.strokeRect(r.x+.5, r.y+.5, r.w-1, r.h-1);
+          }
           if (r.w > 18 && r.h > 14) {
             ctx.font = '8px system-ui'; ctx.textBaseline = 'top';
             ctx.fillStyle = (new Date(y, m, d+1).getTime() === td) ? CFG.accent : CFG.tx2;
