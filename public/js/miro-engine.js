@@ -5619,24 +5619,43 @@ window.renderZooperDayCard = function(container, dayDate, options) {
       var txt = isDk ? '#ddd' : '#222';
       var bg2 = isDk ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.03)';
       var fruitStart = new Date(2026,0,14); fruitStart.setHours(0,0,0,0);
+
+      function getLocalDateStr(dtObj) {
+        var y = dtObj.getFullYear();
+        var m = String(dtObj.getMonth() + 1).padStart(2, '0');
+        var dVal = String(dtObj.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + dVal;
+      }
+
+      // Inject hover styles
+      if (!document.getElementById('fruit-tracker-box-css')) {
+        var sty = document.createElement('style'); sty.id = 'fruit-tracker-box-css';
+        sty.textContent = '.fruit-tracker-box:hover { border-color: #6c8fff !important; background: rgba(108,143,255,0.15) !important; transform: scale(1.15); }';
+        document.head.appendChild(sty);
+      }
+
       try {
         var allEv = await fetchCalendarEvents(fruitStart, new Date(now.getFullYear(),now.getMonth(),now.getDate()+1));
         var fruitEv = (allEv||[]).filter(function(e){ return (e.calendarName||'').toLowerCase()==="!40's fruit" && !e.allDay; });
-        // Group by date
+        
+        // Group by local date
         var dayMap = {};
         fruitEv.forEach(function(e){
-          var d = new Date(e.start).toISOString().slice(0,10);
+          var d = getLocalDateStr(new Date(e.start));
           if(!dayMap[d]) dayMap[d] = 0;
           dayMap[d]++;
         });
+        
         var days = [];
         var d = new Date(fruitStart);
+        var todayStr = getLocalDateStr(now);
         while(d <= now) {
-          var k = d.toISOString().slice(0,10);
+          var k = getLocalDateStr(d);
           days.push({date:k, count: dayMap[k]||0, dow: d.getDay()});
           d = new Date(d.getTime()+86400000);
         }
         days.reverse();
+        
         var totalSlots = days.length * 16;
         var totalChecked = days.reduce(function(s,d){return s+d.count;},0);
         var pct = totalSlots>0 ? Math.round(totalChecked/totalSlots*100) : 0;
@@ -5659,20 +5678,193 @@ window.renderZooperDayCard = function(container, dayDate, options) {
             curMonth = mLabel;
             html += '<div style="font-weight:700;font-size:.6rem;margin:8px 0 4px;opacity:.6;">'+mLabel+'</div>';
           }
-          var isToday = dy.date === now.toISOString().slice(0,10);
+          var isToday = dy.date === todayStr;
           var isFri = dy.dow === 5;
           html += '<div style="display:flex;align-items:center;gap:2px;margin-bottom:1px;'+(isToday?'background:rgba(108,143,255,.1);border-radius:3px;padding:1px 2px;':'')+(isFri?'opacity:.5;':'')+'">';
           html += '<span style="width:24px;font-size:.4rem;opacity:.6;">'+dn[dy.dow].slice(0,2)+'</span>';
           html += '<span style="width:16px;font-size:.4rem;opacity:.5;">'+dt.getDate()+'</span>';
+          
+          // Get events for this day
+          var dayEvts = fruitEv.filter(function(e) {
+            return getLocalDateStr(new Date(e.start)) === dy.date;
+          });
+          dayEvts.sort(function(a, b) {
+            return new Date(a.start).getTime() - new Date(b.start).getTime();
+          });
+          
           for(var i=0;i<16;i++){
-            var checked = i < dy.count;
-            html += '<div style="width:12px;height:12px;border-radius:2px;border:1px solid '+(isDk?'rgba(255,255,255,.15)':'rgba(0,0,0,.12)')+';background:transparent;display:flex;align-items:center;justify-content:center;font-size:10px;line-height:1;">'+(checked?'\uD83C\uDF4E':'')+'</div>';
+            var ev = dayEvts[i];
+            var checked = !!ev;
+            var timeStr = ev ? new Date(ev.start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+            var titleStr = ev ? (ev.summary + ' (' + timeStr + ')') : 'Add fruit entry';
+            var safeSummary = ev ? (typeof esc === 'function' ? esc(ev.summary) : ev.summary.replace(/"/g, '&quot;')) : '';
+            var safeTitle = typeof esc === 'function' ? esc(titleStr) : titleStr.replace(/"/g, '&quot;');
+            
+            html += '<div class="fruit-tracker-box" data-date="' + dy.date + '" data-idx="' + i + '"' +
+              (ev ? ' data-ev-id="' + ev.id + '" data-cal-id="' + ev.calendarId + '" data-summary="' + safeSummary + '"' : '') +
+              ' title="' + safeTitle + '"' +
+              ' style="width:12px;height:12px;cursor:pointer;border-radius:2px;border:1px solid '+(isDk?'rgba(255,255,255,.15)':'rgba(0,0,0,.12)')+';background:transparent;display:flex;align-items:center;justify-content:center;font-size:10px;line-height:1;transition:all .15s;">' +
+              (checked?'\uD83C\uDF4E':'') +
+              '</div>';
           }
-          html += '<span style="font-size:.4rem;margin-left:4px;opacity:.6;">'+dy.count+'/16</span>';
+          html += '<span style="font-size:.4rem;margin-left:4px;opacity:.6;">'+dayEvts.length+'/16</span>';
           html += '</div>';
         });
         html += '</div></div>';
         body.innerHTML = html;
+        
+        // Attach drag selection handlers to the boxes
+        var isDragging = false;
+        var dragMode = null;
+        var draggedBoxes = [];
+
+        var onMouseUp = async function() {
+          if (!isDragging) return;
+          isDragging = false;
+          document.removeEventListener('mouseup', onMouseUp);
+
+          if (draggedBoxes.length === 0) return;
+
+          if (typeof ensureGoogleToken === 'function') await ensureGoogleToken();
+
+          showToast("⏳ Saving " + draggedBoxes.length + " changes...");
+
+          try {
+            if (dragMode === 'check') {
+              var additionsByDate = {};
+              draggedBoxes.forEach(function(box) {
+                var dDate = box.getAttribute('data-date');
+                if (!additionsByDate[dDate]) additionsByDate[dDate] = 0;
+                additionsByDate[dDate]++;
+              });
+
+              var fruitCalId = '';
+              try {
+                var cals = await getCalendarList();
+                var fCal = cals.find(function(c) { return (c.summary||'').toLowerCase() === "!40's fruit"; });
+                if (fCal) fruitCalId = fCal.id;
+              } catch(e) {}
+
+              if (!fruitCalId) {
+                showToast("❌ Could not find '!40's Fruit' calendar!");
+                _renderFruit();
+                return;
+              }
+
+              var promises = [];
+              var dates = Object.keys(additionsByDate);
+              for (var i = 0; i < dates.length; i++) {
+                var dyDate = dates[i];
+                var count = additionsByDate[dyDate];
+
+                var parts = dyDate.split('-');
+                var dayDate = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+                var dayMs = dayDate.getTime();
+
+                var dayEvtsForClick = fruitEv.filter(function(e) {
+                  return getLocalDateStr(new Date(e.start)) === dyDate;
+                });
+
+                var occupiedSlots = {};
+                dayEvtsForClick.forEach(function(e) {
+                  var startMs = new Date(e.start).getTime();
+                  var slotIdx = Math.floor((startMs - dayMs) / 1800000);
+                  if (slotIdx >= 0 && slotIdx < 48) {
+                    occupiedSlots[slotIdx] = true;
+                  }
+                });
+
+                var preferred = [12, 13, 14, 33, 34, 35];
+                var allSlots = [];
+                preferred.forEach(function(s) { allSlots.push(s); });
+                for (var s = 0; s < 48; s++) {
+                  if (preferred.indexOf(s) === -1) {
+                    allSlots.push(s);
+                  }
+                }
+
+                for (var c = 0; c < count; c++) {
+                  var targetSlot = -1;
+                  for (var j = 0; j < allSlots.length; j++) {
+                    var slotCandidate = allSlots[j];
+                    if (!occupiedSlots[slotCandidate]) {
+                      targetSlot = slotCandidate;
+                      break;
+                    }
+                  }
+
+                  if (targetSlot === -1) {
+                    showToast("⚠️ No empty slots left on " + dyDate);
+                    break;
+                  }
+
+                  occupiedSlots[targetSlot] = true;
+
+                  var slotStartMs = dayMs + targetSlot * 1800000;
+                  var slotEndMs = dayMs + (targetSlot + 1) * 1800000;
+                  var startD = new Date(slotStartMs);
+                  var endD = new Date(slotEndMs);
+
+                  promises.push(createCalendarEvent(fruitCalId, "!40's Fruit", startD, endD, ''));
+                }
+              }
+              await Promise.all(promises);
+            } else {
+              // Deletions
+              var promises = [];
+              for (var i = 0; i < draggedBoxes.length; i++) {
+                var box = draggedBoxes[i];
+                var evId = box.getAttribute('data-ev-id');
+                var calId = box.getAttribute('data-cal-id');
+                if (evId && calId) {
+                  promises.push(deleteCalendarEvent(calId, evId));
+                }
+              }
+              await Promise.all(promises);
+            }
+            showToast("✅ Changes saved!");
+          } catch (e) {
+            showToast("❌ " + e.message);
+          }
+          _renderFruit();
+        };
+
+        var boxes = body.querySelectorAll('.fruit-tracker-box');
+        boxes.forEach(function(box) {
+          box.addEventListener('mousedown', function(e) {
+            if (e.button !== 0) return;
+            isDragging = true;
+            var isBoxChecked = !!box.getAttribute('data-ev-id');
+            dragMode = isBoxChecked ? 'uncheck' : 'check';
+            draggedBoxes = [box];
+
+            if (dragMode === 'check') {
+              box.innerHTML = '🍎';
+            } else {
+              box.innerHTML = '';
+            }
+            box.style.opacity = '0.5';
+
+            document.addEventListener('mouseup', onMouseUp);
+            e.preventDefault();
+          });
+
+          box.addEventListener('mouseenter', function() {
+            if (!isDragging) return;
+            if (draggedBoxes.indexOf(box) !== -1) return;
+
+            var isBoxChecked = !!box.getAttribute('data-ev-id');
+            if (dragMode === 'check' && !isBoxChecked) {
+              draggedBoxes.push(box);
+              box.innerHTML = '🍎';
+              box.style.opacity = '0.5';
+            } else if (dragMode === 'uncheck' && isBoxChecked) {
+              draggedBoxes.push(box);
+              box.innerHTML = '';
+              box.style.opacity = '0.5';
+            }
+          });
+        });
       } catch(err) {
         body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;">\u26A0\uFE0F '+err.message+'</div>';
       }
