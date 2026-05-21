@@ -429,21 +429,49 @@
     var mmW = 140, mmH = 80, pad = 10;
     var mmX = cvW - mmW - pad, mmY = cvH - mmH - pad;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 1;
-    ctx.fillRect(mmX, mmY, mmW, mmH);
-    ctx.strokeRect(mmX, mmY, mmW, mmH);
+
+    // Glassy background with shadow & rounded corners
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
+    ctx.lineWidth = 1;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.12)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 3;
+
+    ctx.beginPath();
+    if (ctx.roundRect) {
+      ctx.roundRect(mmX, mmY, mmW, mmH, 8);
+    } else {
+      ctx.rect(mmX, mmY, mmW, mmH);
+    }
+    ctx.fill();
+    ctx.shadowColor = 'transparent'; // reset shadow
+    ctx.stroke();
+
     var scX = mmW / worldW, scY = mmH / worldH;
     for (var i = 0; i < 50; i++) {
       var r = yR(i, worldW, worldH);
-      ctx.fillStyle = 'rgba(0,0,0,0.08)';
+      ctx.fillStyle = 'rgba(0,0,0,0.06)';
       ctx.fillRect(mmX + r.x*scX, mmY + r.y*scY, r.w*scX, r.h*scY);
-      ctx.strokeStyle = 'rgba(0,0,0,0.06)'; ctx.lineWidth = .5;
+      ctx.strokeStyle = 'rgba(0,0,0,0.04)'; ctx.lineWidth = .5;
       ctx.strokeRect(mmX + r.x*scX, mmY + r.y*scY, r.w*scX, r.h*scY);
     }
+
+    // Viewport bounds
     var vw = cvW / cam.z, vh = cvH / cam.z;
-    ctx.strokeStyle = CFG.accent; ctx.lineWidth = 2;
-    ctx.strokeRect(mmX + cam.x*scX, mmY + cam.y*scY, vw*scX, vh*scY);
+    var vX = mmX + cam.x*scX;
+    var vY = mmY + cam.y*scY;
+    var vW = vw*scX;
+    var vH = vh*scY;
+
+    // Viewport fill (light accent shade)
+    ctx.fillStyle = 'rgba(0, 184, 148, 0.08)';
+    ctx.fillRect(vX, vY, vW, vH);
+
+    // Viewport border
+    ctx.strokeStyle = CFG.accent; ctx.lineWidth = 1.5;
+    ctx.strokeRect(vX, vY, vW, vH);
   }
 
   /* ─────────────────────────────────────────────────────────
@@ -608,8 +636,21 @@
     cv.oncontextmenu = function(e){ e.preventDefault(); };
 
     /* ── Interaction state ── */
-    var ST = { dn:false, panning:false, moved:false, sx:0, sy:0, px:0, py:0 };
+    var ST = { dn:false, panning:false, minimapDragging:false, moved:false, sx:0, sy:0, px:0, py:0 };
     function getWH() { return { W:Math.max(1,el.clientWidth), H:Math.max(1,el.clientHeight-32) }; }
+
+    function updateCamFromMinimap(mx, my, cam, W, H) {
+      var mmW = 140, mmH = 80;
+      mx = clamp(mx, 0, mmW);
+      my = clamp(my, 0, mmH);
+      var vw = W / cam.z, vh = H / cam.z;
+      var worldX = (mx / mmW) * W;
+      var worldY = (my / mmH) * H;
+      cam.x = worldX - vw / 2;
+      cam.y = worldY - vh / 2;
+      clampCam(cam, W, H);
+      if (typeof sv === 'function') sv(false, true);
+    }
 
     /* Mouse-down */
     cv.addEventListener('mousedown', function(e) {
@@ -617,11 +658,22 @@
       var life = ensLife(card), cam = life.cam, wh = getWH();
       clampCam(cam, wh.W, wh.H);
       ST.moved = false;
+
+      // Check if clicking inside the minimap region
+      var mmW = 140, mmH = 80, pad = 10;
+      var mmX = wh.W - mmW - pad, mmY = wh.H - mmH - pad;
+      if (e.offsetX >= mmX && e.offsetX <= mmX + mmW && e.offsetY >= mmY && e.offsetY <= mmY + mmH) {
+        ST.minimapDragging = true;
+        updateCamFromMinimap(e.offsetX - mmX, e.offsetY - mmY, cam, wh.W, wh.H);
+        e.preventDefault();
+        return;
+      }
+
       if (e.shiftKey && e.button === 0) {
         ST.dn = true; ST.sx = e.offsetX; ST.sy = e.offsetY;
         e.preventDefault(); return;
       }
-      if (e.button === 2 || (e.altKey && e.button === 0)) {
+      if (e.button === 1 || e.button === 2 || (e.altKey && e.button === 0)) {
         ST.panning = true; ST.px = e.offsetX; ST.py = e.offsetY;
         e.preventDefault(); return;
       }
@@ -629,30 +681,50 @@
 
     /* Mouse-move */
     cv.addEventListener('mousemove', function(e) {
+      var wh = getWH();
+      var mmW = 140, mmH = 80, pad = 10;
+      var mmX = wh.W - mmW - pad, mmY = wh.H - mmH - pad;
+
+      if (ST.minimapDragging) {
+        var life = ensLife(card), cam = life.cam;
+        updateCamFromMinimap(e.offsetX - mmX, e.offsetY - mmY, cam, wh.W, wh.H);
+        e.preventDefault();
+        return;
+      }
+
       /* Tooltip (Phase 4) */
       if (!ST.dn && !ST.panning) {
-        var life = ensLife(card), cam = life.cam, wh = getWH();
+        var life = ensLife(card), cam = life.cam;
         clampCam(cam, wh.W, wh.H);
-        var wp = s2w(e.offsetX, e.offsetY, cam);
-        var curLOD = lod(cam.z);
-        var hit = pickCell(wp.x, wp.y, wh.W, wh.H, curLOD);
-        if (hit) {
-          var txt = '';
-          if (hit.type==='year')  txt = ''+hit.y;
-          else if (hit.type==='month') txt = MN[hit.m]+' '+hit.y;
-          else if (hit.type==='day')   txt = (hit.d+1)+' '+MN[hit.m]+' '+hit.y;
-          else if (hit.type==='slot') {
-            var h = Math.floor(hit.sl/2);
-            txt = (hit.d+1)+' '+MN[hit.m]+' '+hit.y+' '+h+':'+(hit.sl%2?'30':'00');
-          }
-          tooltip.textContent = txt;
-          tooltip.style.display = 'block';
-          tooltip.style.opacity = '1';
-          tooltip.style.left = (e.offsetX + 14) + 'px';
-          tooltip.style.top = (e.offsetY + 14 + 32) + 'px';
-        } else {
+
+        // Hide tooltip & set pointer cursor when hovering minimap
+        if (e.offsetX >= mmX && e.offsetX <= mmX + mmW && e.offsetY >= mmY && e.offsetY <= mmY + mmH) {
           tooltip.style.display = 'none';
           tooltip.style.opacity = '0';
+          cv.style.cursor = 'pointer';
+        } else {
+          cv.style.cursor = '';
+          var wp = s2w(e.offsetX, e.offsetY, cam);
+          var curLOD = lod(cam.z);
+          var hit = pickCell(wp.x, wp.y, wh.W, wh.H, curLOD);
+          if (hit) {
+            var txt = '';
+            if (hit.type==='year')  txt = ''+hit.y;
+            else if (hit.type==='month') txt = MN[hit.m]+' '+hit.y;
+            else if (hit.type==='day')   txt = (hit.d+1)+' '+MN[hit.m]+' '+hit.y;
+            else if (hit.type==='slot') {
+              var h = Math.floor(hit.sl/2);
+              txt = (hit.d+1)+' '+MN[hit.m]+' '+hit.y+' '+h+':'+(hit.sl%2?'30':'00');
+            }
+            tooltip.textContent = txt;
+            tooltip.style.display = 'block';
+            tooltip.style.opacity = '1';
+            tooltip.style.left = (e.offsetX + 14) + 'px';
+            tooltip.style.top = (e.offsetY + 14 + 32) + 'px';
+          } else {
+            tooltip.style.display = 'none';
+            tooltip.style.opacity = '0';
+          }
         }
       }
       if (!ST.dn && !ST.panning) return;
@@ -671,6 +743,11 @@
     /* Mouse-up */
     cv.addEventListener('mouseup', function(e) {
       e.stopPropagation();
+      if (ST.minimapDragging) {
+        ST.minimapDragging = false;
+        if (typeof sv === 'function') sv();
+        return;
+      }
       var life = ensLife(card), cam = life.cam, wh = getWH();
       clampCam(cam, wh.W, wh.H);
 
@@ -715,7 +792,10 @@
       }
     });
 
-    cv.addEventListener('mouseleave', function(){ tooltip.style.display = 'none'; tooltip.style.opacity = '0'; });
+    cv.addEventListener('mouseleave', function(){
+      tooltip.style.display = 'none'; tooltip.style.opacity = '0';
+      ST.minimapDragging = false;
+    });
 
     /* Wheel zoom — cursor-anchored, internal camera (Phase 2) */
     function wheelZoom(e) {
