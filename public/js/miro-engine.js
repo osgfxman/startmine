@@ -3943,9 +3943,17 @@ window.renderZooperDayCard = function(container, dayDate, options) {
             var pBody = options.popupBody || document.body;
             if(se.length>0){
               var e0=se[0];
-              showCalendarEventForm(pBody,pBody,null,{mode:'edit',calendarId:e0.calendarId,eventId:e0.id,summary:e0.summary,description:e0.description,startTime:new Date(e0.start),endTime:new Date(e0.end),onDone:options.onRefresh});
+              if (options.onClickEvent) {
+                options.onClickEvent(e0);
+              } else {
+                showCalendarEventForm(pBody,pBody,null,{mode:'edit',calendarId:e0.calendarId,eventId:e0.id,summary:e0.summary,description:e0.description,startTime:new Date(e0.start),endTime:new Date(e0.end),onDone:options.onRefresh});
+              }
             }else{
-              showCalendarEventForm(pBody,pBody,null,{mode:'create',startTime:sd,endTime:ed,onDone:options.onRefresh});
+              if (options.onCreateEvent) {
+                options.onCreateEvent(sd, ed);
+              } else {
+                showCalendarEventForm(pBody,pBody,null,{mode:'create',startTime:sd,endTime:ed,onDone:options.onRefresh});
+              }
             }
           }
         });
@@ -4005,8 +4013,12 @@ window.renderZooperDayCard = function(container, dayDate, options) {
       }else if(!isCtrl&&!isAlt&&!isShift&&sel.length>=2){
         var sMin=Math.min.apply(null,sel.map(function(h){return h.slotStartMin;}));
         var eMin=Math.max.apply(null,sel.map(function(h){return h.slotEndMin;}));
-        var pBody = options.popupBody || document.body;
-        showCalendarEventForm(pBody,pBody,null,{mode:'create',startTime:new Date(dm+sMin*60000),endTime:new Date(dm+eMin*60000),onDone:options.onRefresh});
+        if (options.onCreateEvent) {
+          options.onCreateEvent(new Date(dm+sMin*60000), new Date(dm+eMin*60000));
+        } else {
+          var pBody = options.popupBody || document.body;
+          showCalendarEventForm(pBody,pBody,null,{mode:'create',startTime:new Date(dm+sMin*60000),endTime:new Date(dm+eMin*60000),onDone:options.onRefresh});
+        }
       }
     }
     

@@ -108,19 +108,35 @@
   position: absolute;
   top: 50px;
   right: 12px;
-  width: 260px;
+  width: 290px;
+  max-height: calc(100% - 70px);
+  overflow-y: auto;
   background: #fff;
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-  padding: 12px;
+  padding: 14px;
   z-index: 30;
   font-family: 'DM Sans', sans-serif;
 }
 .le-title {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   color: #333;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  padding-bottom: 6px;
+}
+.le-field {
+  margin-bottom: 10px;
+}
+.le-field label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 .le-input {
   width: 100%;
@@ -128,10 +144,46 @@
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 0.8rem;
-  margin-bottom: 12px;
   outline: none;
 }
 .le-input:focus {
+  border-color: #00b894;
+}
+.le-desc-input {
+  width: 100%;
+  height: 54px;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  outline: none;
+  resize: vertical;
+  font-family: inherit;
+}
+.le-desc-input:focus {
+  border-color: #00b894;
+}
+.le-datetime-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.le-datetime-row .le-field {
+  flex: 1;
+  margin-bottom: 0;
+}
+.le-datetime-row input[type="date"],
+.le-datetime-row input[type="time"] {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  outline: none;
+  margin-top: 4px;
+  box-sizing: border-box;
+}
+.le-datetime-row input:focus {
   border-color: #00b894;
 }
 .le-colors {
@@ -146,23 +198,31 @@
   border-radius: 50%;
   cursor: pointer;
   border: 2px solid transparent;
+  transition: transform 0.15s ease;
+}
+.le-csw:hover {
+  transform: scale(1.08);
 }
 .le-csw.sel {
   border-color: #333;
-  transform: scale(1.1);
+  transform: scale(1.15);
 }
 .le-actions {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+  border-top: 1px solid rgba(0,0,0,0.06);
+  padding-top: 10px;
+  margin-top: 6px;
 }
-.le-save, .le-del {
+.le-save, .le-del, .le-close {
   padding: 6px 12px;
   border: none;
   border-radius: 4px;
   font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
+  font-family: inherit;
 }
 .le-save {
   background: #00b894;
@@ -171,4 +231,57 @@
 .le-del {
   background: #ff7675;
   color: #fff;
+}
+.le-close {
+  background: #f1f2f6;
+  color: #57606f;
+}
+.le-close:hover {
+  background: #dfe4ea;
+}
+
+/* Zoom switches and Today button in Header */
+.life-zoom-switches {
+  display: flex;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 6px;
+  padding: 2px;
+  margin-left: 14px;
+}
+.life-zoom-switches button {
+  background: none;
+  border: none;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 4px;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: 'DM Sans', sans-serif;
+}
+.life-zoom-switches button.active {
+  background: #fff;
+  color: #00b894;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.life-today-btn {
+  background: #00b894;
+  color: #fff;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 5px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 8px;
+  transition: all 0.2s ease;
+}
+.life-today-btn:hover {
+  background: #00a884;
+  transform: translateY(-1px);
+}
+.life-today-btn:active {
+  transform: translateY(0);
 }

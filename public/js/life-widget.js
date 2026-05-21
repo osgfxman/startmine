@@ -79,6 +79,68 @@
     return { start: startD, end: endD };
   }
 
+  function parseGCalDescription(desc) {
+    if (!desc) return { description: '', color: null };
+    var marker = '\n\n---\ncolor:';
+    var idx = desc.lastIndexOf(marker);
+    if (idx !== -1) {
+      var colorStr = desc.substring(idx + marker.length).trim();
+      var actualDesc = desc.substring(0, idx).trim();
+      return { description: actualDesc, color: colorStr };
+    }
+    return { description: desc, color: null };
+  }
+
+  function addOneDay(dateStr) {
+    var d = parseLocalDate(dateStr);
+    d.setDate(d.getDate() + 1);
+    return toLocalYYYYMMDD(d);
+  }
+
+  function toGCalDateTimeString(d) {
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var date = String(d.getDate()).padStart(2, '0');
+    var h = String(d.getHours()).padStart(2, '0');
+    var min = String(d.getMinutes()).padStart(2, '0');
+    return y + '-' + m + '-' + date + 'T' + h + ':' + min + ':00';
+  }
+
+  function zoomToLevel(life, level, W, H) {
+    var cam = life.cam;
+    var targetZ = 0.5;
+    if (level === 'Y') targetZ = 0.5;
+    else if (level === 'M') targetZ = 1.6;
+    else if (level === 'W') targetZ = 3.0;
+    else if (level === 'D') targetZ = 8.0;
+    else if (level === 'H') targetZ = 12.0;
+
+    var cx = cam.x + (W / 2) / cam.z;
+    var cy = cam.y + (H / 2) / cam.z;
+    var tx = cx - (W / 2) / targetZ;
+    var ty = cy - (H / 2) / targetZ;
+
+    if (level === 'Y' || level === 'M') {
+      life._monthFocus = null;
+    }
+
+    animateCam(life, tx, ty, targetZ, W, H);
+  }
+
+  function flyToToday(life, W, H) {
+    var n = nowInfo();
+    var yi = n.y - CFG.startYear;
+    if (yi < 0 || yi >= 50) return;
+    var rect = dR(yi, n.m, n.d - 1, W, H);
+    life._monthFocus = { y: n.y, m: n.m, half: (n.d > 14 ? 1 : 0) };
+    zoomToRect(life, rect, W, H, 12.0);
+  }
+
+  function getEventDuration(ev) {
+    var dates = getEventDates(ev);
+    return dates.end.getTime() - dates.start.getTime();
+  }
+
   function getCellDateRange(cell) {
     if (!cell) return null;
     var startD, endD;
@@ -91,9 +153,14 @@
     } else if (cell.type === 'week') {
       startD = new Date(cell.y, cell.m, cell.wRow * 7 + 1);
       endD = new Date(cell.y, cell.m, Math.min(dim(cell.y, cell.m), (cell.wRow + 1) * 7));
-    } else if (cell.type === 'day' || cell.type === 'slot') {
+    } else if (cell.type === 'day') {
       startD = new Date(cell.y, cell.m, cell.d + 1);
       endD = new Date(cell.y, cell.m, cell.d + 1);
+    } else if (cell.type === 'slot') {
+      var sh = Math.floor(cell.sl / 2);
+      var sm = (cell.sl % 2) * 30;
+      startD = new Date(cell.y, cell.m, cell.d + 1, sh, sm);
+      endD = new Date(cell.y, cell.m, cell.d + 1, sh, sm + 30);
     }
     return { start: startD, end: endD };
   }
@@ -387,8 +454,12 @@
     if (level === 'Y') {
       for (var i = 0; i < 50; i++) {
         var y = CFG.startYear + i;
-        var sCell = new Date(y, 0, 1), eCell = new Date(y, 11, 31);
-        if (sCell.getTime() <= eTime && eCell.getTime() >= sTime) {
+        var sCell = new Date(y, 0, 1, 0, 0, 0, 0);
+        var eCell = new Date(y, 11, 31, 23, 59, 59, 999);
+        var overlaps = sTime === eTime ? 
+          (sTime >= sCell.getTime() && sTime <= eCell.getTime()) : 
+          (Math.max(sCell.getTime(), sTime) < Math.min(eCell.getTime(), eTime));
+        if (overlaps) {
           cells.push(yR(i, W, H));
         }
       }
@@ -396,8 +467,12 @@
       for (var i = 0; i < 50; i++) {
         var y = CFG.startYear + i;
         for (var m = 0; m < 12; m++) {
-          var sCell = new Date(y, m, 1), eCell = new Date(y, m, dim(y, m));
-          if (sCell.getTime() <= eTime && eCell.getTime() >= sTime) {
+          var sCell = new Date(y, m, 1, 0, 0, 0, 0);
+          var eCell = new Date(y, m, dim(y, m), 23, 59, 59, 999);
+          var overlaps = sTime === eTime ? 
+            (sTime >= sCell.getTime() && sTime <= eCell.getTime()) : 
+            (Math.max(sCell.getTime(), sTime) < Math.min(eCell.getTime(), eTime));
+          if (overlaps) {
             cells.push(mR(i, m, W, H));
           }
         }
@@ -407,9 +482,12 @@
         var y = CFG.startYear + i;
         for (var m = 0; m < 12; m++) {
           for (var r = 0; r < CFG.dRows; r++) {
-            var sCell = new Date(y, m, r * 7 + 1);
-            var eCell = new Date(y, m, Math.min(dim(y, m), (r + 1) * 7));
-            if (sCell.getTime() <= eTime && eCell.getTime() >= sTime) {
+            var sCell = new Date(y, m, r * 7 + 1, 0, 0, 0, 0);
+            var eCell = new Date(y, m, Math.min(dim(y, m), (r + 1) * 7), 23, 59, 59, 999);
+            var overlaps = sTime === eTime ? 
+              (sTime >= sCell.getTime() && sTime <= eCell.getTime()) : 
+              (Math.max(sCell.getTime(), sTime) < Math.min(eCell.getTime(), eTime));
+            if (overlaps) {
               var mr = mR(i, m, W, H);
               var rh = mr.h / CFG.dRows;
               cells.push({ x: mr.x, y: mr.y + r * rh, w: mr.w, h: rh });
@@ -423,9 +501,37 @@
         for (var m = 0; m < 12; m++) {
           var ds = dim(y, m);
           for (var d = 0; d < ds; d++) {
-            var sCell = new Date(y, m, d + 1), eCell = new Date(y, m, d + 1);
-            if (sCell.getTime() <= eTime && eCell.getTime() >= sTime) {
+            var sCell = new Date(y, m, d + 1, 0, 0, 0, 0);
+            var eCell = new Date(y, m, d + 1, 23, 59, 59, 999);
+            var overlaps = sTime === eTime ? 
+              (sTime >= sCell.getTime() && sTime <= eCell.getTime()) : 
+              (Math.max(sCell.getTime(), sTime) < Math.min(eCell.getTime(), eTime));
+            if (overlaps) {
               cells.push(dR(i, m, d, W, H));
+            }
+          }
+        }
+      }
+    } else if (level === 'H') {
+      for (var i = 0; i < 50; i++) {
+        var y = CFG.startYear + i;
+        for (var m = 0; m < 12; m++) {
+          var ds = dim(y, m);
+          for (var d = 0; d < ds; d++) {
+            var r = dR(i, m, d, W, H);
+            if (r.w < 80 || r.h < 80) continue;
+            var slotH = r.h / CFG.slots;
+            for (var sl = 0; sl < CFG.slots; sl++) {
+              var sh = Math.floor(sl / 2);
+              var sm = (sl % 2) * 30;
+              var sCell = new Date(y, m, d + 1, sh, sm, 0, 0);
+              var eCell = new Date(y, m, d + 1, sh, sm + 30, 0, 0);
+              var overlaps = sTime === eTime ? 
+                (sTime >= sCell.getTime() && sTime <= eCell.getTime()) : 
+                (Math.max(sCell.getTime(), sTime) < Math.min(eCell.getTime(), eTime));
+              if (overlaps) {
+                cells.push({ x: r.x, y: r.y + sl * slotH, w: r.w, h: slotH });
+              }
             }
           }
         }
@@ -509,8 +615,15 @@
     if (!events || !events.length) return;
     if (level === 'H') return;
     
-    for (var i = 0; i < events.length; i++) {
-      var ev = events[i];
+    var sorted = events.slice().sort(function(a, b) {
+      var durA = getEventDuration(a);
+      var durB = getEventDuration(b);
+      if (durA !== durB) return durB - durA;
+      return d2i(a.start) - d2i(b.start);
+    });
+    
+    for (var i = 0; i < sorted.length; i++) {
+      var ev = sorted[i];
       if (!ev.start) continue;
       
       var dates = getEventDates(ev);
@@ -554,8 +667,14 @@
   /* ── Phase 3 — Google Calendar Event Drawing ── */
   function drawCalEvents(ctx, events, W, H, curLOD) {
     if (!events || !events.length) return;
-    for (var i = 0; i < events.length; i++) {
-      var ev = events[i];
+    var sorted = events.slice().sort(function(a, b) {
+      var durA = getEventDuration(a);
+      var durB = getEventDuration(b);
+      if (durA !== durB) return durB - durA;
+      return d2i(a.start) - d2i(b.start);
+    });
+    for (var i = 0; i < sorted.length; i++) {
+      var ev = sorted[i];
       if (!ev.start) continue;
       var sd = new Date(ev.start), ed = new Date(ev.end || ev.start);
       var yi = sd.getFullYear() - CFG.startYear;
@@ -625,7 +744,7 @@
     return null;
   }
 
-  function create14hEvent(card, title, startD, endD) {
+  function create14hEvent(card, title, description, color, startStr, endStr, isDateTime) {
     var life = ensLife(card);
     if (typeof ensureGoogleToken !== 'function') return Promise.reject('No token function');
     
@@ -666,14 +785,14 @@
         });
         
       return p.then(function(calId) {
-        var startStr = toLocalYYYYMMDD(startD);
-        var endAdjusted = new Date(endD.getFullYear(), endD.getMonth(), endD.getDate() + 1);
-        var endStr = toLocalYYYYMMDD(endAdjusted);
+        var finalDescription = (description || '') + '\n\n---\ncolor: ' + color;
+        var endStrForGCal = isDateTime ? endStr : addOneDay(endStr);
         
         var body = {
-          summary: title,
-          start: { date: startStr },
-          end: { date: endStr }
+          summary: title || '(No Title)',
+          description: finalDescription,
+          start: isDateTime ? { dateTime: startStr, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone } : { date: startStr },
+          end: isDateTime ? { dateTime: endStr, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone } : { date: endStrForGCal }
         };
         
         return fetch('https://www.googleapis.com/calendar/v3/calendars/' + encodeURIComponent(calId) + '/events', {
@@ -693,7 +812,7 @@
     });
   }
 
-  function edit14hEvent(card, eventId, newTitle) {
+  function edit14hEvent(card, eventId, title, description, color, startStr, endStr, isDateTime) {
     var life = ensLife(card);
     if (!life.cal14hId) return Promise.reject('No calendar ID');
     if (typeof ensureGoogleToken !== 'function') return Promise.reject('No token function');
@@ -701,8 +820,14 @@
     return ensureGoogleToken().then(function(token) {
       if (!token) throw new Error('No Google token');
       
+      var finalDescription = (description || '') + '\n\n---\ncolor: ' + color;
+      var endStrForGCal = isDateTime ? endStr : addOneDay(endStr);
+      
       var body = {
-        summary: newTitle
+        summary: title || '(No Title)',
+        description: finalDescription,
+        start: isDateTime ? { dateTime: startStr, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone } : { date: startStr },
+        end: isDateTime ? { dateTime: endStr, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone } : { date: endStrForGCal }
       };
       
       return fetch('https://www.googleapis.com/calendar/v3/calendars/' + encodeURIComponent(life.cal14hId) + '/events/' + encodeURIComponent(eventId), {
@@ -782,11 +907,28 @@
                 var s = ev.start && (ev.start.dateTime || ev.start.date);
                 var e2 = ev.end && (ev.end.dateTime || ev.end.date);
                 if (!s) continue;
-                var ci = j % CFG.palette.length;
+                
+                var parsed = parseGCalDescription(ev.description || '');
+                var color = parsed.color || CFG.palette[j % CFG.palette.length];
+                
+                var fillCol = color;
+                var strokeCol = color;
+                if (color.startsWith('#') && color.length === 7) {
+                  fillCol = color + '44';
+                  strokeCol = color + 'aa';
+                } else if (color.startsWith('#') && color.length === 9) {
+                  fillCol = color;
+                  strokeCol = color.slice(0, 7) + 'aa';
+                }
+                
                 mapped.push({
-                  id: ev.id || ('gc'+j), title: ev.summary || '',
-                  start: s, end: e2 || s,
-                  color: CFG.palette[ci] + '44', bc: CFG.palette[ci] + 'aa',
+                  id: ev.id || ('gc'+j),
+                  title: ev.summary || '',
+                  description: parsed.description,
+                  start: s,
+                  end: e2 || s,
+                  color: fillCol,
+                  bc: strokeCol,
                   source: 'gcal'
                 });
               }
@@ -936,6 +1078,36 @@
     crumb.textContent = '\uD83E\uDDEC Life \u2014 Years';
     hdr.appendChild(crumb);
 
+    /* Zoom switches (Years, Months, Weeks, Days, Hours) */
+    var switches = document.createElement('div');
+    switches.className = 'life-zoom-switches';
+    var lvls = ['Y', 'M', 'W', 'D', 'H'];
+    var labels = { Y: 'Years', M: 'Months', W: 'Weeks', D: 'Days', H: 'Hours' };
+    var btnMap = {};
+    lvls.forEach(function(lvl) {
+      var btn = document.createElement('button');
+      btn.textContent = labels[lvl];
+      btn.onclick = function(e) {
+        e.stopPropagation();
+        var wh = getWH();
+        zoomToLevel(life, lvl, wh.W, wh.H);
+      };
+      switches.appendChild(btn);
+      btnMap[lvl] = btn;
+    });
+    hdr.appendChild(switches);
+
+    /* Today button */
+    var todayBtn = document.createElement('button');
+    todayBtn.className = 'life-today-btn';
+    todayBtn.textContent = 'Today';
+    todayBtn.onclick = function(e) {
+      e.stopPropagation();
+      var wh = getWH();
+      flyToToday(life, wh.W, wh.H);
+    };
+    hdr.appendChild(todayBtn);
+
     /* Sync button (Phase 3) */
     var syncBtn = document.createElement('button');
     syncBtn.className = 'life-sync';
@@ -987,46 +1159,186 @@
     var editorPanel = document.createElement('div');
     editorPanel.className = 'life-editor'; editorPanel.style.display = 'none';
     editorPanel.innerHTML =
-      '<div class="le-title">Edit Overlay</div>' +
-      '<input class="le-input" placeholder="Title" />' +
-      '<div class="le-colors"></div>' +
+      '<div class="le-title">Event Editor</div>' +
+      '<div class="le-field">' +
+        '<label>Title</label>' +
+        '<input class="le-input" id="le-title-input" placeholder="Event Title" />' +
+      '</div>' +
+      '<div class="le-field">' +
+        '<label>Description</label>' +
+        '<textarea class="le-desc-input" id="le-desc-input" placeholder="Description (shows as tooltip)"></textarea>' +
+      '</div>' +
+      '<div class="le-field" style="display: flex; align-items: center; gap: 6px; margin-bottom: 10px;">' +
+        '<input type="checkbox" id="le-all-day" style="width: auto; margin: 0; cursor: pointer;" />' +
+        '<label for="le-all-day" style="display: inline; margin: 0; text-transform: none; cursor: pointer;">All Day Event</label>' +
+      '</div>' +
+      '<div class="le-datetime-row">' +
+        '<div class="le-field">' +
+          '<label>From</label>' +
+          '<input type="date" id="le-from-date" />' +
+          '<input type="time" id="le-from-time" />' +
+        '</div>' +
+        '<div class="le-field">' +
+          '<label>To</label>' +
+          '<input type="date" id="le-to-date" />' +
+          '<input type="time" id="le-to-time" />' +
+        '</div>' +
+      '</div>' +
+      '<div class="le-field">' +
+        '<label>Color</label>' +
+        '<div class="le-colors"></div>' +
+      '</div>' +
       '<div class="le-actions">' +
         '<button class="le-save">\u2713 Save</button>' +
-        '<button class="le-del">\uD83D\uDDD1 Delete</button>' +
-        '<button class="le-close">\u2715</button>' +
+        '<button class="le-del" style="background:#ff7675;color:#fff;">\uD83D\uDDD1 Delete</button>' +
+        '<button class="le-close">\u2715 Cancel</button>' +
       '</div>';
     el.appendChild(editorPanel);
 
+    var allDayCb = editorPanel.querySelector('#le-all-day');
+    allDayCb.onchange = function() {
+      var isAllDay = allDayCb.checked;
+      var fromTimeInput = editorPanel.querySelector('#le-from-time');
+      var toTimeInput = editorPanel.querySelector('#le-to-time');
+      if (isAllDay) {
+        fromTimeInput.style.display = 'none';
+        toTimeInput.style.display = 'none';
+      } else {
+        fromTimeInput.style.display = '';
+        toTimeInput.style.display = '';
+      }
+    };
+
     /* Populate colour swatches */
     var colorGrid = editorPanel.querySelector('.le-colors');
-    var selColor = CFG.ovFill;
+    var selColor = CFG.palette[0];
     CFG.palette.forEach(function(c) {
       var sw = document.createElement('div');
       sw.className = 'le-csw'; sw.style.background = c;
+      sw.dataset.color = c;
       sw.onclick = function(e) {
-        e.stopPropagation(); selColor = c + '44';
+        e.stopPropagation(); selColor = c;
         colorGrid.querySelectorAll('.le-csw').forEach(function(s){ s.classList.remove('sel'); });
         sw.classList.add('sel');
       };
       colorGrid.appendChild(sw);
     });
 
+    function toLocalTimeStr(d) {
+      var h = String(d.getHours()).padStart(2, '0');
+      var m = String(d.getMinutes()).padStart(2, '0');
+      return h + ':' + m;
+    }
+
     var _editingOv = null;
     function openEditor(ov) {
       _editingOv = ov;
       editorPanel.style.display = 'block';
-      editorPanel.querySelector('.le-input').value = ov.title || '';
-      selColor = ov.color || CFG.ovFill;
+      
+      editorPanel.querySelector('#le-title-input').value = ov.title || '';
+      editorPanel.querySelector('#le-desc-input').value = ov.description || '';
+      
+      var isDateTime = false;
+      var startD, endD;
+      
+      var life = ensLife(card);
+      
+      if (ov._isNew) {
+        startD = ov.startD;
+        endD = ov.endD;
+        var currentLOD = lod(life.cam.z);
+        isDateTime = (currentLOD === 'H');
+        editorPanel.querySelector('.le-del').style.display = 'none';
+      } else {
+        var dates = getEventDates(ov);
+        startD = dates.start;
+        endD = dates.end;
+        if (typeof ov.start === 'string' && ov.start.indexOf('T') !== -1) {
+          isDateTime = true;
+        }
+        editorPanel.querySelector('.le-del').style.display = '';
+      }
+      
+      // Set date inputs
+      editorPanel.querySelector('#le-from-date').value = toLocalYYYYMMDD(startD);
+      editorPanel.querySelector('#le-to-date').value = toLocalYYYYMMDD(endD);
+      
+      // Set time inputs
+      var fromTimeInput = editorPanel.querySelector('#le-from-time');
+      var toTimeInput = editorPanel.querySelector('#le-to-time');
+      
+      if (isDateTime) {
+        allDayCb.checked = false;
+        fromTimeInput.style.display = '';
+        toTimeInput.style.display = '';
+        fromTimeInput.value = toLocalTimeStr(startD);
+        toTimeInput.value = toLocalTimeStr(endD);
+      } else {
+        allDayCb.checked = true;
+        fromTimeInput.style.display = 'none';
+        toTimeInput.style.display = 'none';
+        fromTimeInput.value = '09:00';
+        toTimeInput.value = '18:00';
+      }
+      
+      // Setup swatch selection
+      var rawColor = ov.color || CFG.ovFill;
+      var hexColor = rawColor;
+      if (rawColor.startsWith('#')) {
+        if (rawColor.length === 9) {
+          hexColor = rawColor.slice(0, 7);
+        } else if (rawColor.length === 5) {
+          hexColor = rawColor.slice(0, 4);
+        }
+      } else {
+        hexColor = CFG.palette[0];
+      }
+      
+      selColor = hexColor;
+      colorGrid.querySelectorAll('.le-csw').forEach(function(s) {
+        var sColor = s.dataset.color || '';
+        if (sColor.toLowerCase() === hexColor.toLowerCase()) {
+          s.classList.add('sel');
+        } else {
+          s.classList.remove('sel');
+        }
+      });
     }
+    
     function closeEditor() { editorPanel.style.display = 'none'; _editingOv = null; }
 
     editorPanel.querySelector('.le-close').onclick = function(e){ e.stopPropagation(); closeEditor(); };
     editorPanel.querySelector('.le-save').onclick = function(e){
       e.stopPropagation();
       if (!_editingOv) return;
-      var newTitle = editorPanel.querySelector('.le-input').value;
-      if (_editingOv.source === 'gcal') {
-        edit14hEvent(card, _editingOv.id, newTitle).then(function() {
+      
+      var newTitle = editorPanel.querySelector('#le-title-input').value;
+      var newDesc = editorPanel.querySelector('#le-desc-input').value;
+      var isAllDay = allDayCb.checked;
+      
+      var dateFromStr = editorPanel.querySelector('#le-from-date').value;
+      var timeFromStr = editorPanel.querySelector('#le-from-time').value;
+      var dateToStr = editorPanel.querySelector('#le-to-date').value;
+      var timeToStr = editorPanel.querySelector('#le-to-time').value;
+      
+      var startStr, endStr;
+      if (isAllDay) {
+        startStr = dateFromStr;
+        endStr = dateToStr;
+      } else {
+        startStr = dateFromStr + 'T' + timeFromStr + ':00';
+        endStr = dateToStr + 'T' + timeToStr + ':00';
+      }
+      
+      if (_editingOv._isNew) {
+        create14hEvent(card, newTitle, newDesc, selColor, startStr, endStr, !isAllDay).then(function() {
+          closeEditor();
+          if (typeof sv==='function') sv();
+        }).catch(function(err) {
+          alert("Error creating: " + err);
+        });
+      } else if (_editingOv.source === 'gcal') {
+        edit14hEvent(card, _editingOv.id, newTitle, newDesc, selColor, startStr, endStr, !isAllDay).then(function() {
           closeEditor();
           if (typeof sv==='function') sv();
         }).catch(function(err) {
@@ -1034,8 +1346,12 @@
         });
       } else {
         _editingOv.title = newTitle;
-        _editingOv.color = selColor;
-        _editingOv.bc = selColor.replace(/44$/, 'aa');
+        _editingOv.description = newDesc;
+        _editingOv.color = selColor + '44';
+        _editingOv.bc = selColor + 'aa';
+        _editingOv.start = startStr;
+        _editingOv.end = endStr;
+        _editingOv.isDateTime = !isAllDay;
         closeEditor();
         if (typeof sv==='function') sv();
       }
@@ -1116,7 +1432,14 @@
         return;
       }
 
-      if (e.shiftKey && e.button === 0) {
+      // Alt + Click or middle/right click starts panning
+      if (e.button === 1 || e.button === 2 || (e.altKey && e.button === 0)) {
+        ST.panning = true; ST.px = e.offsetX; ST.py = e.offsetY;
+        e.preventDefault(); return;
+      }
+
+      // Left click starts drag-selection
+      if (e.button === 0) {
         ST.dn = true; ST.sx = e.offsetX; ST.sy = e.offsetY;
         var wp = s2w(e.offsetX, e.offsetY, cam);
         var curLOD = lod(cam.z);
@@ -1128,10 +1451,6 @@
           life.selStart = null;
           life.selEnd = null;
         }
-        e.preventDefault(); return;
-      }
-      if (e.button === 1 || e.button === 2 || (e.altKey && e.button === 0)) {
-        ST.panning = true; ST.px = e.offsetX; ST.py = e.offsetY;
         e.preventDefault(); return;
       }
     });
@@ -1163,25 +1482,40 @@
           cv.style.cursor = '';
           var wp = s2w(e.offsetX, e.offsetY, cam);
           var curLOD = lod(cam.z);
-          var hit = pickCell(wp.x, wp.y, wh.W, wh.H, curLOD);
-          if (hit) {
-            var txt = '';
-            if (hit.type==='year')  txt = ''+hit.y;
-            else if (hit.type==='month') txt = MN[hit.m]+' '+hit.y;
-            else if (hit.type==='week') txt = 'Wk ' + getWeekNumber(new Date(hit.y, hit.m, hit.wRow * 7 + 1)) + ' ' + MN[hit.m] + ' ' + hit.y;
-            else if (hit.type==='day')   txt = (hit.d+1)+' '+MN[hit.m]+' '+hit.y;
-            else if (hit.type==='slot') {
-              var h = Math.floor(hit.sl/2);
-              txt = (hit.d+1)+' '+MN[hit.m]+' '+hit.y+' '+h+':'+(hit.sl%2?'30':'00');
+          
+          var eventHit = hitCalEvent(wp.x, wp.y, life.calEvents, wh.W, wh.H, curLOD) || hitOverlay(wp.x, wp.y, life.ov, wh.W);
+          if (eventHit) {
+            var txt = eventHit.title || '(No Title)';
+            if (eventHit.description) {
+              txt += ': ' + eventHit.description;
             }
             tooltip.textContent = txt;
             tooltip.style.display = 'block';
             tooltip.style.opacity = '1';
             tooltip.style.left = (e.offsetX + 14) + 'px';
             tooltip.style.top = (e.offsetY + 14 + 32) + 'px';
+            cv.style.cursor = 'pointer';
           } else {
-            tooltip.style.display = 'none';
-            tooltip.style.opacity = '0';
+            var hit = pickCell(wp.x, wp.y, wh.W, wh.H, curLOD);
+            if (hit) {
+              var txt = '';
+              if (hit.type==='year')  txt = ''+hit.y;
+              else if (hit.type==='month') txt = MN[hit.m]+' '+hit.y;
+              else if (hit.type==='week') txt = 'Wk ' + getWeekNumber(new Date(hit.y, hit.m, hit.wRow * 7 + 1)) + ' ' + MN[hit.m] + ' ' + hit.y;
+              else if (hit.type==='day')   txt = (hit.d+1)+' '+MN[hit.m]+' '+hit.y;
+              else if (hit.type==='slot') {
+                var h = Math.floor(hit.sl/2);
+                txt = (hit.d+1)+' '+MN[hit.m]+' '+hit.y+' '+h+':'+(hit.sl%2?'30':'00');
+              }
+              tooltip.textContent = txt;
+              tooltip.style.display = 'block';
+              tooltip.style.opacity = '1';
+              tooltip.style.left = (e.offsetX + 14) + 'px';
+              tooltip.style.top = (e.offsetY + 14 + 32) + 'px';
+            } else {
+              tooltip.style.display = 'none';
+              tooltip.style.opacity = '0';
+            }
           }
         }
       }
@@ -1218,30 +1552,32 @@
       var life = ensLife(card), cam = life.cam, wh = getWH();
       clampCam(cam, wh.W, wh.H);
 
-      /* Finish overlay creation (Shift+drag) */
+      /* Finish overlay creation */
       if (ST.dn) {
         ST.dn = false;
-        if (life.selStart && life.selEnd) {
-          var rStart = getCellDateRange(life.selStart);
-          var rEnd = getCellDateRange(life.selEnd);
+        var sStart = life.selStart;
+        var sEnd = life.selEnd;
+        life.selStart = null;
+        life.selEnd = null;
+
+        if (ST.moved && sStart && sEnd) {
+          var rStart = getCellDateRange(sStart);
+          var rEnd = getCellDateRange(sEnd);
           if (rStart && rEnd) {
             var minT = Math.min(rStart.start.getTime(), rEnd.start.getTime());
             var maxT = Math.max(rStart.end.getTime(), rEnd.end.getTime());
             var startD = new Date(minT);
             var endD = new Date(maxT);
             
-            var title = prompt("Enter event title:");
-            if (title) {
-              create14hEvent(card, title, startD, endD).catch(function(err) {
-                alert("Error creating event: " + err);
-              });
-            }
+            openEditor({
+              _isNew: true,
+              startD: startD,
+              endD: endD
+            });
           }
+          if (typeof sv==='function') sv();
+          return;
         }
-        life.selStart = null;
-        life.selEnd = null;
-        if (typeof sv==='function') sv();
-        return;
       }
       /* Finish pan */
       if (ST.panning) { ST.panning = false; if (typeof sv==='function') sv(); return; }
@@ -1645,6 +1981,57 @@
                   L._domMap.clear();
                 }
                 if (typeof sv === 'function') sv();
+              },
+              onClickEvent: function(ev) {
+                if ((ev.calendarName || '').toLowerCase() === '14h') {
+                  var found = life.calEvents.find(function(cEv) { return cEv.id === ev.id; });
+                  if (found) {
+                    openEditor(found);
+                  } else {
+                    var parsed = parseGCalDescription(ev.description || '');
+                    openEditor({
+                      id: ev.id,
+                      title: ev.summary,
+                      description: parsed.description,
+                      start: ev.start,
+                      end: ev.end,
+                      color: parsed.color || ev.color,
+                      source: 'gcal'
+                    });
+                  }
+                } else {
+                  var pBody = el;
+                  if (typeof showCalendarEventForm === 'function') {
+                    showCalendarEventForm(pBody, pBody, null, {
+                      mode: 'edit',
+                      calendarId: ev.calendarId,
+                      eventId: ev.id,
+                      summary: ev.summary,
+                      description: ev.description,
+                      startTime: new Date(ev.start),
+                      endTime: new Date(ev.end),
+                      onDone: function() {
+                        var L = ensLife(card);
+                        L._evCache = null;
+                        L._evCacheKey = '';
+                        if (L._domMap) {
+                          L._domMap.forEach(function(entry) {
+                            if (entry.el && entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
+                          });
+                          L._domMap.clear();
+                        }
+                        if (typeof sv === 'function') sv();
+                      }
+                    });
+                  }
+                }
+              },
+              onCreateEvent: function(startD, endD) {
+                openEditor({
+                  _isNew: true,
+                  startD: startD,
+                  endD: endD
+                });
               }
             });
           }
@@ -1746,6 +2133,17 @@
 
       /* Breadcrumb text (Phase 2) */
       crumb.textContent = '\uD83E\uDDEC Life \u2014 ' + lodLabel(level);
+
+      /* Update zoom switches active states */
+      if (btnMap) {
+        Object.keys(btnMap).forEach(function(lvl) {
+          if (lvl === level) {
+            btnMap[lvl].classList.add('active');
+          } else {
+            btnMap[lvl].classList.remove('active');
+          }
+        });
+      }
 
       /* Mini-map (Phase 4) */
       drawMinimap(ctx, cam, W, H, W, H, _dpr);
