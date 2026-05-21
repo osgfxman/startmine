@@ -48,16 +48,66 @@
     return { y:d.getFullYear(), m:d.getMonth(), d:d.getDate(),
              sl: d.getHours()*2 + (d.getMinutes()>=30 ? 1 : 0) };
   }
+  function getWeekNumber(d) {
+    var date = new Date(d.getTime());
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
+    var week1 = new Date(date.getFullYear(), 0, 4);
+    return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+  }
+  function parseLocalDate(str) {
+    if (!str) return new Date();
+    if (str.length === 10) {
+      var parts = str.split('-');
+      return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+    return new Date(str);
+  }
+  function toLocalYYYYMMDD(d) {
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var date = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + date;
+  }
+  function getEventDates(ev) {
+    var startD = parseLocalDate(ev.start);
+    var endD = parseLocalDate(ev.end || ev.start);
+    // If it's a date-only (all day) event, subtract 1 day from end date to make it inclusive
+    if (ev.start && ev.start.indexOf('T') === -1 && ev.end && ev.end.indexOf('T') === -1) {
+      endD = new Date(endD.getFullYear(), endD.getMonth(), endD.getDate() - 1);
+    }
+    return { start: startD, end: endD };
+  }
+
+  function getCellDateRange(cell) {
+    if (!cell) return null;
+    var startD, endD;
+    if (cell.type === 'year') {
+      startD = new Date(cell.y, 0, 1);
+      endD = new Date(cell.y, 11, 31);
+    } else if (cell.type === 'month') {
+      startD = new Date(cell.y, cell.m, 1);
+      endD = new Date(cell.y, cell.m, dim(cell.y, cell.m));
+    } else if (cell.type === 'week') {
+      startD = new Date(cell.y, cell.m, cell.wRow * 7 + 1);
+      endD = new Date(cell.y, cell.m, Math.min(dim(cell.y, cell.m), (cell.wRow + 1) * 7));
+    } else if (cell.type === 'day' || cell.type === 'slot') {
+      startD = new Date(cell.y, cell.m, cell.d + 1);
+      endD = new Date(cell.y, cell.m, cell.d + 1);
+    }
+    return { start: startD, end: endD };
+  }
 
   /* ── LOD — thresholds based on INTERNAL camera zoom (not Miro page zoom) ── */
   function lod(z) {
     if (z < 0.9)  return 'Y';
     if (z < 2.2)  return 'M';
-    if (z < 6.5)  return 'D';
+    if (z < 4.5)  return 'W';
+    if (z < 10.0) return 'D';
     return 'H';
   }
   function lodLabel(l) {
-    return l==='Y' ? 'Years' : l==='M' ? 'Months' : l==='D' ? 'Days' : 'Hours';
+    return l==='Y' ? 'Years' : l==='M' ? 'Months' : l==='W' ? 'Weeks' : l==='D' ? 'Days' : 'Hours';
   }
 
   /* ── Rect mappers (world-space coordinates) ── */
@@ -174,6 +224,63 @@
     }
   }
 
+  function drawWeeks(ctx, W, H) {
+    var n = nowInfo();
+    ctx.textBaseline = 'top';
+    for (var i = 0; i < 50; i++) {
+      var yr = yR(i, W, H), y = CFG.startYear + i;
+      ctx.strokeStyle = CFG.grid1; ctx.lineWidth = 1.5;
+      ctx.strokeRect(yr.x+.5, yr.y+.5, yr.w-1, yr.h-1);
+      ctx.font = 'bold 11px system-ui';
+      ctx.fillStyle = (y === n.y) ? CFG.accent : CFG.tx;
+      ctx.fillText(''+y, yr.x+6, yr.y+4);
+      for (var m = 0; m < 12; m++) {
+        var mr = mR(i, m, W, H);
+        ctx.strokeStyle = CFG.grid2; ctx.lineWidth = .7;
+        ctx.strokeRect(mr.x+.5, mr.y+.5, mr.w-1, mr.h-1);
+        
+        var rh = mr.h / CFG.dRows; // 5 rows
+        for (var r = 0; r < CFG.dRows; r++) {
+          var ry = mr.y + r * rh;
+          ctx.strokeStyle = CFG.grid3; ctx.lineWidth = .5;
+          ctx.beginPath();
+          ctx.moveTo(mr.x, ry);
+          ctx.lineTo(mr.x + mr.w, ry);
+          ctx.stroke();
+
+          // Calculate week number for this week row
+          var dVal = r * 7 + 1;
+          var ds = dim(y, m);
+          if (dVal > ds) dVal = ds;
+          var date = new Date(y, m, dVal);
+          var wkNum = getWeekNumber(date);
+
+          // Highlight current week if it matches today's week in this month
+          var isTodayWeek = false;
+          var today = new Date();
+          if (today.getFullYear() === y && today.getMonth() === m) {
+            var tDay = today.getDate();
+            var tRow = Math.floor((tDay - 1) / 7);
+            if (tRow === r) {
+              isTodayWeek = true;
+            }
+          }
+
+          if (isTodayWeek) {
+            ctx.strokeStyle = CFG.accent; ctx.lineWidth = 1.2;
+            ctx.strokeRect(mr.x+.5, ry+.5, mr.w-1, rh-1);
+          }
+
+          if (mr.w > 25 && rh > 10) {
+            ctx.font = '7px system-ui';
+            ctx.fillStyle = isTodayWeek ? CFG.accent : CFG.tx2;
+            ctx.fillText('Wk ' + wkNum, mr.x + 3, ry + 2);
+          }
+        }
+      }
+    }
+  }
+
   function drawDays(ctx, W, H) {
     var n = nowInfo(), td = new Date(n.y, n.m, n.d).getTime();
     for (var i = 0; i < 50; i++) {
@@ -273,6 +380,177 @@
     }
   }
 
+  function getCoveredCells(startD, endD, level, W, H) {
+    var cells = [];
+    var sTime = startD.getTime(), eTime = endD.getTime();
+    
+    if (level === 'Y') {
+      for (var i = 0; i < 50; i++) {
+        var y = CFG.startYear + i;
+        var sCell = new Date(y, 0, 1), eCell = new Date(y, 11, 31);
+        if (sCell.getTime() <= eTime && eCell.getTime() >= sTime) {
+          cells.push(yR(i, W, H));
+        }
+      }
+    } else if (level === 'M') {
+      for (var i = 0; i < 50; i++) {
+        var y = CFG.startYear + i;
+        for (var m = 0; m < 12; m++) {
+          var sCell = new Date(y, m, 1), eCell = new Date(y, m, dim(y, m));
+          if (sCell.getTime() <= eTime && eCell.getTime() >= sTime) {
+            cells.push(mR(i, m, W, H));
+          }
+        }
+      }
+    } else if (level === 'W') {
+      for (var i = 0; i < 50; i++) {
+        var y = CFG.startYear + i;
+        for (var m = 0; m < 12; m++) {
+          for (var r = 0; r < CFG.dRows; r++) {
+            var sCell = new Date(y, m, r * 7 + 1);
+            var eCell = new Date(y, m, Math.min(dim(y, m), (r + 1) * 7));
+            if (sCell.getTime() <= eTime && eCell.getTime() >= sTime) {
+              var mr = mR(i, m, W, H);
+              var rh = mr.h / CFG.dRows;
+              cells.push({ x: mr.x, y: mr.y + r * rh, w: mr.w, h: rh });
+            }
+          }
+        }
+      }
+    } else if (level === 'D') {
+      for (var i = 0; i < 50; i++) {
+        var y = CFG.startYear + i;
+        for (var m = 0; m < 12; m++) {
+          var ds = dim(y, m);
+          for (var d = 0; d < ds; d++) {
+            var sCell = new Date(y, m, d + 1), eCell = new Date(y, m, d + 1);
+            if (sCell.getTime() <= eTime && eCell.getTime() >= sTime) {
+              cells.push(dR(i, m, d, W, H));
+            }
+          }
+        }
+      }
+    }
+    return cells;
+  }
+
+  function drawStickyNote(ctx, x, y, w, h, ev, color, strokeColor) {
+    ctx.save();
+    
+    ctx.fillStyle = color;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 1.5;
+    
+    ctx.beginPath();
+    if (ctx.roundRect) {
+      ctx.roundRect(x + 2, y + 2, w - 4, h - 4, 4);
+    } else {
+      ctx.rect(x + 2, y + 2, w - 4, h - 4);
+    }
+    ctx.fill();
+    ctx.stroke();
+    
+    var title = ev.title || '';
+    if (title) {
+      var maxW = w - 8;
+      var maxH = h - 8;
+      if (maxW > 10 && maxH > 8) {
+        ctx.fillStyle = '#1e272e';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center';
+        
+        var fontSize = Math.min(18, Math.max(7, Math.floor(h * 0.4)));
+        var words = title.split(' ');
+        var lines = [];
+        
+        while (fontSize >= 6) {
+          ctx.font = 'bold ' + fontSize + 'px system-ui, -apple-system, sans-serif';
+          lines = [];
+          var currentLine = words[0];
+          
+          for (var i = 1; i < words.length; i++) {
+            var word = words[i];
+            var width = ctx.measureText(currentLine + ' ' + word).width;
+            if (width < maxW) {
+              currentLine += ' ' + word;
+            } else {
+              lines.push(currentLine);
+              currentLine = word;
+            }
+          }
+          lines.push(currentLine);
+          
+          var totalHeight = lines.length * (fontSize * 1.2);
+          if (totalHeight <= maxH) {
+            break;
+          }
+          fontSize--;
+        }
+        
+        ctx.font = 'bold ' + fontSize + 'px system-ui, -apple-system, sans-serif';
+        var totalHeight = lines.length * (fontSize * 1.2);
+        var startY = y + h/2 - totalHeight/2 + (fontSize * 0.6);
+        
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x + 4, y + 4, w - 8, h - 8);
+        ctx.clip();
+        
+        for (var l = 0; l < lines.length; l++) {
+          ctx.fillText(lines[l], x + w/2, startY + l * (fontSize * 1.2));
+        }
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawCalEventsAsStickyNotes(ctx, events, W, H, level) {
+    if (!events || !events.length) return;
+    if (level === 'H') return;
+    
+    for (var i = 0; i < events.length; i++) {
+      var ev = events[i];
+      if (!ev.start) continue;
+      
+      var dates = getEventDates(ev);
+      var cells = getCoveredCells(dates.start, dates.end, level, W, H);
+      if (cells.length === 0) continue;
+      
+      var rows = {};
+      for (var j = 0; j < cells.length; j++) {
+        var c = cells[j];
+        var yKey = c.y.toFixed(1);
+        if (!rows[yKey]) rows[yKey] = [];
+        rows[yKey].push(c);
+      }
+      
+      var color = ev.color || 'rgba(52, 152, 219, 0.4)';
+      var strokeColor = ev.bc || 'rgba(52, 152, 219, 0.9)';
+      
+      var keys = Object.keys(rows);
+      for (var k = 0; k < keys.length; k++) {
+        var rowCells = rows[keys[k]];
+        rowCells.sort(function(a, b) { return a.x - b.x; });
+        
+        var startCell = rowCells[0];
+        var lastCell = rowCells[0];
+        
+        for (var j = 1; j < rowCells.length; j++) {
+          var c = rowCells[j];
+          if (c.x - (lastCell.x + lastCell.w) < 5) {
+            lastCell = c;
+          } else {
+            drawStickyNote(ctx, startCell.x, startCell.y, (lastCell.x + lastCell.w) - startCell.x, startCell.h, ev, color, strokeColor);
+            startCell = c;
+            lastCell = c;
+          }
+        }
+        drawStickyNote(ctx, startCell.x, startCell.y, (lastCell.x + lastCell.w) - startCell.x, startCell.h, ev, color, strokeColor);
+      }
+    }
+  }
+
   /* ── Phase 3 — Google Calendar Event Drawing ── */
   function drawCalEvents(ctx, events, W, H, curLOD) {
     if (!events || !events.length) return;
@@ -327,6 +605,142 @@
     }
   }
 
+  function hitCalEvent(wx, wy, events, W, H, level) {
+    if (!events || !events.length) return null;
+    if (level === 'H') return null;
+    
+    for (var i = events.length - 1; i >= 0; i--) {
+      var ev = events[i];
+      if (!ev.start) continue;
+      var dates = getEventDates(ev);
+      var cells = getCoveredCells(dates.start, dates.end, level, W, H);
+      
+      for (var j = 0; j < cells.length; j++) {
+        var c = cells[j];
+        if (wx >= c.x && wx <= c.x + c.w && wy >= c.y && wy <= c.y + c.h) {
+          return ev;
+        }
+      }
+    }
+    return null;
+  }
+
+  function create14hEvent(card, title, startD, endD) {
+    var life = ensLife(card);
+    if (typeof ensureGoogleToken !== 'function') return Promise.reject('No token function');
+    
+    return ensureGoogleToken().then(function(token) {
+      if (!token) throw new Error('No Google token');
+      
+      var p = life.cal14hId ? Promise.resolve(life.cal14hId) : 
+        fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        }).then(function(r){ return r.json(); }).then(function(data) {
+          var cal14h = null;
+          if (data.items) {
+            for (var i = 0; i < data.items.length; i++) {
+              if ((data.items[i].summary || '').toLowerCase() === '14h') {
+                cal14h = data.items[i].id; break;
+              }
+            }
+          }
+          if (cal14h) {
+            life.cal14hId = cal14h;
+            return cal14h;
+          }
+          
+          return fetch('https://www.googleapis.com/calendar/v3/calendars', {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + token,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ summary: '14h' })
+          }).then(function(r) {
+            if (!r.ok) throw new Error('Could not find or create "14h" calendar.');
+            return r.json();
+          }).then(function(newCal) {
+            life.cal14hId = newCal.id;
+            return newCal.id;
+          });
+        });
+        
+      return p.then(function(calId) {
+        var startStr = toLocalYYYYMMDD(startD);
+        var endAdjusted = new Date(endD.getFullYear(), endD.getMonth(), endD.getDate() + 1);
+        var endStr = toLocalYYYYMMDD(endAdjusted);
+        
+        var body = {
+          summary: title,
+          start: { date: startStr },
+          end: { date: endStr }
+        };
+        
+        return fetch('https://www.googleapis.com/calendar/v3/calendars/' + encodeURIComponent(calId) + '/events', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(body)
+        }).then(function(r) {
+          if (!r.ok) throw new Error('Failed to create event');
+          return r.json();
+        }).then(function() {
+          fetchCalEvents(card);
+        });
+      });
+    });
+  }
+
+  function edit14hEvent(card, eventId, newTitle) {
+    var life = ensLife(card);
+    if (!life.cal14hId) return Promise.reject('No calendar ID');
+    if (typeof ensureGoogleToken !== 'function') return Promise.reject('No token function');
+    
+    return ensureGoogleToken().then(function(token) {
+      if (!token) throw new Error('No Google token');
+      
+      var body = {
+        summary: newTitle
+      };
+      
+      return fetch('https://www.googleapis.com/calendar/v3/calendars/' + encodeURIComponent(life.cal14hId) + '/events/' + encodeURIComponent(eventId), {
+        method: 'PATCH',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      }).then(function(r) {
+        if (!r.ok) throw new Error('Failed to edit event');
+        return r.json();
+      }).then(function() {
+        fetchCalEvents(card);
+      });
+    });
+  }
+
+  function delete14hEvent(card, eventId) {
+    var life = ensLife(card);
+    if (!life.cal14hId) return Promise.reject('No calendar ID');
+    if (typeof ensureGoogleToken !== 'function') return Promise.reject('No token function');
+    
+    return ensureGoogleToken().then(function(token) {
+      if (!token) throw new Error('No Google token');
+      
+      return fetch('https://www.googleapis.com/calendar/v3/calendars/' + encodeURIComponent(life.cal14hId) + '/events/' + encodeURIComponent(eventId), {
+        method: 'DELETE',
+        headers: {
+          'Authorization': 'Bearer ' + token
+        }
+      }).then(function(r) {
+        if (!r.ok && r.status !== 410) throw new Error('Failed to delete event');
+        fetchCalEvents(card);
+      });
+    });
+  }
+
   /* ─────────────────────────────────────────────────────────
      PHASE 3 — Google Calendar Fetch ('14h' calendar)
      ───────────────────────────────────────────────────────── */
@@ -352,6 +766,7 @@
           }
         }
         if (!cal14h) { _calFetching[cid] = false; return; }
+        life.cal14hId = cal14h; // Store it
         var tMin = new Date(CFG.startYear, 0, 1).toISOString();
         var tMax = new Date(CFG.endYear, 11, 31).toISOString();
         var url = 'https://www.googleapis.com/calendar/v3/calendars/' +
@@ -404,6 +819,12 @@
     var m = clamp(mr2 * CFG.mCols + mc, 0, 11);
     var mRect = mR(i, m, W, H);
     if (curLOD === 'M') return { type:'month', y:y, m:m, rect:mRect, i:i };
+
+    if (curLOD === 'W') {
+      var wRow = clamp(Math.floor((wy - mRect.y) / (mRect.h / CFG.dRows)), 0, CFG.dRows - 1);
+      var wRect = { x: mRect.x, y: mRect.y + wRow * (mRect.h / CFG.dRows), w: mRect.w, h: mRect.h / CFG.dRows };
+      return { type: 'week', y: y, m: m, wRow: wRow, rect: wRect, i: i };
+    }
 
     var dw = mRect.w / CFG.dCols, dh = mRect.h / CFG.dRows;
     var dc = Math.floor((wx - mRect.x) / dw), dr3 = Math.floor((wy - mRect.y) / dh);
@@ -603,20 +1024,39 @@
     editorPanel.querySelector('.le-save').onclick = function(e){
       e.stopPropagation();
       if (!_editingOv) return;
-      _editingOv.title = editorPanel.querySelector('.le-input').value;
-      _editingOv.color = selColor;
-      _editingOv.bc = selColor.replace(/44$/, 'aa');
-      closeEditor();
-      if (typeof sv==='function') sv();
+      var newTitle = editorPanel.querySelector('.le-input').value;
+      if (_editingOv.source === 'gcal') {
+        edit14hEvent(card, _editingOv.id, newTitle).then(function() {
+          closeEditor();
+          if (typeof sv==='function') sv();
+        }).catch(function(err) {
+          alert("Error saving: " + err);
+        });
+      } else {
+        _editingOv.title = newTitle;
+        _editingOv.color = selColor;
+        _editingOv.bc = selColor.replace(/44$/, 'aa');
+        closeEditor();
+        if (typeof sv==='function') sv();
+      }
     };
     editorPanel.querySelector('.le-del').onclick = function(e){
       e.stopPropagation();
       if (!_editingOv) return;
-      var life = ensLife(card);
-      life.ov = life.ov.filter(function(o){ return o !== _editingOv; });
-      closeEditor();
-      if (typeof sv==='function') sv();
-      if (typeof buildOutline==='function') try { buildOutline(); } catch(e2){}
+      if (_editingOv.source === 'gcal') {
+        delete14hEvent(card, _editingOv.id).then(function() {
+          closeEditor();
+          if (typeof sv==='function') sv();
+        }).catch(function(err) {
+          alert("Error deleting: " + err);
+        });
+      } else {
+        var life = ensLife(card);
+        life.ov = life.ov.filter(function(o){ return o !== _editingOv; });
+        closeEditor();
+        if (typeof sv==='function') sv();
+        if (typeof buildOutline==='function') try { buildOutline(); } catch(e2){}
+      }
     };
 
     /* ── ResizeObserver for HiDPI canvas sizing ── */
@@ -678,6 +1118,16 @@
 
       if (e.shiftKey && e.button === 0) {
         ST.dn = true; ST.sx = e.offsetX; ST.sy = e.offsetY;
+        var wp = s2w(e.offsetX, e.offsetY, cam);
+        var curLOD = lod(cam.z);
+        var startCell = pickCell(wp.x, wp.y, wh.W, wh.H, curLOD);
+        if (startCell) {
+          life.selStart = startCell;
+          life.selEnd = startCell;
+        } else {
+          life.selStart = null;
+          life.selEnd = null;
+        }
         e.preventDefault(); return;
       }
       if (e.button === 1 || e.button === 2 || (e.altKey && e.button === 0)) {
@@ -718,6 +1168,7 @@
             var txt = '';
             if (hit.type==='year')  txt = ''+hit.y;
             else if (hit.type==='month') txt = MN[hit.m]+' '+hit.y;
+            else if (hit.type==='week') txt = 'Wk ' + getWeekNumber(new Date(hit.y, hit.m, hit.wRow * 7 + 1)) + ' ' + MN[hit.m] + ' ' + hit.y;
             else if (hit.type==='day')   txt = (hit.d+1)+' '+MN[hit.m]+' '+hit.y;
             else if (hit.type==='slot') {
               var h = Math.floor(hit.sl/2);
@@ -735,6 +1186,15 @@
         }
       }
       if (!ST.dn && !ST.panning) return;
+      if (ST.dn && life.selStart) {
+        var life = ensLife(card), cam = life.cam;
+        var wp = s2w(e.offsetX, e.offsetY, cam);
+        var curLOD = lod(cam.z);
+        var currentCell = pickCell(wp.x, wp.y, wh.W, wh.H, curLOD);
+        if (currentCell) {
+          life.selEnd = currentCell;
+        }
+      }
       var dx = e.offsetX - (ST.panning ? ST.px : ST.sx);
       var dy = e.offsetY - (ST.panning ? ST.py : ST.sy);
       if (Math.abs(dx)>3 || Math.abs(dy)>3) ST.moved = true;
@@ -761,18 +1221,26 @@
       /* Finish overlay creation (Shift+drag) */
       if (ST.dn) {
         ST.dn = false;
-        if (ST.moved) {
-          var x1 = Math.min(ST.sx, e.offsetX), x2 = Math.max(ST.sx, e.offsetX);
-          var w1 = s2w(x1, 0, cam).x, w2 = s2w(x2, 0, cam).x;
-          var T = totalDays();
-          var s = i2d(Math.floor((w1/wh.W)*T)).toISOString().slice(0,10);
-          var en = i2d(Math.floor((w2/wh.W)*T)).toISOString().slice(0,10);
-          var newOv = { id:'m_'+Date.now(), start:s, end:en, title:'', color:CFG.ovFill, bc:CFG.ovStroke };
-          life.ov.push(newOv);
-          layoutOverlays(life.ov);
-          openEditor(newOv);
-          if (typeof sv==='function') sv();
+        if (life.selStart && life.selEnd) {
+          var rStart = getCellDateRange(life.selStart);
+          var rEnd = getCellDateRange(life.selEnd);
+          if (rStart && rEnd) {
+            var minT = Math.min(rStart.start.getTime(), rEnd.start.getTime());
+            var maxT = Math.max(rStart.end.getTime(), rEnd.end.getTime());
+            var startD = new Date(minT);
+            var endD = new Date(maxT);
+            
+            var title = prompt("Enter event title:");
+            if (title) {
+              create14hEvent(card, title, startD, endD).catch(function(err) {
+                alert("Error creating event: " + err);
+              });
+            }
+          }
         }
+        life.selStart = null;
+        life.selEnd = null;
+        if (typeof sv==='function') sv();
         return;
       }
       /* Finish pan */
@@ -784,8 +1252,12 @@
         layoutOverlays(life.ov);
         var ovHit = hitOverlay(wp.x, wp.y, life.ov, wh.W);
         if (ovHit && ovHit.source !== 'gcal') { openEditor(ovHit); return; }
-        /* Navigation drill-down (Phase 2) */
+        
         var curLOD = lod(cam.z);
+        var calHit = hitCalEvent(wp.x, wp.y, life.calEvents, wh.W, wh.H, curLOD);
+        if (calHit) { openEditor(calHit); return; }
+
+        /* Navigation drill-down (Phase 2) */
         var hit = pickCell(wp.x, wp.y, wh.W, wh.H, curLOD);
         if (!hit) return;
         if (hit.type==='year')       zoomToRect(life, hit.rect, wh.W, wh.H, 1.6);
@@ -793,6 +1265,7 @@
           life._monthFocus = { y: hit.y, m: hit.m, half: 0 };
           zoomToRect(life, hit.rect, wh.W, wh.H, 4.0);
         }
+        else if (hit.type==='week')  zoomToRect(life, hit.rect, wh.W, wh.H, 8.0);
         else if (hit.type==='day')   zoomToRect(life, hit.rect, wh.W, wh.H, 12.0);
         else if (hit.type==='slot')  life.sel = { y:hit.y, m:hit.m, d:hit.d, sl:hit.sl };
         if (typeof sv==='function') sv(false, true);
@@ -827,7 +1300,8 @@
       e.stopPropagation(); e.preventDefault();
       var life = ensLife(card), cam = life.cam, wh = getWH();
       var center = s2w(wh.W/2, wh.H/2, cam);
-      if (cam.z > 6.5) { cam.z = 4.0; }
+      if (cam.z > 10.0) { cam.z = 6.0; }
+      else if (cam.z > 4.5) { cam.z = 3.0; }
       else if (cam.z > 2.2) { cam.z = 1.6; life._monthFocus = null; }
       else if (cam.z > 0.9) { cam.z = 0.5; life._monthFocus = null; }
       else { cam.z = 0.35; life._monthFocus = null; }
@@ -844,7 +1318,8 @@
         e.stopPropagation(); e.preventDefault();
         if (editorPanel.style.display !== 'none') { closeEditor(); return; }
         var life = ensLife(card), cam = life.cam, wh = getWH();
-        if (cam.z > 6.5) { cam.z = 4.0; }
+        if (cam.z > 10.0) { cam.z = 6.0; }
+        else if (cam.z > 4.5) { cam.z = 3.0; }
         else if (cam.z > 2.2) { cam.z = 1.6; life._monthFocus = null; }
         else if (cam.z > 0.9) { cam.z = 0.5; life._monthFocus = null; }
         else { cam.z = 0.35; life._monthFocus = null; }
@@ -1225,6 +1700,7 @@
          Suppress drawDays/drawHours to avoid visual noise (slot numbers, grid lines). */
       if (level === 'Y')      { drawYears(ctx, W, H); }
       else if (level === 'M') { drawYears(ctx, W, H); drawMonths(ctx, W, H); }
+      else if (level === 'W') { drawWeeks(ctx, W, H); }
       else if (level === 'D' || level === 'H') { drawMonths(ctx, W, H); }
       else                    { drawMonths(ctx, W, H); drawDays(ctx, W, H); drawHours(ctx, W, H); }
 
@@ -1232,8 +1708,29 @@
       drawOverlays(ctx, life.ov, W);
 
       /* Google Calendar events (Phase 3) — canvas only at zoomed-out levels */
-      if (level === 'Y' || level === 'M') {
-        drawCalEvents(ctx, life.calEvents, W, H, level);
+      if (level === 'Y' || level === 'M' || level === 'W') {
+        drawCalEventsAsStickyNotes(ctx, life.calEvents, W, H, level);
+      }
+
+      /* Draw Shift selection overlay */
+      if (life.selStart && life.selEnd) {
+        var rStart = getCellDateRange(life.selStart);
+        var rEnd = getCellDateRange(life.selEnd);
+        if (rStart && rEnd) {
+          var minT = Math.min(rStart.start.getTime(), rEnd.start.getTime());
+          var maxT = Math.max(rStart.end.getTime(), rEnd.end.getTime());
+          var selCells = getCoveredCells(new Date(minT), new Date(maxT), level, W, H);
+          ctx.fillStyle = 'rgba(52, 152, 219, 0.25)';
+          ctx.strokeStyle = 'rgba(52, 152, 219, 0.7)';
+          ctx.lineWidth = 1.5;
+          for (var si = 0; si < selCells.length; si++) {
+            var c = selCells[si];
+            ctx.beginPath();
+            ctx.rect(c.x + 1, c.y + 1, c.w - 2, c.h - 2);
+            ctx.fill();
+            ctx.stroke();
+          }
+        }
       }
 
       /* Update DOM Overlays — throttled: full diff every 3rd frame, transform-only otherwise */
