@@ -3815,7 +3815,7 @@ window.renderZooperDayCard = function(container, dayDate, options) {
   
   var card=document.createElement('div');
   card.className = 'zooper-day-card';
-  card.style.cssText='display:inline-flex;flex-direction:column;flex-shrink:0;border:1px solid '+(isToday?'#4285f4':bdr)+';border-radius:3px;'+(isToday?'background:rgba(66,133,244,.07);box-shadow:0 0 6px rgba(66,133,244,.4);':'')+(isFuture?'opacity:.3;':'');
+  card.style.cssText='display:inline-flex;flex-direction:column;flex-shrink:0;border:1px solid '+(isToday?'#4285f4':bdr)+';border-radius:3px;'+(isToday?'box-shadow:0 0 6px rgba(66,133,244,.4);':'')+(isFuture?'opacity:.3;':'');
   
   var hdr=document.createElement('div');hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:0 1px;border-bottom:1px solid '+bdr+';height:'+(isToday?28:20)+'px;flex-shrink:0;gap:0;';
   var hL=document.createElement('span');hL.style.cssText='font-size:'+(isToday?'.7rem':'.55rem')+';font-weight:900;color:'+(isToday?'#4285f4':(isDk?'#ddd':'#111'))+';white-space:nowrap;line-height:1;';hL.textContent=dayDate.getDate()+dn[dayDate.getDay()];
@@ -3943,9 +3943,9 @@ window.renderZooperDayCard = function(container, dayDate, options) {
             var pBody = options.popupBody || document.body;
             if(se.length>0){
               var e0=se[0];
-              showCalendarEventForm(pBody,pBody,null,{mode:'edit',calendarId:e0.calendarId,eventId:e0.id,summary:e0.summary,description:e0.description,startTime:new Date(e0.start),endTime:new Date(e0.end)});
+              showCalendarEventForm(pBody,pBody,null,{mode:'edit',calendarId:e0.calendarId,eventId:e0.id,summary:e0.summary,description:e0.description,startTime:new Date(e0.start),endTime:new Date(e0.end),onDone:options.onRefresh});
             }else{
-              showCalendarEventForm(pBody,pBody,null,{mode:'create',startTime:sd,endTime:ed});
+              showCalendarEventForm(pBody,pBody,null,{mode:'create',startTime:sd,endTime:ed,onDone:options.onRefresh});
             }
           }
         });
@@ -4006,7 +4006,7 @@ window.renderZooperDayCard = function(container, dayDate, options) {
         var sMin=Math.min.apply(null,sel.map(function(h){return h.slotStartMin;}));
         var eMin=Math.max.apply(null,sel.map(function(h){return h.slotEndMin;}));
         var pBody = options.popupBody || document.body;
-        showCalendarEventForm(pBody,pBody,null,{mode:'create',startTime:new Date(dm+sMin*60000),endTime:new Date(dm+eMin*60000)});
+        showCalendarEventForm(pBody,pBody,null,{mode:'create',startTime:new Date(dm+sMin*60000),endTime:new Date(dm+eMin*60000),onDone:options.onRefresh});
       }
     }
     
@@ -6307,6 +6307,7 @@ function showCalendarEventForm(container, el, card, opts) {
   // Smart refresh: detect gantt vs calendar context
   const _isGantt = !!(el && (el.querySelector('.gantt-body') || el.querySelector('.gantt-overlay-body') || el.classList.contains('gantt-overlay-panel')));
   const _refresh = () => {
+    if (typeof opts.onDone === 'function') { opts.onDone(); }
     if (typeof el._ganttRender === 'function') { el._ganttRender(); } else if (_isGantt && el.querySelector('.gantt-body')) { renderGanttContent(el, card); }
     
     else { renderCalendarContent(el, card); }

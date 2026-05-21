@@ -1153,6 +1153,8 @@
               allGridCells: [],
               popupBody: el,
               onRefresh: function() {
+                var L = ensLife(card);
+                L._evCacheKey = '';
                 if (typeof sv === 'function') sv();
               }
             });
