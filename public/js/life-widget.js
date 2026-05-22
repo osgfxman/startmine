@@ -1880,8 +1880,7 @@
         if (_zoomWrapper) { _dayCardContainer.innerHTML = ''; _zoomWrapper = null; }
         if (life._domMap) { life._domMap.clear(); }
         _lastVisibleKeys = '';
-        life._evCache = null;
-        life._evCacheKey = '';
+        // Preserve life._evCache and life._evCacheKey to prevent empty rendering on zoom-in
         return;
       }
 

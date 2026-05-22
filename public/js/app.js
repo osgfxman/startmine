@@ -434,22 +434,32 @@ auth.onAuthStateChanged((user) => {
       restoreGoogleToken();
     }
     
-    // Remember Me logic: if token is expired or missing, auto-auth via redirect
+    // Remember Me logic: if token is expired or missing, prepare silent re-auth on first interaction
     if (localStorage.getItem('sm_remember_me') === 'true' && isGoogleTokenExpired()) {
-      if (!sessionStorage.getItem('sm_auth_redirected')) {
-        sessionStorage.setItem('sm_auth_redirected', 'true');
-        const hintProvider = new firebase.auth.GoogleAuthProvider();
-        hintProvider.addScope('https://www.googleapis.com/auth/drive.file');
-        hintProvider.addScope('https://www.googleapis.com/auth/calendar.events');
-        hintProvider.addScope('https://www.googleapis.com/auth/calendar.readonly');
-        hintProvider.addScope('https://www.googleapis.com/auth/tasks');
-        hintProvider.setCustomParameters({ login_hint: user.email });
-        console.log('[AUTH] Auto-redirecting for Google token refresh...');
-        auth.signInWithRedirect(hintProvider);
-        return;
-      } else {
-        console.warn('[AUTH] Already attempted auto-redirect in this session. Skipping to avoid loop.');
+      let reauthInProgress = false;
+      function onFirstUserInteraction() {
+        if (reauthInProgress) return;
+        if (localStorage.getItem('sm_remember_me') === 'true' && isGoogleTokenExpired()) {
+          reauthInProgress = true;
+          console.log('[AUTH] User interacted. Initiating background Google token refresh popup...');
+          manualGoogleReAuth().then(() => {
+            console.log('[AUTH] Background Google token refresh successful!');
+            // Reload page columns / cards to fetch fresh events
+            if (typeof buildCols === 'function') buildCols();
+          }).catch((err) => {
+            console.warn('[AUTH] Background Google token refresh failed:', err);
+          }).finally(() => {
+            reauthInProgress = false;
+          });
+        }
+        // Remove listeners immediately on first try
+        document.removeEventListener('mousedown', onFirstUserInteraction);
+        document.removeEventListener('touchstart', onFirstUserInteraction);
+        document.removeEventListener('keydown', onFirstUserInteraction);
       }
+      document.addEventListener('mousedown', onFirstUserInteraction);
+      document.addEventListener('touchstart', onFirstUserInteraction);
+      document.addEventListener('keydown', onFirstUserInteraction);
     }
 
     if (SM.core.runHealthCheck) SM.core.runHealthCheck();
