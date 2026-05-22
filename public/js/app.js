@@ -386,6 +386,8 @@ function runIntegrityCheck() {
 setInterval(runIntegrityCheck, 2 * 60 * 1000);
 
 document.getElementById('login-btn').onclick = () => {
+    localStorage.setItem('sm_remember_me', 'true');
+    sessionStorage.removeItem('sm_auth_redirected');
     auth.signInWithPopup(provider).then((result) => {
       var cred = result.credential || (firebase.auth.GoogleAuthProvider.credentialFromResult && firebase.auth.GoogleAuthProvider.credentialFromResult(result));
       if (cred && cred.accessToken) {
@@ -404,15 +406,21 @@ document.getElementById('login-btn').onclick = () => {
   // Handle redirect result (for Edge and browsers that block popups)
   auth.getRedirectResult().then(function(result) {
     if (result && result.user) {
+      localStorage.setItem('sm_remember_me', 'true');
       var cred = result.credential || (firebase.auth.GoogleAuthProvider.credentialFromResult && firebase.auth.GoogleAuthProvider.credentialFromResult(result));
       if (cred && cred.accessToken) {
         cacheGoogleToken(cred.accessToken);
       }
+      sessionStorage.removeItem('sm_auth_redirected');
     }
   }).catch(function(e) {
     console.warn('[AUTH] Redirect result error:', e.code, e.message);
   });
-document.getElementById('logout-btn').onclick = () => auth.signOut();
+document.getElementById('logout-btn').onclick = () => {
+  localStorage.removeItem('sm_remember_me');
+  sessionStorage.removeItem('sm_auth_redirected');
+  auth.signOut();
+};
 
 auth.onAuthStateChanged((user) => {
   if (user) {
@@ -425,6 +433,25 @@ auth.onAuthStateChanged((user) => {
     if (!_googleAccessToken) {
       restoreGoogleToken();
     }
+    
+    // Remember Me logic: if token is expired or missing, auto-auth via redirect
+    if (localStorage.getItem('sm_remember_me') === 'true' && isGoogleTokenExpired()) {
+      if (!sessionStorage.getItem('sm_auth_redirected')) {
+        sessionStorage.setItem('sm_auth_redirected', 'true');
+        const hintProvider = new firebase.auth.GoogleAuthProvider();
+        hintProvider.addScope('https://www.googleapis.com/auth/drive.file');
+        hintProvider.addScope('https://www.googleapis.com/auth/calendar.events');
+        hintProvider.addScope('https://www.googleapis.com/auth/calendar.readonly');
+        hintProvider.addScope('https://www.googleapis.com/auth/tasks');
+        hintProvider.setCustomParameters({ login_hint: user.email });
+        console.log('[AUTH] Auto-redirecting for Google token refresh...');
+        auth.signInWithRedirect(hintProvider);
+        return;
+      } else {
+        console.warn('[AUTH] Already attempted auto-redirect in this session. Skipping to avoid loop.');
+      }
+    }
+
     if (SM.core.runHealthCheck) SM.core.runHealthCheck();
     initDB();
   } else {

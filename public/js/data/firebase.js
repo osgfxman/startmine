@@ -33,7 +33,7 @@ window._googleTokenExpiry = 0; // Timestamp when token expires
 // ─── Token Persistence (tracked with expiry) ───
 const LS_G_TOKEN = 'sm_google_token';
 const LS_G_TOKEN_EXP = 'sm_google_token_expiry';
-const TOKEN_LIFETIME_MS = 4 * 60 * 60 * 1000; // 4 hours (proactive refresh runs every 5min anyway)
+const TOKEN_LIFETIME_MS = 55 * 60 * 1000; // 55 minutes (Google access tokens expire in 60 minutes)
 
 function cacheGoogleToken(token) {
   _googleAccessToken = token;

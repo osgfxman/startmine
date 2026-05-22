@@ -3815,7 +3815,7 @@ window.renderZooperDayCard = function(container, dayDate, options) {
   
   var card=document.createElement('div');
   card.className = 'zooper-day-card';
-  card.style.cssText='display:inline-flex;flex-direction:column;flex-shrink:0;border:1px solid '+(isToday?'#4285f4':bdr)+';border-radius:3px;'+(isToday?'box-shadow:0 0 6px rgba(66,133,244,.4);':'')+(isFuture?'opacity:.3;':'');
+  card.style.cssText='display:inline-flex;flex-direction:column;flex-shrink:0;border:1px solid '+(isToday?'#4285f4':bdr)+';border-radius:3px;'+(isToday?'box-shadow:0 0 6px rgba(66,133,244,.4);':'');
   
   var hdr=document.createElement('div');hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:0 1px;border-bottom:1px solid '+bdr+';height:'+(isToday?28:20)+'px;flex-shrink:0;gap:0;';
   var hL=document.createElement('span');hL.style.cssText='font-size:'+(isToday?'.7rem':'.55rem')+';font-weight:900;color:'+(isToday?'#4285f4':(isDk?'#ddd':'#111'))+';white-space:nowrap;line-height:1;';hL.textContent=dayDate.getDate()+dn[dayDate.getDay()];
@@ -4218,7 +4218,7 @@ window.renderZooperDayCard = function(container, dayDate, options) {
             w: body.clientWidth || 900,
             h: body.clientHeight || 500,
             _overlayMode: true,
-            life: { ov: [], cam: { z: 0.5, x: 0, y: 0 }, calEvents: [], _calTS: 0, sel: null }
+            life: { ov: [], cam: { z: 1.0, x: 0, y: 0 }, calEvents: [], _calTS: 0, sel: null }
           };
         } else {
           _overlayLifeCard.w = body.clientWidth || 900;

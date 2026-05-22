@@ -133,7 +133,8 @@
     if (level === 'H' && life._monthFocus) {
       var yi = life._monthFocus.y - CFG.startYear;
       var mRect = mR(yi, life._monthFocus.m, W, H);
-      zoomToRect(life, mRect, W, H, 14.0);
+      var targetZ = Math.min(W / mRect.w, H / mRect.h);
+      zoomToRectInstant(life, mRect, W, H, targetZ);
       return;
     }
 
@@ -149,9 +150,10 @@
     var n = nowInfo();
     var yi = n.y - CFG.startYear;
     if (yi < 0 || yi >= 50) return;
-    var rect = dR(yi, n.m, n.d - 1, W, H);
+    var rect = mR(yi, n.m, W, H);
     life._monthFocus = { y: n.y, m: n.m, half: (n.d > 14 ? 1 : 0) };
-    zoomToRect(life, rect, W, H, 12.0);
+    var targetZ = Math.min(W / rect.w, H / rect.h);
+    zoomToRectInstant(life, rect, W, H, targetZ);
   }
 
   function getEventDuration(ev) {
@@ -227,7 +229,7 @@
     return L;
   }
   function clampCam(cam, W, H) {
-    cam.z = clamp(cam.z, 0.35, 30);
+    cam.z = clamp(cam.z, 0.35, 120);
     var vw = W / cam.z, vh = H / cam.z;
     cam.x = clamp(cam.x, 0, Math.max(0, W - vw));
     cam.y = clamp(cam.y, 0, Math.max(0, H - vh));
@@ -271,6 +273,18 @@
     animateCam(life, tx, ty, targetZ, W, H, function() {
       if (typeof sv === 'function') sv();
     });
+  }
+
+  function zoomToRectInstant(life, rect, W, H, targetZ) {
+    var cam = life.cam;
+    var vw = W / targetZ, vh = H / targetZ;
+    var tx = rect.x + rect.w/2 - vw/2;
+    var ty = rect.y + rect.h/2 - vh/2;
+    tx = clamp(tx, 0, Math.max(0, W - vw));
+    ty = clamp(ty, 0, Math.max(0, H - vh));
+    cam.z = targetZ; cam.x = tx; cam.y = ty;
+    clampCam(cam, W, H);
+    if (typeof sv === 'function') sv();
   }
 
   /* ─────────────────────────────────────────────────────────
@@ -551,7 +565,9 @@
         var sCell = new Date(y, 0, 1, 0, 0, 0, 0).getTime();
         var eCell = new Date(y, 11, 31, 23, 59, 59, 999).getTime();
         if (sCell <= eTime && eCell >= sTime) {
-          cells.push(yR(i, W, H));
+          var yrRect = yR(i, W, H);
+          yrRect.yIndex = i;
+          cells.push(yrRect);
         }
       }
     } else if (level === 'M') {
@@ -704,13 +720,59 @@
       return d2i(a.start) - d2i(b.start);
     });
     
+    var yearEventsMap = {};
+    var sortedEventCells = [];
+    
     for (var i = 0; i < sorted.length; i++) {
       var ev = sorted[i];
       if (!ev.start) continue;
-      
       var dates = getEventDates(ev);
       var cells = getCoveredCells(dates.start, dates.end, level, W, H);
+      sortedEventCells.push({ ev: ev, cells: cells });
+      
+      if (level === 'Y') {
+        for (var j = 0; j < cells.length; j++) {
+          var yIdx = cells[j].yIndex;
+          if (yIdx !== undefined) {
+            if (!yearEventsMap[yIdx]) yearEventsMap[yIdx] = [];
+            yearEventsMap[yIdx].push(ev);
+          }
+        }
+      }
+    }
+    
+    for (var i = 0; i < sortedEventCells.length; i++) {
+      var item = sortedEventCells[i];
+      var ev = item.ev;
+      var cells = item.cells;
       if (cells.length === 0) continue;
+      
+      if (level === 'Y') {
+        var adjustedCells = [];
+        for (var j = 0; j < cells.length; j++) {
+          var c = cells[j];
+          var yIdx = c.yIndex;
+          if (yIdx !== undefined && yearEventsMap[yIdx]) {
+            var sharing = yearEventsMap[yIdx];
+            var n = sharing.length;
+            var idx = sharing.indexOf(ev);
+            if (n > 1 && idx !== -1) {
+              var newH = c.h / n;
+              var newY = c.y + idx * newH;
+              adjustedCells.push({
+                x: c.x,
+                y: newY,
+                w: c.w,
+                h: newH,
+                yIndex: yIdx
+              });
+              continue;
+            }
+          }
+          adjustedCells.push(c);
+        }
+        cells = adjustedCells;
+      }
       
       var rows = {};
       for (var j = 0; j < cells.length; j++) {
@@ -1499,9 +1561,15 @@
 
     function getMousePos(e) {
       var rect = cv.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) {
+        return {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top
+        };
+      }
       return {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
+        x: (e.clientX - rect.left) * (cv.clientWidth / rect.width),
+        y: (e.clientY - rect.top) * (cv.clientHeight / rect.height)
       };
     }
 
@@ -1719,9 +1787,8 @@
       e.stopPropagation(); e.preventDefault();
       var life = ensLife(card), cam = life.cam, wh = getWH();
       clampCam(cam, wh.W, wh.H);
-      /* Compute offset relative to cv, even if event fires on overlay */
-      var rect = cv.getBoundingClientRect();
-      var ox = e.clientX - rect.left, oy = e.clientY - rect.top;
+      var pos = getMousePos(e);
+      var ox = pos.x, oy = pos.y;
       var before = s2w(ox, oy, cam);
       cam.z *= (e.deltaY < 0 ? 1.14 : 0.88);
       cam.x = before.x - ox / cam.z;
@@ -1787,7 +1854,7 @@
         e.preventDefault();
         var t0 = e.touches[0], t1 = e.touches[1];
         var dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
-        cam.z = clamp(_tZ * (dist / _tDist), 0.35, 30);
+        cam.z = clamp(_tZ * (dist / _tDist), 0.35, 120);
         clampCam(cam, wh.W, wh.H);
       } else if (e.touches.length === 1 && _tPanning) {
         e.preventDefault();
@@ -1874,9 +1941,9 @@
             if (level !== 'H' && (screenW < 120 || screenH < 90)) continue;
 
             /* Filter to focused month in H mode (no sprint split) */
-            if (level === 'H' && life._monthFocus) {
-              if (y !== life._monthFocus.y || m !== life._monthFocus.m) continue;
-            }
+            // if (level === 'H' && life._monthFocus) {
+            //   if (y !== life._monthFocus.y || m !== life._monthFocus.m) continue;
+            // }
 
             var key = y + '-' + m + '-' + d;
             visibleDays.push({ key: key, r: r, date: new Date(y, m, d + 1) });
@@ -1928,20 +1995,87 @@
           life._evFetching = true;
           /* Async fetch — don't block render */
           (function(ck) {
+            var promises = [];
+            
+            // 1. Fetch Calendar Events
             if (typeof fetchCalendarEvents === 'function') {
-              fetchCalendarEvents(rangeStart, rangeEnd).then(function(allEv) {
-                life._evCache = (allEv || []).filter(function(e) { return !e.allDay; });
-                life._evCacheKey = ck;
-                life._evFetching = false;
-                /* Force DOM rebuild with new data */
-                life._domMap.forEach(function(entry) {
-                  if (entry.el && entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
-                });
-                life._domMap.clear();
-              }).catch(function() { life._evFetching = false; });
-            } else {
-              life._evFetching = false;
+              promises.push(
+                fetchCalendarEvents(rangeStart, rangeEnd)
+                  .then(function(allEv) {
+                    return { type: 'events', data: (allEv || []).filter(function(e) { return !e.allDay; }) };
+                  })
+                  .catch(function(err) {
+                    console.error('Life-widget events fetch error:', err);
+                    return { type: 'events', data: [] };
+                  })
+              );
             }
+            
+            // 2. Fetch Calendar List (for Fruit Calendar ID)
+            if (typeof getCalendarList === 'function') {
+              promises.push(
+                getCalendarList()
+                  .then(function(cals) {
+                    var frCal = cals.find(function(c) { return (c.summary || '').toLowerCase() === "!40's fruit"; });
+                    return { type: 'fruit', id: frCal ? frCal.id : '' };
+                  })
+                  .catch(function(err) {
+                    console.error('Life-widget fruit calendar fetch error:', err);
+                    return { type: 'fruit', id: '' };
+                  })
+              );
+            }
+            
+            // 3. Fetch Task Lists and Tasks (for Plan Calendar ID and Tasks)
+            if (typeof getAllTaskLists === 'function') {
+              promises.push(
+                getAllTaskLists()
+                  .then(function(lists) {
+                    if (lists.length > 0) {
+                      var pId = lists[0].id;
+                      if (typeof fetchPlanTasks === 'function') {
+                        return fetchPlanTasks(pId)
+                          .then(function(tasks) {
+                            return { type: 'tasks', planCalId: pId, planEvents: tasks };
+                          })
+                          .catch(function(err) {
+                            console.error('Life-widget plan tasks fetch error:', err);
+                            return { type: 'tasks', planCalId: pId, planEvents: [] };
+                          });
+                      }
+                    }
+                    return { type: 'tasks', planCalId: '', planEvents: [] };
+                  })
+                  .catch(function(err) {
+                    console.error('Life-widget task lists fetch error:', err);
+                    return { type: 'tasks', planCalId: '', planEvents: [] };
+                  })
+              );
+            }
+
+            Promise.all(promises).then(function(results) {
+              results.forEach(function(r) {
+                if (r.type === 'events') {
+                  life._evCache = r.data;
+                } else if (r.type === 'fruit') {
+                  life._fruitCalId = r.id;
+                } else if (r.type === 'tasks') {
+                  life._planCalId = r.planCalId;
+                  life._planEvents = r.planEvents;
+                }
+              });
+              life._evCacheKey = ck;
+              life._evFetching = false;
+              
+              /* Force DOM rebuild with new data */
+              life._domMap.forEach(function(entry) {
+                if (entry.el && entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
+              });
+              life._domMap.clear();
+            }).catch(function(err) {
+              console.error('Promise.all error in life-widget fetch:', err);
+              life._evFetching = false;
+            });
           })(cacheKey);
         }
         evts = life._evCache || [];
@@ -2046,14 +2180,27 @@
           sepEl = document.createElement('div');
           sepEl.id = separatorId;
           sepEl.className = 'sprint-separator';
-          sepEl.style.cssText = 'position:absolute;pointer-events:none;border-top:2px dashed rgba(0, 184, 148, 0.4);';
+          sepEl.style.cssText = 'position:absolute;pointer-events:none;display:flex;align-items:center;justify-content:center;font-family:inherit;font-weight:bold;text-transform:uppercase;';
           _zoomWrapper.appendChild(sepEl);
         }
-        var sepY = safeRect.y + rowStarts[2] - 15 * s_base;
+        var parts = monthKey.split('-');
+        var yVal = parseInt(parts[0], 10);
+        var mVal = parseInt(parts[1], 10);
+        var monthNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+        var monthName = monthNames[mVal] || '';
+        var sepText = monthName + ' ' + yVal;
+        
+        var isDk = (card.calTheme || 'light') !== 'light';
+        var sepHeight = 30 * s_base;
+        var sepY = safeRect.y + rowStarts[2] - sepHeight;
         sepEl.style.left = (safeRect.x + padWorld) + 'px';
         sepEl.style.top = sepY + 'px';
         sepEl.style.width = (safeRect.w - 2 * padWorld) + 'px';
-        sepEl.style.height = '0px';
+        sepEl.style.height = sepHeight + 'px';
+        sepEl.style.fontSize = (12 * s_base) + 'px';
+        sepEl.style.letterSpacing = (4 * s_base) + 'px';
+        sepEl.style.color = isDk ? 'rgba(255, 255, 255, 0.25)' : 'rgba(20, 25, 40, 0.25)';
+        sepEl.textContent = sepText;
 
         // Position cards sequentially in each row
         for (var rIdx = 0; rIdx < 5; rIdx++) {
@@ -2109,9 +2256,9 @@
             window.renderZooperDayCard(wrapper, vd.date, {
               theme: card.calTheme || 'light',
               evts: evts,
-              fruitCalId: '',
-              planEvents: [],
-              planCalId: '',
+              fruitCalId: life._fruitCalId || '',
+              planEvents: life._planEvents || [],
+              planCalId: life._planCalId || '',
               allGridCells: [],
               popupBody: el,
               onRefresh: function() {
@@ -2125,57 +2272,6 @@
                   L._domMap.clear();
                 }
                 if (typeof sv === 'function') sv();
-              },
-              onClickEvent: function(ev) {
-                if ((ev.calendarName || '').toLowerCase() === '14h') {
-                  var found = life.calEvents.find(function(cEv) { return cEv.id === ev.id; });
-                  if (found) {
-                    openEditor(found);
-                  } else {
-                    var parsed = parseGCalDescription(ev.description || '');
-                    openEditor({
-                      id: ev.id,
-                      title: ev.summary,
-                      description: parsed.description,
-                      start: ev.start,
-                      end: ev.end,
-                      color: parsed.color || ev.color,
-                      source: 'gcal'
-                    });
-                  }
-                } else {
-                  var pBody = el;
-                  if (typeof showCalendarEventForm === 'function') {
-                    showCalendarEventForm(pBody, pBody, null, {
-                      mode: 'edit',
-                      calendarId: ev.calendarId,
-                      eventId: ev.id,
-                      summary: ev.summary,
-                      description: ev.description,
-                      startTime: new Date(ev.start),
-                      endTime: new Date(ev.end),
-                      onDone: function() {
-                        var L = ensLife(card);
-                        L._evCache = null;
-                        L._evCacheKey = '';
-                        if (L._domMap) {
-                          L._domMap.forEach(function(entry) {
-                            if (entry.el && entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
-                          });
-                          L._domMap.clear();
-                        }
-                        if (typeof sv === 'function') sv();
-                      }
-                    });
-                  }
-                }
-              },
-              onCreateEvent: function(startD, endD) {
-                openEditor({
-                  _isNew: true,
-                  startD: startD,
-                  endD: endD
-                });
               }
             });
           }
