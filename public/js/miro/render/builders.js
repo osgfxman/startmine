@@ -314,7 +314,7 @@
     _applyTheme(); sv(); _rw();
   });
   hdr.appendChild(thB);
-  hdr.appendChild(_cb('\uD83D\uDD04','Refresh',function(){ _rw(); }));
+  hdr.appendChild(_cb('\uD83D\uDD04','Refresh',function(){ if (typeof window._clearCalendarCache === 'function') window._clearCalendarCache(); _rw(); }));
   hdr.appendChild(_cb('\uD83D\uDD11','Re-authenticate Google',function(){ if(typeof manualGoogleReAuth==='function'){manualGoogleReAuth().then(function(){_rw();}).catch(function(){});} }));
 
   // Spacer + delete

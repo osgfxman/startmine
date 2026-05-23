@@ -223,16 +223,27 @@
     var L = card.life;
     if (!L.ov)  L.ov  = [];
     if (!L.cam) L.cam = { z:1, x:0, y:0 };
+    if (isNaN(L.cam.z) || typeof L.cam.z !== 'number' || L.cam.z <= 0) L.cam.z = 1.0;
+    if (isNaN(L.cam.x) || typeof L.cam.x !== 'number') L.cam.x = 0;
+    if (isNaN(L.cam.y) || typeof L.cam.y !== 'number') L.cam.y = 0;
     if (!L.calEvents) L.calEvents = [];
     if (!L._calTS) L._calTS = 0;
     if (typeof L._monthFocus === 'undefined') L._monthFocus = null;
+    if (!L._domMap) L._domMap = new Map();
     return L;
   }
   function clampCam(cam, W, H) {
+    if (isNaN(cam.z) || typeof cam.z !== 'number' || cam.z <= 0) cam.z = 1.0;
+    if (isNaN(cam.x) || typeof cam.x !== 'number') cam.x = 0;
+    if (isNaN(cam.y) || typeof cam.y !== 'number') cam.y = 0;
     cam.z = clamp(cam.z, 0.35, 120);
-    var vw = W / cam.z, vh = H / cam.z;
-    cam.x = clamp(cam.x, 0, Math.max(0, W - vw));
-    cam.y = clamp(cam.y, 0, Math.max(0, H - vh));
+    if (W > 10 && H > 10) {
+      var vw = W / cam.z, vh = H / cam.z;
+      cam.x = clamp(cam.x, 0, Math.max(0, W - vw));
+      cam.y = clamp(cam.y, 0, Math.max(0, H - vh));
+    }
+    if (isNaN(cam.x)) cam.x = 0;
+    if (isNaN(cam.y)) cam.y = 0;
   }
   /* Screen → World */
   function s2w(sx, sy, cam) {
@@ -247,6 +258,11 @@
   /** Smoothly fly the camera toward (tx,ty,tz) over ~14 frames */
   function animateCam(life, tx, ty, tz, W, H, onDone) {
     var cam = life.cam, steps = 0;
+    if (isNaN(tz) || !isFinite(tz) || tz <= 0) tz = 1.0;
+    if (isNaN(tx) || !isFinite(tx)) tx = 0;
+    if (isNaN(ty) || !isFinite(ty)) ty = 0;
+    if (isNaN(W) || W <= 0) W = 900;
+    if (isNaN(H) || H <= 0) H = 500;
     (function tick() {
       cam.z = lerp(cam.z, tz, 0.18);
       cam.x = lerp(cam.x, tx, 0.18);
@@ -265,9 +281,14 @@
 
   /** Fly camera so the given rect fills the viewport at targetZ */
   function zoomToRect(life, rect, W, H, targetZ) {
+    if (isNaN(targetZ) || !isFinite(targetZ) || targetZ <= 0) targetZ = 1.0;
+    if (isNaN(W) || W <= 0) W = 900;
+    if (isNaN(H) || H <= 0) H = 500;
     var vw = W / targetZ, vh = H / targetZ;
     var tx = rect.x + rect.w/2 - vw/2;
     var ty = rect.y + rect.h/2 - vh/2;
+    if (isNaN(tx)) tx = 0;
+    if (isNaN(ty)) ty = 0;
     tx = clamp(tx, 0, Math.max(0, W - vw));
     ty = clamp(ty, 0, Math.max(0, H - vh));
     animateCam(life, tx, ty, targetZ, W, H, function() {
@@ -277,9 +298,14 @@
 
   function zoomToRectInstant(life, rect, W, H, targetZ) {
     var cam = life.cam;
+    if (isNaN(targetZ) || !isFinite(targetZ) || targetZ <= 0) targetZ = 1.0;
+    if (isNaN(W) || W <= 0) W = 900;
+    if (isNaN(H) || H <= 0) H = 500;
     var vw = W / targetZ, vh = H / targetZ;
     var tx = rect.x + rect.w/2 - vw/2;
     var ty = rect.y + rect.h/2 - vh/2;
+    if (isNaN(tx)) tx = 0;
+    if (isNaN(ty)) ty = 0;
     tx = clamp(tx, 0, Math.max(0, W - vw));
     ty = clamp(ty, 0, Math.max(0, H - vh));
     cam.z = targetZ; cam.x = tx; cam.y = ty;
@@ -1193,6 +1219,8 @@
      ───────────────────────────────────────────────────────── */
   function build(card) {
     var life = ensLife(card);
+    if (life._domMap) life._domMap.clear();
+    life._evFetching = false;
 
     /* ── Container ── */
     var el = document.createElement('div');
@@ -1544,7 +1572,13 @@
 
     /* ── Interaction state ── */
     var ST = { dn:false, panning:false, minimapDragging:false, moved:false, sx:0, sy:0, px:0, py:0 };
-    function getWH() { return { W:Math.max(1,el.clientWidth), H:Math.max(1,el.clientHeight-32) }; }
+    function getWH() {
+      var w = el.clientWidth;
+      var h = el.clientHeight;
+      if (isNaN(w) || typeof w !== 'number') w = card.w || 900;
+      if (isNaN(h) || typeof h !== 'number') h = card.h || 500;
+      return { W: Math.max(1, w), H: Math.max(1, h - 32) };
+    }
 
     function updateCamFromMinimap(mx, my, cam, W, H) {
       var mmW = 140, mmH = 80;
@@ -1871,7 +1905,7 @@
 
     /* ── Auto-fetch calendar on first build (Phase 3) ── */
     var life0 = ensLife(card);
-    if (life0.calEvents.length === 0 || (Date.now() - life0._calTS) > 300000) {
+    if ((Date.now() - life0._calTS) > 300000) {
       setTimeout(function(){ fetchCalEvents(card); }, 2000);
     }
 
@@ -2292,8 +2326,26 @@
        Render Loop (requestAnimationFrame)
        ───────────────────────────────────────────────────────── */
     var _destroyed = false;
+    var _waitFrames = 0;
     function draw() {
-      if (_destroyed || !el.parentNode) { _destroyed = true; return; }
+      if (_destroyed) return;
+      // Allow up to 120 frames (~2s) for element to be attached to DOM
+      if (!el.parentNode) {
+        _waitFrames++;
+        if (_waitFrames > 120) { _destroyed = true; return; }
+        requestAnimationFrame(draw);
+        return;
+      }
+      _waitFrames = 0;
+      // Auto-resize canvas if dimensions changed (e.g. overlay just became visible)
+      var elW = Math.max(1, el.clientWidth);
+      var elH = Math.max(1, el.clientHeight - 32);
+      var needW = Math.max(1, Math.floor(elW * _dpr));
+      var needH = Math.max(1, Math.floor(elH * _dpr));
+      if (cv.width !== needW || cv.height !== needH) {
+        cv.width = needW;
+        cv.height = needH;
+      }
       var ctx = cv.getContext('2d');
       var wh = getWH(), W = wh.W, H = wh.H;
       var life = ensLife(card), cam = life.cam;

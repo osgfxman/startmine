@@ -83,11 +83,13 @@
   const gid = uid();
   D.groups.push({ id: gid, name: 'Group 1', envId: id });
   const pid = uid();
+  const pageType = D.settings.defaultPageType || 'miro';
+  const name = pageType === 'web' ? 'Web 1' : 'Miro 1';
   D.pages.push({
     id: pid,
     groupId: gid,
-    name: 'Miro 1',
-    pageType: 'miro',
+    name: name,
+    pageType: pageType,
     miroCards: [],
     zoom: 100,
     panX: 0,
@@ -107,11 +109,13 @@
   const envGroups = D.groups.filter((g) => g.envId === targetEnv);
   D.groups.push({ id, name: 'Group ' + (envGroups.length + 1), envId: targetEnv });
   const pid = uid();
+  const pageType = D.settings.defaultPageType || 'miro';
+  const name = pageType === 'web' ? 'Web 1' : 'Miro 1';
   D.pages.push({
     id: pid,
     groupId: id,
-    name: 'Miro 1',
-    pageType: 'miro',
+    name: name,
+    pageType: pageType,
     miroCards: [],
     zoom: 100,
     panX: 0,
@@ -128,11 +132,13 @@
   const id = uid();
   const targetGroup = D.curGroup === '__all__' ? D.groups[0].id : D.curGroup;
   const groupPages = D.pages.filter((p) => p.groupId === targetGroup);
+  const pageType = D.settings.defaultPageType || 'miro';
+  const name = (pageType === 'web' ? 'Web ' : 'Miro ') + (groupPages.length + 1);
   D.pages.push({
     id,
     groupId: targetGroup,
-    name: 'Miro ' + (groupPages.length + 1),
-    pageType: 'miro',
+    name: name,
+    pageType: pageType,
     miroCards: [],
     zoom: 100,
     panX: 0,

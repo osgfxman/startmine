@@ -482,14 +482,52 @@ function setSyncStatus(state, msg) {
 
 function sanitizeData(d) {
   if (!d) return d;
+  // Smart snapshot: strip empty arrays and sort keys to prevent key ordering changes from triggering updates
+  function _snapForCompare(obj) {
+    function sortAndFilter(val) {
+      if (val === null || typeof val !== 'object') {
+        return val;
+      }
+      if (Array.isArray(val)) {
+        if (val.length === 0) return undefined;
+        return val.map(sortAndFilter);
+      }
+      const keys = Object.keys(val).sort();
+      const res = {};
+      let hasKeys = false;
+      for (const k of keys) {
+        const v = sortAndFilter(val[k]);
+        if (v !== undefined) {
+          res[k] = v;
+          hasKeys = true;
+        }
+      }
+      return hasKeys ? res : undefined;
+    }
+    return JSON.stringify(sortAndFilter(obj));
+  }
+  const beforeStr = _snapForCompare(d);
+
   if (!d.settings) d.settings = { engine: 'bm', accent: '#6c8fff' };
+  if (!d.settings.defaultPageType) d.settings.defaultPageType = 'miro';
+
   if (!d.environments || !Array.isArray(d.environments) || d.environments.length === 0) {
     d.environments = [{ id: 'e0', name: 'Main Env' }];
+  }
+  if (!d.environments.some(e => e.id === 'env_time')) {
+    d.environments.push({ id: 'env_time', name: 'Time', tabColor: '#ff8fa3' });
   }
   if (!d.curEnv) d.curEnv = d.environments[0].id;
 
   if (!d.groups || !Array.isArray(d.groups) || d.groups.length === 0) {
     d.groups = [{ id: 'g0', name: 'Main Group', envId: d.environments[0].id }];
+  }
+  if (!d.groups.some(g => g.id === 'group_time')) {
+    d.groups.push({ id: 'group_time', name: 'Current', envId: 'env_time' });
+  } else {
+    const gt = d.groups.find(g => g.id === 'group_time');
+    gt.envId = 'env_time';
+    if (!gt.name || gt.name === 'TIme Group') gt.name = 'Current';
   }
   // Backwards compatibility: ensure all groups have an envId
   d.groups.forEach(g => {
@@ -499,6 +537,40 @@ function sanitizeData(d) {
   if (!d.curGroup) d.curGroup = d.groups[0].id;
   if (!d.pages) d.pages = JSON.parse(JSON.stringify(DEF.pages));
   
+  const timePageDefaults = [
+    { id: 'time_today', name: 'Today' },
+    { id: 'time_gantt', name: 'Gantt Chart' },
+    { id: 'time_stats', name: 'Statistics' },
+    { id: 'time_fruit', name: 'Fruit Tracker' },
+    { id: 'time_zooper', name: 'Zooper' },
+    { id: 'time_life', name: 'Life' }
+  ];
+  timePageDefaults.forEach(tp => {
+    let existing = d.pages.find(p => p.id === tp.id);
+    if (!existing) {
+      existing = {
+        id: tp.id,
+        groupId: 'group_time',
+        name: tp.name,
+        pageType: 'web',
+        zoom: 100,
+        panX: 0,
+        panY: 0
+      };
+      d.pages.push(existing);
+    } else {
+      // Only fix groupId and pageType; preserve user-set name, zoom, pan, tabColor
+      existing.groupId = 'group_time';
+      if (!existing.pageType || existing.pageType === 'miro' || existing.pageType === 'bookmarks') {
+        existing.pageType = 'web';
+      }
+      // Migrate old lowercase names to Title Case (one-time)
+      if (!existing.name || existing.name === tp.name.toLowerCase()) {
+        existing.name = tp.name;
+      }
+    }
+  });
+
   d.pages.forEach((p) => {
     if (!p.groupId) p.groupId = d.groups[0].id;
     if (!p.widgets) p.widgets = [];
@@ -517,8 +589,15 @@ function sanitizeData(d) {
   });
   if (!d.cur) d.cur = d.pages[0]?.id || 'p0';
   if (!d.inbox) d.inbox = [];
+
+  const afterStr = _snapForCompare(d);
+  if (beforeStr !== afterStr) {
+    console.warn('[SANITIZE] Data modified. Before:', beforeStr.length, 'After:', afterStr.length);
+    d.__modified = true;
+  }
   return d;
 }
+window.sanitizeData = sanitizeData;
 
 function initDB() {
   if (window.__miroBuildersOk) window.__miroBuildersOk();
@@ -552,6 +631,11 @@ function initDB() {
       const restoredPage = D.pages.find(p => p.id === D.cur);
       if (restoredPage && restoredPage.groupId) {
         D.curGroup = restoredPage.groupId;
+      }
+      sanitizeData(D);
+      if (D.__modified) {
+        delete D.__modified;
+        sv(true, true);
       }
       const cachedPage = getCachedPageData(D.cur);
       const pg = cp();
@@ -651,6 +735,14 @@ function renderMeta() {
   buildInbox();
   document.documentElement.style.setProperty('--ac', D.settings.accent || '#6c8fff');
   document.getElementById('ac-dot').style.background = D.settings.accent || '#6c8fff';
+
+  const cb = document.getElementById('page-type-toggle-cb');
+  const lbl = document.getElementById('page-type-label');
+  if (cb && lbl) {
+    const isWeb = (D.settings.defaultPageType === 'web');
+    cb.checked = isWeb;
+    lbl.textContent = isWeb ? 'Web' : 'Miro';
+  }
 }
 
 // Switch the active synchronized payload
@@ -1849,6 +1941,17 @@ document.getElementById('bg-btn').onclick = () => {
   openM('m-bg');
 };
 
+const pageTypeToggleCb = document.getElementById('page-type-toggle-cb');
+if (pageTypeToggleCb) {
+  pageTypeToggleCb.onchange = () => {
+    const isWeb = pageTypeToggleCb.checked;
+    D.settings.defaultPageType = isWeb ? 'web' : 'miro';
+    const lbl = document.getElementById('page-type-label');
+    if (lbl) lbl.textContent = isWeb ? 'Web' : 'Miro';
+    sv();
+  };
+}
+
 function switchBgTab(t) {
   document
     .querySelectorAll('.bg-tab')
@@ -2489,8 +2592,12 @@ function buildEnvs() {
     if (env.tabColor) {
       tab.style.borderBottomColor = env.id === D.curEnv ? env.tabColor : 'transparent';
     }
-    tab.draggable = true;
+    tab.draggable = env.id !== 'env_time';
     tab.addEventListener('dragstart', (e) => {
+      if (env.id === 'env_time') {
+        e.preventDefault();
+        return;
+      }
       _dragEnvId = env.id;
       tab.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
@@ -2501,12 +2608,14 @@ function buildEnvs() {
     });
     tab.addEventListener('dragover', (e) => {
       e.preventDefault();
+      if (env.id === 'env_time') return;
       if ((_dragEnvId && _dragEnvId !== env.id) || (_dragGrpId)) tab.classList.add('tab-dragover');
     });
     tab.addEventListener('dragleave', () => tab.classList.remove('tab-dragover'));
     tab.addEventListener('drop', (e) => {
       e.preventDefault();
       tab.classList.remove('tab-dragover');
+      if (env.id === 'env_time') return;
       if (_dragGrpId) {
         const grp = D.groups.find((g) => g.id === _dragGrpId);
         if (grp && grp.envId !== env.id) {
@@ -2537,6 +2646,7 @@ function buildEnvs() {
     cd.style.background = env.tabColor || 'rgba(255,255,255,.15)';
     cd.title = 'Environment color';
     cd.onclick = (ev) => {
+      if (env.id === 'env_time') return;
       ev.stopPropagation();
       openEnvColorPop(ev, env.id);
     };
@@ -2547,6 +2657,10 @@ function buildEnvs() {
     nm.contentEditable = 'false';
     nm.onblur = () => {
       nm.contentEditable = 'false';
+      if (env.id === 'env_time') {
+        nm.textContent = 'Time';
+        return;
+      }
       env.name = nm.textContent.trim() || 'Env';
       sv();
     };
@@ -2561,6 +2675,7 @@ function buildEnvs() {
       if (nm.contentEditable === 'true') e.stopPropagation();
     };
     tab.addEventListener('dblclick', (e) => {
+      if (env.id === 'env_time') return;
       e.stopPropagation();
       nm.contentEditable = 'true';
       nm.focus();
@@ -2593,7 +2708,7 @@ function buildEnvs() {
     };
     tab.appendChild(cd);
     tab.appendChild(nm);
-    if (D.environments.length > 1) tab.appendChild(x);
+    if (D.environments.length > 1 && env.id !== 'env_time') tab.appendChild(x);
     // Right-click: export/import this environment
     tab.addEventListener('contextmenu', (e) => {
       e.preventDefault();
@@ -2616,6 +2731,11 @@ let _dragGrpId = null;
 function buildGroups() {
   const bar = document.getElementById('gtabs');
   bar.querySelectorAll('.gtab').forEach((t) => t.remove());
+  if (D.curEnv === 'env_time') {
+    bar.style.display = 'none';
+    return;
+  }
+  bar.style.display = 'flex';
   const addBtn = document.getElementById('add-grp');
 
   if (D.curEnv === '__all__') return; // Hide groups in "All" view if implemented
@@ -2684,6 +2804,10 @@ function buildGroups() {
     nm.contentEditable = 'false';
     nm.onblur = () => {
       nm.contentEditable = 'false';
+      if (g.id === 'group_time') {
+        nm.textContent = 'Current';
+        return;
+      }
       g.name = nm.textContent.trim() || 'Group';
       sv();
     };
@@ -2698,6 +2822,7 @@ function buildGroups() {
       if (nm.contentEditable === 'true') e.stopPropagation();
     };
     tab.addEventListener('dblclick', (e) => {
+      if (g.id === 'group_time') return;
       e.stopPropagation();
       nm.contentEditable = 'true';
       nm.focus();
@@ -3253,6 +3378,11 @@ function buildTabs() {
   const bar = document.getElementById('ptabs');
   bar.querySelectorAll('.ptab').forEach((t) => t.remove());
   const addBtn = document.getElementById('add-pg');
+  if (D.curEnv === 'env_time') {
+    if (addBtn) addBtn.style.display = 'none';
+  } else {
+    if (addBtn) addBtn.style.display = '';
+  }
   const groupPages =
     D.curGroup === '__all__' ? D.pages : D.pages.filter((p) => p.groupId === D.curGroup);
   groupPages.forEach((pg) => {
@@ -3264,6 +3394,7 @@ function buildTabs() {
     tab.draggable = true;
     tab.dataset.pid = pg.id;
     tab.addEventListener('dragstart', (e) => {
+
       _dragTabId = pg.id;
       tab.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
@@ -3304,6 +3435,7 @@ function buildTabs() {
     nm.contentEditable = 'false';
     nm.onblur = () => {
       nm.contentEditable = 'false';
+
       pg.name = nm.textContent.trim() || 'Page';
       sv();
     };
@@ -3342,7 +3474,7 @@ function buildTabs() {
     };
     tab.appendChild(cd);
     tab.appendChild(nm);
-    if (groupPages.length > 1) tab.appendChild(x);
+    if (groupPages.length > 1 && !pg.id.startsWith('time_')) tab.appendChild(x);
     // Right-click: export this page
     tab.addEventListener('contextmenu', (e) => {
       e.preventDefault();
@@ -3367,6 +3499,10 @@ function buildTabs() {
 // Moved to toolbar.js;
 
 function delEnv(eid) {
+  if (eid === 'env_time') {
+    alert('Cannot delete the Time environment.');
+    return;
+  }
   if (D.environments.length <= 1) {
     alert('Cannot delete the only environment.');
     return;
@@ -3400,6 +3536,10 @@ function delEnv(eid) {
 }
 
 function delGroup(gid) {
+  if (gid === 'group_time') {
+    alert('Cannot delete the Current group.');
+    return;
+  }
   const envGroups = D.groups.filter(g => g.envId === D.curEnv);
   if (envGroups.length <= 1) {
     alert('Cannot delete the only group in this environment.');
@@ -3427,6 +3567,10 @@ function delGroup(gid) {
 }
 
 function delPage(pid) {
+  if (pid.startsWith('time_')) {
+    alert('Cannot delete Time environment pages.');
+    return;
+  }
   const pg = D.pages.find((p) => p.id === pid);
   if (!pg) return;
   const siblingPages = D.pages.filter((p) => p.groupId === pg.groupId);
@@ -3489,6 +3633,38 @@ function buildCols() {
   // Diagnostic Log inside the main render function
   console.log('[RENDER] Rendering page:', page.name, 'pageType:', page.pageType, 'widgets:', (page.widgets||[]).length, 'miroCards:', (page.miroCards||[]).length);
   
+  const wrap = document.getElementById('cw');
+  if (page.id.startsWith('time_')) {
+    document.getElementById('miro-canvas').classList.add('hidden');
+    const mz = document.getElementById('miro-zoom');
+    if (mz) mz.classList.remove('show');
+    const maf = document.getElementById('miro-add-float');
+    if (maf) maf.classList.remove('show');
+    const mtb = document.getElementById('miro-toolbar');
+    if (mtb) mtb.classList.remove('show');
+    
+    wrap.style.display = '';
+    wrap.classList.add('embedded-overlay');
+    wrap.style.gridTemplateColumns = '';
+    // Only clear wrap if overlay isn't already embedded — prevents visual flash
+    if (!wrap.querySelector('.gantt-overlay')) {
+      wrap.innerHTML = '';
+    }
+    const idx = {
+      'time_today': 0,
+      'time_gantt': 1,
+      'time_stats': 2,
+      'time_fruit': 3,
+      'time_zooper': 4,
+      'time_life': 5
+    }[page.id];
+    if (typeof window._openGanttOverlay === 'function') {
+      window._openGanttOverlay(idx, wrap);
+    }
+    return;
+  }
+  wrap.classList.remove('embedded-overlay');
+
   document.getElementById('cw').style.display = isMiro ? 'none' : '';
   document.getElementById('miro-canvas').classList.toggle('hidden', !isMiro);
   
@@ -3510,7 +3686,6 @@ function buildCols() {
     return;
   }
   
-  const wrap = document.getElementById('cw');
   wrap.innerHTML = '';
   wrap.style.gridTemplateColumns = `repeat(${page.cols || 3},minmax(0,1fr))`;
   for (let ci = 0; ci < (page.cols || 3); ci++) {

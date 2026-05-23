@@ -11,6 +11,8 @@
   let _ownWrite = false;
   let _ownWriteTs = 0;
   const OWN_WRITE_TIMEOUT = 5000;
+  let _lastSanitizeSvTs = 0;
+  const SANITIZE_SV_COOLDOWN = 5000; // 5s cooldown between sanitize-triggered saves
 
   // Extracted syncNow
   window.syncNow = function () {
@@ -108,6 +110,17 @@
           D.groups = cachedMeta.groups || D.groups;
           D.inbox = cachedMeta.inbox || D.inbox;
           D.pages = cachedPagesMeta;
+          
+          if (window.sanitizeData) {
+            window.sanitizeData(D);
+             if (D.__modified) {
+               delete D.__modified;
+               if (Date.now() - _lastSanitizeSvTs > SANITIZE_SV_COOLDOWN) {
+                 _lastSanitizeSvTs = Date.now();
+                 setTimeout(() => { window.sv(true, true); }, 100);
+               }
+             }
+          }
           const dg = D.settings.defaultGroup || '__last__';
           const dp = D.settings.defaultPage || '__last__';
           if (dg !== '__last__' && D.groups.some((g) => g.id === dg)) D.curGroup = dg;
@@ -156,8 +169,35 @@
         D.environments = meta.environments || [{ id: 'e0', name: 'Main Env' }];
         D.groups = meta.groups || [{ id: 'g0', name: 'Main Group', envId: 'e0' }];
         D.inbox = meta.inbox || [];
-        cacheMeta(meta); // Cache to localStorage
+        
+        if (window.sanitizeData) {
+          window.sanitizeData(D);
+        }
+        
+        const sanitizedMeta = {
+          settings: D.settings,
+          curEnv: D.curEnv,
+          curGroup: D.curGroup,
+          environments: D.environments,
+          groups: D.groups,
+          inbox: D.inbox
+        };
+        cacheMeta(sanitizedMeta); // Cache to localStorage
+        
+        if (D.__modified) {
+          delete D.__modified;
+          if (Date.now() - _lastSanitizeSvTs > SANITIZE_SV_COOLDOWN) {
+            _lastSanitizeSvTs = Date.now();
+            setTimeout(() => { window.sv(true, true); }, 100);
+          }
+        }
+        
         renderMeta();
+      }, (err) => {
+        console.error('[SYNC] metaRef error:', err);
+        if (typeof setSyncStatus === 'function') {
+          setSyncStatus('err', 'Sync Error: ' + err.message);
+        }
       });
 
       // Listen to Pages Directory (names, ids, group associations)
@@ -174,7 +214,6 @@
         });
 
         D.pages = pagesMeta;
-        cachePagesMeta(pagesMeta); // Cache to localStorage
 
         // Re-inject heavy data into ALL pages that had it loaded
         D.pages.forEach(p => {
@@ -184,12 +223,27 @@
           }
         });
 
-        // Establish baseline for smart pagesMeta diffing in sv()
-        _lastSyncedPagesMetaStr = JSON.stringify(pagesMeta.map(p => ({
+        if (window.sanitizeData) {
+          window.sanitizeData(D);
+        }
+
+        const sanitizedMeta = D.pages.map(p => ({
           id: p.id, groupId: p.groupId, name: p.name, pageType: p.pageType,
           zoom: p.zoom, panX: p.panX, panY: p.panY, bg: p.bg, bgType: p.bgType,
           tabColor: p.tabColor || ''
-        })));
+        }));
+        cachePagesMeta(sanitizedMeta); // Cache to localStorage
+
+        // Establish baseline for smart pagesMeta diffing in sv()
+        _lastSyncedPagesMetaStr = JSON.stringify(sanitizedMeta);
+
+        if (D.__modified) {
+          delete D.__modified;
+          if (Date.now() - _lastSanitizeSvTs > SANITIZE_SV_COOLDOWN) {
+            _lastSanitizeSvTs = Date.now();
+            setTimeout(() => { window.sv(true, true); }, 100);
+          }
+        }
 
         if (isFirstLoad) {
           const dg = D.settings.defaultGroup || '__last__';
@@ -213,6 +267,11 @@
         }
 
         setSyncStatus('ok', 'Realtime Sync Active \u2713');
+      }, (err) => {
+        console.error('[SYNC] pagesMetaRef error:', err);
+        if (typeof setSyncStatus === 'function') {
+          setSyncStatus('err', 'Sync Error: ' + err.message);
+        }
       });
 
       db.ref('.info/connected').on('value', (snap) => {
@@ -221,7 +280,7 @@
         } else {
           console.warn('[SYNC] Disconnected / Offline');
         }
-        if (!snap.val() && !isFirstLoad) setSyncStatus('err', 'Offline \u2014 changes will sync when reconnected');
+        if (!snap.val() && !isFirstLoad) setSyncStatus('loading', '🔄 Disconnected \u2014 reconnecting...');
         else if (snap.val() && !isFirstLoad) setSyncStatus('ok', 'Realtime Sync Active \u2713');
       });
     } catch(error) {

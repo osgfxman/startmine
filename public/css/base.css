@@ -8,16 +8,16 @@
 }
 
 :root {
-  --bg: #e8e8e8;
-  --s1: rgba(18, 20, 32, 0.94);
-  --s2: rgba(24, 26, 38, 0.97);
-  --bd: rgba(255, 255, 255, 0.07);
+  --bg: #f3f4f6;
+  --s1: rgba(255, 255, 255, 0.95);
+  --s2: rgba(243, 244, 246, 0.97);
+  --bd: rgba(0, 0, 0, 0.08);
   --ac: #6c8fff;
-  --tx: #dde1ee;
-  --mu: #71748a;
-  --red: #ff6060;
+  --tx: #1e293b;
+  --mu: #64748b;
+  --red: #ff4757;
   --r: 13px;
-  --sh: 0 8px 36px rgba(0, 0, 0, 0.55);
+  --sh: 0 8px 30px rgba(0, 0, 0, 0.06);
   --font: 'DM Sans', sans-serif;
   --fd: 'DM Serif Display', serif;
 }
@@ -2459,3 +2459,68 @@ body:not(.outline-open) #root {
   border-color: var(--ac);
   color: var(--tx);
 }
+
+/* Miro vs Web Page Toggle Switch styling */
+.page-type-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 0.58rem;
+  font-weight: 500;
+  color: var(--tx-dim);
+  user-select: none;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--bd);
+  transition: all 0.2s ease;
+  height: 20px;
+}
+.page-type-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--ac);
+  color: var(--tx);
+}
+.page-type-toggle input {
+  display: none;
+}
+.page-type-slider {
+  position: relative;
+  width: 20px;
+  height: 12px;
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  transition: background-color 0.2s;
+  flex-shrink: 0;
+}
+.page-type-slider::before {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  left: 2px;
+  bottom: 2px;
+  background-color: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+.page-type-toggle input:checked + .page-type-slider {
+  background-color: var(--ac);
+}
+.page-type-toggle input:checked + .page-type-slider::before {
+  transform: translateX(8px);
+}
+.page-type-label {
+  color: var(--tx);
+  min-width: 24px;
+  text-align: center;
+}
+
+#cw.embedded-overlay {
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  flex: 1 !important;
+}

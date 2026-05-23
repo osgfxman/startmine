@@ -337,6 +337,7 @@ function convertSelectedTo(targetType) {
 
   canvas.addEventListener('mousedown', (e) => {
     const page = cp();
+    if (page && (page.pageType === 'web' || page.id.startsWith('time_'))) return;
     const isMiro = page.pageType === 'miro';
 
     // FIRST: if in a creation/drawing mode, pass through immediately
@@ -494,8 +495,9 @@ function convertSelectedTo(targetType) {
   canvas.addEventListener(
     'wheel',
     (e) => {
-      e.preventDefault();
       const page = cp();
+      if (page && (page.pageType === 'web' || page.id.startsWith('time_'))) return;
+      e.preventDefault();
 
       const rect = canvas.getBoundingClientRect();
       const cursorX = e.clientX - rect.left;
@@ -549,6 +551,7 @@ function convertSelectedTo(targetType) {
   canvas.addEventListener('touchstart', (e) => {
     if (e.target !== canvas && e.target.id !== 'miro-board') return;
     const page = cp();
+    if (page && (page.pageType === 'web' || page.id.startsWith('time_'))) return;
 
     if (e.touches.length === 2) {
       // Pinch start
@@ -573,6 +576,7 @@ function convertSelectedTo(targetType) {
 
   canvas.addEventListener('touchmove', (e) => {
     const page = cp();
+    if (page && (page.pageType === 'web' || page.id.startsWith('time_'))) return;
 
     if (e.touches.length === 2) {
       e.preventDefault();
@@ -644,6 +648,8 @@ function convertSelectedTo(targetType) {
 
   canvas.addEventListener('mousedown', (e) => {
     if (e.target !== canvas && e.target.id !== 'miro-board') return;
+    const page = cp();
+    if (page && (page.pageType === 'web' || page.id.startsWith('time_'))) return;
     const now = Date.now();
     const dx = Math.abs(e.clientX - _lastClickX);
     const dy = Math.abs(e.clientY - _lastClickY);
@@ -685,14 +691,23 @@ function convertSelectedTo(targetType) {
 
 // ─── Central zoom/pan apply helper ───
 function applyZoomPan(page) {
+  if (page && (page.pageType === 'web' || page.id.startsWith('time_'))) {
+    page.zoom = 100;
+    page.panX = 0;
+    page.panY = 0;
+  }
   const zoom = (page.zoom || 100) / 100;
   const board = document.getElementById('miro-board');
-  board.style.transform =
-    `translate(${page.panX || 0}px,${page.panY || 0}px) scale(${zoom})`;
-  // Keep floating UI at constant screen size
-  board.style.setProperty('--inv-zoom', Math.min(3, Math.max(0.25, 1 / zoom)));
-  document.getElementById('mz-slider').value = page.zoom || 100;
-  document.getElementById('mz-pct').textContent = (page.zoom || 100) + '%';
+  if (board) {
+    board.style.transform =
+      `translate(${page.panX || 0}px,${page.panY || 0}px) scale(${zoom})`;
+    // Keep floating UI at constant screen size
+    board.style.setProperty('--inv-zoom', Math.min(3, Math.max(0.25, 1 / zoom)));
+  }
+  const mzSlider = document.getElementById('mz-slider');
+  if (mzSlider) mzSlider.value = page.zoom || 100;
+  const mzPct = document.getElementById('mz-pct');
+  if (mzPct) mzPct.textContent = (page.zoom || 100) + '%';
   updateMiroGrid();
   // Update sel-frame handles if visible
   if (_miroSelected.size >= 2) updateMiroSelFrame();
@@ -3429,7 +3444,7 @@ async function placeGanttWidget() {
     h: 500,
     calView: 'week',
     calOffset: 0,
-    calTheme: 'dark',
+    calTheme: 'light',
     ganttRowHeight: 50,
     ganttView: 'week', // week | 2week | month
   };
@@ -3451,7 +3466,7 @@ async function renderGanttContent(el, card) {
   const days = gv === 'month' ? 30 : gv === '2week' ? 14 : 7;
   const offset = card.calOffset || 0;
   const rowH = card.ganttRowHeight || 50;
-  const theme = card.calTheme || 'dark';
+  const theme = card.calTheme || 'light';
 
   let startDate = new Date(now);
   startDate.setDate(now.getDate() - now.getDay() + offset);
@@ -4059,22 +4074,56 @@ window.renderZooperDayCard = function(container, dayDate, options) {
   let _overlayLifeCard = null;
   var _updatePageDotsRef = function() {};
   var _renderPageRef = function() {};
-  function openGanttOverlay(page) {
+  var _applyThRef = function() {};
+  function openGanttOverlay(page, targetContainer) {
     if (typeof page === 'number') _state.page = page;
-    if (_overlayEl) { _updatePageDotsRef(); _renderPageRef(); return; }
-    if (!_googleAccessToken && typeof manualGoogleReAuth === 'function') {
-      manualGoogleReAuth().then(() => _buildOverlay()).catch(() => _buildOverlay());
+    if (_overlayEl) {
+      const panel = _overlayEl.querySelector('.gantt-overlay-panel');
+      const closeBtn = _overlayEl.querySelector('.gantt-overlay-close');
+      const dots = _overlayEl.querySelector('.gantt-overlay-dots');
+      if (targetContainer) {
+        _overlayEl.style.cssText = 'position:relative; z-index:1; background:none; backdrop-filter:none; width:100%; height:100%; display:flex; animation:none; overflow:hidden;';
+        if (panel) {
+          panel.style.cssText = 'width:100%; height:100%; border-radius:0; border:none; box-shadow:none; display:flex; flex-direction:column; overflow:hidden;';
+        }
+        if (closeBtn) closeBtn.style.display = 'none';
+        if (dots) dots.style.display = 'none';
+        if (!targetContainer.contains(_overlayEl)) {
+          targetContainer.appendChild(_overlayEl);
+        }
+      } else {
+        _overlayEl.style.cssText = '';
+        if (panel) {
+          panel.style.cssText = '';
+        }
+        if (closeBtn) closeBtn.style.display = '';
+        if (dots) dots.style.display = 'flex';
+        if (!document.body.contains(_overlayEl)) {
+          document.body.appendChild(_overlayEl);
+        }
+      }
+      if (typeof _applyThRef === 'function') _applyThRef();
+      _updatePageDotsRef();
+      _renderPageRef();
       return;
     }
-    _buildOverlay();
+    // Skip Google auth popup for Life page (page 5) — it doesn't need calendar data
+    // and popup would be blocked by browser since this isn't from a user gesture
+    if (!_googleAccessToken && typeof manualGoogleReAuth === 'function' && _state.page !== 5) {
+      manualGoogleReAuth().then(() => _buildOverlay(targetContainer)).catch(() => _buildOverlay(targetContainer));
+      return;
+    }
+    _buildOverlay(targetContainer);
   }
   function closeGanttOverlay() {
       if (_overlayEl && _overlayEl.querySelector('.gantt-overlay-panel')) { var p = _overlayEl.querySelector('.gantt-overlay-panel'); if(p._autoTimer) clearInterval(p._autoTimer); } if (_overlayEl) { _overlayEl.remove(); _overlayEl = null; } }
-  function _buildOverlay() {
+  function _buildOverlay(targetContainer) {
     closeGanttOverlay();
     const overlay = document.createElement('div');
     overlay.className = 'gantt-overlay';
-    overlay.addEventListener('mousedown', e => { if (e.target === overlay) closeGanttOverlay(); });
+    if (!targetContainer) {
+      overlay.addEventListener('mousedown', e => { if (e.target === overlay) closeGanttOverlay(); });
+    }
     _overlayEl = overlay;
     const panel = document.createElement('div');
     panel.className = 'gantt-overlay-panel';
@@ -4102,7 +4151,7 @@ window.renderZooperDayCard = function(container, dayDate, options) {
       d.title = 'W'+w;
       d.onmouseenter=function(){d.style.height='14px';};
       d.onmouseleave=function(){d.style.height=isCur?'14px':'8px';};
-      (function(wn){d.onclick=function(e){e.stopPropagation();_state.offset=(wn-_wk)*7;_state.page=4;_renderPage();_buildOverlay();};})(w);
+      (function(wn){d.onclick=function(e){e.stopPropagation();_state.offset=(wn-_wk)*7;_state.page=4;_renderPage();_buildOverlay(targetContainer);};})(w);
       _wkBar.appendChild(d);
     }
     hdr.appendChild(_wkBar);
@@ -4146,30 +4195,45 @@ window.renderZooperDayCard = function(container, dayDate, options) {
       _state.scroll = !_state.scroll;
       _scrollBtn.textContent = _state.scroll ? '\u2195' : '\u2194';
       _scrollBtn.title = _state.scroll ? 'Fit to screen' : 'Allow scroll';
-    _renderPage();
+      _renderPage();
     });
     hdr.appendChild(_scrollBtn);
-    hdr.appendChild(mkBtn('\uD83D\uDD04', 'Refresh', () => _renderPage()));
+    hdr.appendChild(mkBtn('\uD83D\uDD04', 'Refresh', () => { if (typeof window._clearCalendarCache === 'function') window._clearCalendarCache(); _renderPage(); }));
     const closeBtn = mkBtn('\u2715', 'Close (Esc)', closeGanttOverlay);
     closeBtn.className = 'gantt-overlay-close';
+    if (targetContainer) {
+      closeBtn.style.display = 'none';
+    }
     hdr.appendChild(closeBtn);
     panel.appendChild(hdr);
     let body = document.createElement('div');
     body.className = 'gantt-overlay-body';
     panel.appendChild(body);
     overlay.appendChild(panel);
-    document.body.appendChild(overlay);
+    if (targetContainer) {
+      overlay.style.cssText = 'position:relative; z-index:1; background:none; backdrop-filter:none; width:100%; height:100%; display:flex; animation:none; overflow:hidden;';
+      panel.style.cssText = 'width:100%; height:100%; border-radius:0; border:none; box-shadow:none; display:flex; flex-direction:column; overflow:hidden;';
+      targetContainer.appendChild(overlay);
+    } else {
+      document.body.appendChild(overlay);
+    }
     function _applyTh() {
       const t = _state.theme;
       if (t === 'light') { panel.style.background='#f5f6fa'; panel.style.border='1px solid #ddd'; hdr.style.background='rgba(0,0,0,.04)'; title.style.color='#333'; }
       else if (t === 'transparent') { panel.style.background='rgba(20,20,30,.85)'; panel.style.border='1px solid rgba(255,255,255,.08)'; hdr.style.background='transparent'; title.style.color='#aaa'; }
       else { panel.style.background='#1a1c2e'; panel.style.border='1px solid rgba(108,143,255,.2)'; hdr.style.background='rgba(108,143,255,.08)'; title.style.color='#ccc'; }
     }
+    _applyThRef = _applyTh;
     _applyTh();
     const _fc = { calTheme: _state.theme };
     // Page navigation dots
     const _pageDots = document.createElement('div');
-    _pageDots.style.cssText = 'display:flex;gap:4px;align-items:center;margin-left:auto;margin-right:8px;';
+    _pageDots.className = 'gantt-overlay-dots';
+    if (targetContainer) {
+      _pageDots.style.display = 'none';
+    } else {
+      _pageDots.style.cssText = 'display:flex;gap:4px;align-items:center;margin-left:auto;margin-right:8px;';
+    }
     const _pageNames = ['\u2600\uFE0F', '\uD83D\uDCCA', '\uD83D\uDCC8', '\uD83C\uDF4E', '\uD83D\uDCC5', '\uD83E\uDDEC'];
     const _pageTitles = ['Today', 'Gantt Chart', 'Statistics', 'Fruit Tracker', 'Zooper', 'Life'];
     _pageNames.forEach((p, i) => {
@@ -4207,6 +4271,13 @@ window.renderZooperDayCard = function(container, dayDate, options) {
       else if (_state.page === 4) _renderGantt2();
       else {
         /* Life page — embed the real Life Widget with zoom/LOD */
+        if (body.querySelector('.miro-life[data-cid="life_overlay_page"]')) {
+          if (_overlayLifeCard) {
+            _overlayLifeCard.w = body.clientWidth || 900;
+            _overlayLifeCard.h = body.clientHeight || 500;
+          }
+          return;
+        }
         body.innerHTML = '';
         body.style.position = 'relative';
         body.style.overflow = 'hidden';
@@ -4614,7 +4685,9 @@ window.renderZooperDayCard = function(container, dayDate, options) {
       }
     }
     async function _renderGantt2() {
-      body.innerHTML='<div style="text-align:center;padding:10px;color:#888;font-size:.5rem">Loading Zooper...</div>';
+      if(!body.querySelector('.zooper-day-card')){
+        body.innerHTML='<div style="text-align:center;padding:10px;color:#888;font-size:.5rem">Loading Zooper...</div>';
+      }
       if(!document.getElementById('pomo-pulse-css')){var sty=document.createElement('style');sty.id='pomo-pulse-css';sty.textContent='@keyframes pomoPulse{0%,100%{box-shadow:0 0 3px rgba(255,107,53,.4)}50%{box-shadow:0 0 8px rgba(255,107,53,.8)}}';document.head.appendChild(sty);}
       var now=new Date(),isDk=_state.theme!=='light';
       var txt=isDk?'#ddd':'#222',bg2=isDk?'rgba(255,255,255,.03)':'rgba(0,0,0,.02)',bdr=isDk?'rgba(255,255,255,.08)':'rgba(0,0,0,.08)';
@@ -4667,7 +4740,7 @@ window.renderZooperDayCard = function(container, dayDate, options) {
         fhdBtn.textContent=window._zooperFHD?'\uD83D\uDCF1 Adaptive':'\uD83D\uDDA5\uFE0F FHD';
         fhdBtn.title=window._zooperFHD?'Switch to adaptive':'Switch to FHD (1920x1080)';
         fhdBtn.onclick=function(e){e.stopPropagation();window._zooperFHD=!window._zooperFHD;_renderGantt2();};
-        body.style.position='relative';body.appendChild(fhdBtn);
+        body.style.position='relative';root.style.position='relative';root.appendChild(fhdBtn);
         // â”€â”€â”€ TOP HALF: DAY CARDS (50%) â”€â”€â”€
         var topHalf=document.createElement('div');
         topHalf.style.cssText='flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px;overflow:hidden;padding:2px;';
@@ -6175,7 +6248,22 @@ window.renderZooperDayCard = function(container, dayDate, options) {
         body.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:.7rem;">\u26A0\uFE0F ' + (err.message||'Error') + '</div>';
       }
     }
-    const ro = new ResizeObserver(() => { clearTimeout(ro._t); ro._t = setTimeout(_renderPage, 400); });
+    let lastW = panel.clientWidth, lastH = panel.clientHeight;
+    const ro = new ResizeObserver(() => {
+      const w = panel.clientWidth;
+      const h = panel.clientHeight;
+      const dw = Math.abs(w - lastW);
+      const dh = Math.abs(h - lastH);
+      if (dw > 20 || dh > 20) {
+        lastW = w;
+        lastH = h;
+        clearTimeout(ro._t);
+        ro._t = setTimeout(_renderPage, 400);
+      } else {
+        lastW = w;
+        lastH = h;
+      }
+    });
     ro.observe(panel);
     panel._ganttRender = _renderPage;
     var _autoTimer = setInterval(_renderPage, 15*60*1000);
@@ -6201,6 +6289,22 @@ window.renderZooperDayCard = function(container, dayDate, options) {
   // Expose open/close globally for widget bootstrap
   window._openGanttOverlay = openGanttOverlay;
   window._closeGanttOverlay = closeGanttOverlay;
+  function handleOverlayAction(pageIdx) {
+    if (window.D && window.D.curEnv === 'env_time') {
+      const pageIds = ['time_today', 'time_gantt', 'time_stats', 'time_fruit', 'time_zooper', 'time_life'];
+      const targetId = pageIds[pageIdx];
+      if (targetId && typeof window.switchActivePage === 'function') {
+        window.switchActivePage(targetId);
+      }
+    } else {
+      if (_overlayEl && _state.page === pageIdx) {
+        closeGanttOverlay();
+      } else {
+        openGanttOverlay(pageIdx);
+      }
+    }
+  }
+
   // Bind 5 top toolbar buttons (overlay mode)
   var _tbBtns = [
     {id:'overlay-today-btn', page:0},
@@ -6213,8 +6317,7 @@ window.renderZooperDayCard = function(container, dayDate, options) {
   _tbBtns.forEach(function(cfg) {
     var b = document.getElementById(cfg.id);
     if (b) b.onclick = function() {
-      if (_overlayEl && _state.page === cfg.page) { closeGanttOverlay(); }
-      else { openGanttOverlay(cfg.page); }
+      handleOverlayAction(cfg.page);
     };
   });
   // Bind 4 vertical toolbar buttons (widget placement mode)
@@ -6242,8 +6345,7 @@ window.renderZooperDayCard = function(container, dayDate, options) {
     if (!e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
       var pageMap = {'1':0, '2':1, '3':2, '4':3, '5':4, '6':5};
       if (pageMap[e.key] !== undefined) {
-        if (_overlayEl && _state.page === pageMap[e.key]) { closeGanttOverlay(); }
-        else { openGanttOverlay(pageMap[e.key]); }
+        handleOverlayAction(pageMap[e.key]);
         e.preventDefault(); return;
       }
     }
@@ -6256,7 +6358,12 @@ window.renderZooperDayCard = function(container, dayDate, options) {
       }
     }
     if ((e.key === 'h' || e.key === 'H' || e.key === '\u0623' || e.key === '\u0627') && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      if (_overlayEl) closeGanttOverlay(); else openGanttOverlay(4); e.preventDefault();
+      if (window.D && window.D.curEnv === 'env_time') {
+        handleOverlayAction(4);
+      } else {
+        if (_overlayEl) closeGanttOverlay(); else openGanttOverlay(4);
+      }
+      e.preventDefault();
     }
   });
 })();
@@ -6313,15 +6420,34 @@ async function getCalendarList() {
   }
   if (!res.ok) throw new Error('Calendar list failed: ' + res.status);
   const data = await res.json();
-  _cachedCalendarList = (data.items || []).filter(c => c.selected !== false);
+  _cachedCalendarList = (data.items || []);
   _cachedCalendarListTs = Date.now();
   return _cachedCalendarList;
 }
 
-// ─── Fetch Events ───
+// ─── Fetch Events (With Caching) ───
+window._eventsCache = {};
+window._taskListsCache = null;
+window._taskListsCacheTs = 0;
+window._planTasksCache = {};
+window._clearCalendarCache = function() {
+  window._eventsCache = {};
+  window._taskListsCache = null;
+  window._taskListsCacheTs = 0;
+  window._planTasksCache = {};
+  console.log('[Cache] All caches cleared.');
+};
+
 async function fetchCalendarEvents(timeMin, timeMax) {
   if (typeof ensureGoogleToken === 'function') await ensureGoogleToken();
   if (!_googleAccessToken) { const e = new Error('NEEDS_AUTH'); e.needsAuth = true; throw e; }
+
+  const key = timeMin.toISOString() + '_' + timeMax.toISOString();
+  const cached = window._eventsCache[key];
+  if (cached && (Date.now() - cached.ts < 60000)) {
+    console.log('[Calendar Cache] Returning cached events for', key);
+    return JSON.parse(JSON.stringify(cached.data));
+  }
 
   const calendars = await getCalendarList();
   if (!calendars.length) return [];
@@ -6360,6 +6486,12 @@ async function fetchCalendarEvents(timeMin, timeMax) {
   }));
 
   console.log('[Stats] Fetched', allEvents.length, 'events from', calendars.length, 'calendars for', tMin.slice(0,10), 'to', tMax.slice(0,10));
+  
+  window._eventsCache[key] = {
+    ts: Date.now(),
+    data: JSON.parse(JSON.stringify(allEvents))
+  };
+  
   return allEvents;
 }
 
@@ -6421,6 +6553,13 @@ function serializeTaskNotes(meta) {
 async function fetchPlanTasks(listId, dateFilter) {
   if (typeof ensureGoogleToken === 'function') await ensureGoogleToken();
   if (!_googleAccessToken) throw new Error('Not authenticated');
+
+  const key = listId;
+  const cached = window._planTasksCache[key];
+  if (cached && (Date.now() - cached.ts < 60000)) {
+    return JSON.parse(JSON.stringify(cached.data));
+  }
+
   // Fetch all non-deleted tasks (including completed)
   var url = 'https://tasks.googleapis.com/tasks/v1/lists/' + encodeURIComponent(listId) + '/tasks?maxResults=100&showCompleted=true&showHidden=true';
   var res = await fetch(url, {
@@ -6430,7 +6569,7 @@ async function fetchPlanTasks(listId, dateFilter) {
   var data = await res.json();
   var tasks = (data.items || []).filter(function(t) { return t.title && t.title.trim(); });
   // Parse notes meta and convert to unified format
-  return tasks.map(function(t) {
+  const mappedTasks = tasks.map(function(t) {
     var meta = parseTaskNotes(t.notes || '');
     return {
       id: t.id,
@@ -6450,6 +6589,13 @@ async function fetchPlanTasks(listId, dateFilter) {
       _raw: t
     };
   });
+
+  window._planTasksCache[key] = {
+    ts: Date.now(),
+    data: JSON.parse(JSON.stringify(mappedTasks))
+  };
+
+  return mappedTasks;
 }
 
 var _createTaskDedup = {};
@@ -6527,12 +6673,19 @@ async function togglePlanTaskDone(listId, taskId, isDone) {
 async function getAllTaskLists() {
   if (typeof ensureGoogleToken === 'function') await ensureGoogleToken();
   if (!_googleAccessToken) throw new Error('Not authenticated');
+
+  if (window._taskListsCache && (Date.now() - window._taskListsCacheTs < 60000)) {
+    return JSON.parse(JSON.stringify(window._taskListsCache));
+  }
+
   var res = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists', {
     headers: { 'Authorization': 'Bearer ' + _googleAccessToken }
   });
   if (!res.ok) throw new Error('Task lists fetch failed: ' + res.status);
   var data = await res.json();
-  return (data.items || []);
+  window._taskListsCache = (data.items || []);
+  window._taskListsCacheTs = Date.now();
+  return window._taskListsCache;
 }
 
 // ─── Rename task list ───
@@ -7193,7 +7346,7 @@ async function renderCalendarContent(el, card) {
 // ─── Pure UI render (no fetch) ───
 function _renderCalGrid(container, el, card, events, startDate, days, now) {
   const START_HOUR = 0, END_HOUR = 24;
-  const theme = card.calTheme || 'dark';
+  const theme = card.calTheme || 'light';
   const isLight = theme === 'light';
   const dayNameColor = isLight ? '#555' : '#aaa';
   const hourColor = isLight ? '#888' : '#666';

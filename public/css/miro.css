@@ -5142,7 +5142,7 @@ textarea.cal-form-input {
 .gantt-overlay-panel {
   width: 100vw;
   height: 100vh;
-  background: #1a1c2e;
+  background: #f5f6fa;
   border-radius: 0;
   border: none;
   box-shadow: none;
@@ -5150,22 +5150,23 @@ textarea.cal-form-input {
   flex-direction: column;
   overflow: hidden;
   font-family: var(--font);
+  color: #333;
 }
 .gantt-overlay-hdr {
   display: flex;
   align-items: center;
   padding: 6px 12px;
-  background: rgba(108,143,255,.08);
-  border-bottom: 1px solid rgba(255,255,255,.08);
+  background: rgba(0,0,0,.04);
+  border-bottom: 1px solid #ddd;
   gap: 6px;
   flex-shrink: 0;
   flex-wrap: wrap;
 }
 .gantt-overlay-hdr button {
-  background: rgba(255,255,255,.08);
-  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.05);
+  border: 1px solid #ccc;
   border-radius: 6px;
-  color: #aaa;
+  color: #444;
   font-size: .65rem;
   padding: 4px 10px;
   cursor: pointer;

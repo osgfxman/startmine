@@ -5360,6 +5360,7 @@ function buildMiroGantt(card) {
 
   // Refresh
   const refBtn = _cb('\u21BB', 'Refresh', () => {
+    if (typeof window._clearCalendarCache === 'function') window._clearCalendarCache();
     if (typeof renderGanttContent === 'function') renderGanttContent(el, card);
   });
 
