@@ -352,8 +352,9 @@
       }
     }
 
-    // Render draggable guide overlays if _guidesMode is active
-    if (page._guidesMode) {
+    // Render draggable guide overlays if guides exist
+    const hasGuides = page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
+    if (hasGuides) {
       // Render Vertical Guides
       (page.vGuides || []).forEach((pct, idx) => {
         const line = document.createElement('div');

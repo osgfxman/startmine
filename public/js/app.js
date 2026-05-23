@@ -3667,25 +3667,13 @@ function updateGuidesButtonState() {
 document.getElementById('mz-guides-btn').onclick = () => {
   const page = cp();
   if (!page || page.pageType !== 'miro') return;
-  const canvas = document.getElementById('miro-canvas');
-  const W = canvas.clientWidth, H = canvas.clientHeight;
   
   page._guidesMode = !page._guidesMode;
   if (!page._guidesMode) {
-    if (typeof window.mergeMiroCellsIntoCards === 'function') {
-      window.mergeMiroCellsIntoCards(page, W, H);
-    }
-    page.vGuides = [];
-    page.hGuides = [];
-    page.lockedGuides = [];
-    page.cellStates = {};
-    
-    // Remove rulers
+    // Hide/Remove rulers, but DO NOT delete guides or merge cells!
     document.querySelectorAll('.miro-ruler').forEach(el => el.remove());
   } else {
-    if (typeof window.partitionMiroCardsIntoCells === 'function') {
-      window.partitionMiroCardsIntoCells(page, W, H);
-    }
+    // Show/Initialize rulers
     if (typeof window.initMiroSlices === 'function') {
       window.initMiroSlices();
     }
