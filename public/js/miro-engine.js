@@ -4072,6 +4072,7 @@ window.renderZooperDayCard = function(container, dayDate, options) {
   const _state = { view: '2week', offset: 0, theme: 'light', page: 0 }; // page: 0=today, 1=gantt, 2=stats, 3=fruit
   let _overlayEl = null;
   let _overlayLifeCard = null;
+  let _fsListener = null;
   var _updatePageDotsRef = function() {};
   var _renderPageRef = function() {};
   var _applyThRef = function() {};
@@ -4115,10 +4116,27 @@ window.renderZooperDayCard = function(container, dayDate, options) {
     }
     _buildOverlay(targetContainer);
   }
-  function closeGanttOverlay() {
-      if (_overlayEl && _overlayEl.querySelector('.gantt-overlay-panel')) { var p = _overlayEl.querySelector('.gantt-overlay-panel'); if(p._autoTimer) clearInterval(p._autoTimer); } if (_overlayEl) { _overlayEl.remove(); _overlayEl = null; } }
+  function closeGanttOverlay(preventRebuild) {
+      if (_overlayEl && _overlayEl.querySelector('.gantt-overlay-panel')) {
+        var p = _overlayEl.querySelector('.gantt-overlay-panel');
+        if (p._autoTimer) clearInterval(p._autoTimer);
+      }
+      if (_fsListener) {
+        document.removeEventListener('fullscreenchange', _fsListener);
+        _fsListener = null;
+      }
+      if (_overlayEl) {
+        _overlayEl.remove();
+        _overlayEl = null;
+      }
+      if (preventRebuild !== true && window.D && window.D.cur && window.D.cur.startsWith('time_')) {
+        if (typeof window.buildCols === 'function') {
+          window.buildCols();
+        }
+      }
+  }
   function _buildOverlay(targetContainer) {
-    closeGanttOverlay();
+    closeGanttOverlay(true);
     const overlay = document.createElement('div');
     overlay.className = 'gantt-overlay';
     if (!targetContainer) {
@@ -4143,6 +4161,7 @@ window.renderZooperDayCard = function(container, dayDate, options) {
     // Week/Sprint progress bars
     const _wkBar = document.createElement('div');
     _wkBar.style.cssText = 'display:flex;gap:1px;align-items:center;margin-left:8px;';
+    if (targetContainer) _wkBar.style.display = 'none';
     for (let w=1;w<=52;w++) {
       const d = document.createElement('div');
       const isPast = w < _wk;
@@ -4157,6 +4176,7 @@ window.renderZooperDayCard = function(container, dayDate, options) {
     hdr.appendChild(_wkBar);
     const _spBar = document.createElement('div');
     _spBar.style.cssText = 'display:flex;gap:1px;align-items:center;margin-left:4px;';
+    if (targetContainer) _spBar.style.display = 'none';
     for (let s=1;s<=26;s++) {
       const d = document.createElement('div');
       const isPast = s < _sp;
@@ -4199,6 +4219,33 @@ window.renderZooperDayCard = function(container, dayDate, options) {
     });
     hdr.appendChild(_scrollBtn);
     hdr.appendChild(mkBtn('\uD83D\uDD04', 'Refresh', () => { if (typeof window._clearCalendarCache === 'function') window._clearCalendarCache(); _renderPage(); }));
+    let fsBtn = null;
+    fsBtn = mkBtn('\u26F6', 'Fullscreen', () => {
+      if (!document.fullscreenElement) {
+        panel.requestFullscreen().catch(err => {
+          console.error(`Error attempting to enable fullscreen: ${err.message}`);
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    });
+    const updateFsIcon = () => {
+      const isFs = !!document.fullscreenElement;
+      fsBtn.textContent = isFs ? '\uD83D\uDCFA' : '\u26F6';
+      fsBtn.title = isFs ? 'Exit Fullscreen' : 'Fullscreen';
+      if (isFs) {
+        fsBtn.style.background = '#6c8fff';
+        fsBtn.style.color = '#fff';
+        fsBtn.style.borderColor = '#6c8fff';
+      } else {
+        fsBtn.style.background = '';
+        fsBtn.style.color = '';
+        fsBtn.style.borderColor = '';
+      }
+    };
+    _fsListener = updateFsIcon;
+    document.addEventListener('fullscreenchange', _fsListener);
+    hdr.appendChild(fsBtn);
     const closeBtn = mkBtn('\u2715', 'Close (Esc)', closeGanttOverlay);
     closeBtn.className = 'gantt-overlay-close';
     if (targetContainer) {
@@ -4222,6 +4269,9 @@ window.renderZooperDayCard = function(container, dayDate, options) {
       if (t === 'light') { panel.style.background='#f5f6fa'; panel.style.border='1px solid #ddd'; hdr.style.background='rgba(0,0,0,.04)'; title.style.color='#333'; }
       else if (t === 'transparent') { panel.style.background='rgba(20,20,30,.85)'; panel.style.border='1px solid rgba(255,255,255,.08)'; hdr.style.background='transparent'; title.style.color='#aaa'; }
       else { panel.style.background='#1a1c2e'; panel.style.border='1px solid rgba(108,143,255,.2)'; hdr.style.background='rgba(108,143,255,.08)'; title.style.color='#ccc'; }
+      if (_overlayLifeCard) {
+        _overlayLifeCard.calTheme = t;
+      }
     }
     _applyThRef = _applyTh;
     _applyTh();
@@ -4271,37 +4321,45 @@ window.renderZooperDayCard = function(container, dayDate, options) {
       else if (_state.page === 4) _renderGantt2();
       else {
         /* Life page — embed the real Life Widget with zoom/LOD */
-        if (body.querySelector('.miro-life[data-cid="life_overlay_page"]')) {
+        var existingLife = body.querySelector('.miro-life[data-cid="life_overlay_page"]');
+        if (existingLife && existingLife._destroyed) {
+          existingLife.remove();
+          existingLife = null;
+        }
+        if (existingLife) {
           if (_overlayLifeCard) {
             _overlayLifeCard.w = body.clientWidth || 900;
             _overlayLifeCard.h = body.clientHeight || 500;
           }
           return;
         }
+        /* Capture height BEFORE clearing (flex:1 collapses to 0 after innerHTML='') */
+        var savedW = body.clientWidth || 900;
+        var savedH = body.clientHeight || 500;
         body.innerHTML = '';
-        body.style.position = 'relative';
-        body.style.overflow = 'hidden';
+        /* Use flex column layout so the Life widget fills the body via flex:1
+           instead of position:absolute (which needs a non-zero parent height) */
+        body.style.cssText = 'position:relative;overflow:hidden;display:flex;flex-direction:column;';
         if (!_overlayLifeCard) {
           _overlayLifeCard = {
             id: 'life_overlay_page',
             type: 'life',
             x: 0, y: 0,
-            w: body.clientWidth || 900,
-            h: body.clientHeight || 500,
+            w: savedW,
+            h: savedH,
             _overlayMode: true,
+            calTheme: _state.theme,
             life: { ov: [], cam: { z: 1.0, x: 0, y: 0 }, calEvents: [], _calTS: 0, sel: null }
           };
         } else {
-          _overlayLifeCard.w = body.clientWidth || 900;
-          _overlayLifeCard.h = body.clientHeight || 500;
+          _overlayLifeCard.w = savedW;
+          _overlayLifeCard.h = savedH;
+          _overlayLifeCard.calTheme = _state.theme;
         }
         if (typeof window.buildMiroLifeWidget === 'function') {
           var lifeEl = window.buildMiroLifeWidget(_overlayLifeCard);
-          lifeEl.style.position = 'absolute';
-          lifeEl.style.left = '0';
-          lifeEl.style.top = '0';
-          lifeEl.style.width = '100%';
-          lifeEl.style.height = '100%';
+          /* Use flex:1 instead of absolute positioning to fill the body */
+          lifeEl.style.cssText = 'position:relative;width:100%;flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;';
           var delBtn2 = lifeEl.querySelector('.mc-del');
           if (delBtn2) delBtn2.style.display = 'none';
           var lockBtn2 = lifeEl.querySelector('.mc-lock');
@@ -6290,18 +6348,15 @@ window.renderZooperDayCard = function(container, dayDate, options) {
   window._openGanttOverlay = openGanttOverlay;
   window._closeGanttOverlay = closeGanttOverlay;
   function handleOverlayAction(pageIdx) {
-    if (window.D && window.D.curEnv === 'env_time') {
-      const pageIds = ['time_today', 'time_gantt', 'time_stats', 'time_fruit', 'time_zooper', 'time_life'];
-      const targetId = pageIds[pageIdx];
-      if (targetId && typeof window.switchActivePage === 'function') {
-        window.switchActivePage(targetId);
-      }
+    const cw = document.getElementById('cw');
+    const isEmbedded = _overlayEl && cw && cw.contains(_overlayEl);
+    if (_overlayEl && _state.page === pageIdx && !isEmbedded) {
+      closeGanttOverlay();
     } else {
-      if (_overlayEl && _state.page === pageIdx) {
-        closeGanttOverlay();
-      } else {
-        openGanttOverlay(pageIdx);
+      if (isEmbedded) {
+        closeGanttOverlay(true);
       }
+      openGanttOverlay(pageIdx);
     }
   }
 
@@ -6339,7 +6394,17 @@ window.renderZooperDayCard = function(container, dayDate, options) {
     if (typeof window.createLifeWidget === 'function') window.createLifeWidget();
   };
   document.addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.contentEditable === 'true') return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.contentEditable === 'true') {
+      var pageMap = {'1':0, '2':1, '3':2, '4':3, '5':4, '6':5};
+      var isShortcutKey = !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && 
+                          (pageMap[e.key] !== undefined || e.key === 'h' || e.key === 'H' || e.key === '\u0623' || e.key === '\u0627');
+      if (isShortcutKey && (e.target.id === 'si' || e.target.id === 'qi')) {
+        e.preventDefault();
+        e.target.blur();
+      } else {
+        return;
+      }
+    }
     if (e.key === 'Escape' && _overlayEl) { closeGanttOverlay(); e.preventDefault(); return; }
     // Plain 1-6 to open overlay pages
     if (!e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -6358,11 +6423,7 @@ window.renderZooperDayCard = function(container, dayDate, options) {
       }
     }
     if ((e.key === 'h' || e.key === 'H' || e.key === '\u0623' || e.key === '\u0627') && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      if (window.D && window.D.curEnv === 'env_time') {
-        handleOverlayAction(4);
-      } else {
-        if (_overlayEl) closeGanttOverlay(); else openGanttOverlay(4);
-      }
+      handleOverlayAction(4);
       e.preventDefault();
     }
   });

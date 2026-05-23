@@ -4568,7 +4568,11 @@ document.addEventListener('keydown', (e) => {
     document.activeElement.tagName !== 'TEXTAREA' &&
     !document.activeElement.getAttribute('contenteditable')
   ) {
-    $si().focus();
+    var pageMap = {'1':0, '2':1, '3':2, '4':3, '5':4, '6':5};
+    var isShortcutKey = (pageMap[e.key] !== undefined || e.key === 'h' || e.key === 'H' || e.key === '\u0623' || e.key === '\u0627');
+    if (!isShortcutKey) {
+      $si().focus();
+    }
   }
 });
 function renderAll() {

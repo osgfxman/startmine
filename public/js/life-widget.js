@@ -330,13 +330,14 @@
       var fs = Math.min(14 / cam.z, r.h * 0.18);
       ctx.font = 'bold ' + fs + 'px system-ui';
       ctx.textBaseline = 'top';
-      ctx.fillStyle = (y === n.y) ? 'rgba(0, 184, 148, 0.8)' : 'rgba(20, 25, 40, 0.35)';
+      ctx.fillStyle = (y === n.y) ? 'rgba(0, 184, 148, 0.8)' : CFG.tx2;
       ctx.fillText(''+y, r.x + 8 / cam.z, r.y + 6 / cam.z);
     }
   }
 
   function drawMonths(ctx, W, H, cam) {
     var n = nowInfo();
+    var isDk = CFG.bg !== '#f6f7fb';
     for (var i = 0; i < 50; i++) {
       var yr = yR(i, W, H), y = CFG.startYear + i;
       if (!isRectVisible(yr, cam, W, H)) continue;
@@ -349,7 +350,7 @@
       ctx.textBaseline = 'middle';
       var yrFs = Math.min(48 / cam.z, yr.h * 0.25);
       ctx.font = 'bold ' + yrFs + 'px system-ui';
-      ctx.fillStyle = (y === n.y) ? 'rgba(0, 184, 148, 0.04)' : 'rgba(20, 25, 40, 0.025)';
+      ctx.fillStyle = (y === n.y) ? 'rgba(0, 184, 148, 0.04)' : (isDk ? 'rgba(255,255,255,0.03)' : 'rgba(20, 25, 40, 0.025)');
       ctx.fillText(''+y, yr.x + yr.w / 2, yr.y + yr.h / 2);
       ctx.restore();
 
@@ -369,7 +370,7 @@
         ctx.textBaseline = 'middle';
         var mFs = Math.min(20 / cam.z, mr.h * 0.25);
         ctx.font = 'bold ' + mFs + 'px system-ui';
-        ctx.fillStyle = (y===n.y && m===n.m) ? 'rgba(0, 184, 148, 0.08)' : 'rgba(20, 25, 40, 0.05)';
+        ctx.fillStyle = (y===n.y && m===n.m) ? 'rgba(0, 184, 148, 0.08)' : (isDk ? 'rgba(255,255,255,0.05)' : 'rgba(20, 25, 40, 0.05)');
         ctx.fillText(MN[m], mr.x + mr.w / 2, mr.y + mr.h / 2);
         ctx.restore();
       }
@@ -378,10 +379,11 @@
 
   function drawWeeks(ctx, W, H, cam) {
     var n = nowInfo();
+    var isDk = CFG.bg !== '#f6f7fb';
     for (var i = 0; i < 50; i++) {
       var yr = yR(i, W, H), y = CFG.startYear + i;
       if (!isRectVisible(yr, cam, W, H)) continue;
-      ctx.strokeStyle = CFG.grid1; ctx.lineWidth = 1.5;
+      ctx.strokeStyle = CFG.grid1; ctx.lineWidth = 1.5 / cam.z;
       ctx.strokeRect(yr.x+.5, yr.y+.5, yr.w-1, yr.h-1);
       
       // Year watermark
@@ -390,14 +392,14 @@
       ctx.textBaseline = 'middle';
       var yrFs = Math.min(48 / cam.z, yr.h * 0.25);
       ctx.font = 'bold ' + yrFs + 'px system-ui';
-      ctx.fillStyle = (y === n.y) ? 'rgba(0, 184, 148, 0.04)' : 'rgba(20, 25, 40, 0.025)';
+      ctx.fillStyle = (y === n.y) ? 'rgba(0, 184, 148, 0.04)' : (isDk ? 'rgba(255,255,255,0.03)' : 'rgba(20, 25, 40, 0.025)');
       ctx.fillText(''+y, yr.x + yr.w / 2, yr.y + yr.h / 2);
       ctx.restore();
 
       for (var m = 0; m < 12; m++) {
         var mr = mR(i, m, W, H);
         if (!isRectVisible(mr, cam, W, H)) continue;
-        ctx.strokeStyle = CFG.grid2; ctx.lineWidth = .7;
+        ctx.strokeStyle = CFG.grid2; ctx.lineWidth = .7 / cam.z;
         ctx.strokeRect(mr.x+.5, mr.y+.5, mr.w-1, mr.h-1);
         
         // Month watermark
@@ -406,14 +408,14 @@
         ctx.textBaseline = 'middle';
         var mFs = Math.min(20 / cam.z, mr.h * 0.25);
         ctx.font = 'bold ' + mFs + 'px system-ui';
-        ctx.fillStyle = (y===n.y && m===n.m) ? 'rgba(0, 184, 148, 0.08)' : 'rgba(20, 25, 40, 0.05)';
+        ctx.fillStyle = (y===n.y && m===n.m) ? 'rgba(0, 184, 148, 0.08)' : (isDk ? 'rgba(255,255,255,0.05)' : 'rgba(20, 25, 40, 0.05)');
         ctx.fillText(MN[m], mr.x + mr.w / 2, mr.y + mr.h / 2);
         ctx.restore();
 
         var rh = mr.h / CFG.dRows; // 5 rows
         for (var r = 0; r < CFG.dRows; r++) {
           var ry = mr.y + r * rh;
-          ctx.strokeStyle = CFG.grid3; ctx.lineWidth = .5;
+          ctx.strokeStyle = CFG.grid3; ctx.lineWidth = .5 / cam.z;
           ctx.beginPath();
           ctx.moveTo(mr.x, ry);
           ctx.lineTo(mr.x + mr.w, ry);
@@ -438,7 +440,7 @@
           }
 
           if (isTodayWeek) {
-            ctx.strokeStyle = CFG.accent; ctx.lineWidth = 1.2;
+            ctx.strokeStyle = CFG.accent; ctx.lineWidth = 1.2 / cam.z;
             ctx.strokeRect(mr.x+.5, ry+.5, mr.w-1, rh-1);
           }
 
@@ -448,7 +450,7 @@
             var wkFs = Math.min(8 / cam.z, rh * 0.6);
             ctx.font = wkFs + 'px system-ui';
             ctx.textBaseline = 'top';
-            ctx.fillStyle = isTodayWeek ? CFG.accent : 'rgba(20, 25, 40, 0.35)';
+            ctx.fillStyle = isTodayWeek ? CFG.accent : CFG.tx2;
             ctx.fillText('Wk ' + wkNum, mr.x + 3 / cam.z, ry + 2 / cam.z);
           }
         }
@@ -481,7 +483,7 @@
           if (screenW > 18 && screenH > 14) {
             var dayFs = Math.min(9 / cam.z, r.h * 0.5);
             ctx.font = dayFs + 'px system-ui';
-            ctx.fillStyle = (new Date(y, m, d+1).getTime() === td) ? CFG.accent : 'rgba(20, 25, 40, 0.4)';
+            ctx.fillStyle = (new Date(y, m, d+1).getTime() === td) ? CFG.accent : CFG.tx2;
             ctx.fillText(''+(d+1), r.x + 3 / cam.z, r.y + 2 / cam.z);
           }
         }
@@ -508,27 +510,27 @@
           var isToday = (y===n.y && m===n.m && d+1===n.d);
           var sh = r.h / CFG.slots, eh = r.h / CFG.sects;
           for (var s = 0; s < CFG.sects; s++) {
-            ctx.strokeStyle = CFG.grid2; ctx.lineWidth = 1;
+            ctx.strokeStyle = CFG.grid2; ctx.lineWidth = 1 / cam.z;
             ctx.strokeRect(r.x, r.y + s*eh, r.w, eh);
             
             var hrFs = Math.min(8 / cam.z, eh * 0.5);
             ctx.font = hrFs + 'px system-ui';
-            ctx.fillStyle = 'rgba(20, 25, 40, 0.35)';
+            ctx.fillStyle = CFG.tx2;
             ctx.textBaseline = 'top';
             ctx.fillText((s*4)+':00', r.x + 3 / cam.z, r.y + s*eh + 2 / cam.z);
           }
           for (var sl = 0; sl < CFG.slots; sl++) {
             var sy = r.y + sl * sh;
             if (isToday && sl === n.sl) { ctx.fillStyle = CFG.hi3; ctx.fillRect(r.x, sy, r.w, sh); }
-            ctx.strokeStyle = CFG.grid3; ctx.lineWidth = .3;
+            ctx.strokeStyle = CFG.grid3; ctx.lineWidth = .3 / cam.z;
             ctx.beginPath(); ctx.moveTo(r.x, sy); ctx.lineTo(r.x + r.w, sy); ctx.stroke();
           }
-          ctx.strokeStyle = isToday ? CFG.accent : CFG.grid1; ctx.lineWidth = isToday ? 2 : 1;
+          ctx.strokeStyle = isToday ? CFG.accent : CFG.grid1; ctx.lineWidth = (isToday ? 2 : 1) / cam.z;
           ctx.strokeRect(r.x, r.y, r.w, r.h);
           
           var titleFs = Math.min(10 / cam.z, sh * 1.5);
           ctx.font = 'bold ' + titleFs + 'px system-ui';
-          ctx.fillStyle = isToday ? CFG.accent : 'rgba(20, 25, 40, 0.5)';
+          ctx.fillStyle = isToday ? CFG.accent : CFG.tx;
           ctx.textBaseline = 'bottom';
           ctx.fillText((d+1)+' '+MN[m]+' '+y, r.x + 4 / cam.z, r.y - 3 / cam.z);
         }
@@ -1218,9 +1220,10 @@
      BUILD — DOM + Render Loop + Interactions
      ───────────────────────────────────────────────────────── */
   function build(card) {
-    var life = ensLife(card);
-    if (life._domMap) life._domMap.clear();
-    life._evFetching = false;
+    try {
+      var life = ensLife(card);
+      if (life._domMap) life._domMap.clear();
+      life._evFetching = false;
 
     /* ── Container ── */
     var el = document.createElement('div');
@@ -1553,8 +1556,12 @@
       _dpr = window.devicePixelRatio || 1;
       var w = Math.max(1, el.clientWidth);
       var h = Math.max(1, el.clientHeight - 32);
-      cv.width  = Math.max(1, Math.floor(w * _dpr));
-      cv.height = Math.max(1, Math.floor(h * _dpr));
+      var needW = Math.max(1, Math.floor(w * _dpr));
+      var needH = Math.max(1, Math.floor(h * _dpr));
+      if (Math.abs(cv.width - needW) > 2 || Math.abs(cv.height - needH) > 2) {
+        cv.width  = needW;
+        cv.height = needH;
+      }
     }
     rsz();
     try { new ResizeObserver(rsz).observe(el); } catch(e){}
@@ -1771,6 +1778,7 @@
         cv.style.cursor = 'pointer';
       } else {
         cv.style.cursor = '';
+        var cam = life.cam;
         var wp = s2w(pos.x, pos.y, cam);
         var curLOD = lod(cam.z);
         
@@ -2329,117 +2337,205 @@
     var _waitFrames = 0;
     function draw() {
       if (_destroyed) return;
-      // Allow up to 120 frames (~2s) for element to be attached to DOM
-      if (!el.parentNode) {
-        _waitFrames++;
-        if (_waitFrames > 120) { _destroyed = true; return; }
-        requestAnimationFrame(draw);
-        return;
-      }
-      _waitFrames = 0;
-      // Auto-resize canvas if dimensions changed (e.g. overlay just became visible)
-      var elW = Math.max(1, el.clientWidth);
-      var elH = Math.max(1, el.clientHeight - 32);
-      var needW = Math.max(1, Math.floor(elW * _dpr));
-      var needH = Math.max(1, Math.floor(elH * _dpr));
-      if (cv.width !== needW || cv.height !== needH) {
-        cv.width = needW;
-        cv.height = needH;
-      }
-      var ctx = cv.getContext('2d');
-      var wh = getWH(), W = wh.W, H = wh.H;
-      var life = ensLife(card), cam = life.cam;
-      clampCam(cam, W, H);
+      try {
+        // Allow up to 120 frames (~2s) for element to be attached to DOM
+        if (!el.parentNode) {
+          _waitFrames++;
+          if (_waitFrames > 120) { _destroyed = true; el._destroyed = true; return; }
+          requestAnimationFrame(draw);
+          return;
+        }
+        _waitFrames = 0;
+        // Auto-resize canvas if dimensions changed (e.g. overlay just became visible)
+        var elW = Math.max(1, el.clientWidth);
+        var elH = Math.max(1, el.clientHeight - 32);
+        var needW = Math.max(1, Math.floor(elW * _dpr));
+        var needH = Math.max(1, Math.floor(elH * _dpr));
+        if (Math.abs(cv.width - needW) > 2 || Math.abs(cv.height - needH) > 2) {
+          cv.width = needW;
+          cv.height = needH;
+        }
+        var ctx = cv.getContext('2d');
+        var W = cv.width / _dpr;
+        var H = cv.height / _dpr;
+        var life = ensLife(card), cam = life.cam;
+        clampCam(cam, W, H);
 
-      /* Clear */
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, cv.width, cv.height);
+        // Dynamically update CFG colors & DOM elements styling based on active theme
+        var theme = card.calTheme || 'light';
+        var isDk = theme !== 'light';
+        if (theme === 'transparent') {
+          CFG.bg = 'rgba(20, 20, 30, 0.85)';
+          CFG.grid1 = 'rgba(255, 255, 255, 0.20)';
+          CFG.grid2 = 'rgba(255, 255, 255, 0.15)';
+          CFG.grid3 = 'rgba(255, 255, 255, 0.12)';
+          CFG.tx = '#eee';
+          CFG.tx2 = '#aaa';
+        } else if (isDk) {
+          CFG.bg = '#1a1c2e';
+          CFG.grid1 = 'rgba(255, 255, 255, 0.22)';
+          CFG.grid2 = 'rgba(255, 255, 255, 0.18)';
+          CFG.grid3 = 'rgba(255, 255, 255, 0.15)';
+          CFG.tx = '#ddd';
+          CFG.tx2 = '#888';
+        } else {
+          CFG.bg = '#f6f7fb';
+          CFG.grid1 = 'rgba(0, 0, 0, 0.22)';
+          CFG.grid2 = 'rgba(0, 0, 0, 0.18)';
+          CFG.grid3 = 'rgba(0, 0, 0, 0.15)';
+          CFG.tx = 'rgba(20, 25, 40, 0.82)';
+          CFG.tx2 = 'rgba(20, 25, 40, 0.50)';
+        }
 
-      /* World transform via internal camera */
-      ctx.setTransform(_dpr*cam.z, 0, 0, _dpr*cam.z, -cam.x*cam.z*_dpr, -cam.y*cam.z*_dpr);
-
-      /* Background */
-      ctx.fillStyle = CFG.bg;
-      ctx.fillRect(0, 0, W, H);
-
-      /* LOD-based drawing */
-      var level = lod(cam.z);
-
-      /* Show/hide Sprint toggle based on LOD */
-      if (card._sprBtn) {
-        card._sprBtn.style.display = 'none';
-      }
-      var hasDOMCards = life._domMap && life._domMap.size > 0;
-
-      if (level === 'Y')      { drawYears(ctx, W, H, cam); }
-      else if (level === 'M') { drawYears(ctx, W, H, cam); drawMonths(ctx, W, H, cam); }
-      else if (level === 'W') { drawWeeks(ctx, W, H, cam); }
-      else if (level === 'D') { drawMonths(ctx, W, H, cam); drawDays(ctx, W, H, cam); }
-      else if (level === 'H') { drawMonths(ctx, W, H, cam); }
-      else                    { drawMonths(ctx, W, H, cam); }
-
-      /* Manual overlays */
-      drawOverlays(ctx, life.ov, W, cam);
-
-      /* Google Calendar events (Phase 3) — canvas only at zoomed-out levels */
-      if (level === 'Y' || level === 'M' || level === 'W' || level === 'D') {
-        drawCalEventsAsStickyNotes(ctx, life.calEvents, W, H, level, cam);
-      }
-
-      /* Draw Shift selection overlay */
-      if (life.selStart && life.selEnd) {
-        var rStart = getCellDateRange(life.selStart);
-        var rEnd = getCellDateRange(life.selEnd);
-        if (rStart && rEnd) {
-          var minT = Math.min(rStart.start.getTime(), rEnd.start.getTime());
-          var maxT = Math.max(rStart.end.getTime(), rEnd.end.getTime());
-          var selCells = getCoveredCells(new Date(minT), new Date(maxT), level, W, H);
-          ctx.fillStyle = 'rgba(52, 152, 219, 0.25)';
-          ctx.strokeStyle = 'rgba(52, 152, 219, 0.7)';
-          ctx.lineWidth = 1.5;
-          for (var si = 0; si < selCells.length; si++) {
-            var c = selCells[si];
-            ctx.beginPath();
-            ctx.rect(c.x + 1, c.y + 1, c.w - 2, c.h - 2);
-            ctx.fill();
-            ctx.stroke();
+        if (el) {
+          if (isDk) {
+            el.style.background = theme === 'transparent' ? 'transparent' : '#1a1c2e';
+            el.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+            if (hdr) {
+              hdr.style.background = 'rgba(255, 255, 255, 0.03)';
+              hdr.style.borderBottomColor = 'rgba(255, 255, 255, 0.08)';
+            }
+            if (crumb) crumb.style.color = '#ccc';
+            if (switches) {
+              switches.style.background = 'rgba(255, 255, 255, 0.08)';
+              switches.querySelectorAll('button').forEach(function(b) {
+                if (b.classList.contains('active')) {
+                  b.style.background = 'rgba(255, 255, 255, 0.15)';
+                  b.style.color = '#00b894';
+                } else {
+                  b.style.background = 'none';
+                  b.style.color = '#aaa';
+                }
+              });
+            }
+          } else {
+            el.style.background = '#f6f7fb';
+            el.style.borderColor = 'rgba(0, 0, 0, 0.05)';
+            if (hdr) {
+              hdr.style.background = '#fff';
+              hdr.style.borderBottomColor = 'rgba(0, 0, 0, 0.08)';
+            }
+            if (crumb) crumb.style.color = '#555';
+            if (switches) {
+              switches.style.background = 'rgba(0, 0, 0, 0.05)';
+              switches.querySelectorAll('button').forEach(function(b) {
+                if (b.classList.contains('active')) {
+                  b.style.background = '#fff';
+                  b.style.color = '#00b894';
+                } else {
+                  b.style.background = 'none';
+                  b.style.color = '#666';
+                }
+              });
+            }
           }
         }
-      }
 
-      /* Update DOM Overlays — throttled: full diff every 3rd frame, transform-only otherwise */
-      life._domFrame = (life._domFrame || 0) + 1;
-      if (life._domFrame % 3 !== 0 && _zoomWrapper) {
-        /* Transform-only update (cheap) */
-        var tx2 = -cam.x * cam.z;
-        var ty2 = -cam.y * cam.z;
-        _zoomWrapper.style.transform = 'translate3d(' + tx2 + 'px,' + ty2 + 'px,0) scale(' + cam.z + ')';
-      } else {
-        updateDOMOverlays(life, W, H, level, cam);
-      }
+        /* Clear */
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, cv.width, cv.height);
 
-      /* Breadcrumb text (Phase 2) */
-      crumb.textContent = '\uD83E\uDDEC Life \u2014 ' + lodLabel(level);
+        /* World transform via internal camera */
+        ctx.setTransform(_dpr*cam.z, 0, 0, _dpr*cam.z, -cam.x*cam.z*_dpr, -cam.y*cam.z*_dpr);
 
-      /* Update zoom switches active states */
-      if (btnMap) {
-        Object.keys(btnMap).forEach(function(lvl) {
-          if (lvl === level) {
-            btnMap[lvl].classList.add('active');
-          } else {
-            btnMap[lvl].classList.remove('active');
+        /* Background */
+        ctx.fillStyle = CFG.bg;
+        ctx.fillRect(0, 0, W, H);
+
+        /* LOD-based drawing */
+        var level = lod(cam.z);
+
+        /* Show/hide Sprint toggle based on LOD */
+        if (card._sprBtn) {
+          card._sprBtn.style.display = 'none';
+        }
+        var hasDOMCards = life._domMap && life._domMap.size > 0;
+
+        if (level === 'Y')      { drawYears(ctx, W, H, cam); }
+        else if (level === 'M') { drawYears(ctx, W, H, cam); drawMonths(ctx, W, H, cam); }
+        else if (level === 'W') { drawWeeks(ctx, W, H, cam); }
+        else if (level === 'D') { drawMonths(ctx, W, H, cam); drawDays(ctx, W, H, cam); }
+        else if (level === 'H') { drawMonths(ctx, W, H, cam); }
+        else                    { drawMonths(ctx, W, H, cam); }
+
+        /* Manual overlays */
+        drawOverlays(ctx, life.ov, W, cam);
+
+        /* Google Calendar events (Phase 3) — canvas only at zoomed-out levels */
+        if (level === 'Y' || level === 'M' || level === 'W' || level === 'D') {
+          drawCalEventsAsStickyNotes(ctx, life.calEvents, W, H, level, cam);
+        }
+
+        /* Draw Shift selection overlay */
+        if (life.selStart && life.selEnd) {
+          var rStart = getCellDateRange(life.selStart);
+          var rEnd = getCellDateRange(life.selEnd);
+          if (rStart && rEnd) {
+            var minT = Math.min(rStart.start.getTime(), rEnd.start.getTime());
+            var maxT = Math.max(rStart.end.getTime(), rEnd.end.getTime());
+            var selCells = getCoveredCells(new Date(minT), new Date(maxT), level, W, H);
+            ctx.fillStyle = 'rgba(52, 152, 219, 0.25)';
+            ctx.strokeStyle = 'rgba(52, 152, 219, 0.7)';
+            ctx.lineWidth = 1.5;
+            for (var si = 0; si < selCells.length; si++) {
+              var c = selCells[si];
+              ctx.beginPath();
+              ctx.rect(c.x + 1, c.y + 1, c.w - 2, c.h - 2);
+              ctx.fill();
+              ctx.stroke();
+            }
           }
-        });
+        }
+
+        /* Update DOM Overlays — throttled: full diff every 3rd frame, transform-only otherwise */
+        life._domFrame = (life._domFrame || 0) + 1;
+        if (life._domFrame % 3 !== 0 && _zoomWrapper) {
+          /* Transform-only update (cheap) */
+          var tx2 = -cam.x * cam.z;
+          var ty2 = -cam.y * cam.z;
+          _zoomWrapper.style.transform = 'translate3d(' + tx2 + 'px,' + ty2 + 'px,0) scale(' + cam.z + ')';
+        } else {
+          updateDOMOverlays(life, W, H, level, cam);
+        }
+
+        /* Breadcrumb text (Phase 2) */
+        crumb.textContent = '\uD83E\uDDEC Life \u2014 ' + lodLabel(level);
+
+        /* Update zoom switches active states */
+        if (btnMap) {
+          Object.keys(btnMap).forEach(function(lvl) {
+            if (lvl === level) {
+              btnMap[lvl].classList.add('active');
+            } else {
+              btnMap[lvl].classList.remove('active');
+            }
+          });
+        }
+
+        /* Mini-map (Phase 4) */
+        drawMinimap(ctx, cam, W, H, W, H, _dpr);
+
+        requestAnimationFrame(draw);
+      } catch (err) {
+        console.error('[Life Widget Render Loop Error]', err);
+        var errDiv = document.createElement('div');
+        errDiv.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.95);color:red;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:12px;z-index:9999;padding:20px;box-sizing:border-box;overflow:auto;';
+        errDiv.innerHTML = '<b style="font-size:14px;">Render Loop Error:</b><pre style="white-space:pre-wrap;margin-top:10px;text-align:left;width:100%;">' + err.message + '\n' + err.stack + '</pre>';
+        el.appendChild(errDiv);
+        _destroyed = true;
+        el._destroyed = true;
       }
-
-      /* Mini-map (Phase 4) */
-      drawMinimap(ctx, cam, W, H, W, H, _dpr);
-
-      requestAnimationFrame(draw);
     }
     requestAnimationFrame(draw);
 
     return el;
+    } catch (err) {
+      console.error('[Life Widget Build Error]', err);
+      var errDiv = document.createElement('div');
+      errDiv.style.cssText = 'padding:20px;color:red;font-weight:bold;background:#fff;overflow:auto;height:100%;box-sizing:border-box;width:100%;';
+      errDiv.innerHTML = '<b>Build Error:</b><pre style="white-space:pre-wrap;text-align:left;">' + err.message + '\n' + err.stack + '</pre>';
+      return errDiv;
+    }
   }
 
   /* ─────────────────────────────────────────────────────────
@@ -2471,16 +2567,6 @@
   function init() {
     var b = document.getElementById('mtb-life');
     if (b) b.addEventListener('click', createLife);
-
-    document.addEventListener('keydown', function(e) {
-      if (e.key === '6' && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        var tag = ((document.activeElement || {}).tagName || '').toUpperCase();
-        if (tag === 'INPUT' || tag === 'TEXTAREA' ||
-            (document.activeElement && document.activeElement.isContentEditable)) return;
-        e.preventDefault();
-        createLife();
-      }
-    });
 
     /* Expose for miro-core.js type-switch */
     window.buildMiroLifeWidget = build;
