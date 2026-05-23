@@ -651,11 +651,15 @@ function initDB() {
     return;
   }
 
-  // Backwards compatibility migration logic: if the user still has monolithic data, migrate it first
+  // Load sharded listeners immediately so that offline cache loads instantly 
+  // and listeners are attached without blocking on legacy migration check
+  setupShardedListeners();
+
+  // Backwards compatibility migration check: run in background asynchronously
   db.ref(DB_REF).once('value', (snap) => {
     const rawData = snap.val();
     if (rawData && rawData.pages && Array.isArray(rawData.pages)) {
-      // It's a monolith. Let's shard it.
+      console.log('[MIGRATION] Monolithic legacy layout found. Migrating to sharded layout in background...');
       const meta = {
         settings: rawData.settings || { engine: 'bm', accent: '#6c8fff' },
         curEnv: rawData.curEnv || 'e0',
@@ -697,23 +701,16 @@ function initDB() {
       updates[`users/${USER_ID}/startmine_pages_meta`] = pagesMeta;
 
       // Clear the old monolith
-      updates[`users/${USER_ID}/startmine_data`] = null;
+      updates[DB_REF] = null;
 
       db.ref().update(updates).then(() => {
-        setupShardedListeners();
+        console.log('[MIGRATION] Legacy data migration complete!');
       }).catch((err) => {
-        console.warn('Migration failed, proceeding with sharded listeners:', err);
-        setSyncStatus('err', 'Migration error — retrying…');
-        setupShardedListeners();
+        console.error('[MIGRATION] Legacy data migration update failed:', err);
       });
-    } else {
-      setupShardedListeners();
     }
   }, (err) => {
-    // Error reading legacy data — skip migration, go straight to sharded listeners
-    console.warn('initDB read error, proceeding with sharded listeners:', err);
-    setSyncStatus('err', 'Connection error — retrying…');
-    setupShardedListeners();
+    console.warn('[MIGRATION] Monolithic layout read error or permission denied (possibly already sharded):', err.message);
   });
 }
 
@@ -783,11 +780,16 @@ function switchActivePage(pageId) {
 
   // ─── Instant render from localStorage cache, IndexedDB fallback ───
   const cachedPage = getCachedPageData(pageId);
-  if (cachedPage && ((cachedPage.widgets || []).length > 0 || (cachedPage.miroCards || []).length > 0)) {
+  if (cachedPage && ((cachedPage.widgets || []).length > 0 || (cachedPage.miroCards || []).length > 0 || (cachedPage.vGuides || []).length > 0 || (cachedPage.hGuides || []).length > 0)) {
     const pg = cp();
     if (pg) {
       pg.widgets = cachedPage.widgets || [];
       pg.miroCards = cachedPage.miroCards || [];
+      pg.vGuides = cachedPage.vGuides || [];
+      pg.hGuides = cachedPage.hGuides || [];
+      pg._guidesMode = cachedPage._guidesMode || false;
+      pg.lockedGuides = cachedPage.lockedGuides || [];
+      pg.cellStates = cachedPage.cellStates || {};
       const fakeD = { pages: [pg] };
       sanitizeData(fakeD);
       _lastSyncedPageData = {
@@ -799,11 +801,16 @@ function switchActivePage(pageId) {
   } else {
     // Try IndexedDB async (larger, more reliable cache)
     getCachedPageDataAsync(pageId).then(idbCached => {
-      if (idbCached && ((idbCached.widgets || []).length > 0 || (idbCached.miroCards || []).length > 0)) {
+      if (idbCached && ((idbCached.widgets || []).length > 0 || (idbCached.miroCards || []).length > 0 || (idbCached.vGuides || []).length > 0 || (idbCached.hGuides || []).length > 0)) {
         const pg = cp();
         if (pg && pg.id === pageId) { // Make sure we're still on same page
           pg.widgets = idbCached.widgets || [];
           pg.miroCards = idbCached.miroCards || [];
+          pg.vGuides = idbCached.vGuides || [];
+          pg.hGuides = idbCached.hGuides || [];
+          pg._guidesMode = idbCached._guidesMode || false;
+          pg.lockedGuides = idbCached.lockedGuides || [];
+          pg.cellStates = idbCached.cellStates || {};
           const fakeD = { pages: [pg] };
           sanitizeData(fakeD);
           _lastSyncedPageData = {
@@ -841,6 +848,11 @@ function switchActivePage(pageId) {
       }
       pg.widgets = pData.widgets || [];
       pg.miroCards = pData.miroCards || [];
+      pg.vGuides = pData.vGuides || [];
+      pg.hGuides = pData.hGuides || [];
+      pg._guidesMode = pData._guidesMode || false;
+      pg.lockedGuides = pData.lockedGuides || [];
+      pg.cellStates = pData.cellStates || {};
       const fakeD = { pages: [pg] };
       sanitizeData(fakeD);
       _lastSyncedPageData = {
@@ -848,7 +860,15 @@ function switchActivePage(pageId) {
         miroCards: JSON.stringify(pg.miroCards)
       };
       // Cache to BOTH localStorage and IndexedDB
-      cachePageData(pageId, { widgets: pg.widgets, miroCards: pg.miroCards });
+      cachePageData(pageId, {
+        widgets: pg.widgets,
+        miroCards: pg.miroCards,
+        vGuides: pg.vGuides,
+        hGuides: pg.hGuides,
+        _guidesMode: pg._guidesMode,
+        lockedGuides: pg.lockedGuides,
+        cellStates: pg.cellStates
+      });
     }
     buildCols();
   });
@@ -3626,6 +3646,94 @@ function setTabColor(pid, color) {
   sv();
   buildTabs();
 }
+
+// Slices Mode - Guides & Grid bindings
+function updateGuidesButtonState() {
+  const page = cp();
+  const btn = document.getElementById('mz-guides-btn');
+  if (btn) {
+    const isActive = !!(page && page.pageType === 'miro' && page._guidesMode);
+    btn.classList.toggle('active-toggle', isActive);
+    if (isActive) {
+      btn.style.background = 'rgba(108, 143, 255, 0.2)';
+      btn.style.color = '#4a7aff';
+    } else {
+      btn.style.background = '';
+      btn.style.color = '';
+    }
+  }
+}
+
+document.getElementById('mz-guides-btn').onclick = () => {
+  const page = cp();
+  if (!page || page.pageType !== 'miro') return;
+  const canvas = document.getElementById('miro-canvas');
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  
+  page._guidesMode = !page._guidesMode;
+  if (!page._guidesMode) {
+    if (typeof window.mergeMiroCellsIntoCards === 'function') {
+      window.mergeMiroCellsIntoCards(page, W, H);
+    }
+    page.vGuides = [];
+    page.hGuides = [];
+    page.lockedGuides = [];
+    page.cellStates = {};
+    
+    // Remove rulers
+    document.querySelectorAll('.miro-ruler').forEach(el => el.remove());
+  } else {
+    if (typeof window.partitionMiroCardsIntoCells === 'function') {
+      window.partitionMiroCardsIntoCells(page, W, H);
+    }
+    if (typeof window.initMiroSlices === 'function') {
+      window.initMiroSlices();
+    }
+  }
+  sv();
+  if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+  updateGuidesButtonState();
+};
+
+document.getElementById('mz-grid-btn').onclick = () => {
+  const page = cp();
+  if (!page || page.pageType !== 'miro') return;
+  
+  const colsVal = prompt("Enter number of columns (1-20):", "3");
+  if (colsVal === null) return;
+  const cols = parseInt(colsVal);
+  if (isNaN(cols) || cols < 1 || cols > 20) {
+    alert("Please enter a valid number of columns between 1 and 20.");
+    return;
+  }
+  
+  const rowsVal = prompt("Enter number of rows (1-20):", "3");
+  if (rowsVal === null) return;
+  const rows = parseInt(rowsVal);
+  if (isNaN(rows) || rows < 1 || rows > 20) {
+    alert("Please enter a valid number of rows between 1 and 20.");
+    return;
+  }
+  
+  if (typeof window.createMiroGrid === 'function') {
+    window.createMiroGrid(cols, rows);
+    updateGuidesButtonState();
+  }
+};
+
+document.getElementById('mz-autofit-btn').onclick = () => {
+  const page = cp();
+  if (!page || page.pageType !== 'miro') return;
+  const hasGuides = page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
+  if (!hasGuides) {
+    alert("Autofit is only available when the page is sliced into viewports.");
+    return;
+  }
+  if (typeof window.autofitAllMiroSlices === 'function') {
+    window.autofitAllMiroSlices();
+  }
+};
+
 function buildCols() {
   const page = cp();
   const isMiro = page.pageType === 'miro';
@@ -3681,8 +3789,12 @@ function buildCols() {
   if (colsWrap) colsWrap.style.display = isMiro ? 'none' : 'flex';
   
   if (isMiro) {
+    if (page._guidesMode && typeof window.initMiroSlices === 'function') {
+      window.initMiroSlices();
+    }
     if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
     if (typeof buildOutline === 'function') buildOutline();
+    if (typeof updateGuidesButtonState === 'function') updateGuidesButtonState();
     return;
   }
   

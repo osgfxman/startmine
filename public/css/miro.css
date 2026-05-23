@@ -14,7 +14,7 @@
   flex: 1;
   overflow: hidden;
   cursor: grab;
-  background: var(--bg, #0d0f18);
+  background: transparent;
   user-select: none;
   min-height: calc(100vh - 100px);
   touch-action: none;

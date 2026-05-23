@@ -424,7 +424,7 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
     updateMiroSelFrame();
 
     const page = cp();
-    const zoom = (page.zoom || 100) / 100;
+    const zoom = typeof window.getMiroCardDragZoom === 'function' ? window.getMiroCardDragZoom(card) : ((page.zoom || 100) / 100);
     const startX = e.clientX, startY = e.clientY;
 
     // Original positions of what we are currently dragging
@@ -704,8 +704,15 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
       origPositions.forEach((orig, cid) => {
         const c = (page.miroCards || []).find(x => x.id === cid);
         if (!c) return;
-        c.x = orig.x + finalDx;
-        c.y = orig.y + finalDy;
+        let nx = orig.x + finalDx;
+        let ny = orig.y + finalDy;
+        if (typeof window.clampMiroCardDrag === 'function') {
+          const clamped = window.clampMiroCardDrag(c, nx, ny);
+          nx = clamped.x;
+          ny = clamped.y;
+        }
+        c.x = nx;
+        c.y = ny;
         const cardEl = document.querySelector(`[data-cid="${cid}"]`);
         if (cardEl) {
           cardEl.style.left = c.x + 'px';

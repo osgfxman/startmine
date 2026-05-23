@@ -338,6 +338,16 @@ function convertSelectedTo(targetType) {
   canvas.addEventListener('mousedown', (e) => {
     const page = cp();
     if (page && (page.pageType === 'web' || page.id.startsWith('time_'))) return;
+
+    // Cell Pan Start delegation for Slices Mode (prevent if in any card creation/drawing mode)
+    const hasGuides = page && page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
+    const anyCreateMode = typeof _stickyCreateMode !== 'undefined' && (_stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode || _embedCreateMode || _overlayPageCreateMode || _penMode || _shapeMode);
+    if (!anyCreateMode && hasGuides && typeof window.handleMiroCellPanStart === 'function') {
+      if (e.target === canvas || e.target.id === 'miro-board' || (e.target.closest('.miro-cell-viewport') && !e.target.closest('[data-cid]') && !e.target.closest('.miro-guide-v, .miro-guide-h'))) {
+        if (window.handleMiroCellPanStart(e)) return;
+      }
+    }
+
     const isMiro = page.pageType === 'miro';
 
     // FIRST: if in a creation/drawing mode, pass through immediately
@@ -406,6 +416,8 @@ function convertSelectedTo(targetType) {
   });
 
   document.addEventListener('mousemove', (e) => {
+    if (typeof window.handleMiroCellPanMove === 'function' && window.handleMiroCellPanMove(e)) return;
+
     // Rubber-band drag
     if (_rubberBanding) {
       const page = cp();
@@ -450,6 +462,8 @@ function convertSelectedTo(targetType) {
   });
 
   document.addEventListener('mouseup', (e) => {
+    if (typeof window.handleMiroCellPanEnd === 'function' && window.handleMiroCellPanEnd()) return;
+
     if (_rubberBanding) {
       _rubberBanding = false;
       _justRubberBanded = true;
@@ -497,6 +511,12 @@ function convertSelectedTo(targetType) {
     (e) => {
       const page = cp();
       if (page && (page.pageType === 'web' || page.id.startsWith('time_'))) return;
+
+      const hasGuides = page && page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
+      if (hasGuides && typeof window.handleMiroCellWheel === 'function') {
+        if (window.handleMiroCellWheel(e)) return;
+      }
+
       e.preventDefault();
 
       const rect = canvas.getBoundingClientRect();
@@ -1328,12 +1348,42 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
     if (!page.miroCards) page.miroCards = [];
     const zoom = (page.zoom || 100) / 100;
     const rect = document.getElementById('miro-canvas').getBoundingClientRect();
-    const bx = (e.clientX - rect.left - (page.panX || 0)) / zoom;
-    const by = (e.clientY - rect.top - (page.panY || 0)) / zoom;
+    
+    let bx = (e.clientX - rect.left - (page.panX || 0)) / zoom;
+    let by = (e.clientY - rect.top - (page.panY || 0)) / zoom;
+    let targetCell = null;
+
+    const hasGuides = page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
+    if (hasGuides) {
+      const cellEl = e.target.closest('.miro-cell-viewport');
+      if (cellEl) {
+        targetCell = cellEl.dataset.cellKey;
+        const parts = targetCell.split('_');
+        const col = parseInt(parts[0]), row = parseInt(parts[1]);
+        
+        const canvas = document.getElementById('miro-canvas');
+        const W = canvas.clientWidth, H = canvas.clientHeight;
+        const vg = [0, ...[...page.vGuides].sort((a,b)=>a-b), 1];
+        const hg = [0, ...[...page.hGuides].sort((a,b)=>a-b), 1];
+        const cellLeft = vg[col] * W;
+        const cellTop = hg[row] * H;
+        
+        const state = page.cellStates[targetCell] || { zoom: 100, panX: 0, panY: 0 };
+        const cellZoom = state.zoom / 100;
+        
+        bx = (e.clientX - rect.left - cellLeft - state.panX) / cellZoom;
+        by = (e.clientY - rect.top - cellTop - state.panY) / cellZoom;
+      }
+    }
+
+    const cardIndexBefore = page.miroCards.length;
 
     if (_stickyCreateMode) {
       const newId = uid();
       page.miroCards.push({ id: newId, type: 'sticky', text: '', color: 'yellow', shape: 'rect', x: bx - 140, y: by - 80, w: 280, h: 160 });
+      if (targetCell) {
+        page.miroCards[page.miroCards.length - 1].cell = targetCell;
+      }
       sv(); buildMiroCanvas(); buildOutline();
       setTimeout(() => {
         const el = document.querySelector(`.miro-sticky[data-cid="${newId}"] .ms-text`);
@@ -1348,6 +1398,9 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
     } else if (_textCreateMode) {
       const newId = uid();
       page.miroCards.push({ id: newId, type: 'text', text: '', x: bx - 60, y: by - 15, w: 200, h: 40, fontSize: 24, font: 'Inter', fontColor: '#333333', align: 'right' });
+      if (targetCell) {
+        page.miroCards[page.miroCards.length - 1].cell = targetCell;
+      }
       sv(); buildMiroCanvas(); buildOutline();
       setTimeout(() => {
         const el = document.querySelector(`.miro-text[data-cid="${newId}"] .mt-text`);
@@ -1371,6 +1424,9 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
       const colWidths = Array(cols).fill(colW);
       const rowHeights = Array(rows).fill(rowH);
       page.miroCards.push({ id: uid(), type: 'grid', rows, cols, cells, colWidths, rowHeights, x: bx - w / 2, y: by - h / 2, w, h, headerColor: 'none', borderColor: '#555' });
+      if (targetCell) {
+        page.miroCards[page.miroCards.length - 1].cell = targetCell;
+      }
       sv(); buildMiroCanvas(); buildOutline();
     } else if (_mindmapCreateMode) {
       const rootId = uid(), child1 = uid(), child2 = uid(), child3 = uid();
@@ -1385,9 +1441,15 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
           ],
         },
       });
+      if (targetCell) {
+        page.miroCards[page.miroCards.length - 1].cell = targetCell;
+      }
       sv(); buildMiroCanvas(); buildOutline();
     } else if (_widgetCreateMode) {
       page.miroCards.push({ id: uid(), type: 'bwidget', title: 'Bookmarks', emoji: '🗂️', items: [], x: bx - 160, y: by - 200, w: 320, h: 400, color: { r: 255, g: 255, b: 255, a: 1 } });
+      if (targetCell) {
+        page.miroCards[page.miroCards.length - 1].cell = targetCell;
+      }
       sv(); buildMiroCanvas(); buildOutline();
     } else if (_trelloCreateMode) {
       const gap = 20;
@@ -1402,15 +1464,26 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
       lists.forEach((l, i) => {
         page.miroCards.push({ id: uid(), type: 'trello', title: l.title, listColor: l.color, cards: [], x: startX + i * (lw + gap), y: by - lh / 2, w: lw, h: lh });
       });
+      if (targetCell) {
+        for (let i = cardIndexBefore; i < page.miroCards.length; i++) {
+          page.miroCards[i].cell = targetCell;
+        }
+      }
       sv(); buildMiroCanvas(); buildOutline();
     } else if (_overlayPageCreateMode) {
       var opIdx = _overlayPageCreateIdx;
       page.miroCards.push({ id: uid(), type: 'overlay-page', overlayPage: opIdx, x: bx - Math.floor(window.innerWidth*0.42), y: by - Math.floor(window.innerHeight*0.4), w: Math.floor(window.innerWidth*0.85), h: Math.floor(window.innerHeight*0.8), calOffset: 0, calTheme: 'light', ganttView: '2week', ganttRowHeight: 50 });
+      if (targetCell) {
+        page.miroCards[page.miroCards.length - 1].cell = targetCell;
+      }
       sv(); buildMiroCanvas(); buildOutline();
     } else if (_embedCreateMode) {
       const url = prompt('🌐 Enter published URL (Google Sheets chart, web page, etc.):');
       if (url && url.trim()) {
         page.miroCards.push({ id: uid(), type: 'embed', embedUrl: url.trim(), cropRect: null, refreshMin: 15, x: bx - 300, y: by - 200, w: 600, h: 400 });
+        if (targetCell) {
+          page.miroCards[page.miroCards.length - 1].cell = targetCell;
+        }
         sv(); buildMiroCanvas(); buildOutline();
       }
     }

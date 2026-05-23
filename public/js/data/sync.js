@@ -32,7 +32,7 @@
     inbox: D.inbox
   };
 
-  const pagesMeta = D.pages.map(p => ({
+  const pagesMeta = D.pages.filter(p => p).map(p => ({
     id: p.id, groupId: p.groupId, name: p.name,
     pageType: p.pageType, zoom: p.zoom, panX: p.panX, panY: p.panY,
     bg: p.bg, bgType: p.bgType, tabColor: p.tabColor || ''
@@ -44,6 +44,7 @@
 
   // Push all page data (active page from memory, others from cache)
   D.pages.forEach(p => {
+    if (!p) return;
     let widgets, miroCards;
     if (p.id === D.cur) {
       // Active page: use live in-memory data
@@ -141,6 +142,11 @@
           if (pg && cachedPage) {
             pg.widgets = cachedPage.widgets || [];
             pg.miroCards = cachedPage.miroCards || [];
+            pg.vGuides = cachedPage.vGuides || [];
+            pg.hGuides = cachedPage.hGuides || [];
+            pg._guidesMode = cachedPage._guidesMode || false;
+            pg.lockedGuides = cachedPage.lockedGuides || [];
+            pg.cellStates = cachedPage.cellStates || {};
             _lastSyncedPageData = {
               widgets: JSON.stringify(pg.widgets),
               miroCards: JSON.stringify(pg.miroCards)
@@ -203,12 +209,13 @@
       // Listen to Pages Directory (names, ids, group associations)
       db.ref(pagesMetaRef).on('value', (snap) => {
         if (isOwnWrite()) return;
-        const pagesMeta = snap.val() || [{ id: 'p0', groupId: 'g0', name: 'Home', pageType: 'miro', zoom: 100, panX: 0, panY: 0, bg: '', bgType: 'none' }];
+        const pagesMetaRaw = snap.val() || [{ id: 'p0', groupId: 'g0', name: 'Home', pageType: 'miro', zoom: 100, panX: 0, panY: 0, bg: '', bgType: 'none' }];
+        const pagesMeta = pagesMetaRaw.filter(p => p);
 
         // FIX: Preserve heavy data (widgets/miroCards) for ALL loaded pages, not just active
         const heavyDataMap = {};
         D.pages.forEach(p => {
-          if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0)) {
+          if (p && ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0))) {
             heavyDataMap[p.id] = { widgets: p.widgets || [], miroCards: p.miroCards || [] };
           }
         });
@@ -217,7 +224,7 @@
 
         // Re-inject heavy data into ALL pages that had it loaded
         D.pages.forEach(p => {
-          if (heavyDataMap[p.id]) {
+          if (p && heavyDataMap[p.id]) {
             p.widgets = heavyDataMap[p.id].widgets;
             p.miroCards = heavyDataMap[p.id].miroCards;
           }
@@ -227,7 +234,7 @@
           window.sanitizeData(D);
         }
 
-        const sanitizedMeta = D.pages.map(p => ({
+        const sanitizedMeta = D.pages.filter(p => p).map(p => ({
           id: p.id, groupId: p.groupId, name: p.name, pageType: p.pageType,
           zoom: p.zoom, panX: p.panX, panY: p.panY, bg: p.bg, bgType: p.bgType,
           tabColor: p.tabColor || ''
@@ -277,11 +284,11 @@
       db.ref('.info/connected').on('value', (snap) => {
         if (snap.val()) {
           console.log('[SYNC] Connected successfully');
+          if (!isFirstLoad) setSyncStatus('ok', 'Realtime Sync Active \u2713');
         } else {
           console.warn('[SYNC] Disconnected / Offline');
+          setSyncStatus('loading', '🔄 Disconnected \u2014 reconnecting...');
         }
-        if (!snap.val() && !isFirstLoad) setSyncStatus('loading', '🔄 Disconnected \u2014 reconnecting...');
-        else if (snap.val() && !isFirstLoad) setSyncStatus('ok', 'Realtime Sync Active \u2713');
       });
     } catch(error) {
       console.error('[SYNC] Connection failed:', error);
@@ -300,14 +307,22 @@
   if (_offlineMode) {
     const activePg = cp();
     if (activePg) {
-      cachePageData(activePg.id, { widgets: activePg.widgets || [], miroCards: activePg.miroCards || [] });
+      cachePageData(activePg.id, {
+        widgets: activePg.widgets || [],
+        miroCards: activePg.miroCards || [],
+        vGuides: activePg.vGuides || [],
+        hGuides: activePg.hGuides || [],
+        _guidesMode: activePg._guidesMode || false,
+        lockedGuides: activePg.lockedGuides || [],
+        cellStates: activePg.cellStates || {}
+      });
     }
     const meta = {
       settings: D.settings, curEnv: D.curEnv, curGroup: D.curGroup,
       environments: D.environments, groups: D.groups, inbox: D.inbox
     };
     cacheMeta(meta);
-    cachePagesMeta(D.pages.map(p => ({
+    cachePagesMeta(D.pages.filter(p => p).map(p => ({
       id: p.id, groupId: p.groupId, name: p.name, pageType: p.pageType,
       zoom: p.zoom, panX: p.panX, panY: p.panY, bg: p.bg, bgType: p.bgType,
       tabColor: p.tabColor || ''
@@ -332,7 +347,7 @@
       inbox: D.inbox
     };
 
-    const pagesMeta = D.pages.map(p => ({
+    const pagesMeta = D.pages.filter(p => p).map(p => ({
       id: p.id,
       groupId: p.groupId,
       name: p.name,
@@ -397,20 +412,36 @@
     if (saveAll) {
       let _savedCount = 0, _skippedCount = 0;
       D.pages.forEach(p => {
-        let widgets, miroCards;
+        if (!p) return;
+        let widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates;
         if (p.id === D.cur) {
           // Active page — use live data
           widgets = p.widgets || [];
           miroCards = p.miroCards || [];
+          vGuides = p.vGuides || [];
+          hGuides = p.hGuides || [];
+          _guidesMode = p._guidesMode || false;
+          lockedGuides = p.lockedGuides || [];
+          cellStates = p.cellStates || {};
         } else {
           // NON-ACTIVE page — try cache, then memory
           const cached = getCachedPageData(p.id);
           if (cached && (cached.widgets?.length > 0 || cached.miroCards?.length > 0)) {
             widgets = cached.widgets || [];
             miroCards = cached.miroCards || [];
+            vGuides = cached.vGuides || [];
+            hGuides = cached.hGuides || [];
+            _guidesMode = cached._guidesMode || false;
+            lockedGuides = cached.lockedGuides || [];
+            cellStates = cached.cellStates || {};
           } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0)) {
             widgets = p.widgets || [];
             miroCards = p.miroCards || [];
+            vGuides = p.vGuides || [];
+            hGuides = p.hGuides || [];
+            _guidesMode = p._guidesMode || false;
+            lockedGuides = p.lockedGuides || [];
+            cellStates = p.cellStates || {};
           } else {
             // ⛔ ABSOLUTE GUARD: NEVER write empty data to Firebase
             // This page has no data anywhere — skip it entirely
@@ -425,7 +456,15 @@
           _skippedCount++;
           return;
         }
-        updates[`users/${USER_ID}/startmine_pages/${p.id}`] = { widgets, miroCards };
+        updates[`users/${USER_ID}/startmine_pages/${p.id}`] = {
+          widgets,
+          miroCards,
+          vGuides,
+          hGuides,
+          _guidesMode,
+          lockedGuides,
+          cellStates
+        };
         _savedCount++;
       });
       if (_skippedCount > 0) {
@@ -459,6 +498,13 @@
           const curWidgetsStr = JSON.stringify(activePg.widgets || []);
           const curCardsStr = JSON.stringify(activePg.miroCards || []);
 
+          // Always write guides/slices properties when _lastSyncedPageData is active
+          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/vGuides`] = activePg.vGuides || [];
+          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/hGuides`] = activePg.hGuides || [];
+          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/_guidesMode`] = activePg._guidesMode || false;
+          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/lockedGuides`] = activePg.lockedGuides || [];
+          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/cellStates`] = activePg.cellStates || {};
+
           const oldWidgets = JSON.parse(_lastSyncedPageData.widgets || '[]');
           const oldCards = JSON.parse(_lastSyncedPageData.miroCards || '[]');
           const curWidgets = activePg.widgets || [];
@@ -468,7 +514,7 @@
           if (oldWidgets.length !== curWidgets.length) widgetsChanged = true;
           else {
             for (let i = 0; i < curWidgets.length; i++) {
-              if (curWidgets[i].id !== oldWidgets[i].id) { widgetsChanged = true; break; }
+              if (!curWidgets[i] || !oldWidgets[i] || curWidgets[i].id !== oldWidgets[i].id) { widgetsChanged = true; break; }
             }
           }
 
@@ -476,7 +522,7 @@
             updates[`users/${USER_ID}/startmine_pages/${activePg.id}/widgets`] = curWidgets;
           } else {
             for (let i = 0; i < curWidgets.length; i++) {
-              if (JSON.stringify(curWidgets[i]) !== JSON.stringify(oldWidgets[i])) {
+              if (!curWidgets[i] || !oldWidgets[i] || JSON.stringify(curWidgets[i]) !== JSON.stringify(oldWidgets[i])) {
                 updates[`users/${USER_ID}/startmine_pages/${activePg.id}/widgets/${i}`] = curWidgets[i];
               }
             }
@@ -486,7 +532,7 @@
           if (oldCards.length !== curCards.length) cardsChanged = true;
           else {
             for (let i = 0; i < curCards.length; i++) {
-              if (curCards[i].id !== oldCards[i].id) { cardsChanged = true; break; }
+              if (!curCards[i] || !oldCards[i] || curCards[i].id !== oldCards[i].id) { cardsChanged = true; break; }
             }
           }
 
@@ -494,7 +540,7 @@
             updates[`users/${USER_ID}/startmine_pages/${activePg.id}/miroCards`] = curCards;
           } else {
             for (let i = 0; i < curCards.length; i++) {
-              if (JSON.stringify(curCards[i]) !== JSON.stringify(oldCards[i])) {
+              if (!curCards[i] || !oldCards[i] || JSON.stringify(curCards[i]) !== JSON.stringify(oldCards[i])) {
                 updates[`users/${USER_ID}/startmine_pages/${activePg.id}/miroCards/${i}`] = curCards[i];
               }
             }
@@ -506,7 +552,12 @@
         } else {
           updates[`users/${USER_ID}/startmine_pages/${activePg.id}`] = {
             widgets: activePg.widgets || [],
-            miroCards: activePg.miroCards || []
+            miroCards: activePg.miroCards || [],
+            vGuides: activePg.vGuides || [],
+            hGuides: activePg.hGuides || [],
+            _guidesMode: activePg._guidesMode || false,
+            lockedGuides: activePg.lockedGuides || [],
+            cellStates: activePg.cellStates || {}
           };
         }
       }
@@ -558,14 +609,22 @@
     localStorage.setItem(LS_CUR_PAGE, D.cur);
     const activePg = cp();
     if (activePg) {
-      cachePageData(activePg.id, { widgets: activePg.widgets || [], miroCards: activePg.miroCards || [] });
+      cachePageData(activePg.id, {
+        widgets: activePg.widgets || [],
+        miroCards: activePg.miroCards || [],
+        vGuides: activePg.vGuides || [],
+        hGuides: activePg.hGuides || [],
+        _guidesMode: activePg._guidesMode || false,
+        lockedGuides: activePg.lockedGuides || [],
+        cellStates: activePg.cellStates || {}
+      });
     }
     const meta = {
       settings: D.settings, curEnv: D.curEnv, curGroup: D.curGroup,
       environments: D.environments, groups: D.groups, inbox: D.inbox
     };
     cacheMeta(meta);
-    cachePagesMeta(D.pages.map(p => ({
+    cachePagesMeta(D.pages.filter(p => p).map(p => ({
       id: p.id, groupId: p.groupId, name: p.name, pageType: p.pageType,
       zoom: p.zoom, panX: p.panX, panY: p.panY, bg: p.bg, bgType: p.bgType,
       tabColor: p.tabColor || ''

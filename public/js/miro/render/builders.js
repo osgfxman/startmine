@@ -16,11 +16,23 @@
     const page = cp();
     if (!page.miroCards) page.miroCards = [];
     const board = document.getElementById('miro-board');
+    if (board) {
+      board.style.width = '';
+      board.style.height = '';
+    }
     // Clear pinned layer (elements from previous page)
     const _pl = document.getElementById('miro-pinned-layer');
     if (_pl) _pl.innerHTML = '';
-    // Remove only card elements, preserve selection overlays
-    board.querySelectorAll('.miro-card, .miro-life, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed, .miro-overlay-widget').forEach((el) => el.remove());
+    // Remove only card elements, cell viewports, and guides, preserving selection overlays
+    board.querySelectorAll('.miro-card, .miro-life, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed, .miro-overlay-widget, .miro-cell-viewport, .miro-guide-v, .miro-guide-h').forEach((el) => el.remove());
+
+    // Slices Mode rendering delegation
+    const hasGuides = page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
+    if (hasGuides && typeof window.renderMiroSlices === 'function') {
+      window.renderMiroSlices(page);
+      if (typeof window.updateMiroScrollbars === 'function') window.updateMiroScrollbars();
+      return;
+    }
     // Clean up grid toolbars that live in document.body
     document.querySelectorAll('.mg-toolbar[data-grid-id]').forEach(t => t.remove());
     // Clear selection state
