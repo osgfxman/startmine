@@ -3046,7 +3046,7 @@ function _handleContextMenu(e) {
   const pinItem = document.querySelector('[data-action="pin-toggle"]');
   if (pinItem) {
     const page = typeof cp === 'function' ? cp() : {};
-    const cards = page.cards || [];
+    const cards = page.miroCards || [];
     const cardData = cards.find(c => c.id === cid);
     const isPinned = cardData && cardData.pinned;
     const label = pinItem.querySelector('.ctx-label');
@@ -3087,41 +3087,58 @@ if (_pinnedLayer) {
 // ─── Unpin All — emergency escape for stuck pinned elements ───
 function unpinAll() {
   const pinnedLayer = document.getElementById('miro-pinned-layer');
-  if (!pinnedLayer) return;
   const board = document.getElementById('miro-board');
   const page = typeof cp === 'function' ? cp() : {};
-  const cards = page.cards || [];
-  // Move all children back to board
-  while (pinnedLayer.firstChild) {
-    const el = pinnedLayer.firstChild;
-    const cid = el.dataset && el.dataset.cid;
-    if (cid) {
-      const cardData = cards.find(c => c.id === cid);
-      if (cardData) {
-        const origX = cardData._savedX != null ? cardData._savedX : (cardData.x || 0);
-        const origY = cardData._savedY != null ? cardData._savedY : (cardData.y || 0);
-        const origW = cardData._savedW != null ? cardData._savedW : (cardData.w || 200);
-        const origH = cardData._savedH != null ? cardData._savedH : (cardData.h || 150);
-        cardData.pinned = false;
-        cardData.x = origX;
-        cardData.y = origY;
-        cardData.w = origW;
-        cardData.h = origH;
-        delete cardData._pinScreenX; delete cardData._pinScreenY;
-        delete cardData._pinScreenW; delete cardData._pinScreenH;
-        delete cardData._savedX; delete cardData._savedY;
-        delete cardData._savedW; delete cardData._savedH;
-        el.style.position = 'absolute';
-        el.style.left = origX + 'px';
-        el.style.top = origY + 'px';
-        el.style.width = origW + 'px';
-        el.style.height = origH + 'px';
+  const cards = page.miroCards || [];
+  // Unpin from global pinned layer
+  if (pinnedLayer) {
+    while (pinnedLayer.firstChild) {
+      const el = pinnedLayer.firstChild;
+      const cid = el.dataset && el.dataset.cid;
+      if (cid) {
+        const cardData = cards.find(function(c) { return c.id === cid; });
+        if (cardData) {
+          var origX = cardData._savedX != null ? cardData._savedX : (cardData.x || 0);
+          var origY = cardData._savedY != null ? cardData._savedY : (cardData.y || 0);
+          var origW = cardData._savedW != null ? cardData._savedW : (cardData.w || 200);
+          var origH = cardData._savedH != null ? cardData._savedH : (cardData.h || 150);
+          cardData.pinned = false;
+          cardData.x = origX; cardData.y = origY;
+          cardData.w = origW; cardData.h = origH;
+          delete cardData._pinScreenX; delete cardData._pinScreenY;
+          delete cardData._pinScreenW; delete cardData._pinScreenH;
+          delete cardData._savedX; delete cardData._savedY;
+          delete cardData._savedW; delete cardData._savedH;
+          delete cardData._pinCellX; delete cardData._pinCellY;
+          delete cardData._pinCellW; delete cardData._pinCellH;
+          el.style.position = 'absolute';
+          el.style.left = origX + 'px';
+          el.style.top = origY + 'px';
+          el.style.width = origW + 'px';
+          el.style.height = origH + 'px';
+        }
       }
+      if (board) board.appendChild(el);
+      else pinnedLayer.removeChild(el);
     }
-    if (board) board.appendChild(el);
-    else pinnedLayer.removeChild(el);
   }
+  // Also clear pinned flag on any remaining cards (cell-pinned)
+  cards.forEach(function(cd) {
+    if (!cd.pinned) return;
+    cd.pinned = false;
+    if (cd._savedX != null) cd.x = cd._savedX;
+    if (cd._savedY != null) cd.y = cd._savedY;
+    if (cd._savedW != null) cd.w = cd._savedW;
+    if (cd._savedH != null) cd.h = cd._savedH;
+    delete cd._pinScreenX; delete cd._pinScreenY;
+    delete cd._pinScreenW; delete cd._pinScreenH;
+    delete cd._savedX; delete cd._savedY;
+    delete cd._savedW; delete cd._savedH;
+    delete cd._pinCellX; delete cd._pinCellY;
+    delete cd._pinCellW; delete cd._pinCellH;
+  });
   if (typeof sv === 'function') sv();
+  if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
   if (typeof showToast === 'function') showToast('📍 All elements unpinned');
 }
 

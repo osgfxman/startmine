@@ -706,7 +706,7 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
         if (!c) return;
         let nx = orig.x + finalDx;
         let ny = orig.y + finalDy;
-        if (typeof window.clampMiroCardDrag === 'function') {
+        if (!ev.ctrlKey && typeof window.clampMiroCardDrag === 'function') {
           const clamped = window.clampMiroCardDrag(c, nx, ny);
           nx = clamped.x;
           ny = clamped.y;
@@ -735,7 +735,15 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
         if (cardEl) cardEl.style.zIndex = '';
       });
 
-      if (moved || hasCloned) sv();
+      if (moved || hasCloned) {
+        // Re-partition cards into cells after drag (handles cross-cell moves)
+        if (typeof window.partitionMiroCardsIntoCells === 'function') {
+          const _canvas = document.getElementById('miro-canvas');
+          if (_canvas) window.partitionMiroCardsIntoCells(page, _canvas.clientWidth, _canvas.clientHeight);
+        }
+        sv();
+        if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+      }
     }
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
@@ -994,22 +1002,52 @@ function attachLockUI(el, card) {
   }
 
   function pinElement() {
-    const pinnedLayer = document.getElementById('miro-pinned-layer');
-    if (!pinnedLayer) return;
     // Save original canvas position & size for restore on unpin
     card._savedX = card.x;
     card._savedY = card.y;
     card._savedW = card.w;
     card._savedH = card.h;
-    // Get EXACT screen-rendered position & size (includes zoom effect)
-    const rect = el.getBoundingClientRect();
     card.pinned = true;
+
+    // Cell-local pinning: pin relative to cell viewport
+    if (card.cell) {
+      const parts = card.cell.split('_');
+      const col = parseInt(parts[0]), row = parseInt(parts[1]);
+      const cellEl = document.querySelector('.miro-cell-viewport[data-col="' + col + '"][data-row="' + row + '"]');
+      if (cellEl) {
+        const cellRect = cellEl.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        card._pinCellX = elRect.left - cellRect.left;
+        card._pinCellY = elRect.top - cellRect.top;
+        card._pinCellW = elRect.width;
+        card._pinCellH = elRect.height;
+        cellEl.appendChild(el);
+        el.style.position = 'absolute';
+        el.style.left = card._pinCellX + 'px';
+        el.style.top = card._pinCellY + 'px';
+        el.style.width = card._pinCellW + 'px';
+        el.style.height = card._pinCellH + 'px';
+        el.style.zIndex = '20';
+        el.style.transform = 'none';
+        pinIcon.textContent = '📌';
+        pinBtn.title = 'Unpin from cell';
+        pinBtn.style.background = 'rgba(255,107,53,.6)';
+        pinBtn.style.opacity = '1';
+        showPinBadge();
+        sv();
+        if (typeof showToast === 'function') showToast('📌 Pinned to cell');
+        return;
+      }
+    }
+
+    // Global pinning (non-cell cards)
+    const pinnedLayer = document.getElementById('miro-pinned-layer');
+    if (!pinnedLayer) return;
+    const rect = el.getBoundingClientRect();
     card._pinScreenX = rect.left;
     card._pinScreenY = rect.top;
     card._pinScreenW = rect.width;
     card._pinScreenH = rect.height;
-    // Move to pinned layer — set BOTH position AND size to screen values
-    // This ensures ZERO visual change
     pinnedLayer.appendChild(el);
     el.style.position = 'fixed';
     el.style.left = rect.left + 'px';
@@ -1042,17 +1080,36 @@ function attachLockUI(el, card) {
     delete card._pinScreenY;
     delete card._pinScreenW;
     delete card._pinScreenH;
+    delete card._pinCellX;
+    delete card._pinCellY;
+    delete card._pinCellW;
+    delete card._pinCellH;
     delete card._savedX;
     delete card._savedY;
     delete card._savedW;
     delete card._savedH;
+    
     // Move back to board at original canvas coords & size
-    board.appendChild(el);
+    if (card.cell) {
+      const parts = card.cell.split('_');
+      const col = parseInt(parts[0]), row = parseInt(parts[1]);
+      const cellBoard = document.querySelector(`.miro-cell-viewport[data-col="${col}"][data-row="${row}"] .miro-cell-board`);
+      if (cellBoard) {
+        cellBoard.appendChild(el);
+      } else {
+        board.appendChild(el);
+      }
+    } else {
+      board.appendChild(el);
+    }
     el.style.position = 'absolute';
     el.style.left = origX + 'px';
     el.style.top = origY + 'px';
     el.style.width = origW + 'px';
     el.style.height = origH + 'px';
+    el.style.zIndex = '';
+    el.style.transform = '';
+    
     pinIcon.textContent = '📍';
     pinBtn.title = 'Pin to screen';
     pinBtn.style.background = 'rgba(0,0,0,.55)';
@@ -1085,6 +1142,24 @@ function attachLockUI(el, card) {
   // If card was saved as pinned, re-apply on load
   if (card.pinned) {
     requestAnimationFrame(() => {
+      if (card.cell) {
+        const parts = card.cell.split('_');
+        const col = parseInt(parts[0]), row = parseInt(parts[1]);
+        const cellEl = document.querySelector(`.miro-cell-viewport[data-col="${col}"][data-row="${row}"]`);
+        if (cellEl) {
+          cellEl.appendChild(el);
+          el.style.position = 'absolute';
+          el.style.left = (card._pinCellX || 0) + 'px';
+          el.style.top = (card._pinCellY || 0) + 'px';
+          el.style.width = (card._pinCellW || card.w || 200) + 'px';
+          el.style.height = (card._pinCellH || card.h || 150) + 'px';
+          el.style.zIndex = '20';
+          el.style.transform = 'none';
+          pinBtn.style.background = 'rgba(255,107,53,.6)';
+          showPinBadge();
+          return;
+        }
+      }
       const pinnedLayer = document.getElementById('miro-pinned-layer');
       if (pinnedLayer) {
         pinnedLayer.appendChild(el);

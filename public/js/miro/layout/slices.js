@@ -93,14 +93,42 @@
           top: 8px;
           left: 8px;
           font-size: 0.65rem;
-          color: rgba(255, 255, 255, 0.35);
+          color: rgba(255, 255, 255, 0.55);
           background: rgba(0, 0, 0, 0.6);
-          padding: 2px 6px;
-          border-radius: 4px;
-          pointer-events: none;
+          padding: 3px 8px;
+          border-radius: 6px;
+          pointer-events: auto;
+          cursor: pointer;
           z-index: 10;
           font-weight: bold;
           font-family: var(--font);
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          transition: background .15s, color .15s;
+          user-select: none;
+        }
+        .miro-cell-label:hover {
+          background: rgba(108, 143, 255, 0.35);
+          color: rgba(255, 255, 255, 0.85);
+        }
+        .miro-cell-color-tag {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          flex-shrink: 0;
+        }
+        .miro-cell-zoom-text {
+          opacity: 0.6;
+          font-weight: 400;
+          font-size: 0.6rem;
+        }
+        .miro-cell-bg-overlay {
+          position: absolute;
+          top: 0; left: 0; right: 0; bottom: 0;
+          pointer-events: none;
+          border-radius: 12px;
+          z-index: 0;
         }
         /* Custom Context Menu */
         .miro-slices-menu {
@@ -123,6 +151,130 @@
         .miro-slices-menu-item:hover {
           background: #f5f7fa;
           color: var(--ac);
+        }
+        /* Cell Settings Modal */
+        .miro-cell-modal-overlay {
+          position: fixed;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(0,0,0,0.55);
+          z-index: 3000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          backdrop-filter: blur(4px);
+        }
+        .miro-cell-modal {
+          background: #1a1d2e;
+          border: 1px solid rgba(108, 143, 255, 0.3);
+          border-radius: 16px;
+          padding: 20px 24px;
+          min-width: 300px;
+          max-width: 380px;
+          box-shadow: 0 12px 48px rgba(0,0,0,0.6);
+          font-family: var(--font);
+          color: #e8eaf6;
+        }
+        .miro-cell-modal h3 {
+          margin: 0 0 16px 0;
+          font-size: 0.9rem;
+          color: #fff;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .miro-cell-modal .mcm-row {
+          margin-bottom: 12px;
+        }
+        .miro-cell-modal .mcm-row label {
+          display: block;
+          font-size: 0.65rem;
+          color: rgba(255,255,255,0.5);
+          margin-bottom: 4px;
+        }
+        .miro-cell-modal .mcm-row input[type="text"] {
+          width: 100%;
+          background: rgba(255,255,255,0.08);
+          border: 1px solid rgba(255,255,255,0.15);
+          border-radius: 8px;
+          padding: 6px 10px;
+          color: #fff;
+          font-size: 0.75rem;
+          outline: none;
+          box-sizing: border-box;
+        }
+        .miro-cell-modal .mcm-row input[type="text"]:focus {
+          border-color: #6c8fff;
+        }
+        .miro-cell-modal .mcm-colors {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+        }
+        .miro-cell-modal .mcm-csw {
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          cursor: pointer;
+          border: 2px solid transparent;
+          transition: border-color .12s, transform .12s;
+        }
+        .miro-cell-modal .mcm-csw:hover {
+          transform: scale(1.15);
+        }
+        .miro-cell-modal .mcm-csw.sel {
+          border-color: #fff;
+        }
+        .miro-cell-modal .mcm-bg-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .miro-cell-modal .mcm-bg-row input[type="color"] {
+          width: 36px;
+          height: 28px;
+          border: none;
+          background: none;
+          cursor: pointer;
+          border-radius: 6px;
+        }
+        .miro-cell-modal .mcm-bg-row input[type="range"] {
+          flex: 1;
+          accent-color: #6c8fff;
+        }
+        .miro-cell-modal .mcm-bg-row .mcm-opacity-val {
+          font-size: 0.65rem;
+          color: rgba(255,255,255,0.5);
+          min-width: 30px;
+          text-align: right;
+        }
+        .miro-cell-modal .mcm-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+          margin-top: 16px;
+        }
+        .miro-cell-modal .mcm-btn {
+          padding: 6px 16px;
+          border-radius: 8px;
+          border: none;
+          cursor: pointer;
+          font-size: 0.7rem;
+          font-weight: 600;
+          transition: background .12s;
+        }
+        .miro-cell-modal .mcm-btn-cancel {
+          background: rgba(255,255,255,0.1);
+          color: rgba(255,255,255,0.6);
+        }
+        .miro-cell-modal .mcm-btn-cancel:hover {
+          background: rgba(255,255,255,0.15);
+        }
+        .miro-cell-modal .mcm-btn-save {
+          background: #6c8fff;
+          color: #fff;
+        }
+        .miro-cell-modal .mcm-btn-save:hover {
+          background: #5a7de8;
         }
       `;
       document.head.appendChild(style);
@@ -276,10 +428,48 @@
         cellDiv.style.height = ((hg[r+1] - hg[r]) * 100) + '%';
         cellDiv.style.border = '1px dashed rgba(108, 143, 255, 0.35)';
 
-        // Debug cell label
+        // Apply custom background color if set
+        if (page.cellStates[cellKey] && page.cellStates[cellKey].bgColor) {
+          const bg = page.cellStates[cellKey].bgColor;
+          const opacity = page.cellStates[cellKey].bgOpacity != null ? page.cellStates[cellKey].bgOpacity : 0.15;
+          const overlay = document.createElement('div');
+          overlay.className = 'miro-cell-bg-overlay';
+          overlay.style.background = bg;
+          overlay.style.opacity = opacity;
+          cellDiv.appendChild(overlay);
+        }
+
+        // Interactive cell label with title, color tag, and zoom
         const lbl = document.createElement('div');
         lbl.className = 'miro-cell-label';
-        lbl.textContent = `Cell [${c+1}, ${r+1}]`;
+
+        // Color tag dot
+        const cellState = page.cellStates[cellKey] || {};
+        if (cellState.colorTag) {
+          const dot = document.createElement('span');
+          dot.className = 'miro-cell-color-tag';
+          dot.style.background = cellState.colorTag;
+          lbl.appendChild(dot);
+        }
+
+        // Title text
+        const titleSpan = document.createElement('span');
+        titleSpan.textContent = cellState.title || `Cell [${c+1}, ${r+1}]`;
+        lbl.appendChild(titleSpan);
+
+        // Zoom percentage
+        const zoomSpan = document.createElement('span');
+        zoomSpan.className = 'miro-cell-zoom-text';
+        zoomSpan.textContent = `(${cellState.zoom || 100}%)`;
+        lbl.appendChild(zoomSpan);
+
+        // Click to open settings modal
+        lbl.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          ev.preventDefault();
+          showCellSettingsModal(cellKey);
+        });
+
         cellDiv.appendChild(lbl);
 
         // Internal cell board
@@ -340,7 +530,19 @@
               const lockBtn = el.querySelector('.mc-lock');
               if (delBtn) delBtn.style.setProperty('--inv-zoom', '1');
               if (lockBtn) lockBtn.style.setProperty('--inv-zoom', '1');
-              cellBoard.appendChild(el);
+              
+              if (card.pinned) {
+                cellDiv.appendChild(el);
+                el.style.position = 'absolute';
+                el.style.left = (card._pinCellX || 0) + 'px';
+                el.style.top = (card._pinCellY || 0) + 'px';
+                el.style.width = (card._pinCellW || card.w || 200) + 'px';
+                el.style.height = (card._pinCellH || card.h || 150) + 'px';
+                el.style.zIndex = '20';
+                el.style.transform = 'none';
+              } else {
+                cellBoard.appendChild(el);
+              }
             }
           } catch (err) {
             console.error('[CELL RENDER ERROR]', card && card.type, card && card.id, err);
@@ -526,8 +728,19 @@
 
     (page.miroCards || []).forEach(card => {
       // Calculate absolute center coords in board space
-      const cx = (card.x || 0) + (card.w || 280) / 2;
-      const cy = (card.y || 0) + (card.h || 240) / 2;
+      let absX = card.x || 0;
+      let absY = card.y || 0;
+      if (card.cell) {
+        const parts = card.cell.split('_');
+        const c = parseInt(parts[0]), r = parseInt(parts[1]);
+        const cellLeft = vg[c] * canvasW;
+        const cellTop = hg[r] * canvasH;
+        absX = cellLeft + absX;
+        absY = cellTop + absY;
+      }
+
+      const cx = absX + (card.w || 280) / 2;
+      const cy = absY + (card.h || 240) / 2;
 
       // Find viewport col/row that contains center
       const pctX = cx / canvasW;
@@ -550,20 +763,10 @@
       const cellLeft = vg[col] * canvasW;
       const cellTop = hg[row] * canvasH;
 
-      // If it was already in another cell, translate back to absolute first
-      if (card.cell) {
-        const oldParts = card.cell.split('_');
-        const oc = parseInt(oldParts[0]), or = parseInt(oldParts[1]);
-        const oldLeft = vg[oc] * canvasW;
-        const oldTop = hg[or] * canvasH;
-        card.x = oldLeft + (card.x || 0);
-        card.y = oldTop + (card.y || 0);
-      }
-
       // Convert absolute to local cell coordinates
       card.cell = targetCell;
-      card.x = (card.x || 0) - cellLeft;
-      card.y = (card.y || 0) - cellTop;
+      card.x = absX - cellLeft;
+      card.y = absY - cellTop;
     });
   };
 
@@ -636,6 +839,9 @@
 
     const canvas = document.getElementById('miro-canvas');
     const W = canvas.clientWidth, H = canvas.clientHeight;
+
+    // Partition cards first to ensure correct coordinates mapping
+    partitionMiroCardsIntoCells(page, W, H);
 
     const vg = [0, ...[...page.vGuides].sort((a,b)=>a-b), 1];
     const hg = [0, ...[...page.hGuides].sort((a,b)=>a-b), 1];
@@ -760,7 +966,7 @@
     const col = parseInt(parts[0]), row = parseInt(parts[1]);
     const cellEl = document.querySelector(`.miro-cell-viewport[data-col="${col}"][data-row="${row}"]`);
     if (cellEl) {
-      clampCellState(_activeCellKey, cellEl.clientWidth, cellEl.clientHeight);
+      if (!e.ctrlKey) clampCellState(_activeCellKey, cellEl.clientWidth, cellEl.clientHeight);
       const cellBoard = cellEl.querySelector('.miro-cell-board');
       if (cellBoard) {
         const z = state.zoom / 100;
@@ -867,7 +1073,7 @@
       clampCellState(cellKey, cellW, cellH);
     }
 
-    // Live update board style transforms
+    // Live update board style transforms and zoom text
     document.querySelectorAll('.miro-cell-viewport').forEach(cvEl => {
       const k = cvEl.dataset.cellKey;
       const cState = page.cellStates[k];
@@ -877,6 +1083,9 @@
           const z = cState.zoom / 100;
           cellBoard.style.transform = `translate(${cState.panX}px, ${cState.panY}px) scale(${z})`;
         }
+        // Update zoom text in label
+        const zoomText = cvEl.querySelector('.miro-cell-zoom-text');
+        if (zoomText) zoomText.textContent = `(${cState.zoom}%)`;
       }
     });
 
@@ -885,6 +1094,161 @@
 
     return true;
   };
+
+  // ─── Cell Settings Modal ───
+  const _colorTagPalette = [
+    '#ff4444', '#ff8a65', '#ffca28', '#66bb6a', '#42a5f5',
+    '#7e57c2', '#ec407a', '#26c6da', '#8d6e63', '#78909c'
+  ];
+
+  function showCellSettingsModal(cellKey) {
+    // Remove any existing modal
+    document.querySelectorAll('.miro-cell-modal-overlay').forEach(el => el.remove());
+
+    const page = cp();
+    if (!page || !page.cellStates) return;
+    if (!page.cellStates[cellKey]) page.cellStates[cellKey] = { zoom: 100, panX: 0, panY: 0 };
+    const state = page.cellStates[cellKey];
+    const parts = cellKey.split('_');
+    const c = parseInt(parts[0]), r = parseInt(parts[1]);
+
+    const overlay = document.createElement('div');
+    overlay.className = 'miro-cell-modal-overlay';
+
+    const modal = document.createElement('div');
+    modal.className = 'miro-cell-modal';
+
+    // Title
+    const h3 = document.createElement('h3');
+    h3.textContent = `⚙️ Cell [${c+1}, ${r+1}] Settings`;
+    modal.appendChild(h3);
+
+    // Row: Title input
+    const titleRow = document.createElement('div');
+    titleRow.className = 'mcm-row';
+    const titleLabel = document.createElement('label');
+    titleLabel.textContent = 'Title';
+    const titleInput = document.createElement('input');
+    titleInput.type = 'text';
+    titleInput.value = state.title || '';
+    titleInput.placeholder = `Cell [${c+1}, ${r+1}]`;
+    titleRow.appendChild(titleLabel);
+    titleRow.appendChild(titleInput);
+    modal.appendChild(titleRow);
+
+    // Row: Color Tag
+    const colorRow = document.createElement('div');
+    colorRow.className = 'mcm-row';
+    const colorLabel = document.createElement('label');
+    colorLabel.textContent = 'Color Tag';
+    colorRow.appendChild(colorLabel);
+    const colorContainer = document.createElement('div');
+    colorContainer.className = 'mcm-colors';
+    let selectedColor = state.colorTag || '';
+
+    // "None" swatch
+    const noneSw = document.createElement('div');
+    noneSw.className = 'mcm-csw' + (!selectedColor ? ' sel' : '');
+    noneSw.style.background = 'rgba(255,255,255,0.1)';
+    noneSw.title = 'None';
+    noneSw.textContent = '✕';
+    noneSw.style.display = 'flex';
+    noneSw.style.alignItems = 'center';
+    noneSw.style.justifyContent = 'center';
+    noneSw.style.fontSize = '0.55rem';
+    noneSw.style.color = 'rgba(255,255,255,0.4)';
+    noneSw.onclick = () => {
+      selectedColor = '';
+      colorContainer.querySelectorAll('.mcm-csw').forEach(s => s.classList.remove('sel'));
+      noneSw.classList.add('sel');
+    };
+    colorContainer.appendChild(noneSw);
+
+    _colorTagPalette.forEach(hex => {
+      const sw = document.createElement('div');
+      sw.className = 'mcm-csw' + (selectedColor === hex ? ' sel' : '');
+      sw.style.background = hex;
+      sw.onclick = () => {
+        selectedColor = hex;
+        colorContainer.querySelectorAll('.mcm-csw').forEach(s => s.classList.remove('sel'));
+        sw.classList.add('sel');
+      };
+      colorContainer.appendChild(sw);
+    });
+    colorRow.appendChild(colorContainer);
+    modal.appendChild(colorRow);
+
+    // Row: Background Color & Opacity
+    const bgRow = document.createElement('div');
+    bgRow.className = 'mcm-row';
+    const bgLabel = document.createElement('label');
+    bgLabel.textContent = 'Background Color & Opacity';
+    bgRow.appendChild(bgLabel);
+    const bgContainer = document.createElement('div');
+    bgContainer.className = 'mcm-bg-row';
+
+    const bgColorInput = document.createElement('input');
+    bgColorInput.type = 'color';
+    bgColorInput.value = state.bgColor || '#6c8fff';
+
+    const opacitySlider = document.createElement('input');
+    opacitySlider.type = 'range';
+    opacitySlider.min = '0';
+    opacitySlider.max = '100';
+    opacitySlider.value = Math.round((state.bgOpacity != null ? state.bgOpacity : 0) * 100);
+
+    const opacityVal = document.createElement('span');
+    opacityVal.className = 'mcm-opacity-val';
+    opacityVal.textContent = opacitySlider.value + '%';
+    opacitySlider.oninput = () => { opacityVal.textContent = opacitySlider.value + '%'; };
+
+    bgContainer.appendChild(bgColorInput);
+    bgContainer.appendChild(opacitySlider);
+    bgContainer.appendChild(opacityVal);
+    bgRow.appendChild(bgContainer);
+    modal.appendChild(bgRow);
+
+    // Actions
+    const actions = document.createElement('div');
+    actions.className = 'mcm-actions';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'mcm-btn mcm-btn-cancel';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.onclick = () => overlay.remove();
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'mcm-btn mcm-btn-save';
+    saveBtn.textContent = 'Save';
+    saveBtn.onclick = () => {
+      state.title = titleInput.value.trim() || '';
+      state.colorTag = selectedColor;
+      const oVal = parseInt(opacitySlider.value);
+      if (oVal > 0) {
+        state.bgColor = bgColorInput.value;
+        state.bgOpacity = oVal / 100;
+      } else {
+        delete state.bgColor;
+        delete state.bgOpacity;
+      }
+      overlay.remove();
+      sv();
+      buildMiroCanvas();
+    };
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(saveBtn);
+    modal.appendChild(actions);
+
+    overlay.appendChild(modal);
+    // Close on overlay click (outside modal)
+    overlay.addEventListener('click', (ev) => {
+      if (ev.target === overlay) overlay.remove();
+    });
+
+    document.body.appendChild(overlay);
+    titleInput.focus();
+  }
 
   // Register namespace
   SM.miro.layout = SM.miro.layout || {};
