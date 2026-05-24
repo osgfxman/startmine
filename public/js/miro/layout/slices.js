@@ -966,7 +966,7 @@
     const col = parseInt(parts[0]), row = parseInt(parts[1]);
     const cellEl = document.querySelector(`.miro-cell-viewport[data-col="${col}"][data-row="${row}"]`);
     if (cellEl) {
-      if (!e.ctrlKey) clampCellState(_activeCellKey, cellEl.clientWidth, cellEl.clientHeight);
+      if (!e.altKey) clampCellState(_activeCellKey, cellEl.clientWidth, cellEl.clientHeight);
       const cellBoard = cellEl.querySelector('.miro-cell-board');
       if (cellBoard) {
         const z = state.zoom / 100;
@@ -1037,57 +1037,23 @@
 
     const direction = e.deltaY > 0 ? -1 : 1;
 
-    // CHECK: Ctrl key zoom syncs zoom levels across ALL cells!
-    if (e.ctrlKey) {
-      const newZoomNum = getNextLocalZoom(cellState.zoom, direction);
-      const newZoom = newZoomNum / 100;
-      
-      // Update ALL cells
-      for (const k in page.cellStates) {
-        const cState = page.cellStates[k];
-        const oldZ = cState.zoom / 100;
-        cState.zoom = newZoomNum;
-        
-        // Adjust pan relative to cell center so it stays centered
-        const cParts = k.split('_');
-        const cc = parseInt(cParts[0]), cr = parseInt(cParts[1]);
-        const cEl = document.querySelector(`.miro-cell-viewport[data-col="${cc}"][data-row="${cr}"]`);
-        if (cEl) {
-          const cx = cEl.clientWidth / 2;
-          const cy = cEl.clientHeight / 2;
-          const bpX = (cx - cState.panX) / oldZ;
-          const bpY = (cy - cState.panY) / oldZ;
-          cState.panX = cx - (bpX * newZoom);
-          cState.panY = cy - (bpY * newZoom);
-          clampCellState(k, cEl.clientWidth, cEl.clientHeight);
-        }
-      }
-    } else {
-      // Single cell zoom
-      const newZoomNum = getNextLocalZoom(cellState.zoom, direction);
-      cellState.zoom = newZoomNum;
-      const newZoom = newZoomNum / 100;
+    // Single cell zoom only (no global sync to avoid trackpad pinch conflict)
+    const newZoomNum = getNextLocalZoom(cellState.zoom, direction);
+    cellState.zoom = newZoomNum;
+    const newZoom = newZoomNum / 100;
 
-      cellState.panX = cursorX - (boardPointX * newZoom);
-      cellState.panY = cursorY - (boardPointY * newZoom);
-      clampCellState(cellKey, cellW, cellH);
+    cellState.panX = cursorX - (boardPointX * newZoom);
+    cellState.panY = cursorY - (boardPointY * newZoom);
+    clampCellState(cellKey, cellW, cellH);
+
+    // Live update board style transforms and zoom text for this cell only
+    const cellBoard = cellViewport.querySelector('.miro-cell-board');
+    if (cellBoard) {
+      const z = cellState.zoom / 100;
+      cellBoard.style.transform = `translate(${cellState.panX}px, ${cellState.panY}px) scale(${z})`;
     }
-
-    // Live update board style transforms and zoom text
-    document.querySelectorAll('.miro-cell-viewport').forEach(cvEl => {
-      const k = cvEl.dataset.cellKey;
-      const cState = page.cellStates[k];
-      if (cState) {
-        const cellBoard = cvEl.querySelector('.miro-cell-board');
-        if (cellBoard) {
-          const z = cState.zoom / 100;
-          cellBoard.style.transform = `translate(${cState.panX}px, ${cState.panY}px) scale(${z})`;
-        }
-        // Update zoom text in label
-        const zoomText = cvEl.querySelector('.miro-cell-zoom-text');
-        if (zoomText) zoomText.textContent = `(${cState.zoom}%)`;
-      }
-    });
+    const zoomText = cellViewport.querySelector('.miro-cell-zoom-text');
+    if (zoomText) zoomText.textContent = `(${cellState.zoom}%)`;
 
     clearTimeout(_wheelSvTimer);
     _wheelSvTimer = setTimeout(() => sv(), 1000);

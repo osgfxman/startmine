@@ -270,12 +270,22 @@ window.addEventListener('beforeunload', () => {
     D.pages.forEach(p => {
       const wc = (p.widgets || []).length;
       const mc = (p.miroCards || []).length;
-      if (wc > 0 || mc > 0) {
+      const hc = (p.vGuides || []).length + (p.hGuides || []).length;
+      if (wc > 0 || mc > 0 || hc > 0 || p._guidesMode) {
+        const payload = {
+          widgets: p.widgets || [],
+          miroCards: p.miroCards || [],
+          vGuides: p.vGuides || [],
+          hGuides: p.hGuides || [],
+          _guidesMode: p._guidesMode || false,
+          lockedGuides: p.lockedGuides || [],
+          cellStates: p.cellStates || {}
+        };
         try {
-          localStorage.setItem(lsPageKey(p.id), JSON.stringify({ widgets: p.widgets, miroCards: p.miroCards }));
+          localStorage.setItem(lsPageKey(p.id), JSON.stringify(payload));
         } catch(e) { /* localStorage full, IDB already has it */ }
         // IndexedDB async — browser WILL finish this even after tab close
-        idbSet('page_' + p.id, { widgets: p.widgets, miroCards: p.miroCards });
+        idbSet('page_' + p.id, payload);
       }
     });
   }
@@ -304,12 +314,21 @@ function autoSnapshot() {
   D.pages.forEach(p => {
     const wc = (p.widgets || []).length;
     const mc = (p.miroCards || []).length;
-    if (wc > 0 || mc > 0) {
-      snapshot.pages[p.id] = { widgets: p.widgets, miroCards: p.miroCards };
+    const hc = (p.vGuides || []).length + (p.hGuides || []).length;
+    if (wc > 0 || mc > 0 || hc > 0 || p._guidesMode) {
+      snapshot.pages[p.id] = {
+        widgets: p.widgets || [],
+        miroCards: p.miroCards || [],
+        vGuides: p.vGuides || [],
+        hGuides: p.hGuides || [],
+        _guidesMode: p._guidesMode || false,
+        lockedGuides: p.lockedGuides || [],
+        cellStates: p.cellStates || {}
+      };
     } else {
       // Try cache
       const cached = getCachedPageData(p.id);
-      if (cached && ((cached.widgets || []).length > 0 || (cached.miroCards || []).length > 0)) {
+      if (cached && ((cached.widgets || []).length > 0 || (cached.miroCards || []).length > 0 || (cached.vGuides || []).length > 0 || (cached.hGuides || []).length > 0 || cached._guidesMode)) {
         snapshot.pages[p.id] = cached;
       }
     }
@@ -744,13 +763,22 @@ function renderMeta() {
 
 // Switch the active synchronized payload
 function switchActivePage(pageId) {
+  window._lastSyncedPageData = null;
   // ─── Safe Eviction: ONLY clear memory after verified cache write ───
   const prevPg = cp();
   if (prevPg && prevPg.id !== pageId) {
     const prevItemCount = (prevPg.widgets || []).length + (prevPg.miroCards || []).length;
     if (prevItemCount > 0) {
       // Save to cache and VERIFY before evicting from memory
-      const cacheOk = cachePageDataSafe(prevPg.id, { widgets: prevPg.widgets || [], miroCards: prevPg.miroCards || [] });
+      const cacheOk = cachePageDataSafe(prevPg.id, {
+        widgets: prevPg.widgets || [],
+        miroCards: prevPg.miroCards || [],
+        vGuides: prevPg.vGuides || [],
+        hGuides: prevPg.hGuides || [],
+        _guidesMode: prevPg._guidesMode || false,
+        lockedGuides: prevPg.lockedGuides || [],
+        cellStates: prevPg.cellStates || {}
+      });
       if (cacheOk) {
         // Cache verified — safe to evict
         prevPg.widgets = [];
@@ -838,21 +866,34 @@ function switchActivePage(pageId) {
     if (pg) {
       const incomingW = (pData.widgets || []).length;
       const incomingC = (pData.miroCards || []).length;
+      const incomingG = (pData.vGuides || []).length + (pData.hGuides || []).length;
       const localW = (pg.widgets || []).length;
       const localC = (pg.miroCards || []).length;
+      const localG = (pg.vGuides || []).length + (pg.hGuides || []).length;
       // ⛔ GUARD: If Firebase sends empty but we have local data, refuse the overwrite 
-      if (incomingW === 0 && incomingC === 0 && (localW > 0 || localC > 0)) {
-        console.error(`[FIREBASE GUARD ⛔] Incoming data for "${pg.name}" is EMPTY but local has ${localW}w+${localC}c — IGNORING Firebase update!`);
+      const incomingEmpty = (incomingW === 0 && incomingC === 0 && incomingG === 0);
+      const localHasData = (localW > 0 || localC > 0 || localG > 0);
+      if (incomingEmpty && localHasData) {
+        console.error(`[FIREBASE GUARD ⛔] Incoming data for "${pg.name}" is EMPTY but local has data/guides — IGNORING Firebase update!`);
         if (typeof showToast === 'function') showToast('⚠️ Empty data from server ignored — local data preserved', 4000);
         return; // Don't apply empty data
       }
       pg.widgets = pData.widgets || [];
       pg.miroCards = pData.miroCards || [];
-      pg.vGuides = pData.vGuides || [];
-      pg.hGuides = pData.hGuides || [];
-      pg._guidesMode = pData._guidesMode || false;
-      pg.lockedGuides = pData.lockedGuides || [];
-      pg.cellStates = pData.cellStates || {};
+      if (pData.vGuides !== undefined) pg.vGuides = pData.vGuides;
+      else if (pg.vGuides === undefined) pg.vGuides = [];
+      
+      if (pData.hGuides !== undefined) pg.hGuides = pData.hGuides;
+      else if (pg.hGuides === undefined) pg.hGuides = [];
+      
+      if (pData._guidesMode !== undefined) pg._guidesMode = pData._guidesMode;
+      else if (pg._guidesMode === undefined) pg._guidesMode = false;
+      
+      if (pData.lockedGuides !== undefined) pg.lockedGuides = pData.lockedGuides;
+      else if (pg.lockedGuides === undefined) pg.lockedGuides = [];
+      
+      if (pData.cellStates !== undefined) pg.cellStates = pData.cellStates;
+      else if (pg.cellStates === undefined) pg.cellStates = {};
       const fakeD = { pages: [pg] };
       sanitizeData(fakeD);
       _lastSyncedPageData = {
@@ -950,21 +991,36 @@ function saveSnapshot(silent = false) {
     pages: {}
   };
   D.pages.forEach(p => {
-    let widgets, miroCards;
+    let widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates;
     if (p.id === D.cur) {
       widgets = p.widgets || [];
       miroCards = p.miroCards || [];
+      vGuides = p.vGuides || [];
+      hGuides = p.hGuides || [];
+      _guidesMode = p._guidesMode || false;
+      lockedGuides = p.lockedGuides || [];
+      cellStates = p.cellStates || {};
     } else {
       const cached = getCachedPageData(p.id);
       if (cached) {
         widgets = cached.widgets || [];
         miroCards = cached.miroCards || [];
+        vGuides = cached.vGuides || [];
+        hGuides = cached.hGuides || [];
+        _guidesMode = cached._guidesMode || false;
+        lockedGuides = cached.lockedGuides || [];
+        cellStates = cached.cellStates || {};
       } else {
         widgets = p.widgets || [];
         miroCards = p.miroCards || [];
+        vGuides = p.vGuides || [];
+        hGuides = p.hGuides || [];
+        _guidesMode = p._guidesMode || false;
+        lockedGuides = p.lockedGuides || [];
+        cellStates = p.cellStates || {};
       }
     }
-    snapshot.pages[p.id] = { widgets, miroCards };
+    snapshot.pages[p.id] = { widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates };
   });
 
   const snapRef = `users/${USER_ID}/startmine_snapshots/${now}`;
@@ -1182,6 +1238,10 @@ async function getOrCreateDriveFolder(token) {
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent("name='" + GDRIVE_FOLDER_NAME + "' and mimeType='application/vnd.google-apps.folder' and trashed=false")}&fields=files(id,name)`,
     { headers: { 'Authorization': 'Bearer ' + token } }
   );
+  if (!searchResp.ok) {
+    const errText = await searchResp.text();
+    throw new Error('Google Drive search failed: ' + errText);
+  }
   const searchData = await searchResp.json();
   if (searchData.files && searchData.files.length > 0) {
     return searchData.files[0].id;
@@ -1199,7 +1259,14 @@ async function getOrCreateDriveFolder(token) {
       mimeType: 'application/vnd.google-apps.folder'
     })
   });
+  if (!createResp.ok) {
+    const errText = await createResp.text();
+    throw new Error('Google Drive folder creation failed: ' + errText);
+  }
   const folder = await createResp.json();
+  if (!folder.id) {
+    throw new Error('Google Drive folder creation returned no ID: ' + JSON.stringify(folder));
+  }
   return folder.id;
 }
 
@@ -1216,19 +1283,29 @@ function buildFullExportData() {
     pages: D.pages.map(p => {
       let widgets = p.widgets || [];
       let miroCards = p.miroCards || [];
+      let vGuides = p.vGuides || [];
+      let hGuides = p.hGuides || [];
+      let _guidesMode = p._guidesMode || false;
+      let lockedGuides = p.lockedGuides || [];
+      let cellStates = p.cellStates || {};
       // Use localStorage cache for pages without loaded data
-      if (widgets.length === 0 && miroCards.length === 0) {
+      if (widgets.length === 0 && miroCards.length === 0 && vGuides.length === 0 && hGuides.length === 0 && !_guidesMode) {
         const cached = getCachedPageData(p.id);
         if (cached) {
           widgets = cached.widgets || [];
           miroCards = cached.miroCards || [];
+          vGuides = cached.vGuides || [];
+          hGuides = cached.hGuides || [];
+          _guidesMode = cached._guidesMode || false;
+          lockedGuides = cached.lockedGuides || [];
+          cellStates = cached.cellStates || {};
         }
       }
       return {
         id: p.id, groupId: p.groupId, name: p.name,
         pageType: p.pageType, zoom: p.zoom, panX: p.panX, panY: p.panY,
         bg: p.bg, bgType: p.bgType, tabColor: p.tabColor || '',
-        widgets, miroCards
+        widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates
       };
     })
   }));
@@ -1391,11 +1468,24 @@ function doSelectiveExport() {
     pages: D.pages.filter(p => pageIds.has(p.id)).map(p => {
       let widgets = p.widgets || [];
       let miroCards = p.miroCards || [];
-      if (widgets.length === 0 && miroCards.length === 0) {
+      let vGuides = p.vGuides || [];
+      let hGuides = p.hGuides || [];
+      let _guidesMode = p._guidesMode || false;
+      let lockedGuides = p.lockedGuides || [];
+      let cellStates = p.cellStates || {};
+      if (widgets.length === 0 && miroCards.length === 0 && vGuides.length === 0 && hGuides.length === 0 && !_guidesMode) {
         const cached = getCachedPageData(p.id);
-        if (cached) { widgets = cached.widgets || []; miroCards = cached.miroCards || []; }
+        if (cached) {
+          widgets = cached.widgets || [];
+          miroCards = cached.miroCards || [];
+          vGuides = cached.vGuides || [];
+          hGuides = cached.hGuides || [];
+          _guidesMode = cached._guidesMode || false;
+          lockedGuides = cached.lockedGuides || [];
+          cellStates = cached.cellStates || {};
+        }
       }
-      return { ...p, widgets, miroCards };
+      return { ...p, widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates };
     })
   };
   
@@ -1579,7 +1669,17 @@ async function exportToGoogleDrive() {
   }
   try {
     showToast('☁️ Exporting to Google Drive…');
-    let token = await ensureGoogleToken();
+    let token;
+    try {
+      token = await ensureGoogleToken();
+    } catch (e) {
+      if (e.needsAuth) {
+        showToast('🔄 Google Drive authorization needed. Opening popup…');
+        token = await manualGoogleReAuth();
+      } else {
+        throw e;
+      }
+    }
     if (!token) throw new Error('No Google token');
     let { uploadResp, fileName } = await _doUpload(token);
     // Auto-retry on 401 (expired token)
@@ -1599,7 +1699,11 @@ async function exportToGoogleDrive() {
     return uploadResult;
   } catch (err) {
     console.error('[GDRIVE EXPORT ERROR]', err);
-    showToast('❌ Drive export failed: ' + err.message, 4000);
+    let msg = err.message || String(err);
+    if (err.code === 'auth/popup-blocked') {
+      msg = 'Browser popup blocked! Please check your browser address bar and allow popups for this site.';
+    }
+    showToast('❌ Drive export failed: ' + msg, 6000);
   }
 }
 
@@ -1607,7 +1711,18 @@ async function exportToGoogleDrive() {
 async function restoreFromGoogleDrive() {
   try {
     showToast('☁️ Loading backups from Google Drive…');
-    const token = await ensureGoogleToken();
+    let token;
+    try {
+      token = await ensureGoogleToken();
+    } catch (e) {
+      if (e.needsAuth) {
+        showToast('🔄 Google Drive authorization needed. Opening popup…');
+        token = await manualGoogleReAuth();
+      } else {
+        throw e;
+      }
+    }
+    if (!token) throw new Error('No Google token');
     const folderId = await getOrCreateDriveFolder(token);
 
     // List backup files in folder
@@ -1706,7 +1821,11 @@ Current state will be saved as a snapshot first.')) return;
 
   } catch (err) {
     console.error('[GDRIVE RESTORE ERROR]', err);
-    showToast('❌ Failed to load backups: ' + err.message, 4000);
+    let msg = err.message || String(err);
+    if (err.code === 'auth/popup-blocked') {
+      msg = 'Browser popup blocked! Please check your browser address bar and allow popups for this site.';
+    }
+    showToast('❌ Failed to load backups: ' + msg, 6000);
   }
 }
 

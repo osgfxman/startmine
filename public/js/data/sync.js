@@ -45,27 +45,57 @@
   // Push all page data (active page from memory, others from cache)
   D.pages.forEach(p => {
     if (!p) return;
-    let widgets, miroCards;
+    let widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates;
     if (p.id === D.cur) {
       // Active page: use live in-memory data
       widgets = p.widgets || [];
       miroCards = p.miroCards || [];
+      vGuides = p.vGuides || [];
+      hGuides = p.hGuides || [];
+      _guidesMode = p._guidesMode || false;
+      lockedGuides = p.lockedGuides || [];
+      cellStates = p.cellStates || {};
     } else {
       // Non-active page: always prefer cache (memory is evicted)
       const cached = getCachedPageData(p.id);
-      if (cached && (cached.widgets?.length > 0 || cached.miroCards?.length > 0)) {
+      const hasCachedData = cached && (
+        (cached.widgets && cached.widgets.length > 0) ||
+        (cached.miroCards && cached.miroCards.length > 0) ||
+        (cached.vGuides && cached.vGuides.length > 0) ||
+        (cached.hGuides && cached.hGuides.length > 0) ||
+        cached._guidesMode
+      );
+      if (hasCachedData) {
         widgets = cached.widgets || [];
         miroCards = cached.miroCards || [];
-      } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0)) {
+        vGuides = cached.vGuides || [];
+        hGuides = cached.hGuides || [];
+        _guidesMode = cached._guidesMode || false;
+        lockedGuides = cached.lockedGuides || [];
+        cellStates = cached.cellStates || {};
+      } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0) || (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode) {
         widgets = p.widgets || [];
         miroCards = p.miroCards || [];
+        vGuides = p.vGuides || [];
+        hGuides = p.hGuides || [];
+        _guidesMode = p._guidesMode || false;
+        lockedGuides = p.lockedGuides || [];
+        cellStates = p.cellStates || {};
       } else {
         // SAFETY: skip to avoid overwriting Firebase with empty data
         console.warn(`[SYNC GUARD] Skipping page "${p.name}" (${p.id}) — no data available`);
         return;
       }
     }
-    updates[`users/${USER_ID}/startmine_pages/${p.id}`] = { widgets, miroCards };
+    updates[`users/${USER_ID}/startmine_pages/${p.id}`] = {
+      widgets,
+      miroCards,
+      vGuides,
+      hGuides,
+      _guidesMode,
+      lockedGuides,
+      cellStates
+    };
   });
 
   return db.ref().update(updates)
@@ -212,11 +242,23 @@
         const pagesMetaRaw = snap.val() || [{ id: 'p0', groupId: 'g0', name: 'Home', pageType: 'miro', zoom: 100, panX: 0, panY: 0, bg: '', bgType: 'none' }];
         const pagesMeta = pagesMetaRaw.filter(p => p);
 
-        // FIX: Preserve heavy data (widgets/miroCards) for ALL loaded pages, not just active
+        // FIX: Preserve heavy data (widgets/miroCards) and guides/slices for ALL loaded pages, not just active
         const heavyDataMap = {};
         D.pages.forEach(p => {
-          if (p && ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0))) {
-            heavyDataMap[p.id] = { widgets: p.widgets || [], miroCards: p.miroCards || [] };
+          if (p) {
+            const hasData = (p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0);
+            const hasGuides = (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode;
+            if (hasData || hasGuides) {
+              heavyDataMap[p.id] = {
+                widgets: p.widgets || [],
+                miroCards: p.miroCards || [],
+                vGuides: p.vGuides || [],
+                hGuides: p.hGuides || [],
+                _guidesMode: p._guidesMode || false,
+                lockedGuides: p.lockedGuides || [],
+                cellStates: p.cellStates || {}
+              };
+            }
           }
         });
 
@@ -227,6 +269,11 @@
           if (p && heavyDataMap[p.id]) {
             p.widgets = heavyDataMap[p.id].widgets;
             p.miroCards = heavyDataMap[p.id].miroCards;
+            p.vGuides = heavyDataMap[p.id].vGuides;
+            p.hGuides = heavyDataMap[p.id].hGuides;
+            p._guidesMode = heavyDataMap[p.id]._guidesMode;
+            p.lockedGuides = heavyDataMap[p.id].lockedGuides;
+            p.cellStates = heavyDataMap[p.id].cellStates;
           }
         });
 
@@ -426,7 +473,14 @@
         } else {
           // NON-ACTIVE page — try cache, then memory
           const cached = getCachedPageData(p.id);
-          if (cached && (cached.widgets?.length > 0 || cached.miroCards?.length > 0)) {
+          const hasCachedData = cached && (
+            (cached.widgets && cached.widgets.length > 0) ||
+            (cached.miroCards && cached.miroCards.length > 0) ||
+            (cached.vGuides && cached.vGuides.length > 0) ||
+            (cached.hGuides && cached.hGuides.length > 0) ||
+            cached._guidesMode
+          );
+          if (hasCachedData) {
             widgets = cached.widgets || [];
             miroCards = cached.miroCards || [];
             vGuides = cached.vGuides || [];
@@ -434,7 +488,7 @@
             _guidesMode = cached._guidesMode || false;
             lockedGuides = cached.lockedGuides || [];
             cellStates = cached.cellStates || {};
-          } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0)) {
+          } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0) || (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode) {
             widgets = p.widgets || [];
             miroCards = p.miroCards || [];
             vGuides = p.vGuides || [];
@@ -451,7 +505,7 @@
           }
         }
         // ⛔ DOUBLE CHECK: Even after loading from cache, if still empty → skip
-        if (widgets.length === 0 && miroCards.length === 0) {
+        if (widgets.length === 0 && miroCards.length === 0 && vGuides.length === 0 && hGuides.length === 0 && !_guidesMode) {
           console.warn(`[SV GUARD ⛔] Page "${p.name}" resolved to 0 items — refusing to write.`);
           _skippedCount++;
           return;
@@ -576,7 +630,15 @@
         // Cache active page data to localStorage after successful save
         const activePg = cp();
         if (activePg) {
-          cachePageData(activePg.id, { widgets: activePg.widgets || [], miroCards: activePg.miroCards || [] });
+          cachePageData(activePg.id, {
+            widgets: activePg.widgets || [],
+            miroCards: activePg.miroCards || [],
+            vGuides: activePg.vGuides || [],
+            hGuides: activePg.hGuides || [],
+            _guidesMode: activePg._guidesMode || false,
+            lockedGuides: activePg.lockedGuides || [],
+            cellStates: activePg.cellStates || {}
+          });
         }
         // Clean up any pending deleted page nodes from Firebase
         if (_pendingDeletePageIds.length > 0) {

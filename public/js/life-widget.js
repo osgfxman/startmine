@@ -229,7 +229,7 @@
     if (!L.calEvents) L.calEvents = [];
     if (!L._calTS) L._calTS = 0;
     if (typeof L._monthFocus === 'undefined') L._monthFocus = null;
-    if (!L._domMap) L._domMap = new Map();
+    if (!L._domMap || !(L._domMap instanceof Map)) L._domMap = new Map();
     return L;
   }
   function clampCam(cam, W, H) {
@@ -1939,7 +1939,7 @@
         }
       }
 
-      if (!life._domMap) life._domMap = new Map();
+      if (!life._domMap || !(life._domMap instanceof Map)) life._domMap = new Map();
 
       var visibleDays = [];
       var capHit = false;
