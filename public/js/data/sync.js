@@ -129,53 +129,56 @@
   window.SM.core.expose('syncNow', window.syncNow);
 
   // Extracted setupShardedListeners
-  window.setupShardedListeners = function () {
+window.setupShardedListeners = function () {
     console.log('[SYNC] setupShardedListeners called');
-    try {
-      const metaRef = `users/${USER_ID}/startmine_meta`;
-      const pagesMetaRef = `users/${USER_ID}/startmine_pages_meta`;
+    if (!USER_ID || !db) return;
+    if (_offlineMode) return;
 
-      // ─── Instant load from localStorage cache ───
-      if (isFirstLoad) {
-        const cachedMeta = getCachedMeta();
-        const cachedPagesMeta = getCachedPagesMeta();
-        if (cachedMeta && cachedPagesMeta) {
-          D.settings = cachedMeta.settings || D.settings;
-          D.curEnv = cachedMeta.curEnv || D.curEnv;
-          D.curGroup = cachedMeta.curGroup || D.curGroup;
-          D.environments = cachedMeta.environments || D.environments;
-          D.groups = cachedMeta.groups || D.groups;
-          D.inbox = cachedMeta.inbox || D.inbox;
-          D.pages = cachedPagesMeta;
-          
-          if (window.sanitizeData) {
-            window.sanitizeData(D);
-             if (D.__modified) {
-               delete D.__modified;
-               if (Date.now() - _lastSanitizeSvTs > SANITIZE_SV_COOLDOWN) {
-                 _lastSanitizeSvTs = Date.now();
-                 setTimeout(() => { window.sv(true, true); }, 100);
-               }
-             }
-          }
-          const dg = D.settings.defaultGroup || '__last__';
-          const dp = D.settings.defaultPage || '__last__';
-          if (dg !== '__last__' && D.groups.some((g) => g.id === dg)) D.curGroup = dg;
-          if (dp !== '__last__' && D.pages.some((p) => p.id === dp)) D.cur = dp;
-          else {
+    // Detach old listeners
+    if (typeof detachAllListeners === 'function') detachAllListeners();
+
+    const metaRef = `users/${USER_ID}/startmine_meta`;
+    const pagesMetaRef = `users/${USER_ID}/startmine_pages_meta`;
+
+    // ─── 0. INSTANT PAINT from cache (before Firebase responds) ───
+    const cachedMeta = getCachedMeta();
+    const cachedPagesMeta = getCachedPagesMeta();
+    if (cachedMeta && cachedPagesMeta) {
+        D.settings = cachedMeta.settings || D.settings;
+        D.curEnv = cachedMeta.curEnv || D.curEnv;
+        D.curGroup = cachedMeta.curGroup || D.curGroup;
+        D.environments = cachedMeta.environments || D.environments;
+        D.groups = cachedMeta.groups || D.groups;
+        D.inbox = cachedMeta.inbox || D.inbox;
+        D.pages = cachedPagesMeta;
+
+        // Restore last page
+        const dg = D.settings.defaultGroup || '**last**';
+        const dp = D.settings.defaultPage || '**last**';
+        if (dg !== '**last**' && D.groups.some(g => g.id === dg)) D.curGroup = dg;
+        if (dp !== '**last**' && D.pages.some(p => p.id === dp)) D.cur = dp;
+        else {
             try {
-              const lastPid = localStorage.getItem(LS_CUR_PAGE);
-              if (lastPid && D.pages.some(p => p.id === lastPid)) D.cur = lastPid;
+                const lastPid = localStorage.getItem('sm_cur_page');
+                if (lastPid && D.pages.some(p => p.id === lastPid)) D.cur = lastPid;
             } catch(e) {}
-          }
-          if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
-          // Ensure curGroup matches the restored page
-          const rp2 = D.pages.find(p => p.id === D.cur);
-          if (rp2 && rp2.groupId) D.curGroup = rp2.groupId;
-          // Load cached page data for instant render
-          const cachedPage = getCachedPageData(D.cur);
-          const pg = cp();
-          if (pg && cachedPage) {
+        }
+        if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
+
+        // Ensure curGroup/curEnv match the restored page
+        const restoredPage = D.pages.find(p => p.id === D.cur);
+        if (restoredPage && restoredPage.groupId) {
+            D.curGroup = restoredPage.groupId;
+            const grp = D.groups.find(g => g.id === restoredPage.groupId);
+            if (grp && grp.envId) D.curEnv = grp.envId;
+        }
+
+        sanitizeData(D);
+
+        // Load active page data from cache
+        const cachedPage = getCachedPageData(D.cur);
+        const pg = cp();
+        if (pg && cachedPage) {
             pg.widgets = cachedPage.widgets || [];
             pg.miroCards = cachedPage.miroCards || [];
             pg.vGuides = cachedPage.vGuides || [];
@@ -183,170 +186,135 @@
             pg._guidesMode = cachedPage._guidesMode || false;
             pg.lockedGuides = cachedPage.lockedGuides || [];
             pg.cellStates = cachedPage.cellStates || {};
-            _lastSyncedPageData = {
-              widgets: JSON.stringify(pg.widgets),
-              miroCards: JSON.stringify(pg.miroCards)
-            };
-          }
-          renderMeta();
-          buildCols();
-          setSyncStatus('ok', 'Loaded from cache — syncing…');
+            pg.ts = cachedPage.ts || 0;
         }
-      }
 
-      // Listen to Metadata (settings, environments, groups, inbox, active selections)
-      db.ref(metaRef).on('value', (snap) => {
-        if (isOwnWrite()) return;
-        const meta = snap.val() || {
-          settings: { engine: 'bm', accent: '#6c8fff' },
-          curEnv: 'e0',
-          curGroup: 'g0',
-          environments: [{ id: 'e0', name: 'Main Env' }],
-          groups: [{ id: 'g0', name: 'Main Group', envId: 'e0' }],
-          inbox: []
-        };
-        D.settings = meta.settings || { engine: 'bm', accent: '#6c8fff' };
-        D.curEnv = meta.curEnv || 'e0';
-        D.curGroup = meta.curGroup || 'g0';
-        D.environments = meta.environments || [{ id: 'e0', name: 'Main Env' }];
-        D.groups = meta.groups || [{ id: 'g0', name: 'Main Group', envId: 'e0' }];
-        D.inbox = meta.inbox || [];
-        
-        if (window.sanitizeData) {
-          window.sanitizeData(D);
-        }
-        
-        const sanitizedMeta = {
-          settings: D.settings,
-          curEnv: D.curEnv,
-          curGroup: D.curGroup,
-          environments: D.environments,
-          groups: D.groups,
-          inbox: D.inbox
-        };
-        cacheMeta(sanitizedMeta); // Cache to localStorage
-        
-        if (D.__modified) {
-          delete D.__modified;
-          if (Date.now() - _lastSanitizeSvTs > SANITIZE_SV_COOLDOWN) {
-            _lastSanitizeSvTs = Date.now();
-            setTimeout(() => { window.sv(true, true); }, 100);
-          }
-        }
-        
+        // Render immediately from cache
+        isFirstLoad = false;
         renderMeta();
-      }, (err) => {
-        console.error('[SYNC] metaRef error:', err);
-        if (typeof setSyncStatus === 'function') {
-          setSyncStatus('err', 'Sync Error: ' + err.message);
-        }
-      });
-
-      // Listen to Pages Directory (names, ids, group associations)
-      db.ref(pagesMetaRef).on('value', (snap) => {
-        if (isOwnWrite()) return;
-        const pagesMetaRaw = snap.val() || [{ id: 'p0', groupId: 'g0', name: 'Home', pageType: 'miro', zoom: 100, panX: 0, panY: 0, bg: '', bgType: 'none' }];
-        const pagesMeta = pagesMetaRaw.filter(p => p);
-
-        // FIX: Preserve heavy data (widgets/miroCards) and guides/slices for ALL loaded pages, not just active
-        const heavyDataMap = {};
-        D.pages.forEach(p => {
-          if (p) {
-            const hasData = (p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0);
-            const hasGuides = (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode;
-            if (hasData || hasGuides) {
-              heavyDataMap[p.id] = {
-                widgets: p.widgets || [],
-                miroCards: p.miroCards || [],
-                vGuides: p.vGuides || [],
-                hGuides: p.hGuides || [],
-                _guidesMode: p._guidesMode || false,
-                lockedGuides: p.lockedGuides || [],
-                cellStates: p.cellStates || {}
-              };
-            }
-          }
-        });
-
-        D.pages = pagesMeta;
-
-        // Re-inject heavy data into ALL pages that had it loaded
-        D.pages.forEach(p => {
-          if (p && heavyDataMap[p.id]) {
-            p.widgets = heavyDataMap[p.id].widgets;
-            p.miroCards = heavyDataMap[p.id].miroCards;
-            p.vGuides = heavyDataMap[p.id].vGuides;
-            p.hGuides = heavyDataMap[p.id].hGuides;
-            p._guidesMode = heavyDataMap[p.id]._guidesMode;
-            p.lockedGuides = heavyDataMap[p.id].lockedGuides;
-            p.cellStates = heavyDataMap[p.id].cellStates;
-          }
-        });
-
-        if (window.sanitizeData) {
-          window.sanitizeData(D);
-        }
-
-        const sanitizedMeta = D.pages.filter(p => p).map(p => ({
-          id: p.id, groupId: p.groupId, name: p.name, pageType: p.pageType,
-          zoom: p.zoom, panX: p.panX, panY: p.panY, bg: p.bg, bgType: p.bgType,
-          tabColor: p.tabColor || ''
-        }));
-        cachePagesMeta(sanitizedMeta); // Cache to localStorage
-
-        // Establish baseline for smart pagesMeta diffing in sv()
-        _lastSyncedPagesMetaStr = JSON.stringify(sanitizedMeta);
-
-        if (D.__modified) {
-          delete D.__modified;
-          if (Date.now() - _lastSanitizeSvTs > SANITIZE_SV_COOLDOWN) {
-            _lastSanitizeSvTs = Date.now();
-            setTimeout(() => { window.sv(true, true); }, 100);
-          }
-        }
-
-        if (isFirstLoad) {
-          const dg = D.settings.defaultGroup || '__last__';
-          const dp = D.settings.defaultPage || '__last__';
-          if (dg !== '__last__' && D.groups.some((g) => g.id === dg)) D.curGroup = dg;
-          if (dp !== '__last__' && D.pages.some((p) => p.id === dp)) D.cur = dp;
-          else {
-            try {
-              const lastPid = localStorage.getItem(LS_CUR_PAGE);
-              if (lastPid && D.pages.some(p => p.id === lastPid)) D.cur = lastPid;
-            } catch(e) {}
-          }
-          if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
-          // Ensure curGroup matches the restored page
-          const rp3 = D.pages.find(p => p.id === D.cur);
-          if (rp3 && rp3.groupId) D.curGroup = rp3.groupId;
-          isFirstLoad = false;
-          switchActivePage(D.cur); // This will render All
-        } else {
-          renderMeta();
-        }
-
-        setSyncStatus('ok', 'Realtime Sync Active \u2713');
-      }, (err) => {
-        console.error('[SYNC] pagesMetaRef error:', err);
-        if (typeof setSyncStatus === 'function') {
-          setSyncStatus('err', 'Sync Error: ' + err.message);
-        }
-      });
-
-      db.ref('.info/connected').on('value', (snap) => {
-        if (snap.val()) {
-          console.log('[SYNC] Connected successfully');
-          if (!isFirstLoad) setSyncStatus('ok', 'Realtime Sync Active \u2713');
-        } else {
-          console.warn('[SYNC] Disconnected / Offline');
-          setSyncStatus('loading', '🔄 Disconnected \u2014 reconnecting...');
-        }
-      });
-    } catch(error) {
-      console.error('[SYNC] Connection failed:', error);
+        buildCols();
+        console.log('[SYNC] Instant paint from cache — page:', D.cur, 'pages:', D.pages.length);
     }
-  };
+
+    // ─── 1. Connection status ───
+    db.ref('.info/connected').on('value', snap => {
+        if (typeof setSyncStatus === 'function') {
+            setSyncStatus(snap.val() ? 'ok' : 'err',
+                snap.val() ? 'Realtime Sync Active ✓' : 'Offline / disconnected');
+        }
+    });
+
+    // ─── 2. Meta listener ───
+    db.ref(metaRef).on('value', snap => {
+        if (isOwnWrite()) return;
+        const meta = snap.val();
+        if (!meta) {
+            // First time user — push current state to Firebase
+            console.log('[SYNC] No meta in Firebase — pushing current state');
+            sv(true, true);
+            return;
+        }
+        D.settings = meta.settings || D.settings;
+        D.curEnv = meta.curEnv || D.curEnv;
+        D.curGroup = meta.curGroup || D.curGroup;
+        D.environments = meta.environments || D.environments;
+        D.groups = meta.groups || D.groups;
+        D.inbox = meta.inbox || D.inbox;
+        cacheMeta(meta);
+        if (typeof renderMeta === 'function') renderMeta();
+    });
+
+    // ─── 3. Pages meta listener ───
+    db.ref(pagesMetaRef).on('value', snap => {
+        if (isOwnWrite()) return;
+        const pagesMeta = snap.val();
+        if (!pagesMeta || !Array.isArray(pagesMeta)) {
+            if (!snap.val()) {
+                console.log('[SYNC] No pagesMeta in Firebase — pushing current state');
+                sv(true, true);
+            }
+            return;
+        }
+
+        // Merge: keep existing page content (memory + cache), update meta fields only
+        const existingById = {};
+        D.pages.forEach(p => { if (p) existingById[p.id] = p; });
+
+        D.pages = pagesMeta.map(pm => {
+            const existing = existingById[pm.id] || {};
+            const cached = getCachedPageData(pm.id);
+            const hasCached = cached && (
+                (cached.widgets || []).length > 0 ||
+                (cached.miroCards || []).length > 0 ||
+                (cached.vGuides || []).length > 0 ||
+                (cached.hGuides || []).length > 0 ||
+                cached._guidesMode
+            );
+            const hasExisting = (
+                (existing.widgets || []).length > 0 ||
+                (existing.miroCards || []).length > 0
+            );
+            return {
+                ...pm,
+                widgets: hasExisting ? existing.widgets : (hasCached ? cached.widgets || [] : []),
+                miroCards: hasExisting ? existing.miroCards : (hasCached ? cached.miroCards || [] : []),
+                vGuides: hasExisting ? (existing.vGuides || []) : (hasCached ? cached.vGuides || [] : []),
+                hGuides: hasExisting ? (existing.hGuides || []) : (hasCached ? cached.hGuides || [] : []),
+                _guidesMode: hasExisting ? existing._guidesMode : (hasCached ? cached._guidesMode || false : false),
+                lockedGuides: hasExisting ? (existing.lockedGuides || []) : (hasCached ? cached.lockedGuides || [] : []),
+                cellStates: hasExisting ? (existing.cellStates || {}) : (hasCached ? cached.cellStates || {} : {})
+            };
+        });
+
+        // Restore D.cur from localStorage
+        try {
+            const lastPid = localStorage.getItem('sm_cur_page');
+            if (lastPid && D.pages.some(p => p.id === lastPid)) {
+                D.cur = lastPid;
+            }
+        } catch(e) {}
+
+        if (!D.cur || !D.pages.some(p => p.id === D.cur)) {
+            D.cur = D.pages[0] ? D.pages[0].id : 'p0';
+        }
+
+        cachePagesMeta(pagesMeta);
+        sanitizeData(D);
+
+        if (typeof renderMeta === 'function') renderMeta();
+        if (typeof buildCols === 'function') buildCols();
+    });
+
+    // ─── 4. Active page data listener ───
+    const pageDataRef = `users/${USER_ID}/startmine_pages/${D.cur}`;
+    window._activePageListener = pageDataRef;
+    db.ref(pageDataRef).on('value', snap => {
+        if (isOwnWrite()) return;
+        const pData = snap.val();
+        if (!pData) return;
+        const pg = cp();
+        if (!pg) return;
+        // Regression guard
+        const newCount = (pData.widgets || []).length + (pData.miroCards || []).length;
+        const oldCount = (pg.widgets || []).length + (pg.miroCards || []).length;
+        if (newCount === 0 && oldCount > 0) {
+            console.warn('[LISTENER GUARD] Refusing empty overwrite from Firebase');
+            return;
+        }
+        pg.widgets = pData.widgets || [];
+        pg.miroCards = pData.miroCards || [];
+        pg.vGuides = pData.vGuides || [];
+        pg.hGuides = pData.hGuides || [];
+        pg._guidesMode = pData._guidesMode || false;
+        pg.lockedGuides = pData.lockedGuides || [];
+        pg.cellStates = pData.cellStates || {};
+        pg.ts = pData.ts || Date.now();
+        cachePageData(pg.id, pData);
+        if (typeof buildCols === 'function') buildCols();
+    });
+
+    console.log('[SYNC] All listeners attached for user:', USER_ID);
+};
   window.SM.data.setupShardedListeners = window.setupShardedListeners;
   window.SM.core.expose('setupShardedListeners', window.setupShardedListeners);
 
@@ -386,292 +354,88 @@
 
   const doSave = () => {
     setOwnWrite(true);
-
+    // 1. Cache locally first (instant, synchronous)
+    forceLocalSave();
+    // 2. Build Firebase updates for active page + meta
     const metaRef = `users/${USER_ID}/startmine_meta`;
     const pagesMetaRef = `users/${USER_ID}/startmine_pages_meta`;
-
-    // Extract metadata without payloads
     const meta = {
-      settings: D.settings,
-      curEnv: D.curEnv,
-      curGroup: D.curGroup,
-      environments: D.environments,
-      groups: D.groups,
-      inbox: D.inbox
+        settings: D.settings, curEnv: D.curEnv, curGroup: D.curGroup,
+        environments: D.environments, groups: D.groups, inbox: D.inbox
     };
-
     const pagesMeta = D.pages.filter(p => p).map(p => ({
-      id: p.id,
-      groupId: p.groupId,
-      name: p.name,
-      pageType: p.pageType,
-      zoom: p.zoom,
-      panX: p.panX,
-      panY: p.panY,
-      bg: p.bg,
-      bgType: p.bgType,
-      tabColor: p.tabColor || ''
+        id: p.id, groupId: p.groupId, name: p.name,
+        pageType: p.pageType, zoom: p.zoom, panX: p.panX, panY: p.panY,
+        bg: p.bg, bgType: p.bgType, tabColor: p.tabColor || ''
     }));
-
     const updates = {};
-
-    // Smart meta sync: only write if changed
-    const curMetaStr = JSON.stringify(meta);
-    if (curMetaStr !== _lastSyncedMetaStr) {
-      updates[metaRef] = meta;
-      _lastSyncedMetaStr = curMetaStr;
+    updates[metaRef] = meta;
+    updates[pagesMetaRef] = pagesMeta;
+    // Active page data
+    const activePg = cp();
+    if (activePg) {
+        const hasData = (activePg.widgets || []).length > 0 ||
+            (activePg.miroCards || []).length > 0 ||
+            (activePg.vGuides || []).length > 0 ||
+            (activePg.hGuides || []).length > 0 ||
+            activePg._guidesMode;
+        if (hasData) {
+            activePg.ts = Date.now();
+            updates[`users/${USER_ID}/startmine_pages/${activePg.id}`] = {
+                widgets: activePg.widgets || [],
+                miroCards: activePg.miroCards || [],
+                vGuides: activePg.vGuides || [],
+                hGuides: activePg.hGuides || [],
+                _guidesMode: activePg._guidesMode || false,
+                lockedGuides: activePg.lockedGuides || [],
+                cellStates: activePg.cellStates || {},
+                ts: activePg.ts
+            };
+        }
     }
-
-    // Smart pagesMeta sync: only upload what changed
-    const curPagesMetaStr = JSON.stringify(pagesMeta);
-    if (curPagesMetaStr !== _lastSyncedPagesMetaStr) {
-      // Check if only zoom/pan changed on the active page (most common case)
-      let onlyZoomPanChanged = false;
-      if (_lastSyncedPagesMetaStr) {
-        try {
-          const oldPM = JSON.parse(_lastSyncedPagesMetaStr);
-          if (oldPM.length === pagesMeta.length) {
-            let diffIdx = -1;
-            let multiDiff = false;
-            for (let i = 0; i < pagesMeta.length; i++) {
-              const o = oldPM[i], n = pagesMeta[i];
-              if (o.id === n.id && o.groupId === n.groupId && o.name === n.name &&
-                o.pageType === n.pageType && o.bg === n.bg && o.bgType === n.bgType &&
-                (o.tabColor || '') === (n.tabColor || '')) {
-                if (o.zoom !== n.zoom || o.panX !== n.panX || o.panY !== n.panY) {
-                  if (diffIdx >= 0) { multiDiff = true; break; }
-                  diffIdx = i;
-                }
-              } else {
-                diffIdx = -2; break; // structural change
-              }
-            }
-            if (diffIdx >= 0 && !multiDiff) {
-              // Only one page's zoom/pan changed — write just that page's meta entry
-              onlyZoomPanChanged = true;
-              updates[`${pagesMetaRef}/${diffIdx}/zoom`] = pagesMeta[diffIdx].zoom;
-              updates[`${pagesMetaRef}/${diffIdx}/panX`] = pagesMeta[diffIdx].panX;
-              updates[`${pagesMetaRef}/${diffIdx}/panY`] = pagesMeta[diffIdx].panY;
-            }
-          }
-        } catch (e) { /* fallback to full write */ }
-      }
-      if (!onlyZoomPanChanged) {
-        updates[pagesMetaRef] = pagesMeta;
-      }
-      _lastSyncedPagesMetaStr = curPagesMetaStr;
-    }
-
+    // If saveAll, include all pages (from cache for non-active)
     if (saveAll) {
-      let _savedCount = 0, _skippedCount = 0;
-      D.pages.forEach(p => {
-        if (!p) return;
-        let widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, ts;
-        if (p.id === D.cur) {
-          p.ts = Date.now(); // Update live page timestamp
-          // Active page — use live data
-          widgets = p.widgets || [];
-          miroCards = p.miroCards || [];
-          vGuides = p.vGuides || [];
-          hGuides = p.hGuides || [];
-          _guidesMode = p._guidesMode || false;
-          lockedGuides = p.lockedGuides || [];
-          cellStates = p.cellStates || {};
-          ts = p.ts;
-        } else {
-          // NON-ACTIVE page — try cache, then memory
-          const cached = getCachedPageData(p.id);
-          const hasCachedData = cached && (
-            (cached.widgets && cached.widgets.length > 0) ||
-            (cached.miroCards && cached.miroCards.length > 0) ||
-            (cached.vGuides && cached.vGuides.length > 0) ||
-            (cached.hGuides && cached.hGuides.length > 0) ||
-            cached._guidesMode
-          );
-          if (hasCachedData) {
-            widgets = cached.widgets || [];
-            miroCards = cached.miroCards || [];
-            vGuides = cached.vGuides || [];
-            hGuides = cached.hGuides || [];
-            _guidesMode = cached._guidesMode || false;
-            lockedGuides = cached.lockedGuides || [];
-            cellStates = cached.cellStates || {};
-            ts = cached.ts || p.ts || Date.now();
-          } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0) || (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode) {
-            widgets = p.widgets || [];
-            miroCards = p.miroCards || [];
-            vGuides = p.vGuides || [];
-            hGuides = p.hGuides || [];
-            _guidesMode = p._guidesMode || false;
-            lockedGuides = p.lockedGuides || [];
-            cellStates = p.cellStates || {};
-            ts = p.ts || Date.now();
-          } else {
-            // ⛔ ABSOLUTE GUARD: NEVER write empty data to Firebase
-            // This page has no data anywhere — skip it entirely
-            console.warn(`[SV GUARD ⛔] Skipping page "${p.name}" (${p.id}) — EMPTY. Firebase data preserved.`);
-            _skippedCount++;
-            return;
-          }
-        }
-        // ⛔ DOUBLE CHECK: Even after loading from cache, if still empty → skip
-        if (widgets.length === 0 && miroCards.length === 0 && vGuides.length === 0 && hGuides.length === 0 && !_guidesMode) {
-          console.warn(`[SV GUARD ⛔] Page "${p.name}" resolved to 0 items — refusing to write.`);
-          _skippedCount++;
-          return;
-        }
-        updates[`users/${USER_ID}/startmine_pages/${p.id}`] = {
-          widgets,
-          miroCards,
-          vGuides,
-          hGuides,
-          _guidesMode,
-          lockedGuides,
-          cellStates,
-          ts
-        };
-        _savedCount++;
-      });
-      if (_skippedCount > 0) {
-        console.warn(`[SV SUMMARY] Saved: ${_savedCount} pages, Skipped (protected): ${_skippedCount} pages`);
-      }
-    } else {
-      // Only upload the heavy data for the active page
-      const activePg = cp();
-      if (activePg) {
-        // ─── DATA LOSS GUARD: Don't overwrite non-empty Firebase data with empty data ───
-        const curHasData = (activePg.widgets && activePg.widgets.length > 0) || (activePg.miroCards && activePg.miroCards.length > 0);
-        if (!curHasData && _lastSyncedPageData) {
-          const oldHadWidgets = JSON.parse(_lastSyncedPageData.widgets || '[]').length > 0;
-          const oldHadCards = JSON.parse(_lastSyncedPageData.miroCards || '[]').length > 0;
-          if (oldHadWidgets || oldHadCards) {
-            console.error(`[SV GUARD] 🚨 Refusing to overwrite page "${activePg.name}" — was non-empty, now empty!`);
-            if (typeof showToast === 'function') showToast('⚠️ Data loss prevented — page was not saved (empty data detected)', 5000);
-            setOwnWrite(false);
-            return;
-          }
-        }
-        // ─── VERSION REGRESSION GUARD ───
-        if (isVersionRegression(activePg.id, activePg.widgets, activePg.miroCards)) {
-          console.error(`[SV GUARD] 🚨 Version regression on "${activePg.name}" — save blocked!`);
-          if (typeof showToast === 'function') showToast('⚠️ Suspicious data drop detected — save blocked', 5000);
-          setOwnWrite(false);
-          return;
-        }
-        trackPageVersion(activePg.id, activePg.widgets, activePg.miroCards);
-        activePg.ts = Date.now(); // Update timestamp on every save
-        if (_lastSyncedPageData) {
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/ts`] = activePg.ts;
-
-          const curWidgetsStr = JSON.stringify(activePg.widgets || []);
-          const curCardsStr = JSON.stringify(activePg.miroCards || []);
-
-          // Always write guides/slices properties when _lastSyncedPageData is active
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/vGuides`] = activePg.vGuides || [];
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/hGuides`] = activePg.hGuides || [];
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/_guidesMode`] = activePg._guidesMode || false;
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/lockedGuides`] = activePg.lockedGuides || [];
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/cellStates`] = activePg.cellStates || {};
-
-          const oldWidgets = JSON.parse(_lastSyncedPageData.widgets || '[]');
-          const oldCards = JSON.parse(_lastSyncedPageData.miroCards || '[]');
-          const curWidgets = activePg.widgets || [];
-          const curCards = activePg.miroCards || [];
-
-          let widgetsChanged = false;
-          if (oldWidgets.length !== curWidgets.length) widgetsChanged = true;
-          else {
-            for (let i = 0; i < curWidgets.length; i++) {
-              if (!curWidgets[i] || !oldWidgets[i] || curWidgets[i].id !== oldWidgets[i].id) { widgetsChanged = true; break; }
+        D.pages.forEach(p => {
+            if (!p || p.id === (activePg && activePg.id)) return;
+            const cached = getCachedPageData(p.id);
+            const src = cached || p;
+            const srcHasData = (src.widgets || []).length > 0 ||
+                (src.miroCards || []).length > 0 ||
+                (src.vGuides || []).length > 0 ||
+                (src.hGuides || []).length > 0 ||
+                src._guidesMode;
+            if (srcHasData) {
+                updates[`users/${USER_ID}/startmine_pages/${p.id}`] = {
+                    widgets: src.widgets || [],
+                    miroCards: src.miroCards || [],
+                    vGuides: src.vGuides || [],
+                    hGuides: src.hGuides || [],
+                    _guidesMode: src._guidesMode || false,
+                    lockedGuides: src.lockedGuides || [],
+                    cellStates: src.cellStates || {},
+                    ts: src.ts || Date.now()
+                };
             }
-          }
-
-          if (widgetsChanged) {
-            updates[`users/${USER_ID}/startmine_pages/${activePg.id}/widgets`] = curWidgets;
-          } else {
-            for (let i = 0; i < curWidgets.length; i++) {
-              if (!curWidgets[i] || !oldWidgets[i] || JSON.stringify(curWidgets[i]) !== JSON.stringify(oldWidgets[i])) {
-                updates[`users/${USER_ID}/startmine_pages/${activePg.id}/widgets/${i}`] = curWidgets[i];
-              }
-            }
-          }
-
-          let cardsChanged = false;
-          if (oldCards.length !== curCards.length) cardsChanged = true;
-          else {
-            for (let i = 0; i < curCards.length; i++) {
-              if (!curCards[i] || !oldCards[i] || curCards[i].id !== oldCards[i].id) { cardsChanged = true; break; }
-            }
-          }
-
-          if (cardsChanged) {
-            updates[`users/${USER_ID}/startmine_pages/${activePg.id}/miroCards`] = curCards;
-          } else {
-            for (let i = 0; i < curCards.length; i++) {
-              if (!curCards[i] || !oldCards[i] || JSON.stringify(curCards[i]) !== JSON.stringify(oldCards[i])) {
-                updates[`users/${USER_ID}/startmine_pages/${activePg.id}/miroCards/${i}`] = curCards[i];
-              }
-            }
-          }
-
-          // Update baseline payload
-          _lastSyncedPageData.widgets = curWidgetsStr;
-          _lastSyncedPageData.miroCards = curCardsStr;
-        } else {
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}`] = {
-            widgets: activePg.widgets || [],
-            miroCards: activePg.miroCards || [],
-            vGuides: activePg.vGuides || [],
-            hGuides: activePg.hGuides || [],
-            _guidesMode: activePg._guidesMode || false,
-            lockedGuides: activePg.lockedGuides || [],
-            cellStates: activePg.cellStates || {},
-            ts: activePg.ts
-          };
-        }
-      }
+        });
     }
-
-    // Skip empty updates (nothing changed)
-    if (Object.keys(updates).length === 0) {
-      setOwnWrite(false);
-      return;
+    // Handle pending page deletions
+    if (window._pendingDeletePageIds && _pendingDeletePageIds.length > 0) {
+        _pendingDeletePageIds.forEach(pid => {
+            updates[`users/${USER_ID}/startmine_pages/${pid}`] = null;
+        });
+        _pendingDeletePageIds.length = 0;
     }
-
-    db.ref().update(updates)
-      .then(() => {
+    db.ref().update(updates).then(() => {
         setOwnWrite(false);
-        _lastSvTs = Date.now();
-        // Cache active page data to localStorage after successful save
-        const activePg = cp();
-        if (activePg) {
-          cachePageData(activePg.id, {
-            widgets: activePg.widgets || [],
-            miroCards: activePg.miroCards || [],
-            vGuides: activePg.vGuides || [],
-            hGuides: activePg.hGuides || [],
-            _guidesMode: activePg._guidesMode || false,
-            lockedGuides: activePg.lockedGuides || [],
-            cellStates: activePg.cellStates || {},
-            ts: activePg.ts
-          });
-        }
-        // Clean up any pending deleted page nodes from Firebase
-        if (_pendingDeletePageIds.length > 0) {
-          const delUpdates = {};
-          _pendingDeletePageIds.forEach(pid => {
-            delUpdates[`users/${USER_ID}/startmine_pages/${pid}`] = null;
-            // Also remove from localStorage cache
-            try { localStorage.removeItem(lsPageKey(pid)); } catch(e) {}
-          });
-          _pendingDeletePageIds = [];
-          db.ref().update(delUpdates).catch(e => console.warn('[DELETE CLEANUP]', e));
-        }
-      })
-      .catch((err) => {
+        _dirtyOffline = false;
+        window._lastSvTs = Date.now();
+        if (typeof updateOfflineUI === 'function') updateOfflineUI();
+        if (typeof setSyncStatus === 'function') setSyncStatus('ok', 'Realtime Sync Active ✓');
+    }).catch(err => {
         setOwnWrite(false);
-        setSyncStatus('err', 'Sync error: ' + (err.code || err.message));
-      });
+        console.error('[SV SAVE ERROR]', err);
+        if (typeof setSyncStatus === 'function') setSyncStatus('err', 'Sync error: ' + (err.message || err));
+    });
   };
 
   clearTimeout(_svTimer);
