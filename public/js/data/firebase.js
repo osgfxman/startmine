@@ -19,6 +19,94 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 window.db = firebase.database();
 window.auth = firebase.auth();
+
+if (localStorage.getItem('sm_test_mock_auth') === 'true') {
+  console.log('[MOCK AUTH] Bypassing Firebase with mock database and authentication...');
+  const _listeners = {};
+  const _dbStore = {};
+  function triggerListeners(path) {
+    if (_listeners[path]) {
+      for (const cb of _listeners[path]) {
+        const val = _dbStore[path];
+        cb({ val: () => (val !== undefined ? val : null) });
+      }
+    }
+  }
+
+  window.firebase = {
+    initializeApp: () => {},
+    auth: function() {
+      return window.auth;
+    },
+    database: function() {
+      return {
+        ref: function(path = '') {
+          return {
+            on: function(event, cb) {
+              if (!_listeners[path]) _listeners[path] = [];
+              _listeners[path].push(cb);
+              if (path === '.info/connected') {
+                setTimeout(() => cb({ val: () => true }), 0);
+              } else {
+                const val = _dbStore[path];
+                setTimeout(() => cb({ val: () => (val !== undefined ? val : null) }), 0);
+              }
+            },
+            off: function() {
+              delete _listeners[path];
+            },
+            once: function(event) {
+              const val = _dbStore[path];
+              return Promise.resolve({ val: () => (val !== undefined ? val : null) });
+            },
+            update: function(updates) {
+              for (const k in updates) {
+                _dbStore[k] = updates[k];
+                triggerListeners(k);
+              }
+              return Promise.resolve();
+            },
+            set: function(val) {
+              _dbStore[path] = val;
+              triggerListeners(path);
+              return Promise.resolve();
+            }
+          };
+        }
+      };
+    }
+  };
+
+  window.firebase.auth.GoogleAuthProvider = function() {
+    this.addScope = () => {};
+    this.setCustomParameters = () => {};
+  };
+
+  window.db = window.firebase.database();
+
+  window.auth = {
+    currentUser: { uid: 'mock-user-123', email: 'test@example.com' },
+    onAuthStateChanged: function(cb) {
+      setTimeout(() => cb({ uid: 'mock-user-123', email: 'test@example.com' }), 0);
+      return () => {};
+    },
+    signOut: function() {
+      localStorage.removeItem('sm_test_mock_auth');
+      window.location.reload();
+      return Promise.resolve();
+    },
+    getRedirectResult: function() {
+      return Promise.resolve(null);
+    },
+    signInWithPopup: function() {
+      return Promise.resolve({ user: { uid: 'mock-user-123', email: 'test@example.com' } });
+    },
+    signInWithRedirect: function() {
+      return Promise.resolve();
+    }
+  };
+}
+
 const provider = new firebase.auth.GoogleAuthProvider();
 provider.addScope('https://www.googleapis.com/auth/drive.file');
 provider.addScope('https://www.googleapis.com/auth/calendar.events');

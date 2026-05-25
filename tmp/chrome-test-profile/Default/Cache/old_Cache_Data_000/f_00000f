@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#6c8fff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
+  <link rel="apple-touch-icon" href="/icon-512.png">
+  <title>Startmine</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+  <link rel="stylesheet" href="css/base.css?v=1779615213">
+  <link rel="stylesheet" href="css/miro.css?v=1779615213">
+  <link rel="stylesheet" href="css/life-widget-additions.css?v=1779615213">
+</head>
+
+<body>
+
+  <div id="login-screen">
+    <h1>Startmine</h1>
+    <button id="login-btn">
+      <svg viewBox="0 0 24 24">
+        <path fill="#4285F4"
+          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+        <path fill="#34A853"
+          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+        <path fill="#FBBC05"
+          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+        <path fill="#EA4335"
+          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+        <path fill="none" d="M1 1h22v22H1z" />
+      </svg>
+      Sign in with Google
+    </button>
+  </div>
+
+  <div id="bgl"></div>
+
+  <div id="root">
+    <div id="sync-bar"></div>
+
+    <div id="tb">
+      <button class="ib" id="inbox-btn" title="Inbox">📥</button>
+      <span id="user-email">👤</span>
+      <div class="tb-sep"></div>
+      <div class="tb-offline-group">
+        <label class="offline-toggle" title="Realtime / Offline Mode">
+          <input type="checkbox" id="offline-toggle-cb" onchange="toggleOfflineMode()">
+          <span class="offline-slider"></span>
+          <span class="offline-label" id="offline-label">⚡ Realtime</span>
+        </label>
+        <button class="ib" id="sync-now-btn" title="Sync to Cloud" disabled onclick="syncNow()">🔄</button>
+      </div>
+      <div class="tb-sep"></div>
+      <div id="sync-dot" class="loading"></div>
+      <span id="sync-msg">Connecting...</span>
+      <div class="tb-sep"></div>
+      <button class="ib" id="overlay-today-btn" title="Today (1)">☀️</button>
+      <button class="ib" id="overlay-gantt-btn" title="Gantt Chart (2)">📊</button>
+      <button class="ib" id="overlay-stats-btn" title="Statistics (3)">📈</button>
+      <button class="ib" id="overlay-fruit-btn" title="Fruit Tracker (4)">🍎</button>
+      <button class="ib" id="overlay-gantt2-btn" title="Zooper (5)">🏃</button>
+      <button class="ib" id="overlay-life-btn" title="Life (6)">🧬</button>
+      <input id="qi" type="text" placeholder="✉ Quick Inbox…" autocomplete="off" spellcheck="false"
+        title="Paste URL here to send to Inbox" style="width: 130px;">
+      <div id="sw">
+        <button id="seb">🔍</button>
+        <input id="si" type="text" placeholder="Search…" autocomplete="off" spellcheck="false">
+        <div id="ep"></div>
+        <div id="sr"></div>
+      </div>
+      <button class="ib" id="all-btn" title="Show All Pages">ALL</button>
+      <button class="ib" id="dup-btn" title="Find Duplicate Links">🔎</button>
+      <div class="tb-sep"></div>
+      <label class="page-type-toggle" title="New Page Default Type: Miro / Web">
+        <input type="checkbox" id="page-type-toggle-cb">
+        <span class="page-type-slider"></span>
+        <span class="page-type-label" id="page-type-label">Miro</span>
+      </label>
+      <div class="tb-sep"></div>
+      <div style="position:relative">
+        <button class="ib" id="bg-btn" title="Page Background">🖼️</button>
+      </div>
+      <div style="position:relative">
+        <button class="ib" id="io-btn" title="Import / Export">⇅</button>
+        <div id="io-pop">
+          <div class="io-it" id="exp-json">📤 Export JSON</div>
+          <div class="io-it" id="exp-csv">📊 Export CSV</div>
+          <div class="io-sep"></div>
+          <div class="io-it"><label style="cursor:pointer;display:flex;align-items:center;gap:8px;width:100%">📥 Import
+              JSON<input type="file" id="imp-json" accept=".json" style="display:none"></label></div>
+          <div class="io-it"><label style="cursor:pointer;display:flex;align-items:center;gap:8px;width:100%">📊 Import
+              CSV<input type="file" id="imp-csv" accept=".csv,.xlsx,.xls,.txt" style="display:none"></label></div>
+          <div class="io-it"><label style="cursor:pointer;display:flex;align-items:center;gap:8px;width:100%">🌐 Import
+              Start.me<input type="file" id="imp-startme" accept=".html,.htm" style="display:none"></label></div>
+          <div class="io-sep"></div>
+          <div class="io-it" id="gdrive-export" style="color:#4dd0e1">☁️ Export to Google Drive <span style="font-size:.65rem;opacity:.6;margin-left:auto">Ctrl+Alt+S</span></div>
+          <div class="io-it" id="gdrive-restore" style="color:#7ed4a4">☁️ Restore from Google Drive</div>
+          <div class="io-sep"></div>
+          <div class="io-it" id="github-export" style="color:#c9a0dc">🐙 Export to GitHub <span style="font-size:.65rem;opacity:.6;margin-left:auto">Ctrl+Alt+G</span></div>
+          <div class="io-it" id="github-restore" style="color:#a0c9dc">🐙 Restore from GitHub</div>
+          <div class="io-sep"></div>
+          <div class="io-it" onclick="openSelIO('export', D); document.getElementById('io-pop').classList.remove('open')" style="color:#fbbf24">📦 Selective Export/Import <span style="font-size:.65rem;opacity:.6;margin-left:auto">with checklist</span></div>
+          <div class="io-sep"></div>
+          <div class="io-it" id="reset-btn" style="color:var(--red)">🗑️ Reset All</div>
+        </div>
+      </div>
+      <button class="ib" id="pv-mode-btn" title="Quick Preview Mode">👁️</button>
+      <button class="ib" id="settings-btn" title="Settings">⚙️</button>
+      <button class="ib" id="outline-btn" title="Page Outline (F2)">📑</button>
+    </div>
+
+    <div id="ribbon">
+      <div id="etabs">
+        <button class="tab-add" id="add-env" title="New Environment">＋</button>
+      </div>
+      <div id="gtabs">
+        <button class="tab-add" id="add-grp" title="New Group">＋</button>
+      </div>
+      <div id="ptabs">
+        <button class="tab-add" id="add-pg" title="New Page">＋</button>
+      </div>
+    </div>
+
+    <div id="cw"></div>
+    <div id="miro-canvas" class="hidden">
+      <div id="miro-board">
+        <svg id="snap-guides" viewBox="-50000 -50000 100000 100000" style="position:absolute;top:-50000px;left:-50000px;width:100000px;height:100000px;pointer-events:none;z-index:9999;"></svg>
+        <div id="miro-sel-box"></div>
+        <div id="miro-sel-frame">
+          <!-- Group resize corner handles -->
+          <div class="msel-resize" data-corner="tl"></div>
+          <div class="msel-resize" data-corner="tr"></div>
+          <div class="msel-resize" data-corner="bl"></div>
+          <div class="msel-resize" data-corner="br"></div>
+          <!-- Edge resize handles -->
+          <div class="msel-resize msel-edge" data-corner="t"></div>
+          <div class="msel-resize msel-edge" data-corner="b"></div>
+          <div class="msel-resize msel-edge" data-corner="l"></div>
+          <div class="msel-resize msel-edge" data-corner="r"></div>
+          <!-- Filter by type -->
+          <div id="miro-filter-btn" title="Filter selection by type">
+            <span id="miro-filter-label">Filter</span> ▾
+            <div id="miro-filter-menu" class="miro-dropdown-menu"></div>
+          </div>
+          <!-- Convert to -->
+          <div id="miro-convert-btn" title="Convert selected to another type">
+            ⇄ Convert to
+            <div id="miro-convert-menu" class="miro-dropdown-menu"></div>
+          </div>
+          <div id="miro-align-handle" title="Align as Grid"><svg viewBox="0 0 16 16">
+              <rect x="1" y="1" width="6" height="6" rx="1" />
+              <rect x="9" y="1" width="6" height="6" rx="1" />
+              <rect x="1" y="9" width="6" height="6" rx="1" />
+              <rect x="9" y="9" width="6" height="6" rx="1" />
+            </svg></div>
+          <div id="miro-widget-handle" title="Convert to Widget" onclick="createWidgetFromSelection()">🗂️</div>
+          <div id="miro-multi-lock" title="Lock All (click) / Unlock All (hold)">🔒</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Outline Sidebar -->
+    <div id="outline-side">
+      <div id="outline-resize"></div>
+      <div class="outline-hdr"><span>📑 Outline</span><button id="outline-close">✕</button></div>
+      <div class="outline-list" id="outline-list"></div>
+    </div>
+  </div>
+
+  <div id="live-pv"></div>
+
+  <div id="inbox-side">
+    <div id="inbox-resize"></div>
+    <div class="inbox-hdr">
+      <span>📥 Inbox</span>
+      <div style="display:flex;gap:3px;margin-left:auto;margin-right:6px">
+        <button class="inbox-hdr-btn" id="inbox-save-btn" title="Save Inbox Backup">💾</button>
+        <button class="inbox-hdr-btn" id="inbox-restore-btn" title="Restore Inbox Backup">🔄</button>
+        <button class="inbox-hdr-btn" id="inbox-export-btn" title="Export Inbox as JSON">📤</button>
+        <label class="inbox-hdr-btn" title="Import Inbox JSON" style="cursor:pointer">📥<input type="file" id="inbox-import-file" accept=".json" style="display:none"></label>
+        <button class="inbox-hdr-btn" id="inbox-export-page-btn" title="Export Inbox to Page" style="background:linear-gradient(135deg,#6c8fff22,#a278ff22);border:1px solid rgba(108,143,255,.3)">📄</button>
+      </div>
+      <button id="inbox-close">✕</button>
+    </div>
+    <div class="inbox-add">
+      <textarea id="inbox-input" placeholder="Type text, paste URL, or drop image…" rows="2" style="flex:1;background:rgba(255,255,255,.06);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:.7rem;padding:4px 6px;outline:none;resize:none;font-family:var(--font)"></textarea>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <button id="inbox-add-btn" style="background:var(--ac);border:none;border-radius:5px;color:#fff;font-size:.65rem;padding:4px 8px;cursor:pointer;white-space:nowrap">Add</button>
+        <label style="background:rgba(255,255,255,.06);border:1px solid var(--bd);border-radius:5px;color:var(--mu);font-size:.6rem;padding:3px 6px;cursor:pointer;text-align:center;white-space:nowrap">📷<input type="file" id="inbox-img-input" accept="image/*" style="display:none"></label>
+      </div>
+    </div>
+    <div class="inbox-list" id="inbox-list"></div>
+  </div>
+
+  <div class="mo" id="m-dup">
+    <div class="mc">
+      <h3>🔎 Duplicate Links</h3>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <button class="btn ba" id="dup-page">This Page</button>
+        <button class="btn bg-btn" id="dup-all">All Pages</button>
+      </div>
+      <div class="dup-list" id="dup-list"></div>
+      <div class="ma">
+        <button class="btn bg-btn" onclick="closeM('m-dup')">Close</button>
+        <button class="btn ba" id="dup-del-all" style="background:#ff4444">🗑️ Remove All Duplicates</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mo" id="m-mv">
+    <div class="mc">
+      <h3>Move / Copy Widget</h3>
+      <div class="fg"><label>To Group</label><select class="fi" id="mv-grp"></select></div>
+      <div class="fg"><label>To Page</label><select class="fi" id="mv-pg"></select></div>
+      <div class="ma">
+        <button class="btn bg-btn" onclick="closeM('m-mv')">Cancel</button>
+        <button class="btn ba" id="mv-copy">📋 Copy</button>
+        <button class="btn ba" id="mv-move">📦 Move</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="pvt">
+    <div class="pv-card">
+      <div class="pv-top">
+        <div class="pv-fav" id="pv-fav"></div>
+        <div class="pv-info">
+          <div class="pv-title" id="pv-title"></div>
+          <div class="pv-domain" id="pv-domain"></div>
+        </div>
+      </div>
+      <div class="pv-bar" id="pv-bar"></div>
+    </div>
+  </div>
+  <div class="tc-pop" id="tc-pop">
+    <div class="tc-none" id="tc-none">✕ No color</div>
+  </div>
+
+  <div class="mo" id="m-aw">
+    <div class="mc">
+      <h3>Add Widget</h3>
+      <div class="fg"><label>Title</label><input type="text" class="fi" id="nw-t" placeholder="My Links…"></div>
+      <div class="fg"><label>Emoji</label><input type="text" class="fi" id="nw-e" placeholder="📌" maxlength="2"></div>
+      <div class="fg"><label>Type</label>
+        <div class="tg">
+          <div class="tc sel" data-t="bookmarks">
+            <div class="ic">🔲</div>Bookmarks
+          </div>
+          <div class="tc" data-t="list">
+            <div class="ic">📋</div>List
+          </div>
+          <div class="tc" data-t="note">
+            <div class="ic">📝</div>Note
+          </div>
+          <div class="tc" data-t="todo">
+            <div class="ic">✅</div>To-Do
+          </div>
+        </div>
+      </div>
+      <div class="ma"><button class="btn bg-btn" onclick="closeM('m-aw')">Cancel</button><button class="btn ba"
+          id="ok-aw">Add</button></div>
+    </div>
+  </div>
+
+  <div class="mo" id="m-bm">
+    <div class="mc">
+      <h3>Add Bookmark</h3>
+      <div class="fg"><label>URL</label><input type="url" class="fi" id="bm-u" placeholder="https://example.com"></div>
+      <div class="fg"><label>Label</label><input type="text" class="fi" id="bm-l" placeholder="Example"></div>
+      <div class="fg"><label>Emoji (optional)</label><input type="text" class="fi" id="bm-e" placeholder="🌐"
+          maxlength="2"></div>
+      <div class="ma"><button class="btn bg-btn" onclick="closeM('m-bm')">Cancel</button><button class="btn ba"
+          id="ok-bm">Add</button></div>
+    </div>
+  </div>
+
+  <!-- Miro Add Card Modal -->
+  <div class="mo" id="m-miro-add">
+    <div class="mc">
+      <h3>📋 Add Card</h3>
+      <div class="fg"><label>URL</label><input type="url" class="fi" id="miro-add-url" placeholder="https://example.com"
+          autocomplete="off"></div>
+      <div class="fg"><label>Label (optional)</label><input type="text" class="fi" id="miro-add-label"
+          placeholder="Auto-detect from URL"></div>
+      <div class="ma"><button class="btn bg-btn" onclick="closeM('m-miro-add')">Cancel</button><button class="btn ba"
+          id="ok-miro-add">Add Card</button></div>
+    </div>
+  </div>
+
+  <!-- Sticky Note Modal -->
+  <div class="mo" id="m-miro-sticky">
+    <div class="mc">
+      <h3>📝 Add Sticky Note</h3>
+      <div class="fg"><label>Text</label><textarea class="fi" id="sn-add-text" rows="3"
+          placeholder="Type your note..."></textarea></div>
+      <div class="fg"><label>Color</label>
+        <div class="sn-colors">
+          <div class="sn-csw c-yellow sel" data-color="yellow"></div>
+          <div class="sn-csw c-pink" data-color="pink"></div>
+          <div class="sn-csw c-green" data-color="green"></div>
+          <div class="sn-csw c-blue" data-color="blue"></div>
+          <div class="sn-csw c-purple" data-color="purple"></div>
+          <div class="sn-csw c-orange" data-color="orange"></div>
+        </div>
+      </div>
+      <div class="fg"><label>Shape</label>
+        <div class="sn-shapes">
+          <button class="sn-shp sel" data-shape="square">■ Square</button>
+          <button class="sn-shp" data-shape="rect">▬ Rectangle</button>
+        </div>
+      </div>
+      <div class="ma"><button class="btn bg-btn" onclick="closeM('m-miro-sticky')">Cancel</button><button class="btn ba"
+          id="ok-miro-sticky">Add Note</button></div>
+    </div>
+  </div>
+
+  <!-- Image Upload Modal -->
+  <div class="mo" id="m-miro-image">
+    <div class="mc">
+      <h3>🖼️ Add Image</h3>
+      <div class="fg"><label>Image</label>
+        <label class="add-i" style="cursor:pointer;margin-top:0">
+          📁 Choose image from device
+          <input type="file" id="miro-img-file" accept="image/*" style="display:none">
+        </label>
+      </div>
+      <div id="miro-img-preview"
+        style="display:none;margin-top:.5rem;border-radius:9px;overflow:hidden;height:140px;background:var(--s1);display:none">
+        <img id="miro-img-prev-el" style="width:100%;height:100%;object-fit:contain">
+      </div>
+      <div class="fg"><label>Label (optional)</label><input type="text" class="fi" id="miro-img-label"
+          placeholder="Image name"></div>
+      <div class="ma"><button class="btn bg-btn" onclick="closeM('m-miro-image')">Cancel</button><button class="btn ba"
+          id="ok-miro-image" disabled>Add Image</button></div>
+    </div>
+  </div>
+
+  <!-- Zoom Controls -->
+  <div id="miro-zoom">
+    <button id="mz-out" title="Zoom Out">−</button>
+    <input type="range" id="mz-slider" min="1" max="400" value="100">
+    <button id="mz-in" title="Zoom In">＋</button>
+    <span class="mz-pct" id="mz-pct">100%</span>
+    <button id="mz-fit" title="Fit to screen">Fit</button>
+    <button id="mz-reset" title="Reset to 100%">1:1</button>
+    <div style="width:1px;height:16px;background:rgba(0,0,0,0.08);margin:0 4px;"></div>
+    <button id="mz-guides-btn" title="Toggle Slices">📐</button>
+    <button id="mz-grid-btn" title="Create Grid">🎛️</button>
+    <button id="mz-autofit-btn" title="Autofit Slices">🔍</button>
+  </div>
+
+  <!-- Miro Vertical Toolbar -->
+  <div id="miro-toolbar">
+    <button class="mtb-btn sel" id="mtb-select" title="Select (V)"><svg viewBox="0 0 24 24" width="22" height="22">
+        <path d="M5 3l14 10.5-6.5.5 3.5 6-2.5 1.5-3.5-6L5 19z" fill="currentColor"/>
+      </svg></button>
+    <button class="mtb-btn" id="mtb-sticky" title="Sticky Note (N)"><svg viewBox="0 0 24 24" width="22" height="22">
+        <path d="M4 4h16v12l-4 4H4V4z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M16 16v4l4-4h-4z" fill="currentColor" opacity=".3"/>
+        <line x1="8" y1="9" x2="16" y2="9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        <line x1="8" y1="13" x2="13" y2="13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg></button>
+    <button class="mtb-btn" id="mtb-text" title="Text (T)"><svg viewBox="0 0 24 24" width="22" height="22">
+        <path d="M6 5h12v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        <line x1="9" y1="19" x2="15" y2="19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg></button>
+    <button class="mtb-btn" id="mtb-shape" title="Shape (S)"><svg viewBox="0 0 24 24" width="22" height="22">
+        <circle cx="10" cy="10" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <rect x="11" y="11" width="9" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      </svg></button>
+    <button class="mtb-btn" id="mtb-grid" title="Grid / Table (G)"><svg viewBox="0 0 24 24" width="22" height="22">
+        <rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <line x1="3" y1="9" x2="21" y2="9" stroke="currentColor" stroke-width="1.2"/>
+        <line x1="3" y1="15" x2="21" y2="15" stroke="currentColor" stroke-width="1.2"/>
+        <line x1="9" y1="3" x2="9" y2="21" stroke="currentColor" stroke-width="1.2"/>
+        <line x1="15" y1="3" x2="15" y2="21" stroke="currentColor" stroke-width="1.2"/>
+      </svg></button>
+    <button class="mtb-btn" id="mtb-image" title="Image (I)"><svg viewBox="0 0 24 24" width="22" height="22">
+        <rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <circle cx="8.5" cy="8.5" r="2" fill="currentColor" opacity=".5"/>
+        <path d="M3 16l5-5 3.5 3.5L15 11l6 6v1a2 2 0 01-2 2H5a2 2 0 01-2-2v-2z" fill="currentColor" opacity=".25"/>
+      </svg></button>
+    <button class="mtb-btn" id="mtb-card" title="Bookmark Card"><svg viewBox="0 0 24 24" width="22" height="22">
+        <rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <line x1="7" y1="8" x2="17" y2="8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        <line x1="7" y1="12" x2="17" y2="12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        <line x1="7" y1="16" x2="13" y2="16" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg></button>
+    <button class="mtb-btn" id="mtb-widget" title="Bookmark Widget"><svg viewBox="0 0 24 24" width="22" height="22">
+        <rect x="2" y="4" width="20" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <line x1="2" y1="9" x2="22" y2="9" stroke="currentColor" stroke-width="1.4"/>
+        <circle cx="5.5" cy="6.5" r="1" fill="currentColor" opacity=".5"/>
+        <circle cx="8.5" cy="6.5" r="1" fill="currentColor" opacity=".5"/>
+        <circle cx="11.5" cy="6.5" r="1" fill="currentColor" opacity=".5"/>
+      </svg></button>
+    <button class="mtb-btn" id="mtb-trello" title="Trello Board (K)"><svg viewBox="0 0 24 24" width="22" height="22">
+        <rect x="2" y="3" width="20" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <rect x="5" y="6" width="4" height="12" rx="1.5" fill="currentColor" opacity=".35"/>
+        <rect x="10" y="6" width="4" height="8" rx="1.5" fill="currentColor" opacity=".35"/>
+        <rect x="15" y="6" width="4" height="10" rx="1.5" fill="currentColor" opacity=".35"/>
+      </svg></button>
+    <button class="mtb-btn" id="mtb-calendar" title="Google Calendar"><svg viewBox="0 0 24 24" width="22" height="22">
+        <rect x="3" y="4" width="18" height="17" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <line x1="3" y1="9" x2="21" y2="9" stroke="currentColor" stroke-width="1.4"/>
+        <line x1="8" y1="2" x2="8" y2="6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        <line x1="16" y1="2" x2="16" y2="6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        <rect x="6" y="12" width="3" height="2.5" rx=".5" fill="currentColor" opacity=".4"/>
+        <rect x="10.5" y="12" width="3" height="2.5" rx=".5" fill="currentColor" opacity=".4"/>
+        <rect x="15" y="12" width="3" height="2.5" rx=".5" fill="currentColor" opacity=".4"/>
+        <rect x="6" y="16" width="3" height="2.5" rx=".5" fill="currentColor" opacity=".4"/>
+        <rect x="10.5" y="16" width="3" height="2.5" rx=".5" fill="currentColor" opacity=".4"/>
+      </svg></button>
+    <button class="mtb-btn" id="mtb-gantt" title="Gantt Chart (Google Calendar)"><svg viewBox="0 0 24 24" width="22" height="22">
+        <rect x="2" y="4" width="12" height="3" rx="1.5" fill="currentColor" opacity=".5"/>
+        <rect x="6" y="9" width="14" height="3" rx="1.5" fill="currentColor" opacity=".4"/>
+        <rect x="4" y="14" width="10" height="3" rx="1.5" fill="currentColor" opacity=".35"/>
+        <rect x="8" y="19" width="8" height="3" rx="1.5" fill="currentColor" opacity=".3"/>
+      </svg></button>
+    <button class="mtb-btn" id="mtb-embed" title="Embed Web View (E)"><svg viewBox="0 0 24 24" width="22" height="22">
+        <rect x="2" y="3" width="20" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        <line x1="12" y1="8" x2="12" y2="4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        <line x1="12" y1="16" x2="12" y2="20" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        <line x1="8" y1="12" x2="4" y2="12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        <line x1="16" y1="12" x2="20" y2="12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg></button>
+    <button class="mtb-btn" id="mtb-save-all" title="Save All: Firebase + Drive + GitHub (Ctrl+Alt+A)" onclick="saveAllBackups()">🛡️</button>
+    <div style="width:30px;height:1px;background:rgba(0,0,0,.08);margin:4px auto;"></div>
+    <!-- Overlay Page Buttons -->
+    <button class="mtb-btn mtb-overlay-btn" id="mtb-today" title="Today (Shift+1)">☀️</button>
+    <button class="mtb-btn mtb-overlay-btn" id="mtb-gantt-overlay" title="Gantt Chart (Shift+2)">📊</button>
+    <button class="mtb-btn mtb-overlay-btn" id="mtb-stats" title="Statistics (Shift+3)">📈</button>
+    <button class="mtb-btn mtb-overlay-btn" id="mtb-fruits" title="Fruit Tracker (Shift+4)">🍎</button>
+    <button class="mtb-btn mtb-overlay-btn" id="mtb-gantt2" title="Zooper (Shift+5)">🏃</button>
+    <button class="mtb-btn mtb-overlay-btn" id="mtb-life" title="Life (Shift+6)">🧬</button>
+    <div style="width:30px;height:1px;background:rgba(0,0,0,.08);margin:4px auto;"></div>
+    <!-- Expandable + button for extra tools -->
+    <button class="mtb-btn" id="mtb-more" title="More tools">
+      <svg viewBox="0 0 24 24" width="22" height="22">
+        <line x1="12" y1="6" x2="12" y2="18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+        <line x1="6" y1="12" x2="18" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <div id="mtb-more-panel">
+      <div class="msp-title">More Tools</div>
+      <div class="mtb-more-grid">
+        <button class="mtb-btn" id="mtb-pen" title="Pen (P)"><svg viewBox="0 0 24 24" width="22" height="22">
+          <path d="M16.5 3.5l4 4L7.5 20.5 3 21l.5-4.5L16.5 3.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+          <line x1="14" y1="6" x2="18" y2="10" stroke="currentColor" stroke-width="1.4"/>
+        </svg></button>
+        <button class="mtb-btn" id="mtb-mindmap" title="Mind Map (M)"><svg viewBox="0 0 24 24" width="22" height="22">
+          <circle cx="12" cy="12" r="3.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+          <circle cx="4" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <circle cx="20" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <circle cx="4" cy="18" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <circle cx="20" cy="18" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <line x1="9.5" y1="9.5" x2="5.5" y2="7.5" stroke="currentColor" stroke-width="1.3"/>
+          <line x1="14.5" y1="9.5" x2="18.5" y2="7.5" stroke="currentColor" stroke-width="1.3"/>
+          <line x1="9.5" y1="14.5" x2="5.5" y2="16.5" stroke="currentColor" stroke-width="1.3"/>
+          <line x1="14.5" y1="14.5" x2="18.5" y2="16.5" stroke="currentColor" stroke-width="1.3"/>
+        </svg></button>
+        <button class="mtb-btn" id="mtb-undo" title="Undo (Ctrl+Z)" onclick="performUndo()"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M7 7h8a5 5 0 0 1 0 10H9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="3,11 7,7 11,11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button class="mtb-btn" id="mtb-snapshot" title="Snapshots (Ctrl+S)" onclick="openSnapshotModal()">📸</button>
+        <button class="mtb-btn" id="mtb-unpin-all" title="Unpin All Elements" onclick="if(typeof unpinAll==='function')unpinAll()">📍</button>
+      </div>
+      <button class="msp-close" id="mtb-more-close">✕</button>
+    </div>
+  </div>
+
+  <!-- Pen toolbar (color + thickness) -->
+  <div id="miro-pen-toolbar">
+    <input type="color" id="pen-color" value="#333333" title="Pen Color">
+    <input type="number" id="pen-width" value="3" min="1" max="20" title="Pen Width">
+    <button id="pen-cancel" title="Cancel (Esc)">✕</button>
+  </div>
+
+  <!-- Legacy floating menu (hidden, keeping IDs for compatibility) -->
+  <button id="miro-add-float" style="display:none" title="Add to canvas">＋</button>
+  <div id="miro-add-menu" style="display:none">
+    <button class="miro-add-opt" id="miro-opt-card">📋</button>
+    <button class="miro-add-opt" id="miro-opt-sticky">📝</button>
+    <button class="miro-add-opt" id="miro-opt-image">🖼️</button>
+    <button class="miro-add-opt" id="miro-opt-text">✏️</button>
+    <button class="miro-add-opt" id="miro-opt-shape">⬡</button>
+  </div>
+
+  <!-- Shape side panel -->
+  <div id="miro-shape-panel">
+    <div class="msp-title">Shapes</div>
+    <div class="msp-grid">
+      <div class="msp-item" data-shape="rect" draggable="true" title="Rectangle"><svg viewBox="0 0 40 30">
+          <rect x="2" y="2" width="36" height="26" rx="3" fill="none" stroke="currentColor" stroke-width="2" />
+        </svg></div>
+      <div class="msp-item" data-shape="rounded-rect" draggable="true" title="Rounded Rectangle"><svg viewBox="0 0 40 30">
+          <rect x="2" y="2" width="36" height="26" rx="10" fill="none" stroke="currentColor" stroke-width="2" />
+        </svg></div>
+      <div class="msp-item" data-shape="ellipse" draggable="true" title="Circle"><svg viewBox="0 0 40 40">
+          <ellipse cx="20" cy="20" rx="18" ry="18" fill="none" stroke="currentColor" stroke-width="2" />
+        </svg></div>
+      <div class="msp-item" data-shape="triangle" draggable="true" title="Triangle"><svg viewBox="0 0 40 36">
+          <polygon points="20,2 38,34 2,34" fill="none" stroke="currentColor" stroke-width="2" />
+        </svg></div>
+      <div class="msp-item" data-shape="diamond" draggable="true" title="Diamond"><svg viewBox="0 0 40 40">
+          <polygon points="20,2 38,20 20,38 2,20" fill="none" stroke="currentColor" stroke-width="2" />
+        </svg></div>
+      <div class="msp-item" data-shape="star" draggable="true" title="Star"><svg viewBox="0 0 40 40">
+          <polygon points="20,2 25,15 38,15 27,23 31,37 20,28 9,37 13,23 2,15 15,15" fill="none" stroke="currentColor" stroke-width="2" />
+        </svg></div>
+      <div class="msp-item" data-shape="hexagon" draggable="true" title="Hexagon"><svg viewBox="0 0 40 36">
+          <polygon points="30,2 38,18 30,34 10,34 2,18 10,2" fill="none" stroke="currentColor" stroke-width="2" />
+        </svg></div>
+      <div class="msp-item" data-shape="pentagon" draggable="true" title="Pentagon"><svg viewBox="0 0 40 40">
+          <polygon points="20,2 38,15 32,36 8,36 2,15" fill="none" stroke="currentColor" stroke-width="2" />
+        </svg></div>
+      <div class="msp-item" data-shape="cross" draggable="true" title="Cross / Plus"><svg viewBox="0 0 40 40">
+          <polygon points="14,2 26,2 26,14 38,14 38,26 26,26 26,38 14,38 14,26 2,26 2,14 14,14" fill="none" stroke="currentColor" stroke-width="2" />
+        </svg></div>
+      <div class="msp-item" data-shape="arrow-shape" draggable="true" title="Arrow Shape"><svg viewBox="0 0 44 30">
+          <polygon points="2,10 28,10 28,2 42,15 28,28 28,20 2,20" fill="none" stroke="currentColor" stroke-width="2" />
+        </svg></div>
+      <div class="msp-item" data-shape="arrow" draggable="true" title="Arrow"><svg viewBox="0 0 44 24">
+          <line x1="2" y1="12" x2="34" y2="12" stroke="currentColor" stroke-width="2" />
+          <polyline points="28,4 38,12 28,20" fill="none" stroke="currentColor" stroke-width="2" />
+        </svg></div>
+      <div class="msp-item" data-shape="line" draggable="true" title="Line"><svg viewBox="0 0 40 20">
+          <line x1="2" y1="18" x2="38" y2="2" stroke="currentColor" stroke-width="2" />
+        </svg></div>
+    </div>
+    <button class="msp-close" id="msp-close">✕</button>
+  </div>
+
+  <!-- Grid Size Picker Panel -->
+  <div id="miro-grid-picker">
+    <div class="mgp-header">
+      <span class="mgp-title">Table</span>
+      <button class="msp-close" id="mgp-close">✕</button>
+    </div>
+    <div class="mgp-grid" id="mgp-grid"></div>
+    <div class="mgp-dim" id="mgp-dim"></div>
+    <div class="mgp-inputs">
+      <div class="mgp-field"><label>Rn</label><input type="number" id="mgp-rn" min="1" max="50" value="3" title="Number of rows"></div>
+      <div class="mgp-field"><label>Rd</label><input type="number" id="mgp-rd" min="20" max="200" value="40" title="Row height (px)"></div>
+      <div class="mgp-field"><label>Cn</label><input type="number" id="mgp-cn" min="1" max="50" value="3" title="Number of columns"></div>
+      <div class="mgp-field"><label>Cd</label><input type="number" id="mgp-cd" min="30" max="400" value="120" title="Column width (px)"></div>
+    </div>
+  </div>
+
+  <!-- Sticky create hint -->
+  <div class="sn-create-hint" id="sn-create-hint">📝 Click anywhere to place a sticky note • Press Esc to cancel</div>
+
+  <div class="mo" id="m-ren">
+    <div class="mc">
+      <h3>Rename Widget</h3>
+      <div class="fg"><label>Title</label><input type="text" class="fi" id="rn-t"></div>
+      <div class="fg"><label>Emoji</label><input type="text" class="fi" id="rn-e" maxlength="2"></div>
+      <div class="ma"><button class="btn bg-btn" onclick="closeM('m-ren')">Cancel</button><button class="btn ba"
+          id="ok-ren">Save</button></div>
+    </div>
+  </div>
+
+  <div class="mo" id="m-dp">
+    <div class="mc wide">
+      <h3>Display Settings</h3>
+      <div class="sl">Layout</div>
+      <div class="dr-g" id="dm-g">
+        <label class="dr sel"><input type="radio" name="dm" value="auto" checked> ✨ Auto — smart layout</label>
+        <label class="dr"><input type="radio" name="dm" value="spark"> 🔲 Icons Grid</label>
+        <label class="dr"><input type="radio" name="dm" value="stream"> 📋 List</label>
+        <label class="dr"><input type="radio" name="dm" value="card"> 🗂️ Detailed Cards</label>
+        <label class="dr"><input type="radio" name="dm" value="cloud"> ☁️ Tag Cloud</label>
+      </div>
+      <div class="fg"><label>Size</label><select class="fi" id="dm-sz">
+          <option value="sm">Small</option>
+          <option value="md" selected>Medium</option>
+          <option value="lg">Large</option>
+        </select></div>
+      <div class="fg"><label>Visible Items</label><select class="fi" id="dm-vi">
+          <option value="all">All</option>
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="15">15</option>
+        </select></div>
+      <div class="ma"><button class="btn bg-btn bsm" id="dp-all">✦ Apply to all</button><button class="btn bg-btn"
+          onclick="closeM('m-dp')">Cancel</button><button class="btn ba" id="ok-dp">Apply</button></div>
+    </div>
+  </div>
+
+  <div class="mo" id="m-col">
+    <div class="mc">
+      <h3>Widget Color</h3>
+      <div class="sl">RGB</div>
+      <div class="slg"><label>Red <span id="rv">18</span></label><input type="range" id="rs" min="0" max="255"
+          value="18"></div>
+      <div class="slg"><label>Green <span id="gv">20</span></label><input type="range" id="gs" min="0" max="255"
+          value="20"></div>
+      <div class="slg"><label>Blue <span id="bv">32</span></label><input type="range" id="bs" min="0" max="255"
+          value="32"></div>
+      <div class="slg"><label>Alpha <span id="av">94</span>%</label><input type="range" id="as" min="0" max="100"
+          value="94"></div>
+      <div class="cprow">
+        <div id="cps"></div><input type="text" class="hexi fi" id="hexi" placeholder="#121420" maxlength="7">
+      </div>
+      <div class="sl">CMYK</div>
+      <div class="cmyk-g">
+        <div class="cf"><label>C</label><input type="number" class="fi" id="cv" min="0" max="100"></div>
+        <div class="cf"><label>M</label><input type="number" class="fi" id="mv" min="0" max="100"></div>
+        <div class="cf"><label>Y</label><input type="number" class="fi" id="yv" min="0" max="100"></div>
+        <div class="cf"><label>K</label><input type="number" class="fi" id="kv" min="0" max="100"></div>
+      </div>
+      <div class="ma"><button class="btn bg-btn" onclick="closeM('m-col')">Cancel</button><button class="btn ba"
+          id="ok-col">Apply</button></div>
+    </div>
+  </div>
+
+  <div class="mo" id="m-bg">
+    <div class="mc wide">
+      <h3>Page Background</h3>
+      <div class="bg-tabs">
+        <div class="bg-tab sel" data-bt="solid">🎨 Solid</div>
+        <div class="bg-tab" data-bt="gradient">🌈 Gradient</div>
+        <div class="bg-tab" data-bt="image">🖼️ Image</div>
+      </div>
+      <div class="bg-panel show" id="bg-p-solid">
+        <div class="sl">Preset Colors</div>
+        <div class="bg-swatches" id="bg-solid-swatches"></div>
+        <div class="fg"><label>Custom HEX Color</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="color" id="bg-solid-picker"
+              style="width:38px;height:32px;border-radius:7px;border:1px solid var(--bd);cursor:pointer;background:transparent">
+            <input type="text" class="fi" id="bg-solid-hex" placeholder="#0d0f18" maxlength="7" style="flex:1">
+          </div>
+        </div>
+        <div class="slg"><label>Opacity <span id="bg-solid-op-v">100</span>%</label><input type="range" id="bg-solid-op"
+            min="0" max="100" value="100"></div>
+      </div>
+      <div class="bg-panel" id="bg-p-gradient">
+        <div class="sl">Preset Gradients</div>
+        <div class="bg-gradient-g" id="bg-grad-swatches"></div>
+        <div class="fg"><label>Custom Gradient CSS</label><input type="text" class="fi" id="bg-grad-custom"
+            placeholder="linear-gradient(135deg, #0d0f18, #1a1040)"></div>
+      </div>
+      <div class="bg-panel" id="bg-p-image">
+        <div class="fg">
+          <label>Upload Image</label>
+          <label class="add-i" style="cursor:pointer;margin-top:0">
+            📁 Choose image from device
+            <input type="file" id="bg-up" accept="image/*" style="display:none">
+          </label>
+        </div>
+        <div id="bg-img-preview"
+          style="display:none;margin-top:.5rem;border-radius:9px;overflow:hidden;height:100px;background:var(--s1)">
+          <img id="bg-img-prev-el" style="width:100%;height:100%;object-fit:cover">
+        </div>
+      </div>
+      <div class="ma">
+        <button class="btn bg-btn bsm danger" id="bg-clr-btn" style="margin-right:auto;color:var(--red)">✕ Clear
+          BG</button>
+        <button class="btn bg-btn" onclick="closeM('m-bg')">Cancel</button>
+        <button class="btn ba" id="ok-bg">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mo" id="m-settings">
+    <div class="mc">
+      <h3>⚙️ Settings</h3>
+      <div class="fg"><label>Startup Environment</label>
+        <select class="fi" id="set-def-env">
+          <option value="__last__">🕐 Remember last</option>
+        </select>
+      </div>
+      <div class="fg"><label>Startup Group</label>
+        <select class="fi" id="set-def-grp">
+          <option value="__last__">🕐 Remember last</option>
+        </select>
+      </div>
+      <div class="fg"><label>Startup Page</label>
+        <select class="fi" id="set-def-pg">
+          <option value="__last__">🕐 Remember last</option>
+        </select>
+      </div>
+      <div class="fg"><label>Accent Color</label>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span id="ac-dot"
+            style="width:18px;height:18px;border-radius:50%;display:inline-block;border:2px solid rgba(255,255,255,.3)"></span>
+          <div id="ac-pop"></div>
+        </div>
+      </div>
+      <div class="ma" style="justify-content:space-between">
+        <button class="btn" id="logout-btn"
+          style="color:var(--red);background:rgba(255,80,80,.1);border:1px solid rgba(255,80,80,.2)">🚪 Sign
+          Out</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn bg-btn" onclick="closeM('m-settings')">Cancel</button>
+          <button class="btn ba" id="ok-settings">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Miro Context Menu (Z-Order & Actions) -->
+  <div id="miro-ctx-menu">
+    <div class="ctx-item" data-action="bring-front"><span class="ctx-icon">⬆️</span><span class="ctx-label">Bring to Front</span><span class="ctx-shortcut">Ctrl+Shift+↑</span></div>
+    <div class="ctx-item" data-action="bring-forward"><span class="ctx-icon">🔼</span><span class="ctx-label">Bring Forward</span><span class="ctx-shortcut">Ctrl+↑</span></div>
+    <div class="ctx-item" data-action="send-backward"><span class="ctx-icon">🔽</span><span class="ctx-label">Send Backward</span><span class="ctx-shortcut">Ctrl+↓</span></div>
+    <div class="ctx-item" data-action="send-back"><span class="ctx-icon">⬇️</span><span class="ctx-label">Send to Back</span><span class="ctx-shortcut">Ctrl+Shift+↓</span></div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" data-action="make-array"><span class="ctx-icon">🔲</span><span class="ctx-label">Make Array</span><span class="ctx-shortcut"></span></div>
+    <div class="ctx-item" data-action="make-2d-array"><span class="ctx-icon">🔳</span><span class="ctx-label">2D Array</span><span class="ctx-shortcut"></span></div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" data-action="pin-toggle"><span class="ctx-icon">📌</span><span class="ctx-label">Pin / Unpin</span><span class="ctx-shortcut"></span></div>
+    <div class="ctx-sep ctx-img-only"></div>
+    <div class="ctx-item ctx-img-only" data-action="add-caption-below"><span class="ctx-icon">📝</span><span class="ctx-label">Add Caption Below</span><span class="ctx-shortcut"></span></div>
+    <div class="ctx-item ctx-img-only" data-action="add-caption-above"><span class="ctx-icon">📝</span><span class="ctx-label">Add Caption Above</span><span class="ctx-shortcut"></span></div>
+    <div class="ctx-item ctx-img-only" data-action="remove-caption"><span class="ctx-icon">✕</span><span class="ctx-label">Remove Caption</span><span class="ctx-shortcut"></span></div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item danger" data-action="delete"><span class="ctx-icon">🗑️</span><span class="ctx-label">Delete</span><span class="ctx-shortcut">Del</span></div>
+  </div>
+
+    <!-- Core -->
+    <script src="js/core/namespace.js?v=1779615213"></script>
+    <script src="js/core/events.js?v=1779615213"></script>
+    <script src="js/core/utils.js?v=1779615213"></script>
+
+    <!-- Data Layer -->
+    <script src="js/data/firebase.js?v=1779615213"></script>
+    <script src="js/data/offline.js?v=1779615213"></script>
+    <script src="js/data/sync.js?v=1779615213"></script>
+
+    <!-- UI Layer -->
+    <script src="js/ui/toasts.js?v=1779615213"></script>
+    <script src="js/ui/modals.js?v=1779615213"></script>
+    <script src="js/ui/toolbar.js?v=1779615213"></script>
+    <script src="js/ui/search.js?v=1779615213"></script>
+    <script src="js/ui/inbox-ui.js?v=1779615213"></script>
+
+    <!-- Miro Modules -->
+    <script src="js/miro/miro-state.js?v=1779615213"></script>
+    <script src="js/miro/render/builders.js?v=1779615213"></script>
+    <script src="js/miro/layout/grid.js?v=1779615213"></script>
+    <script src="js/miro/layout/slices.js?v=1779615213"></script>
+
+    <!-- Original files (now wrappers) -->
+    <script src="js/miro-engine.js?v=1779615213"></script>
+    <script src="js/life-widget.js?v=1779615213"></script>
+    <script src="js/thumbnails.js?v=1779615213"></script>
+    <script src="js/core/health.js?v=1779615213"></script>
+    <script src="js/app.js?v=1779615213"></script>
+    <script>
+      // ─── Zooper-first: auto-open after auth, defer secondary scripts ───
+      var _mainAppLoaded=false;
+      function _loadMainApp(){
+        if(_mainAppLoaded)return;_mainAppLoaded=true;
+        ['js/outline.js','js/alignment.js'].forEach(function(src){
+          var s=document.createElement('script');s.src=src+'?v=1779615213';document.body.appendChild(s);
+        });
+      }
+      // Auto-open Zooper after user is authenticated
+      document.addEventListener('DOMContentLoaded',function(){
+        var _zTry=setInterval(function(){
+          if(typeof showMiroOverlay==='function'&&typeof _state!=='undefined'&&_state.uid){
+            clearInterval(_zTry);
+            setTimeout(function(){showMiroOverlay('gantt2');},300);
+          }
+        },200);
+      });
+      // Hook overlay close to load remaining scripts
+      var _origCloseMiroOverlay=null;
+      var _hookTry=setInterval(function(){
+        if(typeof closeMiroOverlay==='function'&&!_origCloseMiroOverlay){
+          _origCloseMiroOverlay=closeMiroOverlay;
+          closeMiroOverlay=function(){
+            _origCloseMiroOverlay();
+            _loadMainApp();
+          };
+          clearInterval(_hookTry);
+        }
+      },100);
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(function(){});
+      }
+    </script>
+
+  <!-- Selective Export/Import Modal -->
+  <div id="sel-io-modal" style="display:none;position:fixed;inset:0;z-index:99999;align-items:center;justify-content:center">
+    <div style="position:absolute;inset:0;background:rgba(0,0,0,.7)" onclick="closeSelIO()"></div>
+    <div style="position:relative;background:var(--surface,#1a1d2e);border-radius:14px;border:1px solid rgba(255,255,255,.08);width:520px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.5)">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06)">
+        <span id="sel-io-title" style="font-size:.95rem;font-weight:600;color:#e4e4e4">📦 Export / Import</span>
+        <button onclick="closeSelIO()" style="background:none;border:none;color:#888;font-size:1.1rem;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:12px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;gap:12px;align-items:center">
+        <label style="font-size:.75rem;color:#aaa;cursor:pointer"><input type="radio" name="sel-io-mode" value="merge" checked style="margin-right:4px">Merge (Add)</label>
+        <label style="font-size:.75rem;color:#aaa;cursor:pointer"><input type="radio" name="sel-io-mode" value="replace" style="margin-right:4px">Replace All</label>
+        <span style="flex:1"></span>
+        <button onclick="selIOSelectAll(true)" style="font-size:.65rem;padding:2px 8px;border-radius:4px;border:1px solid rgba(255,255,255,.15);background:none;color:#6c8fff;cursor:pointer">Select All</button>
+        <button onclick="selIOSelectAll(false)" style="font-size:.65rem;padding:2px 8px;border-radius:4px;border:1px solid rgba(255,255,255,.15);background:none;color:#aaa;cursor:pointer">None</button>
+      </div>
+      <div id="sel-io-tree" style="flex:1;overflow-y:auto;padding:12px 20px;max-height:50vh"></div>
+      <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);display:flex;gap:8px;flex-wrap:wrap">
+        <button id="sel-io-export-btn" onclick="doSelectiveExport()" style="flex:1;padding:8px;border-radius:8px;border:none;background:linear-gradient(135deg,#6c8fff,#a278ff);color:#fff;font-weight:600;font-size:.75rem;cursor:pointer">📤 Export Selected</button>
+        <button id="sel-io-import-btn" onclick="document.getElementById('sel-io-file').click()" style="flex:1;padding:8px;border-radius:8px;border:none;background:linear-gradient(135deg,#34d399,#3b82f6);color:#fff;font-weight:600;font-size:.75rem;cursor:pointer">📥 Import File</button>
+        <button id="sel-io-drive-btn" onclick="doImportFromDrive()" style="flex:1;padding:8px;border-radius:8px;border:none;background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;font-weight:600;font-size:.75rem;cursor:pointer">☁️ From Drive</button>
+        <input type="file" id="sel-io-file" accept=".json" style="display:none" onchange="handleSelIOImport(event)">
+      </div>
+    </div>
+  </div>
+
+  <div id="miro-pinned-layer"></div>
+</body>
+
+</html>
