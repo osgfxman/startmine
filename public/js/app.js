@@ -638,99 +638,118 @@ function sanitizeData(d) {
 window.sanitizeData = sanitizeData;
 
 function initDB() {
-    if (window.__miroBuildersOk) window.__miroBuildersOk();
-    isFirstLoad = true;
+  if (window.__miroBuildersOk) window.__miroBuildersOk();
+  isFirstLoad = true;
 
-    // ═══ ALWAYS load from cache first (instant paint) ═══
+  // If in offline mode, just load from cache and render
+  if (_offlineMode) {
     const cachedMeta = getCachedMeta();
     const cachedPagesMeta = getCachedPagesMeta();
     if (cachedMeta && cachedPagesMeta) {
-        D.settings = cachedMeta.settings || D.settings;
-        D.curEnv = cachedMeta.curEnv || D.curEnv;
-        D.curGroup = cachedMeta.curGroup || D.curGroup;
-        D.environments = cachedMeta.environments || D.environments;
-        D.groups = cachedMeta.groups || D.groups;
-        D.inbox = cachedMeta.inbox || D.inbox;
-        D.pages = cachedPagesMeta;
-
-        // Restore last page from settings or localStorage
-        const dg = D.settings.defaultGroup || '**last**';
-        const dp = D.settings.defaultPage || '**last**';
-        if (dg !== '**last**' && D.groups.some(g => g.id === dg)) D.curGroup = dg;
-        if (dp !== '**last**' && D.pages.some(p => p.id === dp)) D.cur = dp;
-        else {
-            try {
-                const lastPid = localStorage.getItem(LS_CUR_PAGE);
-                if (lastPid && D.pages.some(p => p.id === lastPid)) D.cur = lastPid;
-            } catch(e) {}
-        }
-        if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
-
-        // Ensure curGroup/curEnv match the restored page
-        const restoredPage = D.pages.find(p => p.id === D.cur);
-        if (restoredPage && restoredPage.groupId) {
-            D.curGroup = restoredPage.groupId;
-            const grp = D.groups.find(g => g.id === restoredPage.groupId);
-            if (grp && grp.envId) D.curEnv = grp.envId;
-        }
-
-        sanitizeData(D);
-        if (D.__modified) {
-            delete D.__modified;
-            // Only auto-save sanitize fixes if we have a user and aren't in a race
-            if (USER_ID && !_offlineMode) {
-                sv(true, true);
-            } else if (_offlineMode) {
-                sv(true, true);
-            }
-        }
-
-        // Load active page data from cache
-        const cachedPage = getCachedPageData(D.cur);
-        const pg = cp();
-        if (pg && cachedPage) {
-            pg.widgets = cachedPage.widgets || [];
-            pg.miroCards = cachedPage.miroCards || [];
-            pg.vGuides = cachedPage.vGuides || [];
-            pg.hGuides = cachedPage.hGuides || [];
-            pg._guidesMode = cachedPage._guidesMode || false;
-            pg.lockedGuides = cachedPage.lockedGuides || [];
-            pg.cellStates = cachedPage.cellStates || {};
-            pg.ts = cachedPage.ts || 0;
-        }
-
-        isFirstLoad = false;
-        renderMeta();
-        buildCols();
-        updateOfflineUI();
-        console.log('[INIT] Loaded from cache — page:', D.cur, 'pages:', D.pages.length, 'mode:', _offlineMode ? 'offline' : 'online');
+      D.settings = cachedMeta.settings || D.settings;
+      D.curEnv = cachedMeta.curEnv || D.curEnv;
+      D.curGroup = cachedMeta.curGroup || D.curGroup;
+      D.environments = cachedMeta.environments || D.environments;
+      D.groups = cachedMeta.groups || D.groups;
+      D.inbox = cachedMeta.inbox || D.inbox;
+      D.pages = cachedPagesMeta;
+      // Restore last page from localStorage
+      const dg = D.settings.defaultGroup || '__last__';
+      const dp = D.settings.defaultPage || '__last__';
+      if (dg !== '__last__' && D.groups.some((g) => g.id === dg)) D.curGroup = dg;
+      if (dp !== '__last__' && D.pages.some((p) => p.id === dp)) D.cur = dp;
+      else {
+        try {
+          const lastPid = localStorage.getItem(LS_CUR_PAGE);
+          if (lastPid && D.pages.some(p => p.id === lastPid)) D.cur = lastPid;
+        } catch(e) {}
+      }
+      if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
+      // Ensure curGroup matches the restored page
+      const restoredPage = D.pages.find(p => p.id === D.cur);
+      if (restoredPage && restoredPage.groupId) {
+        D.curGroup = restoredPage.groupId;
+      }
+      sanitizeData(D);
+      if (D.__modified) {
+        delete D.__modified;
+        sv(true, true);
+      }
+      const cachedPage = getCachedPageData(D.cur);
+      const pg = cp();
+      if (pg && cachedPage) {
+        pg.widgets = cachedPage.widgets || [];
+        pg.miroCards = cachedPage.miroCards || [];
+      }
+      isFirstLoad = false;
+      renderMeta();
+      buildCols();
+      updateOfflineUI();
     }
+    return;
+  }
 
-    // ═══ If offline, we're done ═══
-    if (_offlineMode) {
-        return;
+  // Load sharded listeners immediately so that offline cache loads instantly 
+  // and listeners are attached without blocking on legacy migration check
+  setupShardedListeners();
+
+  // Backwards compatibility migration check: run in background asynchronously
+  db.ref(DB_REF).once('value', (snap) => {
+    const rawData = snap.val();
+    if (rawData && rawData.pages && Array.isArray(rawData.pages)) {
+      console.log('[MIGRATION] Monolithic legacy layout found. Migrating to sharded layout in background...');
+      const meta = {
+        settings: rawData.settings || { engine: 'bm', accent: '#6c8fff' },
+        curEnv: rawData.curEnv || 'e0',
+        curGroup: rawData.curGroup || (rawData.groups && rawData.groups[0] ? rawData.groups[0].id : 'g0'),
+        environments: rawData.environments || [{ id: 'e0', name: 'Main Env' }],
+        groups: rawData.groups || [{ id: 'g0', name: 'Main Group', envId: 'e0' }],
+        inbox: rawData.inbox || []
+      };
+
+      // Legacy group mapping
+      meta.groups.forEach(g => {
+        if (!g.envId) g.envId = meta.environments[0].id;
+      });
+
+      const pagesMeta = [];
+      const updates = {};
+
+      rawData.pages.forEach(p => {
+        pagesMeta.push({
+          id: p.id,
+          groupId: p.groupId || meta.curGroup,
+          name: p.name || 'Page',
+          pageType: p.pageType || 'miro',
+          zoom: p.zoom || 100,
+          panX: p.panX || 0,
+          panY: p.panY || 0,
+          bg: p.bg || '',
+          bgType: p.bgType || 'none',
+          tabColor: p.tabColor || ''
+        });
+
+        updates[`users/${USER_ID}/startmine_pages/${p.id}`] = {
+          widgets: p.widgets || [],
+          miroCards: p.miroCards || []
+        };
+      });
+
+      updates[`users/${USER_ID}/startmine_meta`] = meta;
+      updates[`users/${USER_ID}/startmine_pages_meta`] = pagesMeta;
+
+      // Clear the old monolith
+      updates[DB_REF] = null;
+
+      db.ref().update(updates).then(() => {
+        console.log('[MIGRATION] Legacy data migration complete!');
+      }).catch((err) => {
+        console.error('[MIGRATION] Legacy data migration update failed:', err);
+      });
     }
-
-    // ═══ If online, attach Firebase listeners for real-time updates ═══
-    setupShardedListeners();
-
-    // Backwards compatibility migration check (background, non-blocking)
-    db.ref(DB_REF).once('value', (snap) => {
-        const rawData = snap.val();
-        if (rawData && rawData.pages && Array.isArray(rawData.pages)) {
-            console.log('[MIGRATION] Monolithic legacy layout found. Migrating to sharded layout in background...');
-            const meta = {
-                settings: rawData.settings || { engine: 'bm', accent: '#6c8fff' },
-                curEnv: rawData.curEnv || 'e0',
-                curGroup: rawData.curGroup || (rawData.groups && rawData.groups[0] ? rawData.groups[0].id : 'g0'),
-                environments: rawData.environments || [{ id: 'e0', name: 'Main Env' }],
-                groups: rawData.groups || [{ id: 'g0', name: 'Main Group', envId: 'e0' }],
-                inbox: rawData.inbox || []
-            };
-        }
-    }, (err) => {
-        console.warn('[MIGRATION] Monolithic layout read error or permission denied (possibly already sharded):', err.message);
-    });
+  }, (err) => {
+    console.warn('[MIGRATION] Monolithic layout read error or permission denied (possibly already sharded):', err.message);
+  });
 }
 
 let _activePageListener = null;
@@ -871,32 +890,80 @@ function switchActivePage(pageId) {
 
   db.ref(pageDataRef).on('value', (snap) => {
     if (isOwnWrite()) return;
-    const pData = snap.val();
-    if (!pData) return;
-    const pg = cp();
-    if (!pg || pg.id !== pageId) return;
-    // Regression guard: don't overwrite existing data with empty
-    const newCount = (pData.widgets || []).length + (pData.miroCards || []).length;
-    const oldCount = (pg.widgets || []).length + (pg.miroCards || []).length;
-    if (newCount === 0 && oldCount > 0) {
-        console.warn('[PAGE LISTENER GUARD] Refusing to overwrite', oldCount, 'items with empty data');
+    const pData = snap.val() || { widgets: [], miroCards: [] };
+    
+    // ⛔ RACE CONDITION GUARD: Find the actual page by pageId instead of cp(),
+    // to prevent writing data of pageId into the wrong active page object if we switched pages.
+    const pg = D.pages.find(p => p && p.id === pageId);
+    if (pg) {
+      // ⛔ TIMESTAMP GUARD: If local data is newer than incoming server data, ignore update
+      const incomingTs = pData.ts || 0;
+      const localTs = pg.ts || 0;
+      if (localTs > incomingTs) {
+        console.warn(`[FIREBASE GUARD ⛔] Local data for "${pg.name}" is newer (${localTs}) than incoming (${incomingTs}) — ignoring update.`);
+        // Upload our newer local data to server
+        sv(false, true);
         return;
+      }
+
+      const incomingW = (pData.widgets || []).length;
+      const incomingC = (pData.miroCards || []).length;
+      const incomingG = (pData.vGuides || []).length + (pData.hGuides || []).length;
+      const localW = (pg.widgets || []).length;
+      const localC = (pg.miroCards || []).length;
+      const localG = (pg.vGuides || []).length + (pg.hGuides || []).length;
+      // ⛔ GUARD: If Firebase sends empty but we have local data, refuse the overwrite 
+      // (Only do this if the server data is indeed older/equal, i.e., incomingTs <= localTs)
+      const incomingEmpty = (incomingW === 0 && incomingC === 0 && incomingG === 0);
+      const localHasData = (localW > 0 || localC > 0 || localG > 0);
+      if (incomingEmpty && localHasData && incomingTs <= localTs) {
+        console.error(`[FIREBASE GUARD ⛔] Incoming data for "${pg.name}" is EMPTY but local has data/guides — IGNORING Firebase update!`);
+        if (typeof showToast === 'function') showToast('⚠️ Empty data from server ignored — local data preserved', 4000);
+        return; // Don't apply empty data
+      }
+
+      pg.widgets = pData.widgets || [];
+      pg.miroCards = pData.miroCards || [];
+      if (pData.vGuides !== undefined) pg.vGuides = pData.vGuides;
+      else if (pg.vGuides === undefined) pg.vGuides = [];
+      
+      if (pData.hGuides !== undefined) pg.hGuides = pData.hGuides;
+      else if (pg.hGuides === undefined) pg.hGuides = [];
+      
+      if (pData._guidesMode !== undefined) pg._guidesMode = pData._guidesMode;
+      else if (pg._guidesMode === undefined) pg._guidesMode = false;
+      
+      if (pData.lockedGuides !== undefined) pg.lockedGuides = pData.lockedGuides;
+      else if (pg.lockedGuides === undefined) pg.lockedGuides = [];
+      
+      if (pData.cellStates !== undefined) pg.cellStates = pData.cellStates;
+      else if (pg.cellStates === undefined) pg.cellStates = {};
+      
+      pg.ts = incomingTs;
+
+      // Cache to BOTH localStorage and IndexedDB
+      cachePageData(pageId, {
+        widgets: pg.widgets,
+        miroCards: pg.miroCards,
+        vGuides: pg.vGuides,
+        hGuides: pg.hGuides,
+        _guidesMode: pg._guidesMode,
+        lockedGuides: pg.lockedGuides,
+        cellStates: pg.cellStates,
+        ts: pg.ts
+      });
+
+      // ONLY sanitize, update lastSyncedPageData, and rebuild columns if it's the current active page
+      if (pageId === D.cur) {
+        const fakeD = { pages: [pg] };
+        sanitizeData(fakeD);
+        _lastSyncedPageData = {
+          widgets: JSON.stringify(pg.widgets),
+          miroCards: JSON.stringify(pg.miroCards)
+        };
+        buildCols();
+      }
     }
-    pg.widgets = pData.widgets || [];
-    pg.miroCards = pData.miroCards || [];
-    pg.vGuides = pData.vGuides || [];
-    pg.hGuides = pData.hGuides || [];
-    pg._guidesMode = pData._guidesMode || false;
-    pg.lockedGuides = pData.lockedGuides || [];
-    pg.cellStates = pData.cellStates || {};
-    pg.ts = pData.ts || Date.now();
-    cachePageData(pg.id, pData);
-    _lastSyncedPageData = {
-        widgets: JSON.stringify(pg.widgets),
-        miroCards: JSON.stringify(pg.miroCards)
-    };
-    trackPageVersion(pg.id, pg.widgets, pg.miroCards);
-    buildCols();
   });
 }
 
