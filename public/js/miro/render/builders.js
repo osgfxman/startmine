@@ -23,11 +23,18 @@
     // Clear pinned layer (elements from previous page)
     const _pl = document.getElementById('miro-pinned-layer');
     if (_pl) _pl.innerHTML = '';
-    // Remove only card elements, cell viewports, and guides, preserving selection overlays
-    board.querySelectorAll('.miro-card, .miro-life, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed, .miro-overlay-widget, .miro-cell-viewport, .miro-guide-v, .miro-guide-h').forEach((el) => el.remove());
+
+    // Remove cell viewports and guides from canvas, and preserve selection overlays
+    const canvas = document.getElementById('miro-canvas');
+    if (canvas) {
+      canvas.querySelectorAll('.miro-cell-viewport, .miro-guide-v, .miro-guide-h').forEach((el) => el.remove());
+    }
+
+    // Remove card elements from board
+    board.querySelectorAll('.miro-card, .miro-life, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed, .miro-overlay-widget').forEach((el) => el.remove());
 
     // Slices Mode rendering delegation
-    const hasGuides = page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
+    const hasGuides = page && (page._guidesMode || (page.vGuides && page.vGuides.length > 0) || (page.hGuides && page.hGuides.length > 0) || (page.customCells && page.customCells.length > 0));
     if (hasGuides && typeof window.renderMiroSlices === 'function') {
       window.renderMiroSlices(page);
       if (typeof window.updateMiroScrollbars === 'function') window.updateMiroScrollbars();

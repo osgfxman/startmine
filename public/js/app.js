@@ -270,7 +270,7 @@ window.addEventListener('beforeunload', () => {
     D.pages.forEach(p => {
       const wc = (p.widgets || []).length;
       const mc = (p.miroCards || []).length;
-      const hc = (p.vGuides || []).length + (p.hGuides || []).length;
+      const hc = (p.vGuides || []).length + (p.hGuides || []).length + (p.customCells || []).length;
       if (wc > 0 || mc > 0 || hc > 0 || p._guidesMode) {
         const payload = {
           widgets: p.widgets || [],
@@ -280,6 +280,8 @@ window.addEventListener('beforeunload', () => {
           _guidesMode: p._guidesMode || false,
           lockedGuides: p.lockedGuides || [],
           cellStates: p.cellStates || {},
+          mergedCells: p.mergedCells || [],
+          customCells: p.customCells || [],
           ts: p.ts || Date.now()
         };
         try {
@@ -315,7 +317,7 @@ function autoSnapshot() {
   D.pages.forEach(p => {
     const wc = (p.widgets || []).length;
     const mc = (p.miroCards || []).length;
-    const hc = (p.vGuides || []).length + (p.hGuides || []).length;
+    const hc = (p.vGuides || []).length + (p.hGuides || []).length + (p.customCells || []).length;
     if (wc > 0 || mc > 0 || hc > 0 || p._guidesMode) {
       snapshot.pages[p.id] = {
         widgets: p.widgets || [],
@@ -324,12 +326,14 @@ function autoSnapshot() {
         hGuides: p.hGuides || [],
         _guidesMode: p._guidesMode || false,
         lockedGuides: p.lockedGuides || [],
-        cellStates: p.cellStates || {}
+        cellStates: p.cellStates || {},
+        mergedCells: p.mergedCells || [],
+        customCells: p.customCells || []
       };
     } else {
       // Try cache
       const cached = getCachedPageData(p.id);
-      if (cached && ((cached.widgets || []).length > 0 || (cached.miroCards || []).length > 0 || (cached.vGuides || []).length > 0 || (cached.hGuides || []).length > 0 || cached._guidesMode)) {
+      if (cached && ((cached.widgets || []).length > 0 || (cached.miroCards || []).length > 0 || (cached.vGuides || []).length > 0 || (cached.hGuides || []).length > 0 || cached._guidesMode || (cached.customCells || []).length > 0)) {
         snapshot.pages[p.id] = cached;
       }
     }
@@ -392,6 +396,8 @@ function runIntegrityCheck() {
         _guidesMode: pg._guidesMode || false,
         lockedGuides: pg.lockedGuides || [],
         cellStates: pg.cellStates || {},
+        mergedCells: pg.mergedCells || [],
+        customCells: pg.customCells || [],
         ts: pg.ts || Date.now()
       });
     }
@@ -405,6 +411,8 @@ function runIntegrityCheck() {
         _guidesMode: pg._guidesMode || false,
         lockedGuides: pg.lockedGuides || [],
         cellStates: pg.cellStates || {},
+        mergedCells: pg.mergedCells || [],
+        customCells: pg.customCells || [],
         ts: pg.ts || Date.now()
       });
     }
@@ -695,6 +703,7 @@ function initDB() {
         pg.lockedGuides = cachedPage.lockedGuides || [];
         pg.cellStates = cachedPage.cellStates || {};
         pg.mergedCells = cachedPage.mergedCells || [];
+        pg.customCells = cachedPage.customCells || [];
       }
       isFirstLoad = false;
       renderMeta();
@@ -812,7 +821,8 @@ function switchActivePage(pageId) {
         _guidesMode: prevPg._guidesMode || false,
         lockedGuides: prevPg.lockedGuides || [],
         cellStates: prevPg.cellStates || {},
-        mergedCells: prevPg.mergedCells || []
+        mergedCells: prevPg.mergedCells || [],
+        customCells: prevPg.customCells || []
       });
       if (cacheOk) {
         // Cache verified — safe to evict
@@ -852,7 +862,7 @@ function switchActivePage(pageId) {
   // ─── Instant render from localStorage cache, IndexedDB fallback ───
   // ─── Instant render from localStorage cache, IndexedDB fallback ───
   const cachedPage = getCachedPageData(pageId);
-  if (cachedPage && ((cachedPage.widgets || []).length > 0 || (cachedPage.miroCards || []).length > 0 || (cachedPage.vGuides || []).length > 0 || (cachedPage.hGuides || []).length > 0)) {
+  if (cachedPage && ((cachedPage.widgets || []).length > 0 || (cachedPage.miroCards || []).length > 0 || (cachedPage.vGuides || []).length > 0 || (cachedPage.hGuides || []).length > 0 || (cachedPage.customCells || []).length > 0)) {
     const pg = cp();
     if (pg) {
       pg.widgets = cachedPage.widgets || [];
@@ -863,6 +873,7 @@ function switchActivePage(pageId) {
       pg.lockedGuides = cachedPage.lockedGuides || [];
       pg.cellStates = cachedPage.cellStates || {};
       pg.mergedCells = cachedPage.mergedCells || [];
+      pg.customCells = cachedPage.customCells || [];
       pg.ts = cachedPage.ts || 0;
       const fakeD = { pages: [pg] };
       sanitizeData(fakeD);
@@ -875,7 +886,7 @@ function switchActivePage(pageId) {
   } else {
     // Try IndexedDB async (larger, more reliable cache)
     getCachedPageDataAsync(pageId).then(idbCached => {
-      if (idbCached && ((idbCached.widgets || []).length > 0 || (idbCached.miroCards || []).length > 0 || (idbCached.vGuides || []).length > 0 || (idbCached.hGuides || []).length > 0)) {
+      if (idbCached && ((idbCached.widgets || []).length > 0 || (idbCached.miroCards || []).length > 0 || (idbCached.vGuides || []).length > 0 || (idbCached.hGuides || []).length > 0 || (idbCached.customCells || []).length > 0)) {
         const pg = cp();
         if (pg && pg.id === pageId) { // Make sure we're still on same page
           // ⛔ RACE CONDITION GUARD: If Firebase or another edit has already loaded newer data, don't overwrite it!
@@ -893,6 +904,7 @@ function switchActivePage(pageId) {
           pg.lockedGuides = idbCached.lockedGuides || [];
           pg.cellStates = idbCached.cellStates || {};
           pg.mergedCells = idbCached.mergedCells || [];
+          pg.customCells = idbCached.customCells || [];
           pg.ts = cachedTs;
           const fakeD = { pages: [pg] };
           sanitizeData(fakeD);
@@ -934,10 +946,10 @@ function switchActivePage(pageId) {
 
       const incomingW = (pData.widgets || []).length;
       const incomingC = (pData.miroCards || []).length;
-      const incomingG = (pData.vGuides || []).length + (pData.hGuides || []).length;
+      const incomingG = (pData.vGuides || []).length + (pData.hGuides || []).length + (pData.customCells || []).length;
       const localW = (pg.widgets || []).length;
       const localC = (pg.miroCards || []).length;
-      const localG = (pg.vGuides || []).length + (pg.hGuides || []).length;
+      const localG = (pg.vGuides || []).length + (pg.hGuides || []).length + (pg.customCells || []).length;
       // ⛔ GUARD: If Firebase sends empty but we have local data, refuse the overwrite 
       // (Only do this if the server data is indeed older/equal, i.e., incomingTs <= localTs)
       const incomingEmpty = (incomingW === 0 && incomingC === 0 && incomingG === 0);
@@ -968,6 +980,9 @@ function switchActivePage(pageId) {
       if (pData.mergedCells !== undefined) pg.mergedCells = pData.mergedCells;
       else if (pg.mergedCells === undefined) pg.mergedCells = [];
       
+      if (pData.customCells !== undefined) pg.customCells = pData.customCells;
+      else if (pg.customCells === undefined) pg.customCells = [];
+      
       pg.ts = incomingTs;
 
       // Cache to BOTH localStorage and IndexedDB
@@ -980,6 +995,7 @@ function switchActivePage(pageId) {
         lockedGuides: pg.lockedGuides,
         cellStates: pg.cellStates,
         mergedCells: pg.mergedCells,
+        customCells: pg.customCells,
         ts: pg.ts
       });
 
@@ -1080,7 +1096,7 @@ function saveSnapshot(silent = false) {
     pages: {}
   };
   D.pages.forEach(p => {
-    let widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates;
+    let widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, customCells;
     if (p.id === D.cur) {
       widgets = p.widgets || [];
       miroCards = p.miroCards || [];
@@ -1089,6 +1105,8 @@ function saveSnapshot(silent = false) {
       _guidesMode = p._guidesMode || false;
       lockedGuides = p.lockedGuides || [];
       cellStates = p.cellStates || {};
+      mergedCells = p.mergedCells || [];
+      customCells = p.customCells || [];
     } else {
       const cached = getCachedPageData(p.id);
       if (cached) {
@@ -1099,6 +1117,8 @@ function saveSnapshot(silent = false) {
         _guidesMode = cached._guidesMode || false;
         lockedGuides = cached.lockedGuides || [];
         cellStates = cached.cellStates || {};
+        mergedCells = cached.mergedCells || [];
+        customCells = cached.customCells || [];
       } else {
         widgets = p.widgets || [];
         miroCards = p.miroCards || [];
@@ -1107,9 +1127,11 @@ function saveSnapshot(silent = false) {
         _guidesMode = p._guidesMode || false;
         lockedGuides = p.lockedGuides || [];
         cellStates = p.cellStates || {};
+        mergedCells = p.mergedCells || [];
+        customCells = p.customCells || [];
       }
     }
-    snapshot.pages[p.id] = { widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates };
+    snapshot.pages[p.id] = { widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, customCells };
   });
 
   const snapRef = `users/${USER_ID}/startmine_snapshots/${now}`;
@@ -1385,8 +1407,10 @@ function buildFullExportData() {
       let _guidesMode = p._guidesMode || false;
       let lockedGuides = p.lockedGuides || [];
       let cellStates = p.cellStates || {};
+      let mergedCells = p.mergedCells || [];
+      let customCells = p.customCells || [];
       // Use localStorage cache for pages without loaded data
-      if (widgets.length === 0 && miroCards.length === 0 && vGuides.length === 0 && hGuides.length === 0 && !_guidesMode) {
+      if (widgets.length === 0 && miroCards.length === 0 && vGuides.length === 0 && hGuides.length === 0 && !_guidesMode && (p.customCells || []).length === 0) {
         const cached = getCachedPageData(p.id);
         if (cached) {
           widgets = cached.widgets || [];
@@ -1396,13 +1420,15 @@ function buildFullExportData() {
           _guidesMode = cached._guidesMode || false;
           lockedGuides = cached.lockedGuides || [];
           cellStates = cached.cellStates || {};
+          mergedCells = cached.mergedCells || [];
+          customCells = cached.customCells || [];
         }
       }
       return {
         id: p.id, groupId: p.groupId, name: p.name,
         pageType: p.pageType, zoom: p.zoom, panX: p.panX, panY: p.panY,
         bg: p.bg, bgType: p.bgType, tabColor: p.tabColor || '',
-        widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates
+        widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, customCells
       };
     })
   }));
@@ -1571,7 +1597,8 @@ function doSelectiveExport() {
       let lockedGuides = p.lockedGuides || [];
       let cellStates = p.cellStates || {};
       let mergedCells = p.mergedCells || [];
-      if (widgets.length === 0 && miroCards.length === 0 && vGuides.length === 0 && hGuides.length === 0 && !_guidesMode) {
+      let customCells = p.customCells || [];
+      if (widgets.length === 0 && miroCards.length === 0 && vGuides.length === 0 && hGuides.length === 0 && !_guidesMode && (p.customCells || []).length === 0) {
         const cached = getCachedPageData(p.id);
         if (cached) {
           widgets = cached.widgets || [];
@@ -1582,9 +1609,10 @@ function doSelectiveExport() {
           lockedGuides = cached.lockedGuides || [];
           cellStates = cached.cellStates || {};
           mergedCells = cached.mergedCells || [];
+          customCells = cached.customCells || [];
         }
       }
-      return { ...p, widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells };
+      return { ...p, widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, customCells };
     })
   };
   
@@ -3939,6 +3967,9 @@ document.getElementById('mz-guides-btn').onclick = () => {
   if (!page._guidesMode) {
     // Hide/Remove rulers, but DO NOT delete guides or merge cells!
     document.querySelectorAll('.miro-ruler').forEach(el => el.remove());
+    if (typeof window._exitCustomCellDrawMode === 'function') {
+      window._exitCustomCellDrawMode();
+    }
   } else {
     // Show/Initialize rulers
     if (typeof window.initMiroSlices === 'function') {
@@ -3979,11 +4010,6 @@ document.getElementById('mz-grid-btn').onclick = () => {
 document.getElementById('mz-autofit-btn').onclick = () => {
   const page = cp();
   if (!page || page.pageType !== 'miro') return;
-  const hasGuides = page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
-  if (!hasGuides) {
-    alert("Autofit is only available when the page is sliced into viewports.");
-    return;
-  }
   if (typeof window.autofitAllMiroSlices === 'function') {
     window.autofitAllMiroSlices();
   }

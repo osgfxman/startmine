@@ -13,144 +13,11 @@
   let _cellPanning = false;
   let _cellPanStartX = 0, _cellPanStartY = 0;
 
-  function parseCellKey(cellKey) {
-    if (!cellKey) return null;
-    const parts = cellKey.split('_');
-    if (parts.length === 2) {
-      const c = parseInt(parts[0]), r = parseInt(parts[1]);
-      return { cStart: c, rStart: r, cEnd: c, rEnd: r };
-    } else if (parts.length === 4) {
-      return {
-        cStart: parseInt(parts[0]),
-        rStart: parseInt(parts[1]),
-        cEnd: parseInt(parts[2]),
-        rEnd: parseInt(parts[3])
-      };
-    }
-    return null;
-  }
-
-  function getCellKey(span) {
-    if (span.cStart === span.cEnd && span.rStart === span.rEnd) {
-      return span.cStart + "_" + span.rStart;
-    }
-    return span.cStart + "_" + span.rStart + "_" + span.cEnd + "_" + span.rEnd;
-  }
-
-  function getActiveCells(page) {
-    const vg = [0, ...(page.vGuides || []).sort((a,b)=>a-b), 1];
-    const hg = [0, ...(page.hGuides || []).sort((a,b)=>a-b), 1];
-    const cols = vg.length - 1;
-    const rows = hg.length - 1;
-
-    const merged = page.mergedCells || [];
-    const active = [...merged];
-
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const covered = merged.some(m => c >= m.cStart && c <= m.cEnd && r >= m.rStart && r <= m.rEnd);
-        if (!covered) {
-          active.push({ cStart: c, rStart: r, cEnd: c, rEnd: r });
-        }
-      }
-    }
-    return active;
-  }
-
-  function mergeMiroCellRange(page, cStart, rStart, cEnd, rEnd) {
-    if (!page.mergedCells) page.mergedCells = [];
-
-    // Remove overlapping merged cells
-    page.mergedCells = page.mergedCells.filter(m => {
-      const noOverlap = m.cStart > cEnd || m.cEnd < cStart || m.rStart > rEnd || m.rEnd < rStart;
-      return noOverlap;
-    });
-
-    page.mergedCells.push({ cStart, rStart, cEnd, rEnd });
-
-    const canvas = document.getElementById('miro-canvas');
-    if (canvas) {
-      partitionMiroCardsIntoCells(page, canvas.clientWidth, canvas.clientHeight);
-    }
-  }
-
-  function parseTitleAndIcon(titleStr) {
-    if (!titleStr) return { title: '', icon: null };
-    // Match http/https URLs or base64 data URIs
-    const imgRegex = /(https?:\/\/[^\s]+|data:image\/[a-zA-Z0-9+/=]*;base64,[^\s]+)/i;
-    const match = titleStr.match(imgRegex);
-    if (match) {
-      const icon = match[1];
-      const title = titleStr.replace(icon, '').trim();
-      return { title, icon };
-    }
-    return { title: titleStr, icon: null };
-  }
-
-  function updateCellBackgroundGrid(cellDiv, state) {
-    if (!state) return;
-    const cellZoom = (state.zoom || 100) / 100;
-    const cellPanX = state.panX || 0;
-    const cellPanY = state.panY || 0;
-
-    // Grid rendering inside the cell
-    const BASE = 10;
-    const FACTOR = 5;
-
-    let fine = BASE;
-    while (fine * cellZoom < 8) fine *= FACTOR;
-    while (fine * cellZoom > 200) fine /= FACTOR;
-
-    const medium = fine * FACTOR;
-    const coarse = medium * FACTOR;
-
-    const fineScreen = fine * cellZoom;
-    const medScreen = medium * cellZoom;
-    const coarseScreen = coarse * cellZoom;
-
-    const fineAlpha = Math.max(0, Math.min(1, (fineScreen - 6) / 25)) * 0.05;
-    const medAlpha = Math.max(0, Math.min(1, (medScreen - 6) / 40)) * 0.10;
-    const coarseAlpha = Math.max(0, Math.min(1, (coarseScreen - 6) / 60)) * 0.16;
-
-    const layers = [];
-    const sizes = [];
-    const positions = [];
-
-    function addLevel(screenSize, alpha) {
-      if (alpha < 0.002) return;
-      const c = `rgba(0,0,0,${alpha.toFixed(4)})`;
-      layers.push(
-        `linear-gradient(${c} 1px, transparent 1px)`,
-        `linear-gradient(90deg, ${c} 1px, transparent 1px)`,
-      );
-      const s = `${screenSize}px ${screenSize}px`;
-      sizes.push(s, s);
-      const ox = cellPanX % screenSize;
-      const oy = cellPanY % screenSize;
-      const p = `${ox}px ${oy}px`;
-      positions.push(p, p);
-    }
-
-    addLevel(fineScreen, fineAlpha);
-    addLevel(medScreen, medAlpha);
-    addLevel(coarseScreen, coarseAlpha);
-
-    if (layers.length) {
-      cellDiv.style.backgroundImage = layers.join(',');
-      cellDiv.style.backgroundSize = sizes.join(',');
-      cellDiv.style.backgroundPosition = positions.join(',');
-    } else {
-      cellDiv.style.backgroundImage = 'none';
-    }
-  }
-
-  // Initialize Slices Mode UI, event listeners, and rulers
-  window.initMiroSlices = function initMiroSlices() {
-    // Add css styles for rulers, guide handles, cell viewports, and lock badges
-    if (!document.getElementById('miro-slices-css')) {
-      const style = document.createElement('style');
-      style.id = 'miro-slices-css';
-      style.textContent = `
+  // Add css styles for rulers, guide handles, cell viewports, and lock badges immediately on load
+  if (!document.getElementById('miro-slices-css')) {
+    const style = document.createElement('style');
+    style.id = 'miro-slices-css';
+    style.textContent = `
         .miro-ruler {
           position: absolute;
           background: #1a1d2e;
@@ -213,7 +80,7 @@
         .miro-cell-viewport {
           position: absolute;
           box-sizing: border-box;
-          background: transparent;
+          background: var(--bg, #f3f4f6);
           border: 3px solid rgba(108, 143, 255, 0.45);
           border-radius: 12px;
           box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(108, 143, 255, 0.15);
@@ -408,10 +275,143 @@
         .miro-cell-modal .mcm-btn-save:hover {
           background: #5a7de8;
         }
-      `;
-      document.head.appendChild(style);
+    `;
+    document.head.appendChild(style);
+  }
+
+  function parseCellKey(cellKey) {
+    if (!cellKey) return null;
+    const parts = cellKey.split('_');
+    if (parts.length === 2) {
+      const c = parseInt(parts[0]), r = parseInt(parts[1]);
+      return { cStart: c, rStart: r, cEnd: c, rEnd: r };
+    } else if (parts.length === 4) {
+      return {
+        cStart: parseInt(parts[0]),
+        rStart: parseInt(parts[1]),
+        cEnd: parseInt(parts[2]),
+        rEnd: parseInt(parts[3])
+      };
+    }
+    return null;
+  }
+
+  function getCellKey(span) {
+    if (span.cStart === span.cEnd && span.rStart === span.rEnd) {
+      return span.cStart + "_" + span.rStart;
+    }
+    return span.cStart + "_" + span.rStart + "_" + span.cEnd + "_" + span.rEnd;
+  }
+
+  function getActiveCells(page) {
+    const vg = [0, ...(page.vGuides || []).sort((a,b)=>a-b), 1];
+    const hg = [0, ...(page.hGuides || []).sort((a,b)=>a-b), 1];
+    const cols = vg.length - 1;
+    const rows = hg.length - 1;
+
+    const merged = page.mergedCells || [];
+    const active = [...merged];
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const covered = merged.some(m => c >= m.cStart && c <= m.cEnd && r >= m.rStart && r <= m.rEnd);
+        if (!covered) {
+          active.push({ cStart: c, rStart: r, cEnd: c, rEnd: r });
+        }
+      }
+    }
+    return active;
+  }
+
+  function mergeMiroCellRange(page, cStart, rStart, cEnd, rEnd) {
+    if (!page.mergedCells) page.mergedCells = [];
+
+    // Remove overlapping merged cells
+    page.mergedCells = page.mergedCells.filter(m => {
+      const noOverlap = m.cStart > cEnd || m.cEnd < cStart || m.rStart > rEnd || m.rEnd < rStart;
+      return noOverlap;
+    });
+
+    page.mergedCells.push({ cStart, rStart, cEnd, rEnd });
+
+    const canvas = document.getElementById('miro-canvas');
+    if (canvas) {
+      partitionMiroCardsIntoCells(page, canvas.clientWidth, canvas.clientHeight);
+    }
+  }
+
+  function parseTitleAndIcon(titleStr) {
+    if (!titleStr) return { title: '', icon: null };
+    // Match http/https URLs or base64 data URIs
+    const imgRegex = /(https?:\/\/[^\s]+|data:image\/[a-zA-Z0-9+/=]*;base64,[^\s]+)/i;
+    const match = titleStr.match(imgRegex);
+    if (match) {
+      const icon = match[1];
+      const title = titleStr.replace(icon, '').trim();
+      return { title, icon };
+    }
+    return { title: titleStr, icon: null };
+  }
+
+  function updateCellBackgroundGrid(cellDiv, state) {
+    if (!state) return;
+    const cellZoom = (state.zoom || 100) / 100;
+    const cellPanX = state.panX || 0;
+    const cellPanY = state.panY || 0;
+
+    // Grid rendering inside the cell
+    const BASE = 10;
+    const FACTOR = 5;
+
+    let fine = BASE;
+    while (fine * cellZoom < 8) fine *= FACTOR;
+    while (fine * cellZoom > 200) fine /= FACTOR;
+
+    const medium = fine * FACTOR;
+    const coarse = medium * FACTOR;
+
+    const fineScreen = fine * cellZoom;
+    const medScreen = medium * cellZoom;
+    const coarseScreen = coarse * cellZoom;
+
+    const fineAlpha = Math.max(0, Math.min(1, (fineScreen - 6) / 25)) * 0.05;
+    const medAlpha = Math.max(0, Math.min(1, (medScreen - 6) / 40)) * 0.10;
+    const coarseAlpha = Math.max(0, Math.min(1, (coarseScreen - 6) / 60)) * 0.16;
+
+    const layers = [];
+    const sizes = [];
+    const positions = [];
+
+    function addLevel(screenSize, alpha) {
+      if (alpha < 0.002) return;
+      const c = `rgba(0,0,0,${alpha.toFixed(4)})`;
+      layers.push(
+        `linear-gradient(${c} 1px, transparent 1px)`,
+        `linear-gradient(90deg, ${c} 1px, transparent 1px)`,
+      );
+      const s = `${screenSize}px ${screenSize}px`;
+      sizes.push(s, s);
+      const ox = cellPanX % screenSize;
+      const oy = cellPanY % screenSize;
+      const p = `${ox}px ${oy}px`;
+      positions.push(p, p);
     }
 
+    addLevel(fineScreen, fineAlpha);
+    addLevel(medScreen, medAlpha);
+    addLevel(coarseScreen, coarseAlpha);
+
+    if (layers.length) {
+      cellDiv.style.backgroundImage = layers.join(',');
+      cellDiv.style.backgroundSize = sizes.join(',');
+      cellDiv.style.backgroundPosition = positions.join(',');
+    } else {
+      cellDiv.style.backgroundImage = 'none';
+    }
+  }
+
+  // Initialize Slices Mode UI, event listeners, and rulers
+  window.initMiroSlices = function initMiroSlices() {
     const canvas = document.getElementById('miro-canvas');
     if (!canvas) return;
 
@@ -515,13 +515,15 @@
     _activeGuideDrag = null;
   });
 
-  // Render sliced cell viewports inside #miro-board
+  // Render sliced cell viewports inside #miro-canvas
   window.renderMiroSlices = function renderMiroSlices(page) {
     const board = document.getElementById('miro-board');
     if (!board) return;
 
-    // Reset board transforms so cell containers scale properly
-    board.style.transform = 'none';
+    // Reset board transforms so cell containers scale properly if in Slices edit mode
+    if (page._guidesMode) {
+      board.style.transform = 'none';
+    }
 
     const canvas = document.getElementById('miro-canvas');
     const W = canvas.clientWidth, H = canvas.clientHeight;
@@ -543,27 +545,44 @@
     // Ensure cellStates is initialized
     if (!page.cellStates) page.cellStates = {};
 
-    // Render cell viewports
-    const activeCells = getActiveCells(page);
-    activeCells.forEach((span) => {
-      const cellKey = getCellKey(span);
-      const c = span.cStart;
-      const r = span.rStart;
-      const cEnd = span.cEnd;
-      const rEnd = span.rEnd;
-
+    function drawCellViewport(cellKey, isCustom, customCell, span) {
       const cellDiv = document.createElement('div');
       cellDiv.className = 'miro-cell-viewport';
-      cellDiv.dataset.col = c;
-      cellDiv.dataset.row = r;
       cellDiv.dataset.cellKey = cellKey;
 
-      // Position cell viewport with percentages
-      cellDiv.style.left = (vg[c] * 100) + '%';
-      cellDiv.style.width = ((vg[cEnd+1] - vg[c]) * 100) + '%';
-      cellDiv.style.top = (hg[r] * 100) + '%';
-      cellDiv.style.height = ((hg[rEnd+1] - hg[r]) * 100) + '%';
-      cellDiv.style.border = '1px dashed rgba(108, 143, 255, 0.35)';
+      let cw = 0, ch = 0;
+
+      if (isCustom) {
+        cellDiv.dataset.isCustom = 'true';
+        cellDiv.style.left = (customCell.x * 100) + '%';
+        cellDiv.style.width = (customCell.w * 100) + '%';
+        cellDiv.style.top = (customCell.y * 100) + '%';
+        cellDiv.style.height = (customCell.h * 100) + '%';
+        cellDiv.style.border = '3px solid rgba(255, 138, 101, 0.7)';
+        cellDiv.style.borderRadius = '16px';
+        cellDiv.style.boxShadow = '0 12px 48px rgba(0, 0, 0, 0.65), inset 0 0 15px rgba(255, 138, 101, 0.2)';
+        
+        cw = W * customCell.w;
+        ch = H * customCell.h;
+      } else {
+        const c = span.cStart;
+        const r = span.rStart;
+        const cEnd = span.cEnd;
+        const rEnd = span.rEnd;
+
+        cellDiv.dataset.col = c;
+        cellDiv.dataset.row = r;
+        cellDiv.style.left = (vg[c] * 100) + '%';
+        cellDiv.style.width = ((vg[cEnd+1] - vg[c]) * 100) + '%';
+        cellDiv.style.top = (hg[r] * 100) + '%';
+        cellDiv.style.height = ((hg[rEnd+1] - hg[r]) * 100) + '%';
+        cellDiv.style.border = '1px dashed rgba(108, 143, 255, 0.35)';
+        cellDiv.style.borderRadius = '12px';
+        cellDiv.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(108, 143, 255, 0.15)';
+
+        cw = W * (vg[cEnd+1] - vg[c]);
+        ch = H * (hg[rEnd+1] - hg[r]);
+      }
 
       // Apply custom background color if set
       if (page.cellStates[cellKey] && page.cellStates[cellKey].bgColor) {
@@ -616,9 +635,18 @@
 
       // Title text
       const titleSpan = document.createElement('span');
-      let defaultName = `Cell [${c+1}, ${r+1}]`;
-      if (c !== cEnd || r !== rEnd) {
-        defaultName = `Merged Cell [${c+1},${r+1} to ${cEnd+1},${rEnd+1}]`;
+      let defaultName = '';
+      if (isCustom) {
+        defaultName = customCell.title || 'Screen';
+      } else {
+        const c = span.cStart;
+        const r = span.rStart;
+        const cEnd = span.cEnd;
+        const rEnd = span.rEnd;
+        defaultName = `Cell [${c+1}, ${r+1}]`;
+        if (c !== cEnd || r !== rEnd) {
+          defaultName = `Merged Cell [${c+1},${r+1} to ${cEnd+1},${rEnd+1}]`;
+        }
       }
       titleSpan.textContent = displayTitle || (displayIcon ? '' : defaultName);
       if (displayTitle || !displayIcon) {
@@ -657,8 +685,6 @@
       const state = page.cellStates[cellKey];
       
       // Clamp and apply transforms
-      const cw = W * (vg[cEnd+1] - vg[c]);
-      const ch = H * (hg[rEnd+1] - hg[r]);
       clampCellState(cellKey, cw, ch);
 
       // Apply background grid
@@ -722,8 +748,28 @@
       });
 
       cellDiv.appendChild(cellBoard);
-      board.appendChild(cellDiv);
-    });
+      canvas.appendChild(cellDiv);
+    }
+
+    // Render normal active cell viewports (if guides exist)
+    const hasGridGuides = page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
+    if (hasGridGuides) {
+      const activeCells = getActiveCells(page);
+      activeCells.forEach((span) => {
+        const cellKey = getCellKey(span);
+        drawCellViewport(cellKey, false, null, span);
+      });
+    } else {
+      // If there are no guides, render one single full-boundary grid cell covering 100% W and H
+      drawCellViewport("0_0", false, null, { cStart: 0, rStart: 0, cEnd: 0, rEnd: 0 });
+    }
+
+    // Render Custom Cells viewports
+    if (page.customCells) {
+      page.customCells.forEach((cc) => {
+        drawCellViewport(cc.id, true, cc, null);
+      });
+    }
 
     // Render draggable guide overlays if guides exist
     const hasGuides = page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
@@ -753,6 +799,11 @@
           }
           segment.appendChild(lineVisual);
 
+          if (!page._guidesMode) {
+            segment.style.pointerEvents = 'none';
+            segment.style.cursor = 'default';
+          }
+
           // Events
           segment.onmousedown = (e) => {
             if (page.lockedGuides && page.lockedGuides.indexOf('v_' + idx) !== -1) return;
@@ -765,7 +816,7 @@
             showSlicesContextMenu(e, 'v', idx);
           };
 
-          board.appendChild(segment);
+          canvas.appendChild(segment);
         }
       });
 
@@ -794,6 +845,11 @@
           }
           segment.appendChild(lineVisual);
 
+          if (!page._guidesMode) {
+            segment.style.pointerEvents = 'none';
+            segment.style.cursor = 'default';
+          }
+
           // Events
           segment.onmousedown = (e) => {
             if (page.lockedGuides && page.lockedGuides.indexOf('h_' + idx) !== -1) return;
@@ -806,7 +862,7 @@
             showSlicesContextMenu(e, 'h', idx);
           };
 
-          board.appendChild(segment);
+          canvas.appendChild(segment);
         }
       });
     }
@@ -915,11 +971,13 @@
     }
   };
 
-  // Convert absolute coordinates to cell-local coordinates based on guide percentages
+  // Convert absolute coordinates to cell-local coordinates based on guide percentages & custom cells
   window.partitionMiroCardsIntoCells = function partitionMiroCardsIntoCells(page, canvasW, canvasH) {
     if (!page.vGuides) page.vGuides = [];
     if (!page.hGuides) page.hGuides = [];
-    if (page.vGuides.length === 0 && page.hGuides.length === 0) return;
+    const hasGuides = page.vGuides.length > 0 || page.hGuides.length > 0;
+    const hasCustom = page.customCells && page.customCells.length > 0;
+    if (!hasGuides && !hasCustom) return;
 
     const vg = [0, ...[...page.vGuides].sort((a,b)=>a-b), 1];
     const hg = [0, ...[...page.hGuides].sort((a,b)=>a-b), 1];
@@ -929,55 +987,95 @@
       let absX = card.x || 0;
       let absY = card.y || 0;
       if (card.cell) {
-        const parts = card.cell.split('_');
-        const c = parseInt(parts[0]), r = parseInt(parts[1]);
-        const cellLeft = vg[c] * canvasW;
-        const cellTop = hg[r] * canvasH;
-        absX = cellLeft + absX;
-        absY = cellTop + absY;
+        if (card.cell.startsWith('cc_')) {
+          const cc = (page.customCells || []).find(c => c.id === card.cell);
+          if (cc) {
+            const cellLeft = cc.x * canvasW;
+            const cellTop = cc.y * canvasH;
+            absX = cellLeft + absX;
+            absY = cellTop + absY;
+          }
+        } else {
+          const parts = card.cell.split('_');
+          const c = parseInt(parts[0]), r = parseInt(parts[1]);
+          const cellLeft = vg[c] * canvasW;
+          const cellTop = hg[r] * canvasH;
+          absX = cellLeft + absX;
+          absY = cellTop + absY;
+        }
       }
 
       const cx = absX + (card.w || 280) / 2;
       const cy = absY + (card.h || 240) / 2;
 
-      // Find viewport col/row that contains center
+      // Percentage coordinate of center relative to canvas
       const pctX = cx / canvasW;
       const pctY = cy / canvasH;
 
-      let col = vg.length - 2;
-      for (let i = 0; i < vg.length - 1; i++) {
-        if (pctX >= vg[i] && pctX < vg[i+1]) { col = i; break; }
+      // 1. Check if dropped inside a custom cell (in reverse order to match topmost drawn)
+      let targetCustomCell = null;
+      if (page.customCells) {
+        for (let i = page.customCells.length - 1; i >= 0; i--) {
+          const cc = page.customCells[i];
+          if (pctX >= cc.x && pctX <= (cc.x + cc.w) && pctY >= cc.y && pctY <= (cc.y + cc.h)) {
+            targetCustomCell = cc;
+            break;
+          }
+        }
       }
 
-      let row = hg.length - 2;
-      for (let i = 0; i < hg.length - 1; i++) {
-        if (pctY >= hg[i] && pctY < hg[i+1]) { row = i; break; }
+      if (targetCustomCell) {
+        if (card.cell === targetCustomCell.id) return;
+        const cellLeft = targetCustomCell.x * canvasW;
+        const cellTop = targetCustomCell.y * canvasH;
+        card.cell = targetCustomCell.id;
+        card.x = absX - cellLeft;
+        card.y = absY - cellTop;
+        return;
       }
 
-      // Find if this grid coordinate (col, row) is inside any merged cell
-      const mergedCell = (page.mergedCells || []).find(m => col >= m.cStart && col <= m.cEnd && row >= m.rStart && row <= m.rEnd);
-      
-      let targetCell;
-      let cellLeftCol, cellTopRow;
-      if (mergedCell) {
-        targetCell = mergedCell.cStart + "_" + mergedCell.rStart + "_" + mergedCell.cEnd + "_" + mergedCell.rEnd;
-        cellLeftCol = mergedCell.cStart;
-        cellTopRow = mergedCell.rStart;
+      // 2. Otherwise partition into normal grid cell viewports (if guides exist)
+      if (hasGuides) {
+        let col = vg.length - 2;
+        for (let i = 0; i < vg.length - 1; i++) {
+          if (pctX >= vg[i] && pctX < vg[i+1]) { col = i; break; }
+        }
+
+        let row = hg.length - 2;
+        for (let i = 0; i < hg.length - 1; i++) {
+          if (pctY >= hg[i] && pctY < hg[i+1]) { row = i; break; }
+        }
+
+        const mergedCell = (page.mergedCells || []).find(m => col >= m.cStart && col <= m.cEnd && row >= m.rStart && row <= m.rEnd);
+        
+        let targetCell;
+        let cellLeftCol, cellTopRow;
+        if (mergedCell) {
+          targetCell = mergedCell.cStart + "_" + mergedCell.rStart + "_" + mergedCell.cEnd + "_" + mergedCell.rEnd;
+          cellLeftCol = mergedCell.cStart;
+          cellTopRow = mergedCell.rStart;
+        } else {
+          targetCell = col + "_" + row;
+          cellLeftCol = col;
+          cellTopRow = row;
+        }
+
+        if (card.cell === targetCell) return;
+
+        const cellLeft = vg[cellLeftCol] * canvasW;
+        const cellTop = hg[cellTopRow] * canvasH;
+
+        card.cell = targetCell;
+        card.x = absX - cellLeft;
+        card.y = absY - cellTop;
       } else {
-        targetCell = col + "_" + row;
-        cellLeftCol = col;
-        cellTopRow = row;
+        // If guides are not active, card falls back to main canvas board (no cell)
+        if (card.cell) {
+          card.x = absX;
+          card.y = absY;
+          delete card.cell;
+        }
       }
-
-      if (card.cell === targetCell) return;
-
-      const cellLeft = vg[cellLeftCol] * canvasW;
-      const cellTop = hg[cellTopRow] * canvasH;
-
-      // Convert absolute to local cell coordinates
-      card.cell = targetCell;
-      card.x = absX - cellLeft;
-      card.y = absY - cellTop;
     });
   };
 
@@ -991,14 +1089,25 @@
 
     (page.miroCards || []).forEach(card => {
       if (card.cell) {
-        const parts = card.cell.split('_');
-        const c = parseInt(parts[0]), r = parseInt(parts[1]);
-        const cellLeft = vg[c] * canvasW;
-        const cellTop = hg[r] * canvasH;
+        if (card.cell.startsWith('cc_')) {
+          const cc = (page.customCells || []).find(c => c.id === card.cell);
+          if (cc) {
+            const cellLeft = cc.x * canvasW;
+            const cellTop = cc.y * canvasH;
+            card.x = cellLeft + (card.x || 0);
+            card.y = cellTop + (card.y || 0);
+          }
+          delete card.cell;
+        } else {
+          const parts = card.cell.split('_');
+          const c = parseInt(parts[0]), r = parseInt(parts[1]);
+          const cellLeft = vg[c] * canvasW;
+          const cellTop = hg[r] * canvasH;
 
-        card.x = cellLeft + (card.x || 0);
-        card.y = cellTop + (card.y || 0);
-        delete card.cell;
+          card.x = cellLeft + (card.x || 0);
+          card.y = cellTop + (card.y || 0);
+          delete card.cell;
+        }
       }
     });
   };
@@ -1042,9 +1151,16 @@
   window.autofitAllMiroSlices = function autofitAllMiroSlices() {
     const page = cp();
     if (!page || page.pageType !== 'miro') return;
-    if (!page.vGuides) page.vGuides = [];
-    if (!page.hGuides) page.hGuides = [];
-    if (page.vGuides.length === 0 && page.hGuides.length === 0) return;
+    
+    const hasGridGuides = page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
+    const hasCustomCells = page.customCells && page.customCells.length > 0;
+    
+    if (!hasGridGuides && !hasCustomCells) {
+      if (typeof window.zoomToFitSelection === 'function') {
+        window.zoomToFitSelection();
+      }
+      return;
+    }
 
     const canvas = document.getElementById('miro-canvas');
     const W = canvas.clientWidth, H = canvas.clientHeight;
@@ -1052,22 +1168,41 @@
     // Partition cards first to ensure correct coordinates mapping
     partitionMiroCardsIntoCells(page, W, H);
 
-    const vg = [0, ...[...page.vGuides].sort((a,b)=>a-b), 1];
-    const hg = [0, ...[...page.hGuides].sort((a,b)=>a-b), 1];
+    const vg = [0, ...(page.vGuides || []).sort((a,b)=>a-b), 1];
+    const hg = [0, ...(page.hGuides || []).sort((a,b)=>a-b), 1];
 
     if (!page.cellStates) page.cellStates = {};
 
-    const activeCells = getActiveCells(page);
-    activeCells.forEach((span) => {
-      const cellKey = getCellKey(span);
-      const c = span.cStart;
-      const r = span.rStart;
-      const cEnd = span.cEnd;
-      const rEnd = span.rEnd;
+    // 1. Process grid viewports
+    if (hasGridGuides) {
+      const activeCells = getActiveCells(page);
+      activeCells.forEach((span) => {
+        const cellKey = getCellKey(span);
+        const c = span.cStart;
+        const r = span.rStart;
+        const cEnd = span.cEnd;
+        const rEnd = span.rEnd;
 
-      const cellW = W * (vg[cEnd+1] - vg[c]);
-      const cellH = H * (hg[rEnd+1] - hg[r]);
+        const cellW = W * (vg[cEnd+1] - vg[c]);
+        const cellH = H * (hg[rEnd+1] - hg[r]);
 
+        fitSingleCell(cellKey, cellW, cellH);
+      });
+    } else {
+      // 100% full-board virtual cell
+      fitSingleCell("0_0", W, H);
+    }
+
+    // 2. Process custom cell viewports
+    if (hasCustomCells) {
+      page.customCells.forEach((cc) => {
+        const cellW = W * cc.w;
+        const cellH = H * cc.h;
+        fitSingleCell(cc.id, cellW, cellH);
+      });
+    }
+
+    function fitSingleCell(cellKey, cellW, cellH) {
       const cards = (page.miroCards || []).filter(card => card.cell === cellKey);
       if (cards.length === 0) {
         page.cellStates[cellKey] = { zoom: 100, panX: 0, panY: 0 };
@@ -1085,7 +1220,7 @@
       const contentW = maxX - minX;
       const contentH = maxY - minY;
 
-      // Add 15px padding
+      // Add 30px padding
       const zoomW = (cellW - 30) / contentW;
       const zoomH = (cellH - 30) / contentH;
       let fitZoom = Math.min(zoomW, zoomH);
@@ -1097,7 +1232,7 @@
 
       page.cellStates[cellKey] = { zoom: zPercent, panX, panY };
       clampCellState(cellKey, cellW, cellH);
-    });
+    }
 
     sv();
     buildMiroCanvas();
@@ -1149,7 +1284,8 @@
   window.handleMiroCellPanStart = function handleMiroCellPanStart(e) {
     const page = cp();
     if (!page || page.pageType !== 'miro') return false;
-    if (!page._guidesMode) return false;
+    const hasSlices = page && (page._guidesMode || (page.vGuides && page.vGuides.length > 0) || (page.hGuides && page.hGuides.length > 0) || (page.customCells && page.customCells.length > 0));
+    if (!hasSlices) return false;
 
     const cellViewport = e.target.closest('.miro-cell-viewport');
     if (!cellViewport) return false;
@@ -1202,7 +1338,8 @@
   window.handleMiroCellWheel = function handleMiroCellWheel(e) {
     const page = cp();
     if (!page || page.pageType !== 'miro') return false;
-    if (!page._guidesMode) return false;
+    const hasSlices = page && (page._guidesMode || (page.vGuides && page.vGuides.length > 0) || (page.hGuides && page.hGuides.length > 0) || (page.customCells && page.customCells.length > 0));
+    if (!hasSlices) return false;
 
     const cellViewport = e.target.closest('.miro-cell-viewport');
     if (!cellViewport) return false;
@@ -1288,8 +1425,13 @@
     if (!page || !page.cellStates) return;
     if (!page.cellStates[cellKey]) page.cellStates[cellKey] = { zoom: 100, panX: 0, panY: 0 };
     const state = page.cellStates[cellKey];
-    const parts = cellKey.split('_');
-    const c = parseInt(parts[0]), r = parseInt(parts[1]);
+
+    const isCustomCell = cellKey.startsWith('cc_');
+    let c = 0, r = 0;
+    if (!isCustomCell) {
+      const parts = cellKey.split('_');
+      c = parseInt(parts[0]); r = parseInt(parts[1]);
+    }
 
     const overlay = document.createElement('div');
     overlay.className = 'miro-cell-modal-overlay';
@@ -1299,7 +1441,7 @@
 
     // Title
     const h3 = document.createElement('h3');
-    h3.textContent = `⚙️ Cell [${c+1}, ${r+1}] Settings`;
+    h3.textContent = isCustomCell ? `⚙️ Custom Screen Settings` : `⚙️ Cell [${c+1}, ${r+1}] Settings`;
     modal.appendChild(h3);
 
     // Row: Title input
@@ -1310,7 +1452,7 @@
     const titleInput = document.createElement('input');
     titleInput.type = 'text';
     titleInput.value = state.title || '';
-    titleInput.placeholder = `Cell [${c+1}, ${r+1}]`;
+    titleInput.placeholder = isCustomCell ? 'Screen' : `Cell [${c+1}, ${r+1}]`;
     titleRow.appendChild(titleLabel);
     titleRow.appendChild(titleInput);
     modal.appendChild(titleRow);
@@ -1529,122 +1671,160 @@
     bgRow.appendChild(bgContainer);
     modal.appendChild(bgRow);
 
-    // Row: Merge Cells
+    // Row: Merge Cells / Custom Cell Actions
     const mergeRow = document.createElement('div');
     mergeRow.className = 'mcm-row';
-    const mergeLabel = document.createElement('label');
-    mergeLabel.textContent = 'Merge/Split Cells';
-    mergeRow.appendChild(mergeLabel);
 
-    const mergeContainer = document.createElement('div');
-    mergeContainer.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;';
+    if (isCustomCell) {
+      const mergeLabel = document.createElement('label');
+      mergeLabel.textContent = 'Custom Cell Actions';
+      mergeRow.appendChild(mergeLabel);
 
-    const span = parseCellKey(cellKey);
-    const isMerged = (span.cStart !== span.cEnd || span.rStart !== span.rEnd);
+      const actionContainer = document.createElement('div');
+      actionContainer.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;';
 
-    if (isMerged) {
-      const unmergeBtn = document.createElement('button');
-      unmergeBtn.type = 'button';
-      unmergeBtn.className = 'mcm-btn mcm-btn-cancel';
-      unmergeBtn.style.cssText = 'color:#ff4444;background:rgba(255,68,68,0.1);padding:6px 12px;font-size:0.65rem;';
-      unmergeBtn.textContent = '🔓 Split / Unmerge Cell';
-      unmergeBtn.onclick = () => {
-        if (!confirm('Split this merged cell back into individual grid cells?')) return;
-        page.mergedCells = (page.mergedCells || []).filter(m => !(m.cStart === span.cStart && m.rStart === span.rStart && m.cEnd === span.cEnd && m.rEnd === span.rEnd));
+      const delCellBtn = document.createElement('button');
+      delCellBtn.type = 'button';
+      delCellBtn.className = 'mcm-btn mcm-btn-cancel';
+      delCellBtn.style.cssText = 'color:#ff4444;background:rgba(255,68,68,0.1);padding:6px 12px;font-size:0.65rem;';
+      delCellBtn.textContent = '🗑️ Delete Screen/Cell';
+      delCellBtn.onclick = () => {
+        if (!confirm('Are you sure you want to delete this custom screen? All elements inside it will be returned to the main canvas.')) return;
         
-        // Re-partition cards
-        const canvas = document.getElementById('miro-canvas');
-        if (canvas) partitionMiroCardsIntoCells(page, canvas.clientWidth, canvas.clientHeight);
+        // Remove from page.customCells
+        page.customCells = (page.customCells || []).filter(cc => cc.id !== cellKey);
         
-        overlay.remove();
-        sv();
-        buildMiroCanvas();
-      };
-      mergeContainer.appendChild(unmergeBtn);
-    } else {
-      const mergeColBtn = document.createElement('button');
-      mergeColBtn.type = 'button';
-      mergeColBtn.className = 'mcm-btn mcm-btn-cancel';
-      mergeColBtn.style.cssText = 'padding:6px 12px;font-size:0.65rem;';
-      mergeColBtn.textContent = '🔗 Merge Column';
-      mergeColBtn.onclick = () => {
-        if (!confirm(`Merge all cells in column ${c+1}?`)) return;
-        const totalRows = (page.hGuides || []).length + 1;
-        mergeMiroCellRange(page, c, 0, c, totalRows - 1);
-        overlay.remove();
-        sv();
-        buildMiroCanvas();
-      };
+        // Remove cell state
+        if (page.cellStates[cellKey]) delete page.cellStates[cellKey];
 
-      const mergeRowBtn = document.createElement('button');
-      mergeRowBtn.type = 'button';
-      mergeRowBtn.className = 'mcm-btn mcm-btn-cancel';
-      mergeRowBtn.style.cssText = 'padding:6px 12px;font-size:0.65rem;';
-      mergeRowBtn.textContent = '🔗 Merge Row';
-      mergeRowBtn.onclick = () => {
-        if (!confirm(`Merge all cells in row ${r+1}?`)) return;
-        const totalCols = (page.vGuides || []).length + 1;
-        mergeMiroCellRange(page, 0, r, totalCols - 1, r);
-        overlay.remove();
-        sv();
-        buildMiroCanvas();
-      };
-
-      mergeContainer.appendChild(mergeColBtn);
-      mergeContainer.appendChild(mergeRowBtn);
-
-      const totalCols = (page.vGuides || []).length + 1;
-      const totalRows = (page.hGuides || []).length + 1;
-      if (totalCols > 1 || totalRows > 1) {
-        const customContainer = document.createElement('div');
-        customContainer.style.cssText = 'display:flex;align-items:center;gap:6px;width:100%;margin-top:8px;font-size:0.65rem;';
-        
-        customContainer.appendChild(document.createTextNode('Merge to: '));
-        
-        const colSel = document.createElement('select');
-        colSel.style.cssText = 'background:#121420;color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:4px;font-size:0.65rem;padding:2px 4px;';
-        for (let colIdx = c; colIdx < totalCols; colIdx++) {
-          const opt = document.createElement('option');
-          opt.value = colIdx;
-          opt.textContent = `Col ${colIdx+1}`;
-          colSel.appendChild(opt);
-        }
-        
-        const rowSel = document.createElement('select');
-        rowSel.style.cssText = 'background:#121420;color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:4px;font-size:0.65rem;padding:2px 4px;';
-        for (let rowIdx = r; rowIdx < totalRows; rowIdx++) {
-          const opt = document.createElement('option');
-          opt.value = rowIdx;
-          opt.textContent = `Row ${rowIdx+1}`;
-          rowSel.appendChild(opt);
-        }
-        
-        const goBtn = document.createElement('button');
-        goBtn.type = 'button';
-        goBtn.className = 'mcm-btn mcm-btn-save';
-        goBtn.style.cssText = 'padding:3px 8px;font-size:0.65rem;';
-        goBtn.textContent = 'Go';
-        goBtn.onclick = () => {
-          const cEnd = parseInt(colSel.value);
-          const rEnd = parseInt(rowSel.value);
-          if (cEnd === c && rEnd === r) {
-            alert('Cannot merge a cell with itself.');
-            return;
+        // Move all cards that were in this custom cell to the main board
+        (page.miroCards || []).forEach(card => {
+          if (card.cell === cellKey) {
+            delete card.cell;
           }
-          if (!confirm(`Merge cells from [${c+1}, ${r+1}] to [${cEnd+1}, ${rEnd+1}]?`)) return;
-          mergeMiroCellRange(page, c, r, cEnd, rEnd);
+        });
+
+        overlay.remove();
+        sv();
+        buildMiroCanvas();
+      };
+      actionContainer.appendChild(delCellBtn);
+      mergeRow.appendChild(actionContainer);
+    } else {
+      const mergeLabel = document.createElement('label');
+      mergeLabel.textContent = 'Merge/Split Cells';
+      mergeRow.appendChild(mergeLabel);
+
+      const mergeContainer = document.createElement('div');
+      mergeContainer.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;';
+
+      const span = parseCellKey(cellKey);
+      const isMerged = (span.cStart !== span.cEnd || span.rStart !== span.rEnd);
+
+      if (isMerged) {
+        const unmergeBtn = document.createElement('button');
+        unmergeBtn.type = 'button';
+        unmergeBtn.className = 'mcm-btn mcm-btn-cancel';
+        unmergeBtn.style.cssText = 'color:#ff4444;background:rgba(255,68,68,0.1);padding:6px 12px;font-size:0.65rem;';
+        unmergeBtn.textContent = '🔓 Split / Unmerge Cell';
+        unmergeBtn.onclick = () => {
+          if (!confirm('Split this merged cell back into individual grid cells?')) return;
+          page.mergedCells = (page.mergedCells || []).filter(m => !(m.cStart === span.cStart && m.rStart === span.rStart && m.cEnd === span.cEnd && m.rEnd === span.rEnd));
+          
+          // Re-partition cards
+          const canvas = document.getElementById('miro-canvas');
+          if (canvas) partitionMiroCardsIntoCells(page, canvas.clientWidth, canvas.clientHeight);
+          
+          overlay.remove();
+          sv();
+          buildMiroCanvas();
+        };
+        mergeContainer.appendChild(unmergeBtn);
+      } else {
+        const mergeColBtn = document.createElement('button');
+        mergeColBtn.type = 'button';
+        mergeColBtn.className = 'mcm-btn mcm-btn-cancel';
+        mergeColBtn.style.cssText = 'padding:6px 12px;font-size:0.65rem;';
+        mergeColBtn.textContent = '🔗 Merge Column';
+        mergeColBtn.onclick = () => {
+          if (!confirm(`Merge all cells in column ${c+1}?`)) return;
+          const totalRows = (page.hGuides || []).length + 1;
+          mergeMiroCellRange(page, c, 0, c, totalRows - 1);
           overlay.remove();
           sv();
           buildMiroCanvas();
         };
 
-        customContainer.appendChild(colSel);
-        customContainer.appendChild(rowSel);
-        customContainer.appendChild(goBtn);
-        mergeContainer.appendChild(customContainer);
+        const mergeRowBtn = document.createElement('button');
+        mergeRowBtn.type = 'button';
+        mergeRowBtn.className = 'mcm-btn mcm-btn-cancel';
+        mergeRowBtn.style.cssText = 'padding:6px 12px;font-size:0.65rem;';
+        mergeRowBtn.textContent = '🔗 Merge Row';
+        mergeRowBtn.onclick = () => {
+          if (!confirm(`Merge all cells in row ${r+1}?`)) return;
+          const totalCols = (page.vGuides || []).length + 1;
+          mergeMiroCellRange(page, 0, r, totalCols - 1, r);
+          overlay.remove();
+          sv();
+          buildMiroCanvas();
+        };
+
+        mergeContainer.appendChild(mergeColBtn);
+        mergeContainer.appendChild(mergeRowBtn);
+
+        const totalCols = (page.vGuides || []).length + 1;
+        const totalRows = (page.hGuides || []).length + 1;
+        if (totalCols > 1 || totalRows > 1) {
+          const customContainer = document.createElement('div');
+          customContainer.style.cssText = 'display:flex;align-items:center;gap:6px;width:100%;margin-top:8px;font-size:0.65rem;';
+          
+          customContainer.appendChild(document.createTextNode('Merge to: '));
+          
+          const colSel = document.createElement('select');
+          colSel.style.cssText = 'background:#121420;color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:4px;font-size:0.65rem;padding:2px 4px;';
+          for (let colIdx = c; colIdx < totalCols; colIdx++) {
+            const opt = document.createElement('option');
+            opt.value = colIdx;
+            opt.textContent = `Col ${colIdx+1}`;
+            colSel.appendChild(opt);
+          }
+          
+          const rowSel = document.createElement('select');
+          rowSel.style.cssText = 'background:#121420;color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:4px;font-size:0.65rem;padding:2px 4px;';
+          for (let rowIdx = r; rowIdx < totalRows; rowIdx++) {
+            const opt = document.createElement('option');
+            opt.value = rowIdx;
+            opt.textContent = `Row ${rowIdx+1}`;
+            rowSel.appendChild(opt);
+          }
+          
+          const goBtn = document.createElement('button');
+          goBtn.type = 'button';
+          goBtn.className = 'mcm-btn mcm-btn-save';
+          goBtn.style.cssText = 'padding:3px 8px;font-size:0.65rem;';
+          goBtn.textContent = 'Go';
+          goBtn.onclick = () => {
+            const cEnd = parseInt(colSel.value);
+            const rEnd = parseInt(rowSel.value);
+            if (cEnd === c && rEnd === r) {
+              alert('Cannot merge a cell with itself.');
+              return;
+            }
+            if (!confirm(`Merge cells from [${c+1}, ${r+1}] to [${cEnd+1}, ${rEnd+1}]?`)) return;
+            mergeMiroCellRange(page, c, r, cEnd, rEnd);
+            overlay.remove();
+            sv();
+            buildMiroCanvas();
+          };
+
+          customContainer.appendChild(colSel);
+          customContainer.appendChild(rowSel);
+          customContainer.appendChild(goBtn);
+          mergeContainer.appendChild(customContainer);
+        }
       }
+      mergeRow.appendChild(mergeContainer);
     }
-    mergeRow.appendChild(mergeContainer);
     modal.appendChild(mergeRow);
 
     // Actions

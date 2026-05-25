@@ -339,8 +339,37 @@ function convertSelectedTo(targetType) {
     const page = cp();
     if (page && (page.pageType === 'web' || page.id.startsWith('time_'))) return;
 
+    // Custom Freeform Cell drawing mode handling
+    if (window._customCellDrawMode && e.button === 0) {
+      e.stopPropagation();
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      window._drawingCustomCell = true;
+      window._drawCellStartX = e.clientX - rect.left;
+      window._drawCellStartY = e.clientY - rect.top;
+
+      let temp = document.getElementById('miro-temp-cell-draw');
+      if (!temp) {
+        temp = document.createElement('div');
+        temp.id = 'miro-temp-cell-draw';
+        temp.style.position = 'absolute';
+        temp.style.border = '2px dashed #ff8a65';
+        temp.style.background = 'rgba(255, 138, 101, 0.15)';
+        temp.style.borderRadius = '8px';
+        temp.style.pointerEvents = 'none';
+        temp.style.zIndex = '99999';
+        canvas.appendChild(temp);
+      }
+      temp.style.left = window._drawCellStartX + 'px';
+      temp.style.top = window._drawCellStartY + 'px';
+      temp.style.width = '0px';
+      temp.style.height = '0px';
+      temp.style.display = 'block';
+      return;
+    }
+
     // Cell Pan Start delegation for Slices Mode (prevent if in any card creation/drawing mode)
-    const hasGuides = page && page._guidesMode;
+    const hasGuides = page && (page._guidesMode || (page.vGuides && page.vGuides.length > 0) || (page.hGuides && page.hGuides.length > 0) || (page.customCells && page.customCells.length > 0));
     const anyCreateMode = typeof _stickyCreateMode !== 'undefined' && (_stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode || _embedCreateMode || _overlayPageCreateMode || _penMode || _shapeMode);
     if (!anyCreateMode && hasGuides && typeof window.handleMiroCellPanStart === 'function') {
       if (e.target === canvas || e.target.id === 'miro-board' || (e.target.closest('.miro-cell-viewport') && !e.target.closest('[data-cid]') && !e.target.closest('.miro-guide-v, .miro-guide-h'))) {
@@ -416,6 +445,26 @@ function convertSelectedTo(targetType) {
   });
 
   document.addEventListener('mousemove', (e) => {
+    if (window._drawingCustomCell) {
+      const rect = canvas.getBoundingClientRect();
+      const curX = e.clientX - rect.left;
+      const curY = e.clientY - rect.top;
+
+      const x = Math.min(window._drawCellStartX, curX);
+      const y = Math.min(window._drawCellStartY, curY);
+      const w = Math.abs(curX - window._drawCellStartX);
+      const h = Math.abs(curY - window._drawCellStartY);
+
+      const temp = document.getElementById('miro-temp-cell-draw');
+      if (temp) {
+        temp.style.left = x + 'px';
+        temp.style.top = y + 'px';
+        temp.style.width = w + 'px';
+        temp.style.height = h + 'px';
+      }
+      return;
+    }
+
     if (typeof window.handleMiroCellPanMove === 'function' && window.handleMiroCellPanMove(e)) return;
 
     // Rubber-band drag
@@ -462,6 +511,52 @@ function convertSelectedTo(targetType) {
   });
 
   document.addEventListener('mouseup', (e) => {
+    if (window._drawingCustomCell) {
+      const rect = canvas.getBoundingClientRect();
+      const curX = e.clientX - rect.left;
+      const curY = e.clientY - rect.top;
+
+      const minX = Math.min(window._drawCellStartX, curX);
+      const minY = Math.min(window._drawCellStartY, curY);
+      const width = Math.abs(curX - window._drawCellStartX);
+      const height = Math.abs(curY - window._drawCellStartY);
+
+      const temp = document.getElementById('miro-temp-cell-draw');
+      if (temp) temp.remove();
+
+      window._drawingCustomCell = false;
+
+      if (width > 30 && height > 30) {
+        const page = cp();
+        if (!page.customCells) page.customCells = [];
+
+        const W = canvas.clientWidth || 1000;
+        const H = canvas.clientHeight || 800;
+
+        const cellId = 'cc_' + uid();
+        page.customCells.push({
+          id: cellId,
+          x: minX / W,
+          y: minY / H,
+          w: width / W,
+          h: height / H,
+          title: 'Screen ' + (page.customCells.length + 1)
+        });
+
+        if (!page.cellStates) page.cellStates = {};
+        page.cellStates[cellId] = { zoom: 100, panX: 0, panY: 0 };
+
+        sv();
+        buildMiroCanvas();
+        showToast('📺 Custom Cell created!', 2000);
+      }
+
+      if (typeof window._exitCustomCellDrawMode === 'function') {
+        window._exitCustomCellDrawMode();
+      }
+      return;
+    }
+
     if (typeof window.handleMiroCellPanEnd === 'function' && window.handleMiroCellPanEnd()) return;
 
     if (_rubberBanding) {
@@ -512,7 +607,7 @@ function convertSelectedTo(targetType) {
       const page = cp();
       if (page && (page.pageType === 'web' || page.id.startsWith('time_'))) return;
 
-      const hasGuides = page && page._guidesMode;
+      const hasGuides = page && (page._guidesMode || (page.vGuides && page.vGuides.length > 0) || (page.hGuides && page.hGuides.length > 0) || (page.customCells && page.customCells.length > 0));
       if (hasGuides && typeof window.handleMiroCellWheel === 'function') {
         if (window.handleMiroCellWheel(e)) return;
       }
@@ -796,11 +891,7 @@ function zoomToFitSelection() {
 document.getElementById('mz-slider').oninput = function () {
   const page = cp();
   page.zoom = +this.value;
-  const zoom = page.zoom / 100;
-  document.getElementById('miro-board').style.transform =
-    `translate(${page.panX || 0}px,${page.panY || 0}px) scale(${zoom})`;
-  document.getElementById('mz-pct').textContent = page.zoom + '%';
-  updateMiroGrid();
+  applyZoomPan(page);
   sv();
 };
 document.getElementById('mz-in').onclick = () => {
@@ -1358,23 +1449,32 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
     let by = (e.clientY - rect.top - (page.panY || 0)) / zoom;
     let targetCell = null;
 
-    const hasGuides = page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
-    if (hasGuides) {
+    const hasSlices = page && (page._guidesMode || (page.vGuides && page.vGuides.length > 0) || (page.hGuides && page.hGuides.length > 0) || (page.customCells && page.customCells.length > 0));
+    if (hasSlices) {
       const cellEl = e.target.closest('.miro-cell-viewport');
       if (cellEl) {
         targetCell = cellEl.dataset.cellKey;
-        const parts = targetCell.split('_');
-        const col = parseInt(parts[0]), row = parseInt(parts[1]);
+        const state = page.cellStates[targetCell] || { zoom: 100, panX: 0, panY: 0 };
+        const cellZoom = state.zoom / 100;
         
         const canvas = document.getElementById('miro-canvas');
         const W = canvas.clientWidth, H = canvas.clientHeight;
-        const vg = [0, ...[...page.vGuides].sort((a,b)=>a-b), 1];
-        const hg = [0, ...[...page.hGuides].sort((a,b)=>a-b), 1];
-        const cellLeft = vg[col] * W;
-        const cellTop = hg[row] * H;
+        let cellLeft = 0, cellTop = 0;
         
-        const state = page.cellStates[targetCell] || { zoom: 100, panX: 0, panY: 0 };
-        const cellZoom = state.zoom / 100;
+        if (targetCell.startsWith('cc_')) {
+          const cc = (page.customCells || []).find(c => c.id === targetCell);
+          if (cc) {
+            cellLeft = cc.x * W;
+            cellTop = cc.y * H;
+          }
+        } else {
+          const parts = targetCell.split('_');
+          const col = parseInt(parts[0]), row = parseInt(parts[1]);
+          const vg = [0, ...[...page.vGuides].sort((a,b)=>a-b), 1];
+          const hg = [0, ...[...page.hGuides].sort((a,b)=>a-b), 1];
+          cellLeft = (vg[col] !== undefined ? vg[col] : 0) * W;
+          cellTop = (hg[row] !== undefined ? hg[row] : 0) * H;
+        }
         
         bx = (e.clientX - rect.left - cellLeft - state.panX) / cellZoom;
         by = (e.clientY - rect.top - cellTop - state.panY) / cellZoom;
@@ -1789,6 +1889,7 @@ document.addEventListener('keydown', (e) => {
       case 'escape':
         setActiveTool('select');
         document.getElementById('miro-shape-panel').classList.remove('show');
+        if (typeof window._exitCustomCellDrawMode === 'function') window._exitCustomCellDrawMode();
         break;
       case 'delete':
       case 'backspace':
@@ -7977,6 +8078,48 @@ ${ev._start.toLocaleTimeString([], {hour:'numeric',minute:'2-digit',hour12:true}
 
   // Apply saved state on load
   applyHiddenState();
+
+  // --- Custom Freeform Cells Drawing Initialization ---
+  window._customCellDrawMode = false;
+  window._drawingCustomCell = false;
+  window._drawCellStartX = 0;
+  window._drawCellStartY = 0;
+
+  window._exitCustomCellDrawMode = function _exitCustomCellDrawMode() {
+    window._customCellDrawMode = false;
+    window._drawingCustomCell = false;
+    const btn = document.getElementById('mz-custom-cell-btn');
+    if (btn) {
+      btn.style.background = '';
+      btn.style.color = '';
+    }
+    const canvas = document.getElementById('miro-canvas');
+    if (canvas) canvas.style.cursor = 'grab';
+    const tempDraw = document.getElementById('miro-temp-cell-draw');
+    if (tempDraw) tempDraw.remove();
+  };
+
+  const drawCellBtn = document.getElementById('mz-custom-cell-btn');
+  if (drawCellBtn) {
+    drawCellBtn.onclick = (e) => {
+      e.stopPropagation();
+      const page = cp();
+      if (page && !page._guidesMode) {
+        showToast('⚠️ Please enable Slices Mode (📐) to draw custom cells!', 3000);
+        return;
+      }
+      window._customCellDrawMode = !window._customCellDrawMode;
+      if (window._customCellDrawMode) {
+        drawCellBtn.style.background = 'var(--ac)';
+        drawCellBtn.style.color = '#fff';
+        document.getElementById('miro-canvas').style.cursor = 'crosshair';
+        showToast('📺 Custom Cell drawing mode active. Click and drag on canvas to draw a screen!', 3500);
+        if (typeof setActiveTool === 'function') setActiveTool('select');
+      } else {
+        window._exitCustomCellDrawMode();
+      }
+    };
+  }
 
 SM.miro.engine = SM.miro.engine || {};
 SM.miro.engine.setActiveTool = typeof setActiveTool !== 'undefined' ? setActiveTool : window.setActiveTool;
