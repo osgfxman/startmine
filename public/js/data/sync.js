@@ -53,7 +53,7 @@
   // Push all page data (active page from memory, others from cache)
   D.pages.forEach(p => {
     if (!p) return;
-    let widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, ts;
+    let widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, ts;
     if (p.id === D.cur) {
       p.ts = Date.now();
       // Active page: use live in-memory data
@@ -64,6 +64,7 @@
       _guidesMode = p._guidesMode || false;
       lockedGuides = p.lockedGuides || [];
       cellStates = p.cellStates || {};
+      mergedCells = p.mergedCells || [];
       ts = p.ts;
     } else {
       // Non-active page: always prefer cache (memory is evicted)
@@ -83,6 +84,7 @@
         _guidesMode = cached._guidesMode || false;
         lockedGuides = cached.lockedGuides || [];
         cellStates = cached.cellStates || {};
+        mergedCells = cached.mergedCells || [];
         ts = cached.ts || p.ts || Date.now();
       } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0) || (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode) {
         widgets = p.widgets || [];
@@ -92,6 +94,7 @@
         _guidesMode = p._guidesMode || false;
         lockedGuides = p.lockedGuides || [];
         cellStates = p.cellStates || {};
+        mergedCells = p.mergedCells || [];
         ts = p.ts || Date.now();
       } else {
         // SAFETY: skip to avoid overwriting Firebase with empty data
@@ -107,6 +110,7 @@
       _guidesMode,
       lockedGuides,
       cellStates,
+      mergedCells,
       ts
     };
   });
@@ -194,6 +198,7 @@
             pg._guidesMode = cachedPage._guidesMode || false;
             pg.lockedGuides = cachedPage.lockedGuides || [];
             pg.cellStates = cachedPage.cellStates || {};
+            pg.mergedCells = cachedPage.mergedCells || [];
             _lastSyncedPageData = {
               widgets: JSON.stringify(pg.widgets),
               miroCards: JSON.stringify(pg.miroCards)
@@ -273,7 +278,8 @@
                 hGuides: p.hGuides || [],
                 _guidesMode: p._guidesMode || false,
                 lockedGuides: p.lockedGuides || [],
-                cellStates: p.cellStates || {}
+                cellStates: p.cellStates || {},
+                mergedCells: p.mergedCells || []
               };
             }
           }
@@ -291,6 +297,7 @@
             p._guidesMode = heavyDataMap[p.id]._guidesMode;
             p.lockedGuides = heavyDataMap[p.id].lockedGuides;
             p.cellStates = heavyDataMap[p.id].cellStates;
+            p.mergedCells = heavyDataMap[p.id].mergedCells;
           }
         });
 
@@ -481,7 +488,7 @@
       let _savedCount = 0, _skippedCount = 0;
       D.pages.forEach(p => {
         if (!p) return;
-        let widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, ts;
+        let widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, ts;
         if (p.id === D.cur) {
           p.ts = Date.now(); // Update live page timestamp
           // Active page — use live data
@@ -492,6 +499,7 @@
           _guidesMode = p._guidesMode || false;
           lockedGuides = p.lockedGuides || [];
           cellStates = p.cellStates || {};
+          mergedCells = p.mergedCells || [];
           ts = p.ts;
         } else {
           // NON-ACTIVE page — try cache, then memory
@@ -511,6 +519,7 @@
             _guidesMode = cached._guidesMode || false;
             lockedGuides = cached.lockedGuides || [];
             cellStates = cached.cellStates || {};
+            mergedCells = cached.mergedCells || [];
             ts = cached.ts || p.ts || Date.now();
           } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0) || (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode) {
             widgets = p.widgets || [];
@@ -520,6 +529,7 @@
             _guidesMode = p._guidesMode || false;
             lockedGuides = p.lockedGuides || [];
             cellStates = p.cellStates || {};
+            mergedCells = p.mergedCells || [];
             ts = p.ts || Date.now();
           } else {
             // ⛔ ABSOLUTE GUARD: NEVER write empty data to Firebase
@@ -543,6 +553,7 @@
           _guidesMode,
           lockedGuides,
           cellStates,
+          mergedCells,
           ts
         };
         _savedCount++;
@@ -587,6 +598,7 @@
           updates[`users/${USER_ID}/startmine_pages/${activePg.id}/_guidesMode`] = activePg._guidesMode || false;
           updates[`users/${USER_ID}/startmine_pages/${activePg.id}/lockedGuides`] = activePg.lockedGuides || [];
           updates[`users/${USER_ID}/startmine_pages/${activePg.id}/cellStates`] = activePg.cellStates || {};
+          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/mergedCells`] = activePg.mergedCells || [];
 
           const oldWidgets = JSON.parse(_lastSyncedPageData.widgets || '[]');
           const oldCards = JSON.parse(_lastSyncedPageData.miroCards || '[]');
@@ -641,6 +653,7 @@
             _guidesMode: activePg._guidesMode || false,
             lockedGuides: activePg.lockedGuides || [],
             cellStates: activePg.cellStates || {},
+            mergedCells: activePg.mergedCells || [],
             ts: activePg.ts
           };
         }
@@ -668,6 +681,7 @@
             _guidesMode: activePg._guidesMode || false,
             lockedGuides: activePg.lockedGuides || [],
             cellStates: activePg.cellStates || {},
+            mergedCells: activePg.mergedCells || [],
             ts: activePg.ts
           });
         }
@@ -710,6 +724,7 @@
         _guidesMode: activePg._guidesMode || false,
         lockedGuides: activePg.lockedGuides || [],
         cellStates: activePg.cellStates || {},
+        mergedCells: activePg.mergedCells || [],
         ts: activePg.ts || Date.now()
       });
     }

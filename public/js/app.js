@@ -689,6 +689,12 @@ function initDB() {
       if (pg && cachedPage) {
         pg.widgets = cachedPage.widgets || [];
         pg.miroCards = cachedPage.miroCards || [];
+        pg.vGuides = cachedPage.vGuides || [];
+        pg.hGuides = cachedPage.hGuides || [];
+        pg._guidesMode = cachedPage._guidesMode || false;
+        pg.lockedGuides = cachedPage.lockedGuides || [];
+        pg.cellStates = cachedPage.cellStates || {};
+        pg.mergedCells = cachedPage.mergedCells || [];
       }
       isFirstLoad = false;
       renderMeta();
@@ -805,7 +811,8 @@ function switchActivePage(pageId) {
         hGuides: prevPg.hGuides || [],
         _guidesMode: prevPg._guidesMode || false,
         lockedGuides: prevPg.lockedGuides || [],
-        cellStates: prevPg.cellStates || {}
+        cellStates: prevPg.cellStates || {},
+        mergedCells: prevPg.mergedCells || []
       });
       if (cacheOk) {
         // Cache verified — safe to evict
@@ -855,6 +862,7 @@ function switchActivePage(pageId) {
       pg._guidesMode = cachedPage._guidesMode || false;
       pg.lockedGuides = cachedPage.lockedGuides || [];
       pg.cellStates = cachedPage.cellStates || {};
+      pg.mergedCells = cachedPage.mergedCells || [];
       pg.ts = cachedPage.ts || 0;
       const fakeD = { pages: [pg] };
       sanitizeData(fakeD);
@@ -884,6 +892,7 @@ function switchActivePage(pageId) {
           pg._guidesMode = idbCached._guidesMode || false;
           pg.lockedGuides = idbCached.lockedGuides || [];
           pg.cellStates = idbCached.cellStates || {};
+          pg.mergedCells = idbCached.mergedCells || [];
           pg.ts = cachedTs;
           const fakeD = { pages: [pg] };
           sanitizeData(fakeD);
@@ -956,6 +965,9 @@ function switchActivePage(pageId) {
       if (pData.cellStates !== undefined) pg.cellStates = pData.cellStates;
       else if (pg.cellStates === undefined) pg.cellStates = {};
       
+      if (pData.mergedCells !== undefined) pg.mergedCells = pData.mergedCells;
+      else if (pg.mergedCells === undefined) pg.mergedCells = [];
+      
       pg.ts = incomingTs;
 
       // Cache to BOTH localStorage and IndexedDB
@@ -967,6 +979,7 @@ function switchActivePage(pageId) {
         _guidesMode: pg._guidesMode,
         lockedGuides: pg.lockedGuides,
         cellStates: pg.cellStates,
+        mergedCells: pg.mergedCells,
         ts: pg.ts
       });
 
@@ -1557,6 +1570,7 @@ function doSelectiveExport() {
       let _guidesMode = p._guidesMode || false;
       let lockedGuides = p.lockedGuides || [];
       let cellStates = p.cellStates || {};
+      let mergedCells = p.mergedCells || [];
       if (widgets.length === 0 && miroCards.length === 0 && vGuides.length === 0 && hGuides.length === 0 && !_guidesMode) {
         const cached = getCachedPageData(p.id);
         if (cached) {
@@ -1567,9 +1581,10 @@ function doSelectiveExport() {
           _guidesMode = cached._guidesMode || false;
           lockedGuides = cached.lockedGuides || [];
           cellStates = cached.cellStates || {};
+          mergedCells = cached.mergedCells || [];
         }
       }
-      return { ...p, widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates };
+      return { ...p, widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells };
     })
   };
   

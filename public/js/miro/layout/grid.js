@@ -14,6 +14,13 @@
   const panX = page.panX || 0;
   const panY = page.panY || 0;
   const canvas = document.getElementById('miro-canvas');
+  if (!canvas) return;
+
+  // If Slices Mode is active, clear main canvas grid to avoid overlapping
+  if (page && page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0))) {
+    canvas.style.backgroundImage = 'none';
+    return;
+  }
 
   // Base board-space grid unit
   const BASE = 10;

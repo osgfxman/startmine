@@ -87,6 +87,63 @@
     return { title: titleStr, icon: null };
   }
 
+  function updateCellBackgroundGrid(cellDiv, state) {
+    if (!state) return;
+    const cellZoom = (state.zoom || 100) / 100;
+    const cellPanX = state.panX || 0;
+    const cellPanY = state.panY || 0;
+
+    // Grid rendering inside the cell
+    const BASE = 10;
+    const FACTOR = 5;
+
+    let fine = BASE;
+    while (fine * cellZoom < 8) fine *= FACTOR;
+    while (fine * cellZoom > 200) fine /= FACTOR;
+
+    const medium = fine * FACTOR;
+    const coarse = medium * FACTOR;
+
+    const fineScreen = fine * cellZoom;
+    const medScreen = medium * cellZoom;
+    const coarseScreen = coarse * cellZoom;
+
+    const fineAlpha = Math.max(0, Math.min(1, (fineScreen - 6) / 25)) * 0.05;
+    const medAlpha = Math.max(0, Math.min(1, (medScreen - 6) / 40)) * 0.10;
+    const coarseAlpha = Math.max(0, Math.min(1, (coarseScreen - 6) / 60)) * 0.16;
+
+    const layers = [];
+    const sizes = [];
+    const positions = [];
+
+    function addLevel(screenSize, alpha) {
+      if (alpha < 0.002) return;
+      const c = `rgba(0,0,0,${alpha.toFixed(4)})`;
+      layers.push(
+        `linear-gradient(${c} 1px, transparent 1px)`,
+        `linear-gradient(90deg, ${c} 1px, transparent 1px)`,
+      );
+      const s = `${screenSize}px ${screenSize}px`;
+      sizes.push(s, s);
+      const ox = cellPanX % screenSize;
+      const oy = cellPanY % screenSize;
+      const p = `${ox}px ${oy}px`;
+      positions.push(p, p);
+    }
+
+    addLevel(fineScreen, fineAlpha);
+    addLevel(medScreen, medAlpha);
+    addLevel(coarseScreen, coarseAlpha);
+
+    if (layers.length) {
+      cellDiv.style.backgroundImage = layers.join(',');
+      cellDiv.style.backgroundSize = sizes.join(',');
+      cellDiv.style.backgroundPosition = positions.join(',');
+    } else {
+      cellDiv.style.backgroundImage = 'none';
+    }
+  }
+
   // Initialize Slices Mode UI, event listeners, and rulers
   window.initMiroSlices = function initMiroSlices() {
     // Add css styles for rulers, guide handles, cell viewports, and lock badges
@@ -165,7 +222,8 @@
         .miro-cell-label {
           position: absolute;
           top: 8px;
-          left: 8px;
+          left: 50%;
+          transform: translateX(-50%);
           font-size: 0.65rem;
           color: rgba(255, 255, 255, 0.55);
           background: rgba(0, 0, 0, 0.6);
@@ -602,6 +660,10 @@
       const cw = W * (vg[cEnd+1] - vg[c]);
       const ch = H * (hg[rEnd+1] - hg[r]);
       clampCellState(cellKey, cw, ch);
+
+      // Apply background grid
+      updateCellBackgroundGrid(cellDiv, state);
+
       const z = state.zoom / 100;
       cellBoard.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${z})`;
 
@@ -1120,6 +1182,7 @@
         const z = state.zoom / 100;
         cellBoard.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${z})`;
       }
+      updateCellBackgroundGrid(cellEl, state);
     }
     return true;
   };
@@ -1202,6 +1265,8 @@
     }
     const zoomText = cellViewport.querySelector('.miro-cell-zoom-text');
     if (zoomText) zoomText.textContent = `(${cellState.zoom}%)`;
+
+    updateCellBackgroundGrid(cellViewport, cellState);
 
     clearTimeout(_wheelSvTimer);
     _wheelSvTimer = setTimeout(() => sv(), 1000);
