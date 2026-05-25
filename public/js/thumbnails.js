@@ -423,6 +423,9 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
     }
     updateMiroSelFrame();
 
+    const _canvas = document.getElementById('miro-canvas');
+    if (_canvas) _canvas.classList.add('miro-dragging');
+
     const page = cp();
     const zoom = typeof window.getMiroCardDragZoom === 'function' ? window.getMiroCardDragZoom(card) : ((page.zoom || 100) / 100);
     const startX = e.clientX, startY = e.clientY;
@@ -706,7 +709,7 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
         if (!c) return;
         let nx = orig.x + finalDx;
         let ny = orig.y + finalDy;
-        if (!ev.ctrlKey && typeof window.clampMiroCardDrag === 'function') {
+        if (!ev.ctrlKey && !ev.altKey && typeof window.clampMiroCardDrag === 'function') {
           const clamped = window.clampMiroCardDrag(c, nx, ny);
           nx = clamped.x;
           ny = clamped.y;
@@ -725,6 +728,9 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
     function onUp() {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+
+      const _canvasElement = document.getElementById('miro-canvas');
+      if (_canvasElement) _canvasElement.classList.remove('miro-dragging');
 
       // Clear snap guides
       const snapSvg = document.getElementById('snap-guides');

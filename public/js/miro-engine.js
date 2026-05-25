@@ -1445,40 +1445,76 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
     const zoom = (page.zoom || 100) / 100;
     const rect = document.getElementById('miro-canvas').getBoundingClientRect();
     
-    let bx = (e.clientX - rect.left - (page.panX || 0)) / zoom;
-    let by = (e.clientY - rect.top - (page.panY || 0)) / zoom;
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    let bx = (clickX - (page.panX || 0)) / zoom;
+    let by = (clickY - (page.panY || 0)) / zoom;
     let targetCell = null;
 
     const hasSlices = page && (page._guidesMode || (page.vGuides && page.vGuides.length > 0) || (page.hGuides && page.hGuides.length > 0) || (page.customCells && page.customCells.length > 0));
     if (hasSlices) {
-      const cellEl = e.target.closest('.miro-cell-viewport');
-      if (cellEl) {
-        targetCell = cellEl.dataset.cellKey;
-        const state = page.cellStates[targetCell] || { zoom: 100, panX: 0, panY: 0 };
-        const cellZoom = state.zoom / 100;
-        
-        const canvas = document.getElementById('miro-canvas');
-        const W = canvas.clientWidth, H = canvas.clientHeight;
-        let cellLeft = 0, cellTop = 0;
-        
-        if (targetCell.startsWith('cc_')) {
-          const cc = (page.customCells || []).find(c => c.id === targetCell);
-          if (cc) {
-            cellLeft = cc.x * W;
-            cellTop = cc.y * H;
+      const W = rect.width, H = rect.height;
+      const pctX = clickX / W;
+      const pctY = clickY / H;
+
+      let targetCustomCell = null;
+      if (page.customCells) {
+        for (let i = page.customCells.length - 1; i >= 0; i--) {
+          const cc = page.customCells[i];
+          if (pctX >= cc.x && pctX <= (cc.x + cc.w) && pctY >= cc.y && pctY <= (cc.y + cc.h)) {
+            targetCustomCell = cc;
+            break;
           }
-        } else {
-          const parts = targetCell.split('_');
-          const col = parseInt(parts[0]), row = parseInt(parts[1]);
-          const vg = [0, ...[...page.vGuides].sort((a,b)=>a-b), 1];
-          const hg = [0, ...[...page.hGuides].sort((a,b)=>a-b), 1];
-          cellLeft = (vg[col] !== undefined ? vg[col] : 0) * W;
-          cellTop = (hg[row] !== undefined ? hg[row] : 0) * H;
         }
-        
-        bx = (e.clientX - rect.left - cellLeft - state.panX) / cellZoom;
-        by = (e.clientY - rect.top - cellTop - state.panY) / cellZoom;
       }
+
+      const vg = [0, ...(page.vGuides || []).sort((a,b)=>a-b), 1];
+      const hg = [0, ...(page.hGuides || []).sort((a,b)=>a-b), 1];
+      const hasGridGuides = page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
+      let targetGridCell = null;
+
+      if (!targetCustomCell && hasGridGuides) {
+        let col = vg.length - 2;
+        for (let i = 0; i < vg.length - 1; i++) {
+          if (pctX >= vg[i] && pctX < vg[i+1]) { col = i; break; }
+        }
+        let row = hg.length - 2;
+        for (let i = 0; i < hg.length - 1; i++) {
+          if (pctY >= hg[i] && pctY < hg[i+1]) { row = i; break; }
+        }
+
+        const mergedCell = (page.mergedCells || []).find(m => col >= m.cStart && col <= m.cEnd && row >= m.rStart && row <= m.rEnd);
+        if (mergedCell) {
+          targetGridCell = mergedCell.cStart + "_" + mergedCell.rStart + "_" + mergedCell.cEnd + "_" + mergedCell.rEnd;
+        } else {
+          targetGridCell = col + "_" + row;
+        }
+      }
+
+      if (targetCustomCell) {
+        targetCell = targetCustomCell.id;
+      } else if (targetGridCell) {
+        targetCell = targetGridCell;
+      } else {
+        targetCell = "0_0";
+      }
+
+      const state = page.cellStates[targetCell] || { zoom: 100, panX: 0, panY: 0 };
+      const cellZoom = state.zoom / 100;
+      let cellLeft = 0, cellTop = 0;
+
+      if (targetCustomCell) {
+        cellLeft = targetCustomCell.x * W;
+        cellTop = targetCustomCell.y * H;
+      } else if (targetGridCell) {
+        const parts = targetGridCell.split('_');
+        const col = parseInt(parts[0]), row = parseInt(parts[1]);
+        cellLeft = (vg[col] !== undefined ? vg[col] : 0) * W;
+        cellTop = (hg[row] !== undefined ? hg[row] : 0) * H;
+      }
+
+      bx = (clickX - cellLeft - state.panX) / cellZoom;
+      by = (clickY - cellTop - state.panY) / cellZoom;
     }
 
     const cardIndexBefore = page.miroCards.length;

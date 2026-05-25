@@ -86,6 +86,10 @@
           box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(108, 143, 255, 0.15);
           overflow: hidden;
         }
+        .miro-dragging .miro-cell-viewport {
+          overflow: visible !important;
+          z-index: 10000 !important;
+        }
         .miro-cell-label {
           position: absolute;
           top: 8px;
