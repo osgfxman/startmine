@@ -638,118 +638,99 @@ function sanitizeData(d) {
 window.sanitizeData = sanitizeData;
 
 function initDB() {
-  if (window.__miroBuildersOk) window.__miroBuildersOk();
-  isFirstLoad = true;
+    if (window.__miroBuildersOk) window.__miroBuildersOk();
+    isFirstLoad = true;
 
-  // If in offline mode, just load from cache and render
-  if (_offlineMode) {
+    // ═══ ALWAYS load from cache first (instant paint) ═══
     const cachedMeta = getCachedMeta();
     const cachedPagesMeta = getCachedPagesMeta();
     if (cachedMeta && cachedPagesMeta) {
-      D.settings = cachedMeta.settings || D.settings;
-      D.curEnv = cachedMeta.curEnv || D.curEnv;
-      D.curGroup = cachedMeta.curGroup || D.curGroup;
-      D.environments = cachedMeta.environments || D.environments;
-      D.groups = cachedMeta.groups || D.groups;
-      D.inbox = cachedMeta.inbox || D.inbox;
-      D.pages = cachedPagesMeta;
-      // Restore last page from localStorage
-      const dg = D.settings.defaultGroup || '__last__';
-      const dp = D.settings.defaultPage || '__last__';
-      if (dg !== '__last__' && D.groups.some((g) => g.id === dg)) D.curGroup = dg;
-      if (dp !== '__last__' && D.pages.some((p) => p.id === dp)) D.cur = dp;
-      else {
-        try {
-          const lastPid = localStorage.getItem(LS_CUR_PAGE);
-          if (lastPid && D.pages.some(p => p.id === lastPid)) D.cur = lastPid;
-        } catch(e) {}
-      }
-      if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
-      // Ensure curGroup matches the restored page
-      const restoredPage = D.pages.find(p => p.id === D.cur);
-      if (restoredPage && restoredPage.groupId) {
-        D.curGroup = restoredPage.groupId;
-      }
-      sanitizeData(D);
-      if (D.__modified) {
-        delete D.__modified;
-        sv(true, true);
-      }
-      const cachedPage = getCachedPageData(D.cur);
-      const pg = cp();
-      if (pg && cachedPage) {
-        pg.widgets = cachedPage.widgets || [];
-        pg.miroCards = cachedPage.miroCards || [];
-      }
-      isFirstLoad = false;
-      renderMeta();
-      buildCols();
-      updateOfflineUI();
+        D.settings = cachedMeta.settings || D.settings;
+        D.curEnv = cachedMeta.curEnv || D.curEnv;
+        D.curGroup = cachedMeta.curGroup || D.curGroup;
+        D.environments = cachedMeta.environments || D.environments;
+        D.groups = cachedMeta.groups || D.groups;
+        D.inbox = cachedMeta.inbox || D.inbox;
+        D.pages = cachedPagesMeta;
+
+        // Restore last page from settings or localStorage
+        const dg = D.settings.defaultGroup || '**last**';
+        const dp = D.settings.defaultPage || '**last**';
+        if (dg !== '**last**' && D.groups.some(g => g.id === dg)) D.curGroup = dg;
+        if (dp !== '**last**' && D.pages.some(p => p.id === dp)) D.cur = dp;
+        else {
+            try {
+                const lastPid = localStorage.getItem(LS_CUR_PAGE);
+                if (lastPid && D.pages.some(p => p.id === lastPid)) D.cur = lastPid;
+            } catch(e) {}
+        }
+        if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
+
+        // Ensure curGroup/curEnv match the restored page
+        const restoredPage = D.pages.find(p => p.id === D.cur);
+        if (restoredPage && restoredPage.groupId) {
+            D.curGroup = restoredPage.groupId;
+            const grp = D.groups.find(g => g.id === restoredPage.groupId);
+            if (grp && grp.envId) D.curEnv = grp.envId;
+        }
+
+        sanitizeData(D);
+        if (D.__modified) {
+            delete D.__modified;
+            // Only auto-save sanitize fixes if we have a user and aren't in a race
+            if (USER_ID && !_offlineMode) {
+                sv(true, true);
+            } else if (_offlineMode) {
+                sv(true, true);
+            }
+        }
+
+        // Load active page data from cache
+        const cachedPage = getCachedPageData(D.cur);
+        const pg = cp();
+        if (pg && cachedPage) {
+            pg.widgets = cachedPage.widgets || [];
+            pg.miroCards = cachedPage.miroCards || [];
+            pg.vGuides = cachedPage.vGuides || [];
+            pg.hGuides = cachedPage.hGuides || [];
+            pg._guidesMode = cachedPage._guidesMode || false;
+            pg.lockedGuides = cachedPage.lockedGuides || [];
+            pg.cellStates = cachedPage.cellStates || {};
+            pg.ts = cachedPage.ts || 0;
+        }
+
+        isFirstLoad = false;
+        renderMeta();
+        buildCols();
+        updateOfflineUI();
+        console.log('[INIT] Loaded from cache — page:', D.cur, 'pages:', D.pages.length, 'mode:', _offlineMode ? 'offline' : 'online');
     }
-    return;
-  }
 
-  // Load sharded listeners immediately so that offline cache loads instantly 
-  // and listeners are attached without blocking on legacy migration check
-  setupShardedListeners();
-
-  // Backwards compatibility migration check: run in background asynchronously
-  db.ref(DB_REF).once('value', (snap) => {
-    const rawData = snap.val();
-    if (rawData && rawData.pages && Array.isArray(rawData.pages)) {
-      console.log('[MIGRATION] Monolithic legacy layout found. Migrating to sharded layout in background...');
-      const meta = {
-        settings: rawData.settings || { engine: 'bm', accent: '#6c8fff' },
-        curEnv: rawData.curEnv || 'e0',
-        curGroup: rawData.curGroup || (rawData.groups && rawData.groups[0] ? rawData.groups[0].id : 'g0'),
-        environments: rawData.environments || [{ id: 'e0', name: 'Main Env' }],
-        groups: rawData.groups || [{ id: 'g0', name: 'Main Group', envId: 'e0' }],
-        inbox: rawData.inbox || []
-      };
-
-      // Legacy group mapping
-      meta.groups.forEach(g => {
-        if (!g.envId) g.envId = meta.environments[0].id;
-      });
-
-      const pagesMeta = [];
-      const updates = {};
-
-      rawData.pages.forEach(p => {
-        pagesMeta.push({
-          id: p.id,
-          groupId: p.groupId || meta.curGroup,
-          name: p.name || 'Page',
-          pageType: p.pageType || 'miro',
-          zoom: p.zoom || 100,
-          panX: p.panX || 0,
-          panY: p.panY || 0,
-          bg: p.bg || '',
-          bgType: p.bgType || 'none',
-          tabColor: p.tabColor || ''
-        });
-
-        updates[`users/${USER_ID}/startmine_pages/${p.id}`] = {
-          widgets: p.widgets || [],
-          miroCards: p.miroCards || []
-        };
-      });
-
-      updates[`users/${USER_ID}/startmine_meta`] = meta;
-      updates[`users/${USER_ID}/startmine_pages_meta`] = pagesMeta;
-
-      // Clear the old monolith
-      updates[DB_REF] = null;
-
-      db.ref().update(updates).then(() => {
-        console.log('[MIGRATION] Legacy data migration complete!');
-      }).catch((err) => {
-        console.error('[MIGRATION] Legacy data migration update failed:', err);
-      });
+    // ═══ If offline, we're done ═══
+    if (_offlineMode) {
+        return;
     }
-  }, (err) => {
-    console.warn('[MIGRATION] Monolithic layout read error or permission denied (possibly already sharded):', err.message);
-  });
+
+    // ═══ If online, attach Firebase listeners for real-time updates ═══
+    setupShardedListeners();
+
+    // Backwards compatibility migration check (background, non-blocking)
+    db.ref(DB_REF).once('value', (snap) => {
+        const rawData = snap.val();
+        if (rawData && rawData.pages && Array.isArray(rawData.pages)) {
+            console.log('[MIGRATION] Monolithic legacy layout found. Migrating to sharded layout in background...');
+            const meta = {
+                settings: rawData.settings || { engine: 'bm', accent: '#6c8fff' },
+                curEnv: rawData.curEnv || 'e0',
+                curGroup: rawData.curGroup || (rawData.groups && rawData.groups[0] ? rawData.groups[0].id : 'g0'),
+                environments: rawData.environments || [{ id: 'e0', name: 'Main Env' }],
+                groups: rawData.groups || [{ id: 'g0', name: 'Main Group', envId: 'e0' }],
+                inbox: rawData.inbox || []
+            };
+        }
+    }, (err) => {
+        console.warn('[MIGRATION] Monolithic layout read error or permission denied (possibly already sharded):', err.message);
+    });
 }
 
 let _activePageListener = null;
