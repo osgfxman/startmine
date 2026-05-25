@@ -13,6 +13,67 @@
   let _cellPanning = false;
   let _cellPanStartX = 0, _cellPanStartY = 0;
 
+  function parseCellKey(cellKey) {
+    if (!cellKey) return null;
+    const parts = cellKey.split('_');
+    if (parts.length === 2) {
+      const c = parseInt(parts[0]), r = parseInt(parts[1]);
+      return { cStart: c, rStart: r, cEnd: c, rEnd: r };
+    } else if (parts.length === 4) {
+      return {
+        cStart: parseInt(parts[0]),
+        rStart: parseInt(parts[1]),
+        cEnd: parseInt(parts[2]),
+        rEnd: parseInt(parts[3])
+      };
+    }
+    return null;
+  }
+
+  function getCellKey(span) {
+    if (span.cStart === span.cEnd && span.rStart === span.rEnd) {
+      return span.cStart + "_" + span.rStart;
+    }
+    return span.cStart + "_" + span.rStart + "_" + span.cEnd + "_" + span.rEnd;
+  }
+
+  function getActiveCells(page) {
+    const vg = [0, ...(page.vGuides || []).sort((a,b)=>a-b), 1];
+    const hg = [0, ...(page.hGuides || []).sort((a,b)=>a-b), 1];
+    const cols = vg.length - 1;
+    const rows = hg.length - 1;
+
+    const merged = page.mergedCells || [];
+    const active = [...merged];
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const covered = merged.some(m => c >= m.cStart && c <= m.cEnd && r >= m.rStart && r <= m.rEnd);
+        if (!covered) {
+          active.push({ cStart: c, rStart: r, cEnd: c, rEnd: r });
+        }
+      }
+    }
+    return active;
+  }
+
+  function mergeMiroCellRange(page, cStart, rStart, cEnd, rEnd) {
+    if (!page.mergedCells) page.mergedCells = [];
+
+    // Remove overlapping merged cells
+    page.mergedCells = page.mergedCells.filter(m => {
+      const noOverlap = m.cStart > cEnd || m.cEnd < cStart || m.rStart > rEnd || m.rEnd < rStart;
+      return noOverlap;
+    });
+
+    page.mergedCells.push({ cStart, rStart, cEnd, rEnd });
+
+    const canvas = document.getElementById('miro-canvas');
+    if (canvas) {
+      partitionMiroCardsIntoCells(page, canvas.clientWidth, canvas.clientHeight);
+    }
+  }
+
   function parseTitleAndIcon(titleStr) {
     if (!titleStr) return { title: '', icon: null };
     // Match http/https URLs or base64 data URIs
@@ -425,174 +486,182 @@
     if (!page.cellStates) page.cellStates = {};
 
     // Render cell viewports
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const cellKey = c + "_" + r;
-        const cellDiv = document.createElement('div');
-        cellDiv.className = 'miro-cell-viewport';
-        cellDiv.dataset.col = c;
-        cellDiv.dataset.row = r;
-        cellDiv.dataset.cellKey = cellKey;
+    const activeCells = getActiveCells(page);
+    activeCells.forEach((span) => {
+      const cellKey = getCellKey(span);
+      const c = span.cStart;
+      const r = span.rStart;
+      const cEnd = span.cEnd;
+      const rEnd = span.rEnd;
 
-        // Position cell viewport with percentages
-        cellDiv.style.left = (vg[c] * 100) + '%';
-        cellDiv.style.width = ((vg[c+1] - vg[c]) * 100) + '%';
-        cellDiv.style.top = (hg[r] * 100) + '%';
-        cellDiv.style.height = ((hg[r+1] - hg[r]) * 100) + '%';
-        cellDiv.style.border = '1px dashed rgba(108, 143, 255, 0.35)';
+      const cellDiv = document.createElement('div');
+      cellDiv.className = 'miro-cell-viewport';
+      cellDiv.dataset.col = c;
+      cellDiv.dataset.row = r;
+      cellDiv.dataset.cellKey = cellKey;
 
-        // Apply custom background color if set
-        if (page.cellStates[cellKey] && page.cellStates[cellKey].bgColor) {
-          const bg = page.cellStates[cellKey].bgColor;
-          const opacity = page.cellStates[cellKey].bgOpacity != null ? page.cellStates[cellKey].bgOpacity : 0.15;
-          const overlay = document.createElement('div');
-          overlay.className = 'miro-cell-bg-overlay';
-          overlay.style.background = bg;
-          overlay.style.opacity = opacity;
-          cellDiv.appendChild(overlay);
-        }
+      // Position cell viewport with percentages
+      cellDiv.style.left = (vg[c] * 100) + '%';
+      cellDiv.style.width = ((vg[cEnd+1] - vg[c]) * 100) + '%';
+      cellDiv.style.top = (hg[r] * 100) + '%';
+      cellDiv.style.height = ((hg[rEnd+1] - hg[r]) * 100) + '%';
+      cellDiv.style.border = '1px dashed rgba(108, 143, 255, 0.35)';
 
-        // Interactive cell label with title, color tag, and zoom
-        const lbl = document.createElement('div');
-        lbl.className = 'miro-cell-label';
-
-        // Color tag dot
-        const cellState = page.cellStates[cellKey] || {};
-        if (cellState.colorTag) {
-          const dot = document.createElement('span');
-          dot.className = 'miro-cell-color-tag';
-          dot.style.background = cellState.colorTag;
-          lbl.appendChild(dot);
-        }
-
-        // Determine icon and title
-        let displayTitle = cellState.title || '';
-        let displayIcon = cellState.icon || '';
-        let iconSize = cellState.iconSize || 20;
-
-        // Fallback parser if icon is not set but title contains one
-        if (!displayIcon && displayTitle) {
-          const parsed = parseTitleAndIcon(displayTitle);
-          displayTitle = parsed.title;
-          displayIcon = parsed.icon;
-        }
-
-        // Icon element
-        if (displayIcon) {
-          const img = document.createElement('img');
-          img.src = displayIcon;
-          img.style.width = iconSize + 'px';
-          img.style.height = iconSize + 'px';
-          img.style.objectFit = 'contain';
-          img.style.borderRadius = '4px';
-          img.style.flexShrink = '0';
-          img.style.verticalAlign = 'middle';
-          lbl.appendChild(img);
-        }
-
-        // Title text
-        const titleSpan = document.createElement('span');
-        titleSpan.textContent = displayTitle || (displayIcon ? '' : `Cell [${c+1}, ${r+1}]`);
-        if (displayTitle || !displayIcon) {
-          lbl.appendChild(titleSpan);
-        }
-
-        // Zoom percentage
-        const zoomSpan = document.createElement('span');
-        zoomSpan.className = 'miro-cell-zoom-text';
-        zoomSpan.textContent = `(${cellState.zoom || 100}%)`;
-        lbl.appendChild(zoomSpan);
-
-        // Click to open settings modal
-        lbl.addEventListener('click', (ev) => {
-          ev.stopPropagation();
-          ev.preventDefault();
-          showCellSettingsModal(cellKey);
-        });
-
-        cellDiv.appendChild(lbl);
-
-        // Internal cell board
-        const cellBoard = document.createElement('div');
-        cellBoard.className = 'miro-cell-board';
-        cellBoard.style.position = 'absolute';
-        cellBoard.style.left = '0';
-        cellBoard.style.top = '0';
-        cellBoard.style.width = '100%';
-        cellBoard.style.height = '100%';
-        cellBoard.style.transformOrigin = '0 0';
-
-        // Retrieve or initialize cell zoom & pan state
-        if (!page.cellStates[cellKey]) {
-          page.cellStates[cellKey] = { zoom: 100, panX: 0, panY: 0 };
-        }
-        const state = page.cellStates[cellKey];
-        
-        // Clamp and apply transforms
-        const cw = W * (vg[c+1] - vg[c]);
-        const ch = H * (hg[r+1] - hg[r]);
-        clampCellState(cellKey, cw, ch);
-        const z = state.zoom / 100;
-        cellBoard.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${z})`;
-
-        // Render card child elements
-        const cellCards = (page.miroCards || []).filter(card => card.cell === cellKey);
-        const buildersMap = {
-          sticky: 'buildMiroSticky',
-          image: 'buildMiroImage',
-          text: 'buildMiroText',
-          shape: 'buildMiroShape',
-          pen: 'buildMiroPen',
-          grid: 'buildMiroGridCard',
-          mindmap: 'buildMiroMindMap',
-          trello: 'buildMiroTrello',
-          bwidget: 'buildMiroBookmarkWidget',
-          array: 'buildMiroArray',
-          calendar: 'buildMiroGantt',
-          gantt: 'buildMiroGantt',
-          embed: 'buildMiroEmbed',
-          'overlay-page': 'buildMiroOverlayWidget',
-          life: 'buildMiroLifeWidget',
-        };
-
-        cellCards.forEach((card) => {
-          try {
-            const fnName = buildersMap[card.type];
-            const fn = fnName ? window[fnName] : null;
-            const fallback = window.buildMiroCard;
-            let el;
-            if (typeof fn === 'function') el = fn(card);
-            else if (typeof fallback === 'function') el = fallback(card);
-            
-            if (el) {
-              // Hide delete/lock buttons if the widget is inside grid layout (cleaner)
-              const delBtn = el.querySelector('.mc-del');
-              const lockBtn = el.querySelector('.mc-lock');
-              if (delBtn) delBtn.style.setProperty('--inv-zoom', '1');
-              if (lockBtn) lockBtn.style.setProperty('--inv-zoom', '1');
-              
-              if (card.pinned) {
-                cellDiv.appendChild(el);
-                el.style.position = 'absolute';
-                el.style.left = (card._pinCellX || 0) + 'px';
-                el.style.top = (card._pinCellY || 0) + 'px';
-                el.style.width = (card._pinCellW || card.w || 200) + 'px';
-                el.style.height = (card._pinCellH || card.h || 150) + 'px';
-                el.style.zIndex = '20';
-                el.style.transform = 'none';
-              } else {
-                cellBoard.appendChild(el);
-              }
-            }
-          } catch (err) {
-            console.error('[CELL RENDER ERROR]', card && card.type, card && card.id, err);
-          }
-        });
-
-        cellDiv.appendChild(cellBoard);
-        board.appendChild(cellDiv);
+      // Apply custom background color if set
+      if (page.cellStates[cellKey] && page.cellStates[cellKey].bgColor) {
+        const bg = page.cellStates[cellKey].bgColor;
+        const opacity = page.cellStates[cellKey].bgOpacity != null ? page.cellStates[cellKey].bgOpacity : 0.15;
+        const overlay = document.createElement('div');
+        overlay.className = 'miro-cell-bg-overlay';
+        overlay.style.background = bg;
+        overlay.style.opacity = opacity;
+        cellDiv.appendChild(overlay);
       }
-    }
+
+      // Interactive cell label with title, color tag, and zoom
+      const lbl = document.createElement('div');
+      lbl.className = 'miro-cell-label';
+
+      // Color tag dot
+      const cellState = page.cellStates[cellKey] || {};
+      if (cellState.colorTag) {
+        const dot = document.createElement('span');
+        dot.className = 'miro-cell-color-tag';
+        dot.style.background = cellState.colorTag;
+        lbl.appendChild(dot);
+      }
+
+      // Determine icon and title
+      let displayTitle = cellState.title || '';
+      let displayIcon = cellState.icon || '';
+      let iconSize = cellState.iconSize || 20;
+
+      // Fallback parser if icon is not set but title contains one
+      if (!displayIcon && displayTitle) {
+        const parsed = parseTitleAndIcon(displayTitle);
+        displayTitle = parsed.title;
+        displayIcon = parsed.icon;
+      }
+
+      // Icon element
+      if (displayIcon) {
+        const img = document.createElement('img');
+        img.src = displayIcon;
+        img.style.width = iconSize + 'px';
+        img.style.height = iconSize + 'px';
+        img.style.objectFit = 'contain';
+        img.style.borderRadius = '4px';
+        img.style.flexShrink = '0';
+        img.style.verticalAlign = 'middle';
+        lbl.appendChild(img);
+      }
+
+      // Title text
+      const titleSpan = document.createElement('span');
+      let defaultName = `Cell [${c+1}, ${r+1}]`;
+      if (c !== cEnd || r !== rEnd) {
+        defaultName = `Merged Cell [${c+1},${r+1} to ${cEnd+1},${rEnd+1}]`;
+      }
+      titleSpan.textContent = displayTitle || (displayIcon ? '' : defaultName);
+      if (displayTitle || !displayIcon) {
+        lbl.appendChild(titleSpan);
+      }
+
+      // Zoom percentage
+      const zoomSpan = document.createElement('span');
+      zoomSpan.className = 'miro-cell-zoom-text';
+      zoomSpan.textContent = `(${cellState.zoom || 100}%)`;
+      lbl.appendChild(zoomSpan);
+
+      // Click to open settings modal
+      lbl.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        showCellSettingsModal(cellKey);
+      });
+
+      cellDiv.appendChild(lbl);
+
+      // Internal cell board
+      const cellBoard = document.createElement('div');
+      cellBoard.className = 'miro-cell-board';
+      cellBoard.style.position = 'absolute';
+      cellBoard.style.left = '0';
+      cellBoard.style.top = '0';
+      cellBoard.style.width = '100%';
+      cellBoard.style.height = '100%';
+      cellBoard.style.transformOrigin = '0 0';
+
+      // Retrieve or initialize cell zoom & pan state
+      if (!page.cellStates[cellKey]) {
+        page.cellStates[cellKey] = { zoom: 100, panX: 0, panY: 0 };
+      }
+      const state = page.cellStates[cellKey];
+      
+      // Clamp and apply transforms
+      const cw = W * (vg[cEnd+1] - vg[c]);
+      const ch = H * (hg[rEnd+1] - hg[r]);
+      clampCellState(cellKey, cw, ch);
+      const z = state.zoom / 100;
+      cellBoard.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${z})`;
+
+      // Render card child elements
+      const cellCards = (page.miroCards || []).filter(card => card.cell === cellKey);
+      const buildersMap = {
+        sticky: 'buildMiroSticky',
+        image: 'buildMiroImage',
+        text: 'buildMiroText',
+        shape: 'buildMiroShape',
+        pen: 'buildMiroPen',
+        grid: 'buildMiroGridCard',
+        mindmap: 'buildMiroMindMap',
+        trello: 'buildMiroTrello',
+        bwidget: 'buildMiroBookmarkWidget',
+        array: 'buildMiroArray',
+        calendar: 'buildMiroGantt',
+        gantt: 'buildMiroGantt',
+        embed: 'buildMiroEmbed',
+        'overlay-page': 'buildMiroOverlayWidget',
+        life: 'buildMiroLifeWidget',
+      };
+
+      cellCards.forEach((card) => {
+        try {
+          const fnName = buildersMap[card.type];
+          const fn = fnName ? window[fnName] : null;
+          const fallback = window.buildMiroCard;
+          let el;
+          if (typeof fn === 'function') el = fn(card);
+          else if (typeof fallback === 'function') el = fallback(card);
+          
+          if (el) {
+            // Hide delete/lock buttons if the widget is inside grid layout (cleaner)
+            const delBtn = el.querySelector('.mc-del');
+            const lockBtn = el.querySelector('.mc-lock');
+            if (delBtn) delBtn.style.setProperty('--inv-zoom', '1');
+            if (lockBtn) lockBtn.style.setProperty('--inv-zoom', '1');
+            
+            if (card.pinned) {
+              cellDiv.appendChild(el);
+              el.style.position = 'absolute';
+              el.style.left = (card._pinCellX || 0) + 'px';
+              el.style.top = (card._pinCellY || 0) + 'px';
+              el.style.width = (card._pinCellW || card.w || 200) + 'px';
+              el.style.height = (card._pinCellH || card.h || 150) + 'px';
+              el.style.zIndex = '20';
+              el.style.transform = 'none';
+            } else {
+              cellBoard.appendChild(el);
+            }
+          }
+        } catch (err) {
+          console.error('[CELL RENDER ERROR]', card && card.type, card && card.id, err);
+        }
+      });
+
+      cellDiv.appendChild(cellBoard);
+      board.appendChild(cellDiv);
+    });
 
     // Render draggable guide overlays if guides exist
     const hasGuides = page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
@@ -697,6 +766,9 @@
       // Merge cells first to prevent card deletion
       mergeMiroCellsIntoCards(page, W, H);
       
+      // Clear merged cells because grid layout has changed
+      page.mergedCells = [];
+      
       if (type === 'v') {
         page.vGuides.splice(idx, 1);
       } else {
@@ -796,12 +868,25 @@
         if (pctY >= hg[i] && pctY < hg[i+1]) { row = i; break; }
       }
 
-      // If the card is already in this cell, don't adjust local coordinates
-      const targetCell = col + "_" + row;
+      // Find if this grid coordinate (col, row) is inside any merged cell
+      const mergedCell = (page.mergedCells || []).find(m => col >= m.cStart && col <= m.cEnd && row >= m.rStart && row <= m.rEnd);
+      
+      let targetCell;
+      let cellLeftCol, cellTopRow;
+      if (mergedCell) {
+        targetCell = mergedCell.cStart + "_" + mergedCell.rStart + "_" + mergedCell.cEnd + "_" + mergedCell.rEnd;
+        cellLeftCol = mergedCell.cStart;
+        cellTopRow = mergedCell.rStart;
+      } else {
+        targetCell = col + "_" + row;
+        cellLeftCol = col;
+        cellTopRow = row;
+      }
+
       if (card.cell === targetCell) return;
 
-      const cellLeft = vg[col] * canvasW;
-      const cellTop = hg[row] * canvasH;
+      const cellLeft = vg[cellLeftCol] * canvasW;
+      const cellTop = hg[cellTopRow] * canvasH;
 
       // Convert absolute to local cell coordinates
       card.cell = targetCell;
@@ -848,9 +933,7 @@
     const page = cp();
     if (!page || !card.cell || !page.cellStates || !page.cellStates[card.cell]) return { x, y };
 
-    const parts = card.cell.split('_');
-    const col = parseInt(parts[0]), row = parseInt(parts[1]);
-    const cellEl = document.querySelector(`.miro-cell-viewport[data-col="${col}"][data-row="${row}"]`);
+    const cellEl = document.querySelector(`.miro-cell-viewport[data-cell-key="${card.cell}"]`);
     if (!cellEl) return { x, y };
 
     const cellW = cellEl.clientWidth;
@@ -885,48 +968,50 @@
 
     const vg = [0, ...[...page.vGuides].sort((a,b)=>a-b), 1];
     const hg = [0, ...[...page.hGuides].sort((a,b)=>a-b), 1];
-    const cols = vg.length - 1;
-    const rows = hg.length - 1;
 
     if (!page.cellStates) page.cellStates = {};
 
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const cellKey = c + "_" + r;
-        const cellW = W * (vg[c+1] - vg[c]);
-        const cellH = H * (hg[r+1] - hg[r]);
+    const activeCells = getActiveCells(page);
+    activeCells.forEach((span) => {
+      const cellKey = getCellKey(span);
+      const c = span.cStart;
+      const r = span.rStart;
+      const cEnd = span.cEnd;
+      const rEnd = span.rEnd;
 
-        const cards = (page.miroCards || []).filter(card => card.cell === cellKey);
-        if (cards.length === 0) {
-          page.cellStates[cellKey] = { zoom: 100, panX: 0, panY: 0 };
-          continue;
-        }
+      const cellW = W * (vg[cEnd+1] - vg[c]);
+      const cellH = H * (hg[rEnd+1] - hg[r]);
 
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        cards.forEach(card => {
-          minX = Math.min(minX, card.x || 0);
-          minY = Math.min(minY, card.y || 0);
-          maxX = Math.max(maxX, (card.x || 0) + (card.w || 280));
-          maxY = Math.max(maxY, (card.y || 0) + (card.h || 240));
-        });
-
-        const contentW = maxX - minX;
-        const contentH = maxY - minY;
-
-        // Add 15px padding
-        const zoomW = (cellW - 30) / contentW;
-        const zoomH = (cellH - 30) / contentH;
-        let fitZoom = Math.min(zoomW, zoomH);
-        fitZoom = Math.max(0.1, Math.min(4.0, fitZoom)); // clamp between 10% and 400%
-
-        const zPercent = Math.round(fitZoom * 100);
-        const panX = (cellW - (minX + maxX) * fitZoom) / 2;
-        const panY = (cellH - (minY + maxY) * fitZoom) / 2;
-
-        page.cellStates[cellKey] = { zoom: zPercent, panX, panY };
-        clampCellState(cellKey, cellW, cellH);
+      const cards = (page.miroCards || []).filter(card => card.cell === cellKey);
+      if (cards.length === 0) {
+        page.cellStates[cellKey] = { zoom: 100, panX: 0, panY: 0 };
+        return;
       }
-    }
+
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      cards.forEach(card => {
+        minX = Math.min(minX, card.x || 0);
+        minY = Math.min(minY, card.y || 0);
+        maxX = Math.max(maxX, (card.x || 0) + (card.w || 280));
+        maxY = Math.max(maxY, (card.y || 0) + (card.h || 240));
+      });
+
+      const contentW = maxX - minX;
+      const contentH = maxY - minY;
+
+      // Add 15px padding
+      const zoomW = (cellW - 30) / contentW;
+      const zoomH = (cellH - 30) / contentH;
+      let fitZoom = Math.min(zoomW, zoomH);
+      fitZoom = Math.max(0.1, Math.min(4.0, fitZoom)); // clamp between 10% and 400%
+
+      const zPercent = Math.round(fitZoom * 100);
+      const panX = (cellW - (minX + maxX) * fitZoom) / 2;
+      const panY = (cellH - (minY + maxY) * fitZoom) / 2;
+
+      page.cellStates[cellKey] = { zoom: zPercent, panX, panY };
+      clampCellState(cellKey, cellW, cellH);
+    });
 
     sv();
     buildMiroCanvas();
@@ -949,6 +1034,7 @@
     page.vGuides = [];
     page.hGuides = [];
     page.lockedGuides = [];
+    page.mergedCells = []; // Clear merged cells
 
     // equal vertical divisions
     for (let i = 1; i < cols; i++) {
@@ -1002,9 +1088,7 @@
     state.panY = e.clientY - _cellPanStartY;
 
     // Get cell element dimensions
-    const parts = _activeCellKey.split('_');
-    const col = parseInt(parts[0]), row = parseInt(parts[1]);
-    const cellEl = document.querySelector(`.miro-cell-viewport[data-col="${col}"][data-row="${row}"]`);
+    const cellEl = document.querySelector(`.miro-cell-viewport[data-cell-key="${_activeCellKey}"]`);
     if (cellEl) {
       if (!e.altKey) clampCellState(_activeCellKey, cellEl.clientWidth, cellEl.clientHeight);
       const cellBoard = cellEl.querySelector('.miro-cell-board');
@@ -1355,6 +1439,124 @@
     bgContainer.appendChild(opacityVal);
     bgRow.appendChild(bgContainer);
     modal.appendChild(bgRow);
+
+    // Row: Merge Cells
+    const mergeRow = document.createElement('div');
+    mergeRow.className = 'mcm-row';
+    const mergeLabel = document.createElement('label');
+    mergeLabel.textContent = 'Merge/Split Cells';
+    mergeRow.appendChild(mergeLabel);
+
+    const mergeContainer = document.createElement('div');
+    mergeContainer.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;';
+
+    const span = parseCellKey(cellKey);
+    const isMerged = (span.cStart !== span.cEnd || span.rStart !== span.rEnd);
+
+    if (isMerged) {
+      const unmergeBtn = document.createElement('button');
+      unmergeBtn.type = 'button';
+      unmergeBtn.className = 'mcm-btn mcm-btn-cancel';
+      unmergeBtn.style.cssText = 'color:#ff4444;background:rgba(255,68,68,0.1);padding:6px 12px;font-size:0.65rem;';
+      unmergeBtn.textContent = '🔓 Split / Unmerge Cell';
+      unmergeBtn.onclick = () => {
+        if (!confirm('Split this merged cell back into individual grid cells?')) return;
+        page.mergedCells = (page.mergedCells || []).filter(m => !(m.cStart === span.cStart && m.rStart === span.rStart && m.cEnd === span.cEnd && m.rEnd === span.rEnd));
+        
+        // Re-partition cards
+        const canvas = document.getElementById('miro-canvas');
+        if (canvas) partitionMiroCardsIntoCells(page, canvas.clientWidth, canvas.clientHeight);
+        
+        overlay.remove();
+        sv();
+        buildMiroCanvas();
+      };
+      mergeContainer.appendChild(unmergeBtn);
+    } else {
+      const mergeColBtn = document.createElement('button');
+      mergeColBtn.type = 'button';
+      mergeColBtn.className = 'mcm-btn mcm-btn-cancel';
+      mergeColBtn.style.cssText = 'padding:6px 12px;font-size:0.65rem;';
+      mergeColBtn.textContent = '🔗 Merge Column';
+      mergeColBtn.onclick = () => {
+        if (!confirm(`Merge all cells in column ${c+1}?`)) return;
+        const totalRows = (page.hGuides || []).length + 1;
+        mergeMiroCellRange(page, c, 0, c, totalRows - 1);
+        overlay.remove();
+        sv();
+        buildMiroCanvas();
+      };
+
+      const mergeRowBtn = document.createElement('button');
+      mergeRowBtn.type = 'button';
+      mergeRowBtn.className = 'mcm-btn mcm-btn-cancel';
+      mergeRowBtn.style.cssText = 'padding:6px 12px;font-size:0.65rem;';
+      mergeRowBtn.textContent = '🔗 Merge Row';
+      mergeRowBtn.onclick = () => {
+        if (!confirm(`Merge all cells in row ${r+1}?`)) return;
+        const totalCols = (page.vGuides || []).length + 1;
+        mergeMiroCellRange(page, 0, r, totalCols - 1, r);
+        overlay.remove();
+        sv();
+        buildMiroCanvas();
+      };
+
+      mergeContainer.appendChild(mergeColBtn);
+      mergeContainer.appendChild(mergeRowBtn);
+
+      const totalCols = (page.vGuides || []).length + 1;
+      const totalRows = (page.hGuides || []).length + 1;
+      if (totalCols > 1 || totalRows > 1) {
+        const customContainer = document.createElement('div');
+        customContainer.style.cssText = 'display:flex;align-items:center;gap:6px;width:100%;margin-top:8px;font-size:0.65rem;';
+        
+        customContainer.appendChild(document.createTextNode('Merge to: '));
+        
+        const colSel = document.createElement('select');
+        colSel.style.cssText = 'background:#121420;color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:4px;font-size:0.65rem;padding:2px 4px;';
+        for (let colIdx = c; colIdx < totalCols; colIdx++) {
+          const opt = document.createElement('option');
+          opt.value = colIdx;
+          opt.textContent = `Col ${colIdx+1}`;
+          colSel.appendChild(opt);
+        }
+        
+        const rowSel = document.createElement('select');
+        rowSel.style.cssText = 'background:#121420;color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:4px;font-size:0.65rem;padding:2px 4px;';
+        for (let rowIdx = r; rowIdx < totalRows; rowIdx++) {
+          const opt = document.createElement('option');
+          opt.value = rowIdx;
+          opt.textContent = `Row ${rowIdx+1}`;
+          rowSel.appendChild(opt);
+        }
+        
+        const goBtn = document.createElement('button');
+        goBtn.type = 'button';
+        goBtn.className = 'mcm-btn mcm-btn-save';
+        goBtn.style.cssText = 'padding:3px 8px;font-size:0.65rem;';
+        goBtn.textContent = 'Go';
+        goBtn.onclick = () => {
+          const cEnd = parseInt(colSel.value);
+          const rEnd = parseInt(rowSel.value);
+          if (cEnd === c && rEnd === r) {
+            alert('Cannot merge a cell with itself.');
+            return;
+          }
+          if (!confirm(`Merge cells from [${c+1}, ${r+1}] to [${cEnd+1}, ${rEnd+1}]?`)) return;
+          mergeMiroCellRange(page, c, r, cEnd, rEnd);
+          overlay.remove();
+          sv();
+          buildMiroCanvas();
+        };
+
+        customContainer.appendChild(colSel);
+        customContainer.appendChild(rowSel);
+        customContainer.appendChild(goBtn);
+        mergeContainer.appendChild(customContainer);
+      }
+    }
+    mergeRow.appendChild(mergeContainer);
+    modal.appendChild(mergeRow);
 
     // Actions
     const actions = document.createElement('div');

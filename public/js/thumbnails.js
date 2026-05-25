@@ -1011,9 +1011,7 @@ function attachLockUI(el, card) {
 
     // Cell-local pinning: pin relative to cell viewport
     if (card.cell) {
-      const parts = card.cell.split('_');
-      const col = parseInt(parts[0]), row = parseInt(parts[1]);
-      const cellEl = document.querySelector('.miro-cell-viewport[data-col="' + col + '"][data-row="' + row + '"]');
+      const cellEl = document.querySelector('.miro-cell-viewport[data-cell-key="' + card.cell + '"]');
       if (cellEl) {
         const cellRect = cellEl.getBoundingClientRect();
         const elRect = el.getBoundingClientRect();
@@ -1091,9 +1089,7 @@ function attachLockUI(el, card) {
     
     // Move back to board at original canvas coords & size
     if (card.cell) {
-      const parts = card.cell.split('_');
-      const col = parseInt(parts[0]), row = parseInt(parts[1]);
-      const cellBoard = document.querySelector(`.miro-cell-viewport[data-col="${col}"][data-row="${row}"] .miro-cell-board`);
+      const cellBoard = document.querySelector(`.miro-cell-viewport[data-cell-key="${card.cell}"] .miro-cell-board`);
       if (cellBoard) {
         cellBoard.appendChild(el);
       } else {
@@ -1143,9 +1139,7 @@ function attachLockUI(el, card) {
   if (card.pinned) {
     requestAnimationFrame(() => {
       if (card.cell) {
-        const parts = card.cell.split('_');
-        const col = parseInt(parts[0]), row = parseInt(parts[1]);
-        const cellEl = document.querySelector(`.miro-cell-viewport[data-col="${col}"][data-row="${row}"]`);
+        const cellEl = document.querySelector(`.miro-cell-viewport[data-cell-key="${card.cell}"]`);
         if (cellEl) {
           cellEl.appendChild(el);
           el.style.position = 'absolute';
