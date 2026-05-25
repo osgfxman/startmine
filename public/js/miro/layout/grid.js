@@ -17,7 +17,7 @@
   if (!canvas) return;
 
   // If Slices Mode is active, clear main canvas grid to avoid overlapping
-  if (page && page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0))) {
+  if (page && page._guidesMode) {
     canvas.style.backgroundImage = 'none';
     return;
   }

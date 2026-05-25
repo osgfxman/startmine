@@ -340,7 +340,7 @@ function convertSelectedTo(targetType) {
     if (page && (page.pageType === 'web' || page.id.startsWith('time_'))) return;
 
     // Cell Pan Start delegation for Slices Mode (prevent if in any card creation/drawing mode)
-    const hasGuides = page && page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
+    const hasGuides = page && page._guidesMode;
     const anyCreateMode = typeof _stickyCreateMode !== 'undefined' && (_stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode || _embedCreateMode || _overlayPageCreateMode || _penMode || _shapeMode);
     if (!anyCreateMode && hasGuides && typeof window.handleMiroCellPanStart === 'function') {
       if (e.target === canvas || e.target.id === 'miro-board' || (e.target.closest('.miro-cell-viewport') && !e.target.closest('[data-cid]') && !e.target.closest('.miro-guide-v, .miro-guide-h'))) {
@@ -512,7 +512,7 @@ function convertSelectedTo(targetType) {
       const page = cp();
       if (page && (page.pageType === 'web' || page.id.startsWith('time_'))) return;
 
-      const hasGuides = page && page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
+      const hasGuides = page && page._guidesMode;
       if (hasGuides && typeof window.handleMiroCellWheel === 'function') {
         if (window.handleMiroCellWheel(e)) return;
       }
@@ -716,13 +716,18 @@ function applyZoomPan(page) {
     page.panX = 0;
     page.panY = 0;
   }
-  const zoom = (page.zoom || 100) / 100;
   const board = document.getElementById('miro-board');
   if (board) {
-    board.style.transform =
-      `translate(${page.panX || 0}px,${page.panY || 0}px) scale(${zoom})`;
-    // Keep floating UI at constant screen size
-    board.style.setProperty('--inv-zoom', Math.min(3, Math.max(0.25, 1 / zoom)));
+    if (page && page._guidesMode) {
+      board.style.transform = 'none';
+      board.style.setProperty('--inv-zoom', '1');
+    } else {
+      const zoom = (page.zoom || 100) / 100;
+      board.style.transform =
+        `translate(${page.panX || 0}px,${page.panY || 0}px) scale(${zoom})`;
+      // Keep floating UI at constant screen size
+      board.style.setProperty('--inv-zoom', Math.min(3, Math.max(0.25, 1 / zoom)));
+    }
   }
   const mzSlider = document.getElementById('mz-slider');
   if (mzSlider) mzSlider.value = page.zoom || 100;

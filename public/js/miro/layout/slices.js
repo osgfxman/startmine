@@ -1149,7 +1149,7 @@
   window.handleMiroCellPanStart = function handleMiroCellPanStart(e) {
     const page = cp();
     if (!page || page.pageType !== 'miro') return false;
-    if (!page.vGuides || (page.vGuides.length === 0 && (!page.hGuides || page.hGuides.length === 0))) return false;
+    if (!page._guidesMode) return false;
 
     const cellViewport = e.target.closest('.miro-cell-viewport');
     if (!cellViewport) return false;
@@ -1202,7 +1202,7 @@
   window.handleMiroCellWheel = function handleMiroCellWheel(e) {
     const page = cp();
     if (!page || page.pageType !== 'miro') return false;
-    if (!page.vGuides || (page.vGuides.length === 0 && (!page.hGuides || page.hGuides.length === 0))) return false;
+    if (!page._guidesMode) return false;
 
     const cellViewport = e.target.closest('.miro-cell-viewport');
     if (!cellViewport) return false;
