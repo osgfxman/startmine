@@ -611,6 +611,14 @@ function sanitizeData(d) {
 
   d.pages.forEach((p) => {
     if (!p.groupId) p.groupId = d.groups[0].id;
+    if (!p.name) p.name = 'Untitled Page';
+    if (!p.pageType) p.pageType = 'miro';
+    if (p.zoom === undefined) p.zoom = 100;
+    if (p.panX === undefined) p.panX = 0;
+    if (p.panY === undefined) p.panY = 0;
+    if (p.bg === undefined) p.bg = '';
+    if (p.bgType === undefined) p.bgType = 'none';
+    if (p.tabColor === undefined) p.tabColor = '';
     if (!p.widgets) p.widgets = [];
     p.widgets.forEach((w) => {
       if (w.type !== 'note' && !w.items) w.items = [];
@@ -620,9 +628,6 @@ function sanitizeData(d) {
     });
     if (p.pageType === 'miro') {
       if (!p.miroCards) p.miroCards = [];
-      if (p.zoom === undefined) p.zoom = 100;
-      if (p.panX === undefined) p.panX = 0;
-      if (p.panY === undefined) p.panY = 0;
     }
   });
   if (!d.cur) d.cur = d.pages[0]?.id || 'p0';
@@ -1036,9 +1041,16 @@ function saveSnapshot(silent = false) {
       inbox: D.inbox
     },
     pagesMeta: D.pages.map(p => ({
-      id: p.id, groupId: p.groupId, name: p.name,
-      pageType: p.pageType, zoom: p.zoom, panX: p.panX, panY: p.panY,
-      bg: p.bg, bgType: p.bgType, tabColor: p.tabColor || ''
+      id: p.id || '',
+      groupId: p.groupId || '',
+      name: p.name || 'Untitled Page',
+      pageType: p.pageType || 'miro',
+      zoom: p.zoom !== undefined ? p.zoom : 100,
+      panX: p.panX !== undefined ? p.panX : 0,
+      panY: p.panY !== undefined ? p.panY : 0,
+      bg: p.bg || '',
+      bgType: p.bgType || 'none',
+      tabColor: p.tabColor || ''
     })),
     pages: {}
   };
@@ -1118,9 +1130,16 @@ function saveSnapshotBeacon() {
         inbox: D.inbox
       },
       pagesMeta: D.pages.map(p => ({
-        id: p.id, groupId: p.groupId, name: p.name,
-        pageType: p.pageType, zoom: p.zoom, panX: p.panX, panY: p.panY,
-        bg: p.bg, bgType: p.bgType, tabColor: p.tabColor || ''
+        id: p.id || '',
+        groupId: p.groupId || '',
+        name: p.name || 'Untitled Page',
+        pageType: p.pageType || 'miro',
+        zoom: p.zoom !== undefined ? p.zoom : 100,
+        panX: p.panX !== undefined ? p.panX : 0,
+        panY: p.panY !== undefined ? p.panY : 0,
+        bg: p.bg || '',
+        bgType: p.bgType || 'none',
+        tabColor: p.tabColor || ''
       })),
       pages: {}
     };

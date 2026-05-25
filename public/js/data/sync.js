@@ -34,9 +34,16 @@
   };
 
   const pagesMeta = D.pages.filter(p => p).map(p => ({
-    id: p.id, groupId: p.groupId, name: p.name,
-    pageType: p.pageType, zoom: p.zoom, panX: p.panX, panY: p.panY,
-    bg: p.bg, bgType: p.bgType, tabColor: p.tabColor || ''
+    id: p.id || '',
+    groupId: p.groupId || '',
+    name: p.name || 'Untitled Page',
+    pageType: p.pageType || 'miro',
+    zoom: p.zoom !== undefined ? p.zoom : 100,
+    panX: p.panX !== undefined ? p.panX : 0,
+    panY: p.panY !== undefined ? p.panY : 0,
+    bg: p.bg || '',
+    bgType: p.bgType || 'none',
+    tabColor: p.tabColor || ''
   }));
 
   const updates = {};
@@ -401,15 +408,15 @@
     };
 
     const pagesMeta = D.pages.filter(p => p).map(p => ({
-      id: p.id,
-      groupId: p.groupId,
-      name: p.name,
-      pageType: p.pageType,
-      zoom: p.zoom,
-      panX: p.panX,
-      panY: p.panY,
-      bg: p.bg,
-      bgType: p.bgType,
+      id: p.id || '',
+      groupId: p.groupId || '',
+      name: p.name || 'Untitled Page',
+      pageType: p.pageType || 'miro',
+      zoom: p.zoom !== undefined ? p.zoom : 100,
+      panX: p.panX !== undefined ? p.panX : 0,
+      panY: p.panY !== undefined ? p.panY : 0,
+      bg: p.bg || '',
+      bgType: p.bgType || 'none',
       tabColor: p.tabColor || ''
     }));
 
@@ -704,8 +711,15 @@
     };
     cacheMeta(meta);
     cachePagesMeta(D.pages.filter(p => p).map(p => ({
-      id: p.id, groupId: p.groupId, name: p.name, pageType: p.pageType,
-      zoom: p.zoom, panX: p.panX, panY: p.panY, bg: p.bg, bgType: p.bgType,
+      id: p.id || '',
+      groupId: p.groupId || '',
+      name: p.name || 'Untitled Page',
+      pageType: p.pageType || 'miro',
+      zoom: p.zoom !== undefined ? p.zoom : 100,
+      panX: p.panX !== undefined ? p.panX : 0,
+      panY: p.panY !== undefined ? p.panY : 0,
+      bg: p.bg || '',
+      bgType: p.bgType || 'none',
       tabColor: p.tabColor || ''
     })));
   } catch(e) { console.warn('[FORCE SAVE]', e); }
