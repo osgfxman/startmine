@@ -96,8 +96,8 @@
           left: 50%;
           transform: translateX(-50%);
           font-size: 0.65rem;
-          color: rgba(255, 255, 255, 0.85);
-          background: rgba(0, 0, 0, 0.7);
+          color: #000000;
+          background: transparent;
           padding: 6px 12px;
           border-radius: 8px;
           pointer-events: auto;
@@ -114,8 +114,8 @@
           user-select: none;
         }
         .miro-cell-label:hover {
-          background: rgba(108, 143, 255, 0.35);
-          color: rgba(255, 255, 255, 1);
+          background: rgba(0, 0, 0, 0.06);
+          color: #000000;
         }
         .miro-cell-label.has-change {
           background: rgba(255, 107, 53, 0.9) !important;
@@ -347,6 +347,18 @@
       return `${blockStart}-${blockEnd} ${monthNamesShort[M]}`;
     }
 
+    if (type === '3days') {
+      const blockIndex = Math.floor((D - 1) / 3);
+      const blockStart = blockIndex * 3 + 1;
+      let blockEnd = blockStart + 2;
+      const daysInMonth = new Date(Y, M + 1, 0).getDate();
+      if (blockEnd > daysInMonth) blockEnd = daysInMonth;
+      if (blockStart === blockEnd) {
+        return `${blockStart} ${monthNamesShort[M]}`;
+      }
+      return `${blockStart}-${blockEnd} ${monthNamesShort[M]}`;
+    }
+
     if (type === 'week') {
       const weekNum = getWeekNumber(now);
       const sun = new Date(now);
@@ -365,6 +377,19 @@
       sat.setDate(now.getDate() - now.getDay() + 6);
       const endMonth = monthNamesShort[sat.getMonth()];
       return `W${weekNum}(${thu.getDate()}:${sat.getDate()}${endMonth})`;
+    }
+
+    if (type === 'sprint') {
+      const weekNum = getWeekNumber(now);
+      const sprintNum = Math.floor((weekNum - 1) / 2) + 1;
+      const oddWeekNum = (sprintNum - 1) * 2 + 1;
+      const diffWeeks = weekNum - oddWeekNum;
+      const sun = new Date(now);
+      sun.setDate(now.getDate() - now.getDay() - (diffWeeks * 7));
+      const sat = new Date(now);
+      sat.setDate(now.getDate() - now.getDay() + 6 + ((1 - diffWeeks) * 7));
+      const endMonth = monthNamesShort[sat.getMonth()];
+      return `Sprint${sprintNum}(${sun.getDate()}:${sat.getDate()}${endMonth})`;
     }
 
     if (type === 'month') {
@@ -758,7 +783,7 @@
       const userTitle = cellState.title || '';
       const dynamicVal = cellState.dynamicType ? getDynamicTitleValue(cellState.dynamicType) : '';
       let displayIcon = cellState.icon || '';
-      let iconSize = cellState.iconSize || 20;
+      let iconSize = cellState.iconSize || 40;
 
       // Fallback parser if icon is not set but title contains one
       let parsedTitle = userTitle;
@@ -1646,12 +1671,14 @@
     
     const dynamicOptions = [
       { val: '', label: 'None' },
-      { val: 'session', label: 'This Session' },
       { val: 'pomodoro', label: 'This Pomodoro' },
+      { val: 'session', label: 'This Session' },
       { val: 'day', label: 'This Day' },
       { val: '2days', label: '2Days Back2Back' },
-      { val: 'week', label: 'This Week' },
+      { val: '3days', label: '3 Days' },
       { val: 'weekend', label: 'Weekend Project' },
+      { val: 'week', label: 'This Week' },
+      { val: 'sprint', label: 'This Sprint' },
       { val: 'month', label: 'This Month' },
       { val: 'quarter', label: 'This Quarter' },
       { val: 'year', label: 'This Year' },
@@ -1833,7 +1860,7 @@
     sizeSlider.type = 'range';
     sizeSlider.min = '8';
     sizeSlider.max = '120';
-    sizeSlider.value = state.iconSize || 20;
+    sizeSlider.value = state.iconSize || 40;
 
     const sizeVal = document.createElement('span');
     sizeVal.className = 'mcm-opacity-val';
@@ -2092,7 +2119,7 @@
       state.title = titleInput.value.trim() || '';
       state.dynamicType = newDynamicType;
       state.icon = currentIconUrl;
-      state.iconSize = parseInt(sizeSlider.value) || 20;
+      state.iconSize = parseInt(sizeSlider.value) || 40;
       state.colorTag = selectedColor;
       const oVal = parseInt(opacitySlider.value);
       if (oVal > 0) {
