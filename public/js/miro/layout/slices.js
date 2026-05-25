@@ -13,6 +13,19 @@
   let _cellPanning = false;
   let _cellPanStartX = 0, _cellPanStartY = 0;
 
+  function parseTitleAndIcon(titleStr) {
+    if (!titleStr) return { title: '', icon: null };
+    // Match http/https URLs or base64 data URIs
+    const imgRegex = /(https?:\/\/[^\s]+|data:image\/[a-zA-Z0-9+/=]*;base64,[^\s]+)/i;
+    const match = titleStr.match(imgRegex);
+    if (match) {
+      const icon = match[1];
+      const title = titleStr.replace(icon, '').trim();
+      return { title, icon };
+    }
+    return { title: titleStr, icon: null };
+  }
+
   // Initialize Slices Mode UI, event listeners, and rulers
   window.initMiroSlices = function initMiroSlices() {
     // Add css styles for rulers, guide handles, cell viewports, and lock badges
@@ -452,10 +465,37 @@
           lbl.appendChild(dot);
         }
 
+        // Determine icon and title
+        let displayTitle = cellState.title || '';
+        let displayIcon = cellState.icon || '';
+        let iconSize = cellState.iconSize || 20;
+
+        // Fallback parser if icon is not set but title contains one
+        if (!displayIcon && displayTitle) {
+          const parsed = parseTitleAndIcon(displayTitle);
+          displayTitle = parsed.title;
+          displayIcon = parsed.icon;
+        }
+
+        // Icon element
+        if (displayIcon) {
+          const img = document.createElement('img');
+          img.src = displayIcon;
+          img.style.width = iconSize + 'px';
+          img.style.height = iconSize + 'px';
+          img.style.objectFit = 'contain';
+          img.style.borderRadius = '4px';
+          img.style.flexShrink = '0';
+          img.style.verticalAlign = 'middle';
+          lbl.appendChild(img);
+        }
+
         // Title text
         const titleSpan = document.createElement('span');
-        titleSpan.textContent = cellState.title || `Cell [${c+1}, ${r+1}]`;
-        lbl.appendChild(titleSpan);
+        titleSpan.textContent = displayTitle || (displayIcon ? '' : `Cell [${c+1}, ${r+1}]`);
+        if (displayTitle || !displayIcon) {
+          lbl.appendChild(titleSpan);
+        }
 
         // Zoom percentage
         const zoomSpan = document.createElement('span');
@@ -1102,6 +1142,148 @@
     titleRow.appendChild(titleInput);
     modal.appendChild(titleRow);
 
+    // Row: Icon Image (Upload/Selection)
+    const iconRow = document.createElement('div');
+    iconRow.className = 'mcm-row';
+    const iconLabel = document.createElement('label');
+    iconLabel.textContent = 'Icon Image';
+    iconRow.appendChild(iconLabel);
+
+    const iconContainer = document.createElement('div');
+    iconContainer.style.cssText = 'display:flex;align-items:center;gap:12px;margin-top:4px;';
+
+    // File Input (Hidden)
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.style.display = 'none';
+
+    // Upload Button
+    const uploadBtn = document.createElement('button');
+    uploadBtn.type = 'button';
+    uploadBtn.className = 'mcm-btn mcm-btn-cancel';
+    uploadBtn.style.cssText = 'padding:6px 12px;font-size:0.65rem;';
+    uploadBtn.textContent = state.icon ? 'Change Image' : 'Choose Image…';
+
+    // Preview thumbnail
+    const prevImg = document.createElement('img');
+    prevImg.style.cssText = 'width:32px;height:32px;object-fit:contain;border-radius:4px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);display:none;';
+    if (state.icon) {
+      prevImg.src = state.icon;
+      prevImg.style.display = 'block';
+    }
+
+    // Clear Button
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'mcm-btn mcm-btn-cancel';
+    clearBtn.style.cssText = 'padding:6px 12px;font-size:0.65rem;color:#ff4444;background:rgba(255,68,68,0.1);display: ' + (state.icon ? 'block' : 'none') + ';';
+    clearBtn.textContent = 'Remove';
+
+    let currentIconUrl = state.icon || '';
+
+    // File selection handler
+    fileInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const base64 = ev.target.result;
+        prevImg.src = base64;
+        prevImg.style.display = 'block';
+        uploadBtn.textContent = 'Uploading…';
+        uploadBtn.disabled = true;
+
+        if (typeof window.uploadToImgBB === 'function') {
+          window.uploadToImgBB(base64).then(url => {
+            uploadBtn.disabled = false;
+            if (url) {
+              currentIconUrl = url;
+              uploadBtn.textContent = 'Uploaded ✓';
+              clearBtn.style.display = 'block';
+              if (typeof showToast === 'function') showToast('✅ Icon uploaded to ImgBB!');
+            } else {
+              uploadBtn.textContent = '⚠️ Upload Failed';
+              prevImg.style.display = currentIconUrl ? 'block' : 'none';
+              prevImg.src = currentIconUrl || '';
+              if (typeof showToast === 'function') showToast('❌ Upload failed.');
+            }
+          });
+        } else {
+          fetch('https://api.imgbb.com/1/upload?key=129f1b49da234235959ee4405ac9ebb1', {
+            method: 'POST',
+            body: new URLSearchParams({ image: base64.split(',')[1] })
+          })
+          .then(res => res.json())
+          .then(data => {
+            uploadBtn.disabled = false;
+            if (data.success) {
+              currentIconUrl = data.data.url;
+              uploadBtn.textContent = 'Uploaded ✓';
+              clearBtn.style.display = 'block';
+              if (typeof showToast === 'function') showToast('✅ Icon uploaded to ImgBB!');
+            } else {
+              uploadBtn.textContent = '⚠️ Upload Failed';
+              prevImg.style.display = currentIconUrl ? 'block' : 'none';
+              prevImg.src = currentIconUrl || '';
+              if (typeof showToast === 'function') showToast('❌ Upload failed.');
+            }
+          })
+          .catch(() => {
+            uploadBtn.disabled = false;
+            uploadBtn.textContent = '⚠️ Upload Failed';
+            prevImg.style.display = currentIconUrl ? 'block' : 'none';
+            prevImg.src = currentIconUrl || '';
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+      fileInput.value = '';
+    };
+
+    uploadBtn.onclick = () => fileInput.click();
+
+    clearBtn.onclick = () => {
+      currentIconUrl = '';
+      prevImg.style.display = 'none';
+      prevImg.src = '';
+      clearBtn.style.display = 'none';
+      uploadBtn.textContent = 'Choose Image…';
+    };
+
+    iconContainer.appendChild(fileInput);
+    iconContainer.appendChild(uploadBtn);
+    iconContainer.appendChild(clearBtn);
+    iconContainer.appendChild(prevImg);
+    iconRow.appendChild(iconContainer);
+    modal.appendChild(iconRow);
+
+    // Row: Icon Size slider
+    const sizeRow = document.createElement('div');
+    sizeRow.className = 'mcm-row';
+    const sizeLabel = document.createElement('label');
+    sizeLabel.textContent = 'Icon Size (pixels)';
+    sizeRow.appendChild(sizeLabel);
+    const sizeContainer = document.createElement('div');
+    sizeContainer.className = 'mcm-bg-row';
+
+    const sizeSlider = document.createElement('input');
+    sizeSlider.type = 'range';
+    sizeSlider.min = '8';
+    sizeSlider.max = '120';
+    sizeSlider.value = state.iconSize || 20;
+
+    const sizeVal = document.createElement('span');
+    sizeVal.className = 'mcm-opacity-val';
+    sizeVal.textContent = sizeSlider.value + 'px';
+    sizeSlider.oninput = () => { sizeVal.textContent = sizeSlider.value + 'px'; };
+
+    sizeContainer.appendChild(sizeSlider);
+    sizeContainer.appendChild(sizeVal);
+    sizeRow.appendChild(sizeContainer);
+    modal.appendChild(sizeRow);
+
     // Row: Color Tag
     const colorRow = document.createElement('div');
     colorRow.className = 'mcm-row';
@@ -1188,6 +1370,8 @@
     saveBtn.textContent = 'Save';
     saveBtn.onclick = () => {
       state.title = titleInput.value.trim() || '';
+      state.icon = currentIconUrl;
+      state.iconSize = parseInt(sizeSlider.value) || 20;
       state.colorTag = selectedColor;
       const oVal = parseInt(opacitySlider.value);
       if (oVal > 0) {
