@@ -423,10 +423,10 @@
       page.vGuides[_activeGuideDrag.idx] = newPct;
       
       // Live visual update of guides elements (cheap)
-      const guideEl = document.querySelector(`.miro-guide-v[data-idx="${_activeGuideDrag.idx}"]`);
-      if (guideEl) {
-        guideEl.style.left = (newPct * 100) + '%';
-      }
+      const guideEls = document.querySelectorAll(`.miro-guide-v[data-idx="${_activeGuideDrag.idx}"]`);
+      guideEls.forEach(el => {
+        el.style.left = (newPct * 100) + '%';
+      });
     } else {
       const delta = e.clientY - _activeGuideDrag.startClient;
       let newPct = _activeGuideDrag.startPct + (delta / rect.height);
@@ -436,10 +436,10 @@
       page.hGuides[_activeGuideDrag.idx] = newPct;
       
       // Live visual update of guides elements (cheap)
-      const guideEl = document.querySelector(`.miro-guide-h[data-idx="${_activeGuideDrag.idx}"]`);
-      if (guideEl) {
-        guideEl.style.top = (newPct * 100) + '%';
-      }
+      const guideEls = document.querySelectorAll(`.miro-guide-h[data-idx="${_activeGuideDrag.idx}"]`);
+      guideEls.forEach(el => {
+        el.style.top = (newPct * 100) + '%';
+      });
     }
   });
 
@@ -668,60 +668,84 @@
     if (hasGuides) {
       // Render Vertical Guides
       (page.vGuides || []).forEach((pct, idx) => {
-        const line = document.createElement('div');
-        line.className = 'miro-guide-v';
-        line.dataset.idx = idx;
-        line.style.left = (pct * 100) + '%';
+        const gIdx = vg.indexOf(pct) - 1;
 
-        const lineVisual = document.createElement('div');
-        lineVisual.className = 'miro-guide-line miro-guide-line-v';
-        if (page.lockedGuides && page.lockedGuides.indexOf('v_' + idx) !== -1) {
-          lineVisual.classList.add('is-locked');
+        for (let r = 0; r < rows; r++) {
+          const isCrossed = (page.mergedCells || []).some(m => {
+            return r >= m.rStart && r <= m.rEnd && m.cStart <= gIdx && gIdx < m.cEnd;
+          });
+          if (isCrossed) continue;
+
+          const segment = document.createElement('div');
+          segment.className = 'miro-guide-v';
+          segment.dataset.idx = idx;
+          segment.style.left = (pct * 100) + '%';
+          segment.style.top = (hg[r] * 100) + '%';
+          segment.style.height = ((hg[r+1] - hg[r]) * 100) + '%';
+          segment.style.bottom = 'auto';
+
+          const lineVisual = document.createElement('div');
+          lineVisual.className = 'miro-guide-line miro-guide-line-v';
+          if (page.lockedGuides && page.lockedGuides.indexOf('v_' + idx) !== -1) {
+            lineVisual.classList.add('is-locked');
+          }
+          segment.appendChild(lineVisual);
+
+          // Events
+          segment.onmousedown = (e) => {
+            if (page.lockedGuides && page.lockedGuides.indexOf('v_' + idx) !== -1) return;
+            e.stopPropagation(); e.preventDefault();
+            _activeGuideDrag = { type: 'v', idx, startPct: pct, startClient: e.clientX };
+          };
+
+          segment.oncontextmenu = (e) => {
+            e.preventDefault(); e.stopPropagation();
+            showSlicesContextMenu(e, 'v', idx);
+          };
+
+          board.appendChild(segment);
         }
-        line.appendChild(lineVisual);
-
-        // Events
-        line.onmousedown = (e) => {
-          if (page.lockedGuides && page.lockedGuides.indexOf('v_' + idx) !== -1) return;
-          e.stopPropagation(); e.preventDefault();
-          _activeGuideDrag = { type: 'v', idx, startPct: pct, startClient: e.clientX };
-        };
-
-        line.oncontextmenu = (e) => {
-          e.preventDefault(); e.stopPropagation();
-          showSlicesContextMenu(e, 'v', idx);
-        };
-
-        board.appendChild(line);
       });
 
       // Render Horizontal Guides
       (page.hGuides || []).forEach((pct, idx) => {
-        const line = document.createElement('div');
-        line.className = 'miro-guide-h';
-        line.dataset.idx = idx;
-        line.style.top = (pct * 100) + '%';
+        const gIdx = hg.indexOf(pct) - 1;
 
-        const lineVisual = document.createElement('div');
-        lineVisual.className = 'miro-guide-line miro-guide-line-h';
-        if (page.lockedGuides && page.lockedGuides.indexOf('h_' + idx) !== -1) {
-          lineVisual.classList.add('is-locked');
+        for (let c = 0; c < cols; c++) {
+          const isCrossed = (page.mergedCells || []).some(m => {
+            return c >= m.cStart && c <= m.cEnd && m.rStart <= gIdx && gIdx < m.rEnd;
+          });
+          if (isCrossed) continue;
+
+          const segment = document.createElement('div');
+          segment.className = 'miro-guide-h';
+          segment.dataset.idx = idx;
+          segment.style.top = (pct * 100) + '%';
+          segment.style.left = (vg[c] * 100) + '%';
+          segment.style.width = ((vg[c+1] - vg[c]) * 100) + '%';
+          segment.style.right = 'auto';
+
+          const lineVisual = document.createElement('div');
+          lineVisual.className = 'miro-guide-line miro-guide-line-h';
+          if (page.lockedGuides && page.lockedGuides.indexOf('h_' + idx) !== -1) {
+            lineVisual.classList.add('is-locked');
+          }
+          segment.appendChild(lineVisual);
+
+          // Events
+          segment.onmousedown = (e) => {
+            if (page.lockedGuides && page.lockedGuides.indexOf('h_' + idx) !== -1) return;
+            e.stopPropagation(); e.preventDefault();
+            _activeGuideDrag = { type: 'h', idx, startPct: pct, startClient: e.clientY };
+          };
+
+          segment.oncontextmenu = (e) => {
+            e.preventDefault(); e.stopPropagation();
+            showSlicesContextMenu(e, 'h', idx);
+          };
+
+          board.appendChild(segment);
         }
-        line.appendChild(lineVisual);
-
-        // Events
-        line.onmousedown = (e) => {
-          if (page.lockedGuides && page.lockedGuides.indexOf('h_' + idx) !== -1) return;
-          e.stopPropagation(); e.preventDefault();
-          _activeGuideDrag = { type: 'h', idx, startPct: pct, startClient: e.clientY };
-        };
-
-        line.oncontextmenu = (e) => {
-          e.preventDefault(); e.stopPropagation();
-          showSlicesContextMenu(e, 'h', idx);
-        };
-
-        board.appendChild(line);
       });
     }
   };
