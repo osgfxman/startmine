@@ -176,9 +176,13 @@
             } catch(e) {}
           }
           if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
-          // Ensure curGroup matches the restored page
+          // Ensure curGroup and curEnv match the restored page
           const rp2 = D.pages.find(p => p.id === D.cur);
-          if (rp2 && rp2.groupId) D.curGroup = rp2.groupId;
+          if (rp2 && rp2.groupId) {
+            D.curGroup = rp2.groupId;
+            const rg2 = D.groups.find(g => g.id === rp2.groupId);
+            if (rg2 && rg2.envId) D.curEnv = rg2.envId;
+          }
           // Load cached page data for instant render
           const cachedPage = getCachedPageData(D.cur);
           const pg = cp();
@@ -324,9 +328,13 @@
             } catch(e) {}
           }
           if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
-          // Ensure curGroup matches the restored page
+          // Ensure curGroup and curEnv match the restored page
           const rp3 = D.pages.find(p => p.id === D.cur);
-          if (rp3 && rp3.groupId) D.curGroup = rp3.groupId;
+          if (rp3 && rp3.groupId) {
+            D.curGroup = rp3.groupId;
+            const rg3 = D.groups.find(g => g.id === rp3.groupId);
+            if (rg3 && rg3.envId) D.curEnv = rg3.envId;
+          }
           isFirstLoad = false;
           switchActivePage(D.cur); // This will render All
         } else {

@@ -670,10 +670,14 @@ function initDB() {
         } catch(e) {}
       }
       if (!D.cur && D.pages.length > 0) D.cur = D.pages[0].id;
-      // Ensure curGroup matches the restored page
+      // Ensure curGroup and curEnv match the restored page
       const restoredPage = D.pages.find(p => p.id === D.cur);
       if (restoredPage && restoredPage.groupId) {
         D.curGroup = restoredPage.groupId;
+        const restoredGrp = D.groups.find(g => g.id === restoredPage.groupId);
+        if (restoredGrp && restoredGrp.envId) {
+          D.curEnv = restoredGrp.envId;
+        }
       }
       sanitizeData(D);
       if (D.__modified) {
@@ -820,6 +824,14 @@ function switchActivePage(pageId) {
     }
   }
   D.cur = pageId;
+  const activePg = D.pages.find(p => p && p.id === pageId);
+  if (activePg && activePg.groupId) {
+    D.curGroup = activePg.groupId;
+    const activeGrp = D.groups.find(g => g && g.id === activePg.groupId);
+    if (activeGrp && activeGrp.envId) {
+      D.curEnv = activeGrp.envId;
+    }
+  }
   try { localStorage.setItem(LS_CUR_PAGE, pageId); } catch(e) {}
   renderMeta();
 
@@ -1222,6 +1234,7 @@ function restoreSnapshot(key) {
       if (!D.pages.find(p => p.id === D.cur)) {
         D.cur = D.pages[0]?.id || D.cur;
       }
+      switchActivePage(D.cur);
     }
 
     // Save restored state to Firebase and rebuild UI
@@ -2833,10 +2846,13 @@ function buildEnvs() {
           D.curEnv = env.id;
           D.curGroup = grp.id;
           const firstPage = D.pages.find(p => p.groupId === grp.id);
-          if (firstPage) D.cur = firstPage.id;
           _dragGrpId = null;
-          sv();
-          renderAll();
+          if (firstPage) {
+            switchActivePage(firstPage.id);
+          } else {
+            sv();
+            renderAll();
+          }
         }
         return;
       }
@@ -2899,12 +2915,19 @@ function buildEnvs() {
       if (nm.contentEditable === 'true') return;
       if (D.curEnv === env.id) return;
       D.curEnv = env.id;
-      const firstGroupInEnv = D.groups.find((g) => g.envId === env.id);
-      if (firstGroupInEnv) {
-        D.curGroup = firstGroupInEnv.id;
-        const firstPageInGroup = D.pages.find((p) => p.groupId === firstGroupInEnv.id);
-        if (firstPageInGroup) D.cur = firstPageInGroup.id;
+      let selectedGroup = D.groups.find((g) => g.envId === env.id && D.pages.some((p) => p.groupId === g.id));
+      if (!selectedGroup) {
+        selectedGroup = D.groups.find((g) => g.envId === env.id);
       }
+      if (selectedGroup) {
+        D.curGroup = selectedGroup.id;
+        const firstPage = D.pages.find((p) => p.groupId === selectedGroup.id);
+        if (firstPage) {
+          switchActivePage(firstPage.id);
+          return;
+        }
+      }
+      D.cur = '';
       sv();
       renderAll();
     };
@@ -2981,10 +3004,8 @@ function buildGroups() {
         if (pg && pg.groupId !== g.id) {
           pg.groupId = g.id;
           D.curGroup = g.id;
-          D.cur = pg.id;
           _dragTabId = null;
-          sv();
-          renderAll();
+          switchActivePage(pg.id);
         }
         return;
       }
@@ -3047,9 +3068,13 @@ function buildGroups() {
       if (D.curGroup === g.id) return;
       D.curGroup = g.id;
       const firstPageInGroup = D.pages.find((p) => p.groupId === g.id);
-      if (firstPageInGroup) D.cur = firstPageInGroup.id;
-      sv();
-      renderAll();
+      if (firstPageInGroup) {
+        switchActivePage(firstPageInGroup.id);
+      } else {
+        D.cur = '';
+        sv();
+        renderAll();
+      }
     };
     const x = document.createElement('button');
     x.className = 'ptx';
@@ -3152,14 +3177,31 @@ function openGrpColorPop(ev, gid) {
 // ALL button
 document.getElementById('all-btn').onclick = () => {
   if (D.curGroup === '__all__') {
-    D.curGroup = D.groups[0].id;
-    const fp = D.pages.find((p) => p.groupId === D.curGroup);
-    if (fp) D.cur = fp.id;
+    const activePg = D.pages.find(p => p.id === D.cur);
+    if (activePg) {
+      D.curGroup = activePg.groupId;
+      const activeGrp = D.groups.find(g => g.id === activePg.groupId);
+      if (activeGrp) D.curEnv = activeGrp.envId;
+      switchActivePage(activePg.id);
+    } else {
+      const fallbackGroup = D.groups.find(g => g.envId === D.curEnv) || D.groups[0];
+      if (fallbackGroup) {
+        D.curGroup = fallbackGroup.id;
+        const fp = D.pages.find(p => p.groupId === fallbackGroup.id);
+        if (fp) {
+          switchActivePage(fp.id);
+        } else {
+          D.cur = '';
+          sv();
+          renderAll();
+        }
+      }
+    }
   } else {
     D.curGroup = '__all__';
+    sv();
+    renderAll();
   }
-  sv();
-  renderAll();
 };
 
 // Preview mode
@@ -3738,7 +3780,17 @@ function delEnv(eid) {
     if (firstGroupInEnv) {
       D.curGroup = firstGroupInEnv.id;
       const firstPageInGroup = D.pages.find(p => p.groupId === firstGroupInEnv.id);
-      if (firstPageInGroup) D.cur = firstPageInGroup.id;
+      if (firstPageInGroup) {
+        switchActivePage(firstPageInGroup.id);
+      } else {
+        D.cur = '';
+        sv();
+        renderAll();
+      }
+    } else {
+      D.cur = '';
+      sv();
+      renderAll();
     }
   }
   sv();
@@ -3769,7 +3821,17 @@ function delGroup(gid) {
     if (fallbackGroup) {
       D.curGroup = fallbackGroup.id;
       const firstPageInGroup = D.pages.find((p) => p.groupId === fallbackGroup.id);
-      if (firstPageInGroup) D.cur = firstPageInGroup.id;
+      if (firstPageInGroup) {
+        switchActivePage(firstPageInGroup.id);
+      } else {
+        D.cur = '';
+        sv();
+        renderAll();
+      }
+    } else {
+      D.cur = '';
+      sv();
+      renderAll();
     }
   }
   sv();
@@ -4963,9 +5025,7 @@ function exportToMiro(widgetId) {
     widgets: [],
   });
 
-  D.cur = pageId;
-  sv();
-  renderAll();
+  switchActivePage(pageId);
 }
 
 // ─── Convert Dashboard Page to Miro Page ───
@@ -5043,9 +5103,7 @@ window.convertPageToMiro = function (pageId) {
   D.pages.splice(pgIdx + 1, 0, newPg);
 
   // Switch to new page
-  D.cur = newId;
-  sv();
-  renderAll();
+  switchActivePage(newId);
 
   if (typeof showToast === 'function') {
     showToast(`Page converted and exported to Miro.`);
