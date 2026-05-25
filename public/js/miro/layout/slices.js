@@ -12,6 +12,8 @@
   let _activeCellKey = null;
   let _cellPanning = false;
   let _cellPanStartX = 0, _cellPanStartY = 0;
+  let _slicesClipboard = null;
+  let _activeLabelDrag = null;
 
   // Add css styles for rulers, guide handles, cell viewports, and lock badges immediately on load
   if (!document.getElementById('miro-slices-css')) {
@@ -614,6 +616,13 @@
 
   // Add event listeners for guide dragging globally
   document.addEventListener('mousemove', (e) => {
+    if (_activeLabelDrag) {
+      const drag = _activeLabelDrag;
+      drag.cloneEl.style.left = (e.clientX - drag.offsetX) + 'px';
+      drag.cloneEl.style.top = (e.clientY - drag.offsetY) + 'px';
+      return;
+    }
+
     if (!_activeGuideDrag) return;
     const page = cp();
     if (!page) return;
@@ -650,7 +659,27 @@
     }
   });
 
-  document.addEventListener('mouseup', () => {
+  document.addEventListener('mouseup', (e) => {
+    if (_activeLabelDrag) {
+      const drag = _activeLabelDrag;
+      drag.cloneEl.remove();
+      document.body.style.cursor = '';
+      
+      // Determine which cell viewport is underneath the mouse
+      const targetEl = document.elementFromPoint(e.clientX, e.clientY);
+      const cellViewport = targetEl ? targetEl.closest('.miro-cell-viewport') : null;
+      
+      if (cellViewport) {
+        const destCellKey = cellViewport.dataset.cellKey;
+        if (destCellKey && destCellKey !== drag.srcCellKey) {
+          performLabelTransfer(drag.srcCellKey, destCellKey, drag.mode);
+        }
+      }
+      
+      _activeLabelDrag = null;
+      return;
+    }
+
     if (!_activeGuideDrag) return;
     const page = cp();
     if (page) {
@@ -862,6 +891,22 @@
         ev.stopPropagation();
         ev.preventDefault();
         showCellSettingsModal(cellKey);
+      });
+
+      // Right-click label context menu
+      lbl.addEventListener('contextmenu', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        showCellLabelContextMenu(ev, cellKey);
+      });
+
+      // Ctrl/Alt drag shortcuts
+      lbl.addEventListener('mousedown', (e) => {
+        if (e.ctrlKey || e.altKey) {
+          e.stopPropagation();
+          e.preventDefault();
+          startLabelDrag(e, cellKey, e.ctrlKey ? 'cut' : 'copy');
+        }
       });
 
       cellDiv.appendChild(lbl);
@@ -2165,6 +2210,205 @@
 
     document.body.appendChild(overlay);
     titleInput.focus();
+  }
+
+  function showCellLabelContextMenu(e, cellKey) {
+    document.querySelectorAll('.miro-slices-menu').forEach(el => el.remove());
+    const menu = document.createElement('div');
+    menu.className = 'miro-slices-menu';
+    menu.style.left = e.clientX + 'px';
+    menu.style.top = e.clientY + 'px';
+
+    const page = cp();
+    if (!page || !page.cellStates) return;
+    const state = page.cellStates[cellKey] || {};
+
+    // Copy Title
+    const copyItem = document.createElement('div');
+    copyItem.className = 'miro-slices-menu-item';
+    copyItem.textContent = '📋 Copy Title';
+    copyItem.onclick = () => {
+      _slicesClipboard = {
+        title: state.title,
+        dynamicType: state.dynamicType,
+        icon: state.icon,
+        iconSize: state.iconSize,
+        colorTag: state.colorTag,
+        bgColor: state.bgColor,
+        bgOpacity: state.bgOpacity
+      };
+      menu.remove();
+      if (typeof showToast === 'function') showToast('📋 Title copied');
+    };
+    menu.appendChild(copyItem);
+
+    // Cut Title
+    const cutItem = document.createElement('div');
+    cutItem.className = 'miro-slices-menu-item';
+    cutItem.textContent = '✂️ Cut Title';
+    cutItem.onclick = () => {
+      _slicesClipboard = {
+        title: state.title,
+        dynamicType: state.dynamicType,
+        icon: state.icon,
+        iconSize: state.iconSize,
+        colorTag: state.colorTag,
+        bgColor: state.bgColor,
+        bgOpacity: state.bgOpacity
+      };
+      // Clear from source
+      delete state.title;
+      delete state.dynamicType;
+      delete state.icon;
+      delete state.iconSize;
+      delete state.colorTag;
+      delete state.bgColor;
+      delete state.bgOpacity;
+      delete state.lastDynamicValue;
+      delete state.firstSetAt;
+      delete state.changeCount;
+      delete state.hasUnacknowledgedChange;
+      
+      menu.remove();
+      sv();
+      buildMiroCanvas();
+      if (typeof showToast === 'function') showToast('✂️ Title cut');
+    };
+    menu.appendChild(cutItem);
+
+    // Paste Title
+    const pasteItem = document.createElement('div');
+    pasteItem.className = 'miro-slices-menu-item';
+    pasteItem.textContent = '📋 Paste Title';
+    if (!_slicesClipboard) {
+      pasteItem.style.opacity = '0.5';
+      pasteItem.style.pointerEvents = 'none';
+    } else {
+      pasteItem.onclick = () => {
+        if (_slicesClipboard) {
+          state.title = _slicesClipboard.title || '';
+          state.dynamicType = _slicesClipboard.dynamicType || '';
+          state.icon = _slicesClipboard.icon || '';
+          state.iconSize = _slicesClipboard.iconSize || 40;
+          state.colorTag = _slicesClipboard.colorTag || '';
+          if (_slicesClipboard.bgColor) {
+            state.bgColor = _slicesClipboard.bgColor;
+            state.bgOpacity = _slicesClipboard.bgOpacity != null ? _slicesClipboard.bgOpacity : 0.15;
+          } else {
+            delete state.bgColor;
+            delete state.bgOpacity;
+          }
+          // Reset tracker fields for fresh start
+          delete state.lastDynamicValue;
+          delete state.firstSetAt;
+          delete state.changeCount;
+          delete state.hasUnacknowledgedChange;
+
+          if (state.dynamicType) {
+            state.lastDynamicValue = getDynamicTitleValue(state.dynamicType);
+            state.firstSetAt = new Date().toLocaleString();
+            state.changeCount = 0;
+            state.hasUnacknowledgedChange = false;
+          }
+        }
+        menu.remove();
+        sv();
+        buildMiroCanvas();
+        if (typeof showToast === 'function') showToast('📋 Title pasted');
+      };
+    }
+    menu.appendChild(pasteItem);
+
+    document.body.appendChild(menu);
+    const closeMenu = () => { menu.remove(); document.removeEventListener('click', closeMenu); };
+    setTimeout(() => document.addEventListener('click', closeMenu), 100);
+  }
+
+  function startLabelDrag(e, srcCellKey, mode) {
+    const originalLabel = e.currentTarget;
+    const clone = originalLabel.cloneNode(true);
+    clone.style.position = 'fixed';
+    clone.style.zIndex = '10000';
+    clone.style.pointerEvents = 'none';
+    clone.style.opacity = '0.75';
+    clone.style.boxShadow = '0 8px 24px rgba(0,0,0,0.4)';
+    
+    // Set initial position
+    const rect = originalLabel.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    const offsetY = e.clientY - rect.top;
+    
+    clone.style.left = (e.clientX - offsetX) + 'px';
+    clone.style.top = (e.clientY - offsetY) + 'px';
+    document.body.appendChild(clone);
+
+    _activeLabelDrag = {
+      srcCellKey,
+      mode,
+      cloneEl: clone,
+      offsetX,
+      offsetY
+    };
+
+    document.body.style.cursor = 'grabbing';
+  }
+
+  function performLabelTransfer(srcCellKey, destCellKey, mode) {
+    const page = cp();
+    if (!page || !page.cellStates) return;
+    
+    const srcState = page.cellStates[srcCellKey] || {};
+    if (!page.cellStates[destCellKey]) {
+      page.cellStates[destCellKey] = { zoom: 100, panX: 0, panY: 0 };
+    }
+    const destState = page.cellStates[destCellKey];
+    
+    destState.title = srcState.title || '';
+    destState.dynamicType = srcState.dynamicType || '';
+    destState.icon = srcState.icon || '';
+    destState.iconSize = srcState.iconSize || 40;
+    destState.colorTag = srcState.colorTag || '';
+    if (srcState.bgColor) {
+      destState.bgColor = srcState.bgColor;
+      destState.bgOpacity = srcState.bgOpacity != null ? srcState.bgOpacity : 0.15;
+    } else {
+      delete destState.bgColor;
+      delete destState.bgOpacity;
+    }
+    
+    // Reset tracker fields for fresh start
+    delete destState.lastDynamicValue;
+    delete destState.firstSetAt;
+    delete destState.changeCount;
+    delete destState.hasUnacknowledgedChange;
+
+    if (destState.dynamicType) {
+      destState.lastDynamicValue = getDynamicTitleValue(destState.dynamicType);
+      destState.firstSetAt = new Date().toLocaleString();
+      destState.changeCount = 0;
+      destState.hasUnacknowledgedChange = false;
+    }
+
+    if (mode === 'cut') {
+      delete srcState.title;
+      delete srcState.dynamicType;
+      delete srcState.icon;
+      delete srcState.iconSize;
+      delete srcState.colorTag;
+      delete srcState.bgColor;
+      delete srcState.bgOpacity;
+      delete srcState.lastDynamicValue;
+      delete srcState.firstSetAt;
+      delete srcState.changeCount;
+      delete srcState.hasUnacknowledgedChange;
+      
+      if (typeof showToast === 'function') showToast('✂️ Title cut & pasted');
+    } else {
+      if (typeof showToast === 'function') showToast('📋 Title copied & pasted');
+    }
+    
+    sv();
+    buildMiroCanvas();
   }
 
   // Register namespace
