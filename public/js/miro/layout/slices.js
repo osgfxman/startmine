@@ -96,24 +96,36 @@
           left: 50%;
           transform: translateX(-50%);
           font-size: 0.65rem;
-          color: rgba(255, 255, 255, 0.55);
-          background: rgba(0, 0, 0, 0.6);
-          padding: 3px 8px;
-          border-radius: 6px;
+          color: rgba(255, 255, 255, 0.85);
+          background: rgba(0, 0, 0, 0.7);
+          padding: 6px 12px;
+          border-radius: 8px;
           pointer-events: auto;
           cursor: pointer;
           z-index: 10;
           font-weight: bold;
           font-family: var(--font);
           display: flex;
+          flex-direction: row;
           align-items: center;
-          gap: 5px;
-          transition: background .15s, color .15s;
+          justify-content: center;
+          gap: 10px;
+          transition: background .15s, color .15s, box-shadow .2s;
           user-select: none;
         }
         .miro-cell-label:hover {
           background: rgba(108, 143, 255, 0.35);
-          color: rgba(255, 255, 255, 0.85);
+          color: rgba(255, 255, 255, 1);
+        }
+        .miro-cell-label.has-change {
+          background: rgba(255, 107, 53, 0.9) !important;
+          color: #fff !important;
+          box-shadow: 0 0 12px rgba(255, 107, 53, 0.8);
+          animation: pulse-glow 2s infinite alternate;
+        }
+        @keyframes pulse-glow {
+          0% { box-shadow: 0 0 8px rgba(255, 107, 53, 0.6); }
+          100% { box-shadow: 0 0 18px rgba(255, 107, 53, 1); }
         }
         .miro-cell-color-tag {
           width: 8px;
@@ -281,6 +293,114 @@
         }
     `;
     document.head.appendChild(style);
+  }
+
+  function getDynamicTitleValue(type) {
+    const now = new Date();
+    const Y = now.getFullYear();
+    const M = now.getMonth(); // 0-11
+    const D = now.getDate();
+    const hr = now.getHours();
+    const min = now.getMinutes();
+
+    const monthNamesShort = ["Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec"];
+    const monthNamesFull = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+    function formatTime12(h, m) {
+      const ampm = h >= 12 ? 'pm' : 'am';
+      const displayH = h % 12 === 0 ? 12 : h % 12;
+      const displayM = m.toString().padStart(2, '0');
+      return `${displayH}:${displayM}${ampm}`;
+    }
+
+    if (type === 'session') {
+      const sessionNum = Math.floor(hr / 4) + 1;
+      const startHour = (sessionNum - 1) * 4;
+      return `S${sessionNum}(${formatTime12(startHour, 0)})`;
+    }
+
+    if (type === 'pomodoro') {
+      const totalMinutes = hr * 60 + min;
+      const pomoNum = Math.floor(totalMinutes / 30) + 1;
+      const startMinTotal = (pomoNum - 1) * 30;
+      const startH = Math.floor(startMinTotal / 60);
+      const startM = startMinTotal % 60;
+
+      return `P${pomoNum}(${formatTime12(startH, startM)})`;
+    }
+
+    if (type === 'day') {
+      const gregPart = `${D}${monthNamesShort[M]}`;
+      let hijriDay = 1;
+      try {
+        const formatter = new Intl.DateTimeFormat('en-US-u-ca-islamic', { day: 'numeric' });
+        hijriDay = formatter.format(now);
+      } catch (err) {
+        hijriDay = Math.floor((now.getTime() - new Date(2026, 0, 1).getTime()) / (1000 * 60 * 60 * 24)) % 30; 
+      }
+      return `${gregPart}/${hijriDay}`;
+    }
+
+    if (type === '2days') {
+      const blockStart = D % 2 === 0 ? D - 1 : D;
+      const blockEnd = blockStart + 1;
+      return `${blockStart}-${blockEnd} ${monthNamesShort[M]}`;
+    }
+
+    if (type === 'week') {
+      const weekNum = getWeekNumber(now);
+      const sun = new Date(now);
+      sun.setDate(now.getDate() - now.getDay());
+      const sat = new Date(now);
+      sat.setDate(now.getDate() - now.getDay() + 6);
+      const endMonth = monthNamesShort[sat.getMonth()];
+      return `W${weekNum}(${sun.getDate()}:${sat.getDate()}${endMonth})`;
+    }
+
+    if (type === 'weekend') {
+      const weekNum = getWeekNumber(now);
+      const thu = new Date(now);
+      thu.setDate(now.getDate() - now.getDay() + 4);
+      const sat = new Date(now);
+      sat.setDate(now.getDate() - now.getDay() + 6);
+      const endMonth = monthNamesShort[sat.getMonth()];
+      return `W${weekNum}(${thu.getDate()}:${sat.getDate()}${endMonth})`;
+    }
+
+    if (type === 'month') {
+      return `${monthNamesFull[M]} ${Y}`;
+    }
+
+    if (type === 'quarter') {
+      const quarter = Math.floor(M / 3) + 1;
+      return `Q${quarter} ${Y}`;
+    }
+
+    if (type === 'year') {
+      return `${Y}`;
+    }
+
+    if (type === '5years') {
+      const blockStart = Math.floor(Y / 5) * 5;
+      const blockEnd = blockStart + 5;
+      return `${blockStart}-${blockEnd}`;
+    }
+
+    if (type === 'next5years') {
+      const blockStart = Math.floor(Y / 5) * 5 + 5;
+      const blockEnd = blockStart + 5;
+      return `${blockStart}-${blockEnd}`;
+    }
+
+    return '';
+  }
+
+  function getWeekNumber(d) {
+    d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    return weekNo;
   }
 
   function parseCellKey(cellKey) {
@@ -548,6 +668,7 @@
 
     // Ensure cellStates is initialized
     if (!page.cellStates) page.cellStates = {};
+    let cellMetadataChanged = false;
 
     function drawCellViewport(cellKey, isCustom, customCell, span) {
       const cellDiv = document.createElement('div');
@@ -599,32 +720,55 @@
         cellDiv.appendChild(overlay);
       }
 
+      // Retrieve or initialize cell zoom & pan state
+      if (!page.cellStates[cellKey]) {
+        page.cellStates[cellKey] = { zoom: 100, panX: 0, panY: 0 };
+        cellMetadataChanged = true;
+      }
+      const cellState = page.cellStates[cellKey];
+
+      // Dynamic Title value transition tracking
+      if (cellState.dynamicType) {
+        const currentDynamicVal = getDynamicTitleValue(cellState.dynamicType);
+        if (cellState.lastDynamicValue !== currentDynamicVal) {
+          if (cellState.lastDynamicValue) {
+            cellState.changeCount = (cellState.changeCount || 0) + 1;
+            cellState.hasUnacknowledgedChange = true;
+          } else {
+            cellState.firstSetAt = new Date().toLocaleString();
+            cellState.changeCount = 0;
+            cellState.hasUnacknowledgedChange = false;
+          }
+          cellState.lastDynamicValue = currentDynamicVal;
+          cellMetadataChanged = true;
+        }
+      }
+
       // Interactive cell label with title, color tag, and zoom
       const lbl = document.createElement('div');
       lbl.className = 'miro-cell-label';
-
-      // Color tag dot
-      const cellState = page.cellStates[cellKey] || {};
-      if (cellState.colorTag) {
-        const dot = document.createElement('span');
-        dot.className = 'miro-cell-color-tag';
-        dot.style.background = cellState.colorTag;
-        lbl.appendChild(dot);
+      if (cellState.hasUnacknowledgedChange) {
+        lbl.classList.add('has-change');
+      }
+      if (cellState.changeCount > 0) {
+        lbl.setAttribute('title', `Started: ${cellState.firstSetAt || ''} (${cellState.changeCount})`);
       }
 
       // Determine icon and title
-      let displayTitle = cellState.title || '';
+      const userTitle = cellState.title || '';
+      const dynamicVal = cellState.dynamicType ? getDynamicTitleValue(cellState.dynamicType) : '';
       let displayIcon = cellState.icon || '';
       let iconSize = cellState.iconSize || 20;
 
       // Fallback parser if icon is not set but title contains one
-      if (!displayIcon && displayTitle) {
-        const parsed = parseTitleAndIcon(displayTitle);
-        displayTitle = parsed.title;
+      let parsedTitle = userTitle;
+      if (!displayIcon && userTitle) {
+        const parsed = parseTitleAndIcon(userTitle);
+        parsedTitle = parsed.title;
         displayIcon = parsed.icon;
       }
 
-      // Icon element
+      // Left Column: Icon Image (if present)
       if (displayIcon) {
         const img = document.createElement('img');
         img.src = displayIcon;
@@ -633,12 +777,26 @@
         img.style.objectFit = 'contain';
         img.style.borderRadius = '4px';
         img.style.flexShrink = '0';
-        img.style.verticalAlign = 'middle';
         lbl.appendChild(img);
       }
 
-      // Title text
-      const titleSpan = document.createElement('span');
+      // Right Column: Stack of text rows
+      const textStack = document.createElement('div');
+      textStack.style.cssText = 'display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 2px;';
+
+      // Row 1: Title Text (with Color tag dot if present)
+      const row1 = document.createElement('div');
+      row1.style.cssText = 'display: flex; align-items: center; justify-content: center; gap: 4px; font-weight: bold;';
+
+      // Color tag dot
+      if (cellState.colorTag) {
+        const dot = document.createElement('span');
+        dot.className = 'miro-cell-color-tag';
+        dot.style.background = cellState.colorTag;
+        row1.appendChild(dot);
+      }
+
+      // Title Text
       let defaultName = '';
       if (isCustom) {
         defaultName = customCell.title || 'Screen';
@@ -652,16 +810,27 @@
           defaultName = `Merged Cell [${c+1},${r+1} to ${cEnd+1},${rEnd+1}]`;
         }
       }
-      titleSpan.textContent = displayTitle || (displayIcon ? '' : defaultName);
-      if (displayTitle || !displayIcon) {
-        lbl.appendChild(titleSpan);
+      const line1Text = parsedTitle || dynamicVal || defaultName;
+      const titleSpan = document.createElement('span');
+      titleSpan.textContent = line1Text;
+      row1.appendChild(titleSpan);
+      textStack.appendChild(row1);
+
+      // Row 2: Dynamic value (only if User Title was used on Row 1)
+      if (parsedTitle && dynamicVal) {
+        const row2 = document.createElement('div');
+        row2.style.cssText = 'font-size: 0.6rem; opacity: 0.85; font-weight: normal;';
+        row2.textContent = dynamicVal;
+        textStack.appendChild(row2);
       }
 
-      // Zoom percentage
-      const zoomSpan = document.createElement('span');
-      zoomSpan.className = 'miro-cell-zoom-text';
-      zoomSpan.textContent = `(${cellState.zoom || 100}%)`;
-      lbl.appendChild(zoomSpan);
+      // Row 3: Zoom percentage
+      const row3 = document.createElement('div');
+      row3.className = 'miro-cell-zoom-text';
+      row3.textContent = `${cellState.zoom || 100}%`;
+      textStack.appendChild(row3);
+
+      lbl.appendChild(textStack);
 
       // Click to open settings modal
       lbl.addEventListener('click', (ev) => {
@@ -869,6 +1038,12 @@
           canvas.appendChild(segment);
         }
       });
+    }
+
+    if (cellMetadataChanged) {
+      setTimeout(() => {
+        sv();
+      }, 0);
     }
   };
 
@@ -1461,6 +1636,73 @@
     titleRow.appendChild(titleInput);
     modal.appendChild(titleRow);
 
+    // Row: Dynamic Title select
+    const dynamicRow = document.createElement('div');
+    dynamicRow.className = 'mcm-row';
+    const dynamicLabel = document.createElement('label');
+    dynamicLabel.textContent = 'Dynamic Title Type';
+    const dynamicSelect = document.createElement('select');
+    dynamicSelect.style.cssText = 'width: 100%; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 6px 10px; color: #fff; font-size: 0.75rem; outline: none; box-sizing: border-box;';
+    
+    const dynamicOptions = [
+      { val: '', label: 'None' },
+      { val: 'session', label: 'This Session' },
+      { val: 'pomodoro', label: 'This Pomodoro' },
+      { val: 'day', label: 'This Day' },
+      { val: '2days', label: '2Days Back2Back' },
+      { val: 'week', label: 'This Week' },
+      { val: 'weekend', label: 'Weekend Project' },
+      { val: 'month', label: 'This Month' },
+      { val: 'quarter', label: 'This Quarter' },
+      { val: 'year', label: 'This Year' },
+      { val: '5years', label: 'This 5 Years' },
+      { val: 'next5years', label: 'Next 5' }
+    ];
+    
+    dynamicOptions.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = opt.val;
+      o.textContent = opt.label;
+      o.style.cssText = 'background: #1a1d2e; color: #fff;';
+      if (state.dynamicType === opt.val) o.selected = true;
+      dynamicSelect.appendChild(o);
+    });
+    
+    dynamicRow.appendChild(dynamicLabel);
+    dynamicRow.appendChild(dynamicSelect);
+    modal.appendChild(dynamicRow);
+
+    // Update tracker metadata
+    if (state.firstSetAt && state.changeCount !== undefined) {
+      const trackerRow = document.createElement('div');
+      trackerRow.className = 'mcm-row';
+      trackerRow.style.cssText = 'font-size: 0.65rem; color: rgba(255,255,255,0.45); margin-top: 4px; margin-bottom: 8px;';
+      trackerRow.innerHTML = `<span>Tracker: Started <strong>${state.firstSetAt}</strong> (${state.changeCount} changes)</span>`;
+      modal.appendChild(trackerRow);
+    }
+
+    // Row: Acknowledge Update Checkbox (only if there is an unacknowledged change)
+    let ackCheckbox = null;
+    if (state.hasUnacknowledgedChange) {
+      const ackRow = document.createElement('div');
+      ackRow.className = 'mcm-row';
+      ackRow.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-top: 8px; margin-bottom: 8px;';
+      
+      ackCheckbox = document.createElement('input');
+      ackCheckbox.type = 'checkbox';
+      ackCheckbox.id = 'mcm-ack-change';
+      ackCheckbox.style.cssText = 'width: 16px; height: 16px; accent-color: #ff6b35; cursor: pointer;';
+      
+      const ackLabel = document.createElement('label');
+      ackLabel.htmlFor = 'mcm-ack-change';
+      ackLabel.style.cssText = 'font-size: 0.7rem; color: #ff8a65; cursor: pointer; user-select: none; margin: 0;';
+      ackLabel.textContent = 'Acknowledge Update (Clear Highlight)';
+      
+      ackRow.appendChild(ackCheckbox);
+      ackRow.appendChild(ackLabel);
+      modal.appendChild(ackRow);
+    }
+
     // Row: Icon Image (Upload/Selection)
     const iconRow = document.createElement('div');
     iconRow.className = 'mcm-row';
@@ -1844,7 +2086,11 @@
     saveBtn.className = 'mcm-btn mcm-btn-save';
     saveBtn.textContent = 'Save';
     saveBtn.onclick = () => {
+      const oldDynamicType = state.dynamicType || '';
+      const newDynamicType = dynamicSelect.value || '';
+
       state.title = titleInput.value.trim() || '';
+      state.dynamicType = newDynamicType;
       state.icon = currentIconUrl;
       state.iconSize = parseInt(sizeSlider.value) || 20;
       state.colorTag = selectedColor;
@@ -1856,6 +2102,25 @@
         delete state.bgColor;
         delete state.bgOpacity;
       }
+
+      if (ackCheckbox && ackCheckbox.checked) {
+        state.hasUnacknowledgedChange = false;
+      }
+
+      if (newDynamicType !== oldDynamicType) {
+        if (newDynamicType) {
+          state.lastDynamicValue = getDynamicTitleValue(newDynamicType);
+          state.firstSetAt = new Date().toLocaleString();
+          state.changeCount = 0;
+          state.hasUnacknowledgedChange = false;
+        } else {
+          delete state.lastDynamicValue;
+          delete state.firstSetAt;
+          delete state.changeCount;
+          delete state.hasUnacknowledgedChange;
+        }
+      }
+
       overlay.remove();
       sv();
       buildMiroCanvas();
