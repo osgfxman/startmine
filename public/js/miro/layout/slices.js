@@ -426,6 +426,114 @@
     return '';
   }
 
+  function getDynamicProgressValue(type) {
+    const now = new Date();
+    const Y = now.getFullYear();
+    const M = now.getMonth(); // 0-11
+    const D = now.getDate();
+    const hr = now.getHours();
+    const min = now.getMinutes();
+
+    if (type === 'session') {
+      const elapsedMins = (hr % 4) * 60 + min;
+      const completedPomos = Math.floor(elapsedMins / 30);
+      return `${completedPomos}/8`;
+    }
+
+    if (type === 'pomodoro') {
+      const minOfPomo = min % 30;
+      const completedBlocks = Math.floor(minOfPomo / 5);
+      return `${completedBlocks}/6`;
+    }
+
+    if (type === 'day') {
+      return `${hr}/24`;
+    }
+
+    if (type === '2days') {
+      const dayIndex = D % 2 === 0 ? 1 : 0;
+      const elapsedHours = dayIndex * 24 + hr;
+      return `${elapsedHours}/48`;
+    }
+
+    if (type === '3days') {
+      const blockIndex = Math.floor((D - 1) / 3);
+      const blockStart = blockIndex * 3 + 1;
+      const dayIndex = D - blockStart;
+      const elapsedHours = dayIndex * 24 + hr;
+      return `${elapsedHours}/72`;
+    }
+
+    if (type === 'week') {
+      const dayNum = now.getDay() + 1; // Sunday is 1
+      return `${dayNum}/7`;
+    }
+
+    if (type === 'weekend') {
+      const thu = new Date(now);
+      thu.setDate(now.getDate() - now.getDay() + 4);
+      thu.setHours(0,0,0,0);
+      const elapsedDays = Math.min(3, Math.max(0, Math.floor((now - thu) / 86400000) + 1));
+      return `${elapsedDays}/3`;
+    }
+
+    if (type === 'sprint') {
+      const weekNum = getWeekNumber(now);
+      const sprintNum = Math.floor((weekNum - 1) / 2) + 1;
+      const oddWeekNum = (sprintNum - 1) * 2 + 1;
+      const diffWeeks = weekNum - oddWeekNum;
+      const sun = new Date(now);
+      sun.setDate(now.getDate() - now.getDay() - (diffWeeks * 7));
+      sun.setHours(0,0,0,0);
+      const elapsedDays = Math.floor((now - sun) / 86400000) + 1;
+      return `${elapsedDays}/14`;
+    }
+
+    if (type === 'month') {
+      const daysInMonth = new Date(Y, M + 1, 0).getDate();
+      return `${D}/${daysInMonth}`;
+    }
+
+    if (type === 'quarter') {
+      const qStartMonth = Math.floor(M / 3) * 3;
+      const qStart = new Date(Y, qStartMonth, 1);
+      const qEnd = new Date(Y, qStartMonth + 3, 0);
+      const qTotalDays = Math.round((qEnd - qStart) / 86400000) + 1;
+      const qElapsedDays = Math.round((now - qStart) / 86400000) + 1;
+      return `${qElapsedDays}/${qTotalDays}`;
+    }
+
+    if (type === 'year') {
+      const yearStart = new Date(Y, 0, 1);
+      const yearEnd = new Date(Y + 1, 0, 0);
+      const yTotalDays = Math.round((yearEnd - yearStart) / 86400000) + 1;
+      const yElapsedDays = Math.round((now - yearStart) / 86400000) + 1;
+      return `${yElapsedDays}/${yTotalDays}`;
+    }
+
+    if (type === '5years') {
+      const startYear = Math.floor(Y / 5) * 5;
+      const blockStart = new Date(startYear, 0, 1);
+      const blockEnd = new Date(startYear + 5, 0, 1);
+      const elapsedMs = now - blockStart;
+      const totalMs = blockEnd - blockStart;
+      const elapsedYearsDecimal = (elapsedMs / totalMs * 5).toFixed(1);
+      return `${elapsedYearsDecimal}/5`;
+    }
+
+    if (type === 'next5years') {
+      const startYear = Math.floor(Y / 5) * 5 + 5;
+      const blockStart = new Date(startYear, 0, 1);
+      const blockEnd = new Date(startYear + 5, 0, 1);
+      const elapsedMs = Math.max(0, now - blockStart);
+      const totalMs = blockEnd - blockStart;
+      const elapsedYearsDecimal = (elapsedMs / totalMs * 5).toFixed(1);
+      return `${elapsedYearsDecimal}/5`;
+    }
+
+    return '';
+  }
+
   function getWeekNumber(d) {
     d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
     d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
@@ -915,10 +1023,30 @@
         textStack.appendChild(row2);
       }
 
-      // Row 3: Zoom percentage
+      // Row 3: Zoom percentage + Dynamic Progress tag
       const row3 = document.createElement('div');
       row3.className = 'miro-cell-zoom-text';
-      row3.textContent = `${cellState.zoom || 100}%`;
+      row3.style.cssText = 'display: flex; align-items: center; justify-content: center; gap: 8px;';
+      
+      const zoomSpan = document.createElement('span');
+      zoomSpan.className = 'zoom-value';
+      zoomSpan.textContent = `${cellState.zoom || 100}%`;
+      row3.appendChild(zoomSpan);
+
+      if (cellState.dynamicType) {
+        const progVal = getDynamicProgressValue(cellState.dynamicType);
+        if (progVal) {
+          const sep = document.createElement('span');
+          sep.textContent = '•';
+          sep.style.opacity = '0.5';
+          row3.appendChild(sep);
+
+          const progSpan = document.createElement('span');
+          progSpan.className = 'miro-cell-progress-text';
+          progSpan.textContent = progVal;
+          row3.appendChild(progSpan);
+        }
+      }
       textStack.appendChild(row3);
 
       lbl.appendChild(textStack);
@@ -1726,7 +1854,14 @@
       cellBoard.style.transform = `translate(${cellState.panX}px, ${cellState.panY}px) scale(${z})`;
     }
     const zoomText = cellViewport.querySelector('.miro-cell-zoom-text');
-    if (zoomText) zoomText.textContent = `(${cellState.zoom}%)`;
+    if (zoomText) {
+      const zoomValSpan = zoomText.querySelector('.zoom-value');
+      if (zoomValSpan) {
+        zoomValSpan.textContent = `${cellState.zoom}%`;
+      } else {
+        zoomText.textContent = `(${cellState.zoom}%)`;
+      }
+    }
 
     updateCellBackgroundGrid(cellViewport, cellState);
 
@@ -2628,37 +2763,31 @@
         if (typeof showToast === 'function') showToast('🔗 Merge mode active: Check cells to merge');
         buildMiroCanvas();
       } else {
-        // Confirm merge
+        // Confirm merge of any checked checkboxes
         const checked = window._selectedCellsForMerge;
-        if (!checked || checked.size < 2) {
-          alert('Please select at least 2 cells to merge.');
-          return;
-        }
+        if (checked && checked.size >= 2) {
+          let minCol = Infinity, minRow = Infinity;
+          let maxCol = -Infinity, maxRow = -Infinity;
+          let hasGrid = false;
 
-        let minCol = Infinity, minRow = Infinity;
-        let maxCol = -Infinity, maxRow = -Infinity;
-        let hasGrid = false;
-
-        checked.forEach(cellKey => {
-          if (!cellKey.startsWith('cc_')) {
-            const span = parseCellKey(cellKey);
-            if (span) {
-              hasGrid = true;
-              minCol = Math.min(minCol, span.cStart);
-              minRow = Math.min(minRow, span.rStart);
-              maxCol = Math.max(maxCol, span.cEnd);
-              maxRow = Math.max(maxRow, span.rEnd);
+          checked.forEach(cellKey => {
+            if (!cellKey.startsWith('cc_')) {
+              const span = parseCellKey(cellKey);
+              if (span) {
+                hasGrid = true;
+                minCol = Math.min(minCol, span.cStart);
+                minRow = Math.min(minRow, span.rStart);
+                maxCol = Math.max(maxCol, span.cEnd);
+                maxRow = Math.max(maxRow, span.rEnd);
+              }
             }
+          });
+
+          if (hasGrid) {
+            mergeMiroCellRange(page, minCol, minRow, maxCol, maxRow);
+            if (typeof showToast === 'function') showToast('🔗 Cells merged successfully');
           }
-        });
-
-        if (!hasGrid) {
-          alert('Only standard grid cells can be merged.');
-          return;
         }
-
-        // Perform merge
-        mergeMiroCellRange(page, minCol, minRow, maxCol, maxRow);
 
         // Reset state
         window._mergeSelectionMode = false;
@@ -2669,7 +2798,6 @@
         alignBtn.style.display = 'inline-block';
         cancelBtn.style.display = 'none';
 
-        if (typeof showToast === 'function') showToast('🔗 Cells merged successfully');
         sv();
         buildMiroCanvas();
       }

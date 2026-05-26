@@ -715,21 +715,9 @@ function convertSelectedTo(targetType) {
               window.mergeMiroCellRange(page, minCol, minRow, maxCol, maxRow);
               if (typeof showToast === 'function') showToast('🔗 Cells merged successfully');
               
-              // Reset merge mode
-              window._mergeSelectionMode = false;
+              // Keep merge mode active
               window._selectedCellsForMerge = new Set();
               
-              // Update UI buttons
-              const mergeBtn = document.getElementById('mz-merge-btn');
-              const splitBtn = document.getElementById('mz-split-btn');
-              const alignBtn = document.getElementById('mz-align-btn');
-              const cancelBtn = document.getElementById('mz-cancel-op');
-              if (mergeBtn && splitBtn && alignBtn && cancelBtn) {
-                mergeBtn.textContent = '🔗';
-                splitBtn.style.display = 'inline-block';
-                alignBtn.style.display = 'inline-block';
-                cancelBtn.style.display = 'none';
-              }
               sv();
               buildMiroCanvas();
             }

@@ -4108,6 +4108,7 @@ function buildCols() {
   const wrap = document.getElementById('cw');
   if (page.id.startsWith('time_')) {
     document.getElementById('miro-canvas').classList.add('hidden');
+    document.body.classList.remove('miro-active');
     const mz = document.getElementById('miro-zoom');
     if (mz) mz.classList.remove('show');
     const maf = document.getElementById('miro-add-float');
@@ -4139,6 +4140,7 @@ function buildCols() {
 
   document.getElementById('cw').style.display = isMiro ? 'none' : '';
   document.getElementById('miro-canvas').classList.toggle('hidden', !isMiro);
+  document.body.classList.toggle('miro-active', isMiro);
   
   const mz = document.getElementById('miro-zoom');
   if (mz) mz.classList.toggle('show', isMiro);
