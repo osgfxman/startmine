@@ -709,6 +709,11 @@
     // Reset board transforms so cell containers scale properly if in Slices edit mode
     if (page._guidesMode) {
       board.style.transform = 'none';
+      board.style.zIndex = '2000';
+      board.style.pointerEvents = 'none';
+    } else {
+      board.style.zIndex = '';
+      board.style.pointerEvents = '';
     }
 
     const canvas = document.getElementById('miro-canvas');
@@ -1579,6 +1584,9 @@
     if (!page || page.pageType !== 'miro') return false;
     const hasSlices = page && (page._guidesMode || (page.vGuides && page.vGuides.length > 0) || (page.hGuides && page.hGuides.length > 0) || (page.customCells && page.customCells.length > 0));
     if (!hasSlices) return false;
+
+    // Only pan on middle-click (e.button === 1) or Alt + left click
+    if (e.button !== 1 && !e.altKey) return false;
 
     const cellViewport = e.target.closest('.miro-cell-viewport');
     if (!cellViewport) return false;

@@ -397,7 +397,11 @@ function convertSelectedTo(targetType) {
       return;
     }
     // Allow rubber-band over locked elements: if target is inside a locked card, treat as empty canvas
-    if (e.target !== canvas && e.target.id !== 'miro-board') {
+    const insideViewport = e.target.closest('.miro-cell-viewport');
+    const onGuide = e.target.closest('.miro-guide-v, .miro-guide-h');
+    const onMenuOrModal = e.target.closest('.miro-slices-menu, .miro-cell-modal, .sn-toolbar');
+
+    if (e.target !== canvas && e.target.id !== 'miro-board' && !insideViewport) {
       const cardEl = e.target.closest('[data-cid]');
       if (cardEl) {
         const cid = cardEl.dataset.cid;
@@ -406,6 +410,18 @@ function convertSelectedTo(targetType) {
         // Locked card: fall through to rubber-band logic below
       } else {
         return; // Not a card element, not canvas
+      }
+    } else {
+      if (insideViewport) {
+        const cardEl = e.target.closest('[data-cid]');
+        if (cardEl) {
+          const cid = cardEl.dataset.cid;
+          const card = (page.miroCards || []).find(c => c.id === cid);
+          if (!card || !card.locked) return; // Non-locked card: let card's own handler deal with it
+        }
+        if (onGuide || onMenuOrModal) {
+          return; // Do not start rubber-band when dragging guides or menus
+        }
       }
     }
     if (e.button !== 0) {
@@ -486,12 +502,55 @@ function convertSelectedTo(targetType) {
       // Live selection preview
       if (w > 5 || h > 5) {
         const page2 = cp();
+        const canvasW = canvas.clientWidth;
+        const canvasH = canvas.clientHeight;
+
+        function getCardAbsoluteCoords(card, page, canvasW, canvasH) {
+          if (!card.cell) {
+            return {
+              x: card.x || 0,
+              y: card.y || 0,
+              w: card.w || 280,
+              h: card.h || 240
+            };
+          }
+
+          let cellLeft = 0;
+          let cellTop = 0;
+
+          if (card.cell.startsWith('cc_')) {
+            const cc = (page.customCells || []).find(c => c.id === card.cell);
+            if (cc) {
+              cellLeft = cc.x * canvasW;
+              cellTop = cc.y * canvasH;
+            }
+          } else {
+            const vg = [0, ...(page.vGuides || []).sort((a,b)=>a-b), 1];
+            const hg = [0, ...(page.hGuides || []).sort((a,b)=>a-b), 1];
+            const parts = card.cell.split('_');
+            const c = parseInt(parts[0]), r = parseInt(parts[1]);
+            if (!isNaN(c) && !isNaN(r)) {
+              cellLeft = (vg[c] || 0) * canvasW;
+              cellTop = (hg[r] || 0) * canvasH;
+            }
+          }
+
+          const state = (page.cellStates && page.cellStates[card.cell]) || { zoom: 100, panX: 0, panY: 0 };
+          const cellZoom = (state.zoom || 100) / 100;
+          const cellPanX = state.panX || 0;
+          const cellPanY = state.panY || 0;
+
+          return {
+            x: cellLeft + cellPanX + (card.x || 0) * cellZoom,
+            y: cellTop + cellPanY + (card.y || 0) * cellZoom,
+            w: (card.w || 280) * cellZoom,
+            h: (card.h || 240) * cellZoom
+          };
+        }
+
         (page2.miroCards || []).forEach((c) => {
-          const cx = c.x || 0,
-            cy = c.y || 0,
-            cw = c.w || 280,
-            ch2 = c.h || 240;
-          const intersects = !(cx + cw < x || cx > x + w || cy + ch2 < y || cy > y + h);
+          const abs = getCardAbsoluteCoords(c, page2, canvasW, canvasH);
+          const intersects = !(abs.x + abs.w < x || abs.x > x + w || abs.y + abs.h < y || abs.y > y + h);
           if (c.locked) return; // Locked elements are invisible to selection
           if (intersects) addMiroSelect(c.id);
           else if (!e.ctrlKey && !e.metaKey) removeMiroSelect(c.id);
@@ -816,12 +875,16 @@ function applyZoomPan(page) {
     if (page && page._guidesMode) {
       board.style.transform = 'none';
       board.style.setProperty('--inv-zoom', '1');
+      board.style.zIndex = '2000';
+      board.style.pointerEvents = 'none';
     } else {
       const zoom = (page.zoom || 100) / 100;
       board.style.transform =
         `translate(${page.panX || 0}px,${page.panY || 0}px) scale(${zoom})`;
       // Keep floating UI at constant screen size
       board.style.setProperty('--inv-zoom', Math.min(3, Math.max(0.25, 1 / zoom)));
+      board.style.zIndex = '';
+      board.style.pointerEvents = '';
     }
   }
   const mzSlider = document.getElementById('mz-slider');
@@ -1946,16 +2009,19 @@ document.addEventListener('keydown', (e) => {
             if (cards && cards.length > 0) {
               e.preventDefault();
               if (!page.miroCards) page.miroCards = [];
-              const zoom = (page.zoom || 100) / 100;
-              const px = (_mouseX - (page.panX || 0)) / zoom;
-              const py = (_mouseY - (page.panY || 0)) / zoom;
+              const coords = getPasteTargetCoords(page);
               let minX = Infinity, minY = Infinity;
               cards.forEach(c => { if (c.x < minX) minX = c.x; if (c.y < minY) minY = c.y; });
               clearMiroSelection();
               cards.forEach(c => {
                 const newId = uid(); c.id = newId;
-                c.x = px + (c.x - minX) - (c.w || 100) / 2;
-                c.y = py + (c.y - minY) - (c.h || 100) / 2;
+                c.x = coords.x + (c.x - minX) - (c.w || 100) / 2;
+                c.y = coords.y + (c.y - minY) - (c.h || 100) / 2;
+                if (coords.cell) {
+                  c.cell = coords.cell;
+                } else {
+                  delete c.cell;
+                }
                 page.miroCards.push(c); _miroSelected.add(c.id);
               });
               sv(); buildMiroCanvas(); buildOutline(); return;
@@ -1965,17 +2031,25 @@ document.addEventListener('keydown', (e) => {
 
         // Literal text fallback
         if (!page.miroCards) page.miroCards = [];
-        const canvas = document.getElementById('miro-canvas');
-        const zoom = (page.zoom || 100) / 100;
-        const cx = _mouseX ? (_mouseX - (page.panX || 0)) / zoom : (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
-        const cy = _mouseY ? (_mouseY - (page.panY || 0)) / zoom : (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
-
+        const coords = getPasteTargetCoords(page);
         let url = text.trim();
         if (/^(https?:\/\/[^\s]+)$/i.test(url) || /^(www\.[^\s]+)$/i.test(url)) {
           if (!url.startsWith('http')) url = 'https://' + url;
-          page.miroCards.push({ id: uid(), type: 'card', url, label: domainOf(url), x: cx - 140, y: cy - 120, w: 280, h: 240 });
+          const card = { id: uid(), type: 'card', url, label: domainOf(url), x: coords.x - 140, y: coords.y - 120, w: 280, h: 240 };
+          if (coords.cell) {
+            card.cell = coords.cell;
+          } else {
+            delete card.cell;
+          }
+          page.miroCards.push(card);
         } else {
-          page.miroCards.push({ id: uid(), type: 'sticky', text: text, bg: '#ffe599', x: cx - 100, y: cy - 100, w: 200, h: 200 });
+          const card = { id: uid(), type: 'sticky', text: text, bg: '#ffe599', x: coords.x - 100, y: coords.y - 100, w: 200, h: 200 };
+          if (coords.cell) {
+            card.cell = coords.cell;
+          } else {
+            delete card.cell;
+          }
+          page.miroCards.push(card);
         }
         sv(); buildMiroCanvas(); buildOutline();
         window._lastMiroPasteTime = Date.now();
@@ -2022,6 +2096,35 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+function getPasteTargetCoords(page) {
+  const canvas = document.getElementById('miro-canvas');
+  let targetCellKey = null;
+  let px = 0, py = 0;
+  
+  const targetEl = (_mouseX && _mouseY) ? document.elementFromPoint(_mouseX, _mouseY) : null;
+  const cellViewport = targetEl ? targetEl.closest('.miro-cell-viewport') : null;
+  if (cellViewport) {
+    targetCellKey = cellViewport.dataset.cellKey;
+  }
+
+  if (targetCellKey) {
+    const rect = cellViewport.getBoundingClientRect();
+    const state = (page.cellStates && page.cellStates[targetCellKey]) || { zoom: 100, panX: 0, panY: 0 };
+    const cellZoom = (state.zoom || 100) / 100;
+    const localX = _mouseX - rect.left;
+    const localY = _mouseY - rect.top;
+    px = (localX - (state.panX || 0)) / cellZoom;
+    py = (localY - (state.panY || 0)) / cellZoom;
+  } else {
+    const zoom = (page.zoom || 100) / 100;
+    const panX = page.panX || 0;
+    const panY = page.panY || 0;
+    px = _mouseX ? (_mouseX - panX) / zoom : ((canvas ? canvas.clientWidth : 1000) / 2 - panX) / zoom;
+    py = _mouseY ? (_mouseY - panY) / zoom : ((canvas ? canvas.clientHeight : 800) / 2 - panY) / zoom;
+  }
+  return { cell: targetCellKey, x: px, y: py };
+}
+
 document.addEventListener('paste', (e) => {
   // Ignore if pasting into an input element
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
@@ -2038,9 +2141,7 @@ document.addEventListener('paste', (e) => {
       const cards = JSON.parse(cardsJSON);
       if (cards && cards.length > 0) {
         if (!page.miroCards) page.miroCards = [];
-        const zoom = (page.zoom || 100) / 100;
-        const px = (_mouseX - (page.panX || 0)) / zoom;
-        const py = (_mouseY - (page.panY || 0)) / zoom;
+        const coords = getPasteTargetCoords(page);
         let minX = Infinity, minY = Infinity;
         cards.forEach(c => {
           if (c.x < minX) minX = c.x;
@@ -2050,8 +2151,13 @@ document.addEventListener('paste', (e) => {
         cards.forEach(c => {
           const newId = uid();
           c.id = newId;
-          c.x = px + (c.x - minX) - (c.w || 100) / 2;
-          c.y = py + (c.y - minY) - (c.h || 100) / 2;
+          c.x = coords.x + (c.x - minX) - (c.w || 100) / 2;
+          c.y = coords.y + (c.y - minY) - (c.h || 100) / 2;
+          if (coords.cell) {
+            c.cell = coords.cell;
+          } else {
+            delete c.cell;
+          }
           if (c.t === 'sticky') c.contentEditable = false;
           page.miroCards.push(c);
           _miroSelected.add(c.id);
@@ -2435,14 +2541,10 @@ document.addEventListener('paste', (e) => {
 
       if (extracted.length > 0) {
         if (!page.miroCards) page.miroCards = [];
-        const canvas = document.getElementById('miro-canvas');
-        const zoom = (page.zoom || 100) / 100;
-        const panX = page.panX || 0;
-        const panY = page.panY || 0;
-
-        let px = _mouseX ? (_mouseX - panX) / zoom : (canvas.clientWidth / 2 - panX) / zoom;
-        let py = _mouseY ? (_mouseY - panY) / zoom : (canvas.clientHeight / 2 - panY) / zoom;
-
+        const coords = getPasteTargetCoords(page);
+        let px = coords.x;
+        let py = coords.y;
+        let targetCellKey = coords.cell;
         let curX = px;
         let curY = py;
 
@@ -2518,6 +2620,11 @@ document.addEventListener('paste', (e) => {
         extracted.forEach(item => {
           const newId = uid();
           const card = { id: newId, ...item };
+          if (targetCellKey) {
+            card.cell = targetCellKey;
+          } else {
+            delete card.cell;
+          }
 
           // Screen dimensions from visual sizes
           const screenW = Math.max(item._vw / globalFactor, 30);
@@ -2615,12 +2722,10 @@ document.addEventListener('paste', (e) => {
 
       if (extracted.length > 0) {
         if (!page.miroCards) page.miroCards = [];
-        const canvas = document.getElementById('miro-canvas');
-        const zoom = (page.zoom || 100) / 100;
-        const panX = page.panX || 0;
-        const panY = page.panY || 0;
-        let px = _mouseX ? (_mouseX - panX) / zoom : (canvas.clientWidth / 2 - panX) / zoom;
-        let py = _mouseY ? (_mouseY - panY) / zoom : (canvas.clientHeight / 2 - panY) / zoom;
+        const coords = getPasteTargetCoords(page);
+        let px = coords.x;
+        let py = coords.y;
+        let targetCellKey = coords.cell;
         let curX = px, curY = py;
         clearMiroSelection();
         extracted.forEach(item => {
@@ -2630,6 +2735,11 @@ document.addEventListener('paste', (e) => {
           card.y = curY - 100;
           curX += (card.w || 280) + 40;
           if (curX > px + 950) { curX = px; curY += (card.h || 160) + 40; }
+          if (targetCellKey) {
+            card.cell = targetCellKey;
+          } else {
+            delete card.cell;
+          }
           page.miroCards.push(card);
           _miroSelected.add(newId);
         });
@@ -2676,10 +2786,10 @@ document.addEventListener('paste', (e) => {
 
       if (extracted.length > 0) {
         if (!page.miroCards) page.miroCards = [];
-        const canvas = document.getElementById('miro-canvas');
-        const zoom = (page.zoom || 100) / 100;
-        const px = _mouseX ? (_mouseX - (page.panX || 0)) / zoom : (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
-        const py = _mouseY ? (_mouseY - (page.panY || 0)) / zoom : (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+        const coords = getPasteTargetCoords(page);
+        let px = coords.x;
+        let py = coords.y;
+        let targetCellKey = coords.cell;
 
         let curX = px;
         let curY = py;
@@ -2707,6 +2817,12 @@ document.addEventListener('paste', (e) => {
             card.font = 'Inter';
             card.fontColor = card.fontColor || '#333333';
             card.align = 'right';
+          }
+
+          if (targetCellKey) {
+            card.cell = targetCellKey;
+          } else {
+            delete card.cell;
           }
 
           // Apply spatial positioning
@@ -2757,10 +2873,10 @@ document.addEventListener('paste', (e) => {
           const dataUrl = event.target.result;
           const img = new Image();
           img.onload = function () {
-            const canvas = document.getElementById('miro-canvas');
-            const zoom = (page.zoom || 100) / 100;
-            const cx = _mouseX ? (_mouseX - (page.panX || 0)) / zoom : (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
-            const cy = _mouseY ? (_mouseY - (page.panY || 0)) / zoom : (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+            const coords = getPasteTargetCoords(page);
+            const cx = coords.x;
+            const cy = coords.y;
+            const targetCellKey = coords.cell;
 
             if (!page.miroCards) page.miroCards = [];
             let w = 300;
@@ -2768,6 +2884,11 @@ document.addEventListener('paste', (e) => {
             if (img.width > 800) { w = 800; h = Math.round(800 * (img.height / img.width)); }
 
             const card = { id: uid(), type: 'image', w, h, x: cx - w / 2, y: cy - h / 2, imageUrl: dataUrl };
+            if (targetCellKey) {
+              card.cell = targetCellKey;
+            } else {
+              delete card.cell;
+            }
             page.miroCards.push(card);
             sv(); buildMiroCanvas(); buildOutline();
           };
@@ -2810,9 +2931,10 @@ document.addEventListener('paste', (e) => {
       if (cards && cards.length > 0) {
         if (!page.miroCards) page.miroCards = [];
         const canvas = document.getElementById('miro-canvas');
-        const zoom = (page.zoom || 100) / 100;
-        const cx = _mouseX ? (_mouseX - (page.panX || 0)) / zoom : (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
-        const cy = _mouseY ? (_mouseY - (page.panY || 0)) / zoom : (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+        const coords = getPasteTargetCoords(page);
+        const cx = coords.x;
+        const cy = coords.y;
+        const targetCellKey = coords.cell;
 
         let minX = Infinity, minY = Infinity;
         cards.forEach(c => { if (c.x < minX) minX = c.x; if (c.y < minY) minY = c.y; });
@@ -2821,6 +2943,11 @@ document.addEventListener('paste', (e) => {
           const newId = uid(); c.id = newId;
           c.x = cx + (c.x - minX) - (c.w || 100) / 2;
           c.y = cy + (c.y - minY) - (c.h || 100) / 2;
+          if (targetCellKey) {
+            c.cell = targetCellKey;
+          } else {
+            delete c.cell;
+          }
           page.miroCards.push(c); _miroSelected.add(c.id);
         });
         sv(); buildMiroCanvas(); buildOutline();
@@ -2835,10 +2962,10 @@ document.addEventListener('paste', (e) => {
 
   // 5. It's external Text or URL
   if (!page.miroCards) page.miroCards = [];
-  const canvas = document.getElementById('miro-canvas');
-  const zoom = (page.zoom || 100) / 100;
-  const cx = _mouseX ? (_mouseX - (page.panX || 0)) / zoom : (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
-  const cy = _mouseY ? (_mouseY - (page.panY || 0)) / zoom : (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+  const coords = getPasteTargetCoords(page);
+  const cx = coords.x;
+  const cy = coords.y;
+  const targetCellKey = coords.cell;
 
   let url = text.trim();
   if (/^(https?:\/\/[^\s]+)$/i.test(url) || /^(www\.[^\s]+)$/i.test(url)) {
@@ -2846,6 +2973,11 @@ document.addEventListener('paste', (e) => {
     const label = domainOf(url);
     // Explicitly set type to 'card' (bookmark)
     const card = { id: uid(), type: 'card', url, label, x: cx - 140, y: cy - 120, w: 280, h: 240 };
+    if (targetCellKey) {
+      card.cell = targetCellKey;
+    } else {
+      delete card.cell;
+    }
     page.miroCards.push(card);
     sv(); buildMiroCanvas(); buildOutline();
     if (typeof queueCardFetch !== 'undefined') queueCardFetch(card.id, url);
@@ -2854,6 +2986,11 @@ document.addEventListener('paste', (e) => {
     // Normal text -> Sticky
     const w = 200, h = 200;
     const card = { id: uid(), type: 'sticky', text: text, bg: '#ffe599', x: cx - w / 2, y: cy - h / 2, w, h };
+    if (targetCellKey) {
+      card.cell = targetCellKey;
+    } else {
+      delete card.cell;
+    }
     page.miroCards.push(card);
     sv(); buildMiroCanvas(); buildOutline();
     console.log('[PASTE DEBUG] Created Plain Text Sticky card!');

@@ -483,18 +483,14 @@ body {
   flex-direction: column;
 }
 
-#etabs,
-#gtabs {
+#env-group-container {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 0;
-  padding: 0 0.8rem;
+  flex-direction: row;
+  align-items: stretch;
+  width: 100%;
   background: rgba(18, 20, 32, 0.8);
   border-bottom: 1px solid var(--bd);
   min-height: 24px;
-  align-items: stretch;
-  overflow-x: auto;
-  overflow-y: hidden;
 }
 
 #ptabs {
@@ -568,12 +564,15 @@ body {
   flex-wrap: nowrap;
   gap: 2px;
   padding: 0 0.8rem;
-  background: rgba(0, 0, 0, 0.25);
-  border-bottom: 1px solid var(--bd);
-  min-height: 22px;
   align-items: center;
   overflow-x: auto;
   overflow-y: hidden;
+  flex: 1;
+  min-width: 0;
+}
+
+#gtabs {
+  border-left: 1px solid var(--bd);
 }
 
 .gtab {
