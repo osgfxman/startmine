@@ -587,10 +587,10 @@
 #miro-zoom {
   position: fixed;
   bottom: 0;
-  left: 32px;
+  left: 0;
   right: 0;
   transform: none;
-  display: none;
+  display: flex !important;
   align-items: center;
   gap: 6px;
   background: var(--s2);
@@ -601,10 +601,6 @@
   z-index: 1000;
   box-shadow: none;
   box-sizing: border-box;
-}
-
-#miro-zoom.show {
-  display: flex;
 }
 
 #miro-zoom button {
@@ -2765,7 +2761,7 @@
   position: fixed;
   left: 0;
   top: 0;
-  bottom: 0;
+  bottom: 28px;
   width: 32px;
   display: none;
   flex-direction: column;
@@ -2813,17 +2809,26 @@
   height: 18px !important;
 }
 
+#ribbon {
+  margin-left: 0;
+  margin-right: 32px;
+  width: calc(100% - 32px);
+  box-sizing: border-box;
+}
+
 /* Layout shifting when Miro canvas is active */
-body.miro-active #tb,
 body.miro-active #ribbon {
   margin-left: 32px;
-  width: calc(100% - 32px);
+  margin-right: 32px;
+  width: calc(100% - 64px);
   box-sizing: border-box;
 }
 
 body.miro-active #miro-canvas {
   margin-left: 32px;
+  margin-right: 32px;
   margin-bottom: 28px;
+  width: calc(100% - 64px);
   height: calc(100vh - 100px - 28px);
   min-height: calc(100vh - 100px - 28px);
   box-sizing: border-box;

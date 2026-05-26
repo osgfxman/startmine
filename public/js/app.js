@@ -3704,19 +3704,32 @@ function applyContrast() {
   const ptabs = document.getElementById('ptabs');
   if (!ribbon) return;
 
+  const mtb = document.getElementById('miro-toolbar');
+  const mtbr = document.getElementById('miro-toolbar-right');
+  const mz = document.getElementById('miro-zoom');
+
   const useRibbon = !!(D.settings && D.settings.useRibbonBg && D.settings.ribbonBg);
   if (useRibbon) {
     const bg = D.settings.ribbonBg;
     ribbon.style.background = bg;
     if (envGroup) envGroup.style.background = 'transparent';
     if (ptabs) ptabs.style.background = 'transparent';
+    if (mtb) mtb.style.background = bg;
+    if (mtbr) mtbr.style.background = bg;
+    if (mz) mz.style.background = bg;
 
     const isLight = isCssColorLight(bg);
     ribbon.classList.toggle('contrast-light', isLight);
+    if (mtb) mtb.classList.toggle('contrast-light', isLight);
+    if (mtbr) mtbr.classList.toggle('contrast-light', isLight);
+    if (mz) mz.classList.toggle('contrast-light', isLight);
   } else {
     ribbon.style.background = '';
     if (envGroup) envGroup.style.background = '';
     if (ptabs) ptabs.style.background = '';
+    if (mtb) mtb.style.background = '';
+    if (mtbr) mtbr.style.background = '';
+    if (mz) mz.style.background = '';
 
     let isLight = false;
     if (pg && pg.bgType === 'solid' && pg.bg) {
@@ -3729,6 +3742,9 @@ function applyContrast() {
       if (m) isLight = isCssColorLight(m[0]);
     }
     ribbon.classList.toggle('contrast-light', isLight);
+    if (mtb) mtb.classList.toggle('contrast-light', isLight);
+    if (mtbr) mtbr.classList.toggle('contrast-light', isLight);
+    if (mz) mz.classList.toggle('contrast-light', isLight);
   }
 }
 function isCssColorLight(c) {
@@ -4110,7 +4126,9 @@ function buildCols() {
     document.getElementById('miro-canvas').classList.add('hidden');
     document.body.classList.remove('miro-active');
     const mz = document.getElementById('miro-zoom');
-    if (mz) mz.classList.remove('show');
+    if (mz) mz.classList.add('show');
+    const mzMiro = document.getElementById('mz-controls-miro');
+    if (mzMiro) mzMiro.style.display = 'none';
     const maf = document.getElementById('miro-add-float');
     if (maf) maf.classList.remove('show');
     const mtb = document.getElementById('miro-toolbar');
@@ -4143,7 +4161,10 @@ function buildCols() {
   document.body.classList.toggle('miro-active', isMiro);
   
   const mz = document.getElementById('miro-zoom');
-  if (mz) mz.classList.toggle('show', isMiro);
+  if (mz) mz.classList.add('show');
+  
+  const mzMiro = document.getElementById('mz-controls-miro');
+  if (mzMiro) mzMiro.style.display = isMiro ? '' : 'none';
   
   const maf = document.getElementById('miro-add-float');
   if (maf) maf.classList.toggle('show', isMiro);
@@ -5022,8 +5043,11 @@ document.addEventListener('click', () => {
   document.getElementById('tc-pop').classList.remove('open');
   $sr().classList.remove('show');
 });
-document.getElementById('tb').addEventListener('click', (e) => e.stopPropagation());
-document.getElementById('ribbon').addEventListener('click', (e) => e.stopPropagation());
+const stopIds = ['tb', 'ribbon', 'miro-toolbar', 'miro-toolbar-right', 'miro-zoom'];
+stopIds.forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('click', (e) => e.stopPropagation());
+});
 document.addEventListener('keydown', (e) => {
   if (e.key === 'F2') {
     e.preventDefault();

@@ -2540,4 +2540,130 @@ body:not(.outline-open) #root {
   padding: 0 !important;
   overflow: hidden !important;
   flex: 1 !important;
+}
+
+/* ─── Antigravity Layout Refactoring ─── */
+#tb {
+  display: none !important;
+}
+
+#miro-toolbar-right {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 28px;
+  width: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--s1);
+  border-left: 1px solid var(--bd);
+  padding: 10px 2px;
+  box-shadow: none;
+  border-radius: 0;
+  z-index: 1000;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+#miro-toolbar-right .mtb-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--mu);
+  cursor: pointer;
+  transition: all .12s;
+}
+
+#miro-toolbar-right .mtb-btn:hover {
+  background: rgba(108, 143, 255, 0.08);
+  color: var(--ac);
+}
+
+#miro-zoom #ep,
+#miro-zoom #sr {
+  top: auto !important;
+  bottom: 100% !important;
+  margin-bottom: 6px !important;
+  margin-top: 0 !important;
+}
+
+#miro-toolbar-right #io-pop {
+  right: 100% !important;
+  left: auto !important;
+  top: 0 !important;
+  margin-right: 8px !important;
+  margin-top: 0 !important;
+}
+
+#cw {
+  margin-right: 32px;
+  margin-bottom: 28px;
+  width: calc(100% - 32px);
+  box-sizing: border-box;
+}
+
+.mz-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--bd);
+  opacity: 0.5;
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* Contrast Light Mode overrides for Toolbars */
+#miro-toolbar.contrast-light,
+#miro-toolbar-right.contrast-light {
+  border-color: rgba(0, 0, 0, 0.15) !important;
+  color: #000000 !important;
+}
+
+#miro-zoom.contrast-light {
+  border-top-color: rgba(0, 0, 0, 0.15) !important;
+  color: #000000 !important;
+}
+
+#miro-toolbar.contrast-light .mtb-btn,
+#miro-toolbar-right.contrast-light .mtb-btn,
+#miro-zoom.contrast-light button {
+  color: rgba(0, 0, 0, 0.7) !important;
+}
+
+#miro-toolbar.contrast-light .mtb-btn:hover,
+#miro-toolbar-right.contrast-light .mtb-btn:hover,
+#miro-zoom.contrast-light button:hover {
+  background: rgba(0, 0, 0, 0.06) !important;
+  color: var(--ac) !important;
+}
+
+#miro-toolbar.contrast-light .mtb-btn.sel,
+#miro-toolbar-right.contrast-light .mtb-btn.sel {
+  background: rgba(0, 0, 0, 0.12) !important;
+  color: var(--ac) !important;
+}
+
+#miro-zoom.contrast-light .mz-pct {
+  color: #000000 !important;
+  background: rgba(0, 0, 0, 0.05) !important;
+}
+
+#miro-zoom.contrast-light input[type="text"] {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-color: rgba(0, 0, 0, 0.2) !important;
+}
+
+#miro-zoom.contrast-light input[type="text"]::placeholder {
+  color: rgba(0, 0, 0, 0.4) !important;
+}
+
+#miro-zoom.contrast-light span,
+#miro-zoom.contrast-light label {
+  color: #000000 !important;
 }
