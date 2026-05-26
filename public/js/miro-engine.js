@@ -84,6 +84,49 @@ function performUndo() {
 
 
 
+function getCardAbsoluteCoords(card, page, canvasW, canvasH) {
+  if (!card.cell) {
+    return {
+      x: card.x || 0,
+      y: card.y || 0,
+      w: card.w || 280,
+      h: card.h || 240
+    };
+  }
+
+  let cellLeft = 0;
+  let cellTop = 0;
+
+  if (card.cell.startsWith('cc_')) {
+    const cc = (page.customCells || []).find(c => c.id === card.cell);
+    if (cc) {
+      cellLeft = cc.x * canvasW;
+      cellTop = cc.y * canvasH;
+    }
+  } else {
+    const vg = [0, ...(page.vGuides || []).sort((a,b)=>a-b), 1];
+    const hg = [0, ...(page.hGuides || []).sort((a,b)=>a-b), 1];
+    const parts = card.cell.split('_');
+    const c = parseInt(parts[0]), r = parseInt(parts[1]);
+    if (!isNaN(c) && !isNaN(r)) {
+      cellLeft = (vg[c] || 0) * canvasW;
+      cellTop = (hg[r] || 0) * canvasH;
+    }
+  }
+
+  const state = (page.cellStates && page.cellStates[card.cell]) || { zoom: 100, panX: 0, panY: 0 };
+  const cellZoom = (state.zoom || 100) / 100;
+  const cellPanX = state.panX || 0;
+  const cellPanY = state.panY || 0;
+
+  return {
+    x: cellLeft + cellPanX + (card.x || 0) * cellZoom,
+    y: cellTop + cellPanY + (card.y || 0) * cellZoom,
+    w: (card.w || 280) * cellZoom,
+    h: (card.h || 240) * cellZoom
+  };
+}
+
 function addMiroSelect(cid) {
   if (_miroSelected.has(cid)) return;
   _miroSelected.add(cid);
@@ -116,6 +159,10 @@ function clearMiroSelection() {
 }
 function getSelectedCardsBBox() {
   const page = cp();
+  const canvas = document.getElementById('miro-canvas');
+  const canvasW = canvas ? canvas.clientWidth : 1000;
+  const canvasH = canvas ? canvas.clientHeight : 800;
+
   let minX = Infinity,
     minY = Infinity,
     maxX = -Infinity,
@@ -123,10 +170,11 @@ function getSelectedCardsBBox() {
   _miroSelected.forEach((cid) => {
     const c = (page.miroCards || []).find((x) => x.id === cid);
     if (!c) return;
-    minX = Math.min(minX, c.x || 0);
-    minY = Math.min(minY, c.y || 0);
-    maxX = Math.max(maxX, (c.x || 0) + (c.w || 280));
-    maxY = Math.max(maxY, (c.y || 0) + (c.h || 240));
+    const abs = getCardAbsoluteCoords(c, page, canvasW, canvasH);
+    minX = Math.min(minX, abs.x);
+    minY = Math.min(minY, abs.y);
+    maxX = Math.max(maxX, abs.x + abs.w);
+    maxY = Math.max(maxY, abs.y + abs.h);
   });
   return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY };
 }
@@ -505,56 +553,52 @@ function convertSelectedTo(targetType) {
         const canvasW = canvas.clientWidth;
         const canvasH = canvas.clientHeight;
 
-        function getCardAbsoluteCoords(card, page, canvasW, canvasH) {
-          if (!card.cell) {
-            return {
-              x: card.x || 0,
-              y: card.y || 0,
-              w: card.w || 280,
-              h: card.h || 240
-            };
+        if (window._mergeSelectionMode) {
+          const vg = [0, ...(page2.vGuides || []).sort((a,b)=>a-b), 1];
+          const hg = [0, ...(page2.hGuides || []).sort((a,b)=>a-b), 1];
+          if (!window._selectedCellsForMerge) window._selectedCellsForMerge = new Set();
+          window._selectedCellsForMerge.clear();
+
+          if (typeof window.getActiveCells === 'function') {
+            const activeCells = window.getActiveCells(page2);
+            activeCells.forEach(span => {
+              const cellLeft = vg[span.cStart] * canvasW;
+              const cellRight = vg[span.cEnd+1] * canvasW;
+              const cellTop = hg[span.rStart] * canvasH;
+              const cellBottom = hg[span.rEnd+1] * canvasH;
+
+              const intersects = !(cellRight < x || cellLeft > x + w || cellBottom < y || cellTop > y + h);
+              if (intersects) {
+                let cellKey = span.cStart + "_" + span.rStart;
+                if (span.cStart !== span.cEnd || span.rStart !== span.rEnd) {
+                  cellKey = span.cStart + "_" + span.rStart + "_" + span.cEnd + "_" + span.rEnd;
+                }
+                window._selectedCellsForMerge.add(cellKey);
+              }
+            });
           }
 
-          let cellLeft = 0;
-          let cellTop = 0;
-
-          if (card.cell.startsWith('cc_')) {
-            const cc = (page.customCells || []).find(c => c.id === card.cell);
-            if (cc) {
-              cellLeft = cc.x * canvasW;
-              cellTop = cc.y * canvasH;
+          // Highlight matching cell DIVs
+          document.querySelectorAll('.miro-cell-viewport').forEach(cellDiv => {
+            const key = cellDiv.dataset.cellKey;
+            const isSelected = window._selectedCellsForMerge.has(key);
+            if (isSelected) {
+              cellDiv.style.boxShadow = '0 0 15px rgba(255, 107, 53, 0.95), inset 0 0 15px rgba(255, 107, 53, 0.4)';
+              cellDiv.style.borderColor = 'rgba(255, 107, 53, 0.9)';
+            } else {
+              cellDiv.style.boxShadow = '';
+              cellDiv.style.borderColor = '';
             }
-          } else {
-            const vg = [0, ...(page.vGuides || []).sort((a,b)=>a-b), 1];
-            const hg = [0, ...(page.hGuides || []).sort((a,b)=>a-b), 1];
-            const parts = card.cell.split('_');
-            const c = parseInt(parts[0]), r = parseInt(parts[1]);
-            if (!isNaN(c) && !isNaN(r)) {
-              cellLeft = (vg[c] || 0) * canvasW;
-              cellTop = (hg[r] || 0) * canvasH;
-            }
-          }
-
-          const state = (page.cellStates && page.cellStates[card.cell]) || { zoom: 100, panX: 0, panY: 0 };
-          const cellZoom = (state.zoom || 100) / 100;
-          const cellPanX = state.panX || 0;
-          const cellPanY = state.panY || 0;
-
-          return {
-            x: cellLeft + cellPanX + (card.x || 0) * cellZoom,
-            y: cellTop + cellPanY + (card.y || 0) * cellZoom,
-            w: (card.w || 280) * cellZoom,
-            h: (card.h || 240) * cellZoom
-          };
+          });
+        } else {
+          (page2.miroCards || []).forEach((c) => {
+            const abs = getCardAbsoluteCoords(c, page2, canvasW, canvasH);
+            const intersects = !(abs.x + abs.w < x || abs.x > x + w || abs.y + abs.h < y || abs.y > y + h);
+            if (c.locked) return; // Locked elements are invisible to selection
+            if (intersects) addMiroSelect(c.id);
+            else if (!e.ctrlKey && !e.metaKey) removeMiroSelect(c.id);
+          });
         }
-
-        (page2.miroCards || []).forEach((c) => {
-          const abs = getCardAbsoluteCoords(c, page2, canvasW, canvasH);
-          const intersects = !(abs.x + abs.w < x || abs.x > x + w || abs.y + abs.h < y || abs.y > y + h);
-          if (c.locked) return; // Locked elements are invisible to selection
-          if (intersects) addMiroSelect(c.id);
-          else if (!e.ctrlKey && !e.metaKey) removeMiroSelect(c.id);
-        });
       }
       return;
     }
@@ -626,6 +670,86 @@ function convertSelectedTo(targetType) {
       }, 50);
       document.getElementById('miro-sel-box').style.display = 'none';
       document.getElementById('miro-canvas').style.cursor = 'grab';
+
+      if (window._mergeSelectionMode) {
+        const zoom = (page.zoom || 100) / 100;
+        const canvasRect = canvas.getBoundingClientRect();
+        const curX = (e.clientX - canvasRect.left - (page.panX || 0)) / zoom;
+        const curY = (e.clientY - canvasRect.top - (page.panY || 0)) / zoom;
+        const x = Math.min(_rbStartX, curX);
+        const y = Math.min(_rbStartY, curY);
+        const w = Math.abs(curX - _rbStartX);
+        const h = Math.abs(curY - _rbStartY);
+
+        if (w > 10 || h > 10) {
+          const canvasW = canvas.clientWidth;
+          const canvasH = canvas.clientHeight;
+          const vg = [0, ...(page.vGuides || []).sort((a,b)=>a-b), 1];
+          const hg = [0, ...(page.hGuides || []).sort((a,b)=>a-b), 1];
+
+          let minCol = Infinity, minRow = Infinity;
+          let maxCol = -Infinity, maxRow = -Infinity;
+          let mergeCount = 0;
+
+          if (typeof window.getActiveCells === 'function') {
+            const activeCells = window.getActiveCells(page);
+            activeCells.forEach(span => {
+              const cellLeft = vg[span.cStart] * canvasW;
+              const cellRight = vg[span.cEnd+1] * canvasW;
+              const cellTop = hg[span.rStart] * canvasH;
+              const cellBottom = hg[span.rEnd+1] * canvasH;
+
+              const intersects = !(cellRight < x || cellLeft > x + w || cellBottom < y || cellTop > y + h);
+              if (intersects) {
+                minCol = Math.min(minCol, span.cStart);
+                minRow = Math.min(minRow, span.rStart);
+                maxCol = Math.max(maxCol, span.cEnd);
+                maxRow = Math.max(maxRow, span.rEnd);
+                mergeCount++;
+              }
+            });
+          }
+
+          if (mergeCount >= 2 && minCol !== Infinity) {
+            if (typeof window.mergeMiroCellRange === 'function') {
+              window.mergeMiroCellRange(page, minCol, minRow, maxCol, maxRow);
+              if (typeof showToast === 'function') showToast('🔗 Cells merged successfully');
+              
+              // Reset merge mode
+              window._mergeSelectionMode = false;
+              window._selectedCellsForMerge = new Set();
+              
+              // Update UI buttons
+              const mergeBtn = document.getElementById('mz-merge-btn');
+              const splitBtn = document.getElementById('mz-split-btn');
+              const alignBtn = document.getElementById('mz-align-btn');
+              const cancelBtn = document.getElementById('mz-cancel-op');
+              if (mergeBtn && splitBtn && alignBtn && cancelBtn) {
+                mergeBtn.textContent = '🔗';
+                splitBtn.style.display = 'inline-block';
+                alignBtn.style.display = 'inline-block';
+                cancelBtn.style.display = 'none';
+              }
+              sv();
+              buildMiroCanvas();
+            }
+          } else {
+            // Did not select enough cells, reset styling
+            document.querySelectorAll('.miro-cell-viewport').forEach(cellDiv => {
+              cellDiv.style.boxShadow = '';
+              cellDiv.style.borderColor = '';
+            });
+          }
+        } else {
+          // Reset styling
+          document.querySelectorAll('.miro-cell-viewport').forEach(cellDiv => {
+            cellDiv.style.boxShadow = '';
+            cellDiv.style.borderColor = '';
+          });
+        }
+        return;
+      }
+
       updateMiroSelFrame();
       return;
     }

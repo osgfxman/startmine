@@ -4070,7 +4070,8 @@ function buildCols() {
   if (colsWrap) colsWrap.style.display = isMiro ? 'none' : 'flex';
   
   if (isMiro) {
-    if (page._guidesMode && typeof window.initMiroSlices === 'function') {
+    page._guidesMode = false;
+    if (typeof window.initMiroSlices === 'function') {
       window.initMiroSlices();
     }
     if (typeof buildMiroCanvas === 'function') buildMiroCanvas();

@@ -1053,7 +1053,7 @@
 
     // Render draggable guide overlays if guides exist
     const hasGuides = page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
-    if (hasGuides) {
+    if (hasGuides && page._guidesMode) {
       // Render Vertical Guides
       (page.vGuides || []).forEach((pct, idx) => {
         const gIdx = vg.indexOf(pct) - 1;
@@ -1270,33 +1270,40 @@
 
     (page.miroCards || []).forEach(card => {
       // Calculate absolute center coords in board space
-      let absX = card.x || 0;
-      let absY = card.y || 0;
+      let absCX = card.x || 0;
+      let absCY = card.y || 0;
+      let cellZoom = 1;
+      let cellPanX = 0;
+      let cellPanY = 0;
+      let cellLeft = 0;
+      let cellTop = 0;
+
       if (card.cell) {
+        const state = (page.cellStates && page.cellStates[card.cell]) || { zoom: 100, panX: 0, panY: 0 };
+        cellZoom = (state.zoom || 100) / 100;
+        cellPanX = state.panX || 0;
+        cellPanY = state.panY || 0;
+
         if (card.cell.startsWith('cc_')) {
           const cc = (page.customCells || []).find(c => c.id === card.cell);
           if (cc) {
-            const cellLeft = cc.x * canvasW;
-            const cellTop = cc.y * canvasH;
-            absX = cellLeft + absX;
-            absY = cellTop + absY;
+            cellLeft = cc.x * canvasW;
+            cellTop = cc.y * canvasH;
           }
         } else {
           const parts = card.cell.split('_');
           const c = parseInt(parts[0]), r = parseInt(parts[1]);
-          const cellLeft = vg[c] * canvasW;
-          const cellTop = hg[r] * canvasH;
-          absX = cellLeft + absX;
-          absY = cellTop + absY;
+          cellLeft = (vg[c] || 0) * canvasW;
+          cellTop = (hg[r] || 0) * canvasH;
         }
       }
 
-      const cx = absX + (card.w || 280) / 2;
-      const cy = absY + (card.h || 240) / 2;
+      absCX = cellLeft + cellPanX + ((card.x || 0) + (card.w || 280) / 2) * cellZoom;
+      absCY = cellTop + cellPanY + ((card.y || 0) + (card.h || 240) / 2) * cellZoom;
 
       // Percentage coordinate of center relative to canvas
-      const pctX = cx / canvasW;
-      const pctY = cy / canvasH;
+      const pctX = absCX / canvasW;
+      const pctY = absCY / canvasH;
 
       // 1. Check if dropped inside a custom cell (in reverse order to match topmost drawn)
       let targetCustomCell = null;
@@ -1314,9 +1321,14 @@
         if (card.cell === targetCustomCell.id) return;
         const cellLeft = targetCustomCell.x * canvasW;
         const cellTop = targetCustomCell.y * canvasH;
+        const targetState = (page.cellStates && page.cellStates[targetCustomCell.id]) || { zoom: 100, panX: 0, panY: 0 };
+        const targetZoom = (targetState.zoom || 100) / 100;
+        const targetPanX = targetState.panX || 0;
+        const targetPanY = targetState.panY || 0;
+
         card.cell = targetCustomCell.id;
-        card.x = absX - cellLeft;
-        card.y = absY - cellTop;
+        card.x = (absCX - cellLeft - targetPanX) / targetZoom - (card.w || 280) / 2;
+        card.y = (absCY - cellTop - targetPanY) / targetZoom - (card.h || 240) / 2;
         return;
       }
 
@@ -1350,15 +1362,19 @@
 
         const cellLeft = vg[cellLeftCol] * canvasW;
         const cellTop = hg[cellTopRow] * canvasH;
+        const targetState = (page.cellStates && page.cellStates[targetCell]) || { zoom: 30, panX: 0, panY: 0 };
+        const targetZoom = (targetState.zoom || 30) / 100;
+        const targetPanX = targetState.panX || 0;
+        const targetPanY = targetState.panY || 0;
 
         card.cell = targetCell;
-        card.x = absX - cellLeft;
-        card.y = absY - cellTop;
+        card.x = (absCX - cellLeft - targetPanX) / targetZoom - (card.w || 280) / 2;
+        card.y = (absCY - cellTop - targetPanY) / targetZoom - (card.h || 240) / 2;
       } else {
         // If guides are not active, card falls back to main canvas board (no cell)
         if (card.cell) {
-          card.x = absX;
-          card.y = absY;
+          card.x = absCX - (card.w || 280) / 2;
+          card.y = absCY - (card.h || 240) / 2;
           delete card.cell;
         }
       }
@@ -1375,25 +1391,33 @@
 
     (page.miroCards || []).forEach(card => {
       if (card.cell) {
+        let cellZoom = 1;
+        let cellPanX = 0;
+        let cellPanY = 0;
+        let cellLeft = 0;
+        let cellTop = 0;
+
+        const state = (page.cellStates && page.cellStates[card.cell]) || { zoom: 100, panX: 0, panY: 0 };
+        cellZoom = (state.zoom || 100) / 100;
+        cellPanX = state.panX || 0;
+        cellPanY = state.panY || 0;
+
         if (card.cell.startsWith('cc_')) {
           const cc = (page.customCells || []).find(c => c.id === card.cell);
           if (cc) {
-            const cellLeft = cc.x * canvasW;
-            const cellTop = cc.y * canvasH;
-            card.x = cellLeft + (card.x || 0);
-            card.y = cellTop + (card.y || 0);
+            cellLeft = cc.x * canvasW;
+            cellTop = cc.y * canvasH;
           }
-          delete card.cell;
         } else {
           const parts = card.cell.split('_');
           const c = parseInt(parts[0]), r = parseInt(parts[1]);
-          const cellLeft = vg[c] * canvasW;
-          const cellTop = hg[r] * canvasH;
-
-          card.x = cellLeft + (card.x || 0);
-          card.y = cellTop + (card.y || 0);
-          delete card.cell;
+          cellLeft = (vg[c] || 0) * canvasW;
+          cellTop = (hg[r] || 0) * canvasH;
         }
+
+        card.x = cellLeft + cellPanX + (card.x || 0) * cellZoom;
+        card.y = cellTop + cellPanY + (card.y || 0) * cellZoom;
+        delete card.cell;
       }
     });
   };
