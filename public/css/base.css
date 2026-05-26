@@ -2666,4 +2666,61 @@ body:not(.outline-open) #root {
 #miro-zoom.contrast-light span,
 #miro-zoom.contrast-light label {
   color: #000000 !important;
+}
+
+/* Force horizontal row alignment and prevent wrapping in the bottom bar */
+#miro-zoom {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  height: 28px !important;
+  overflow: hidden !important;
+}
+
+#mz-left,
+#mz-controls-miro,
+#mz-right {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  height: 100% !important;
+}
+
+#mz-left {
+  flex-shrink: 0 !important;
+}
+
+#mz-controls-miro {
+  flex-shrink: 1 !important;
+  justify-content: center !important;
+}
+
+#mz-right {
+  flex-shrink: 0 !important;
+}
+
+#mz-slider {
+  min-width: 40px !important;
+  flex-shrink: 1 !important;
+}
+
+#qi {
+  min-width: 70px !important;
+  flex-shrink: 1 !important;
+}
+
+#sw {
+  min-width: 80px !important;
+  flex-shrink: 1 !important;
+}
+
+#sync-msg {
+  max-width: 150px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  flex-shrink: 1 !important;
 }
