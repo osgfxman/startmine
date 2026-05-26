@@ -18,9 +18,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1779758720">
-  <link rel="stylesheet" href="css/miro.css?v=1779758720">
-  <link rel="stylesheet" href="css/life-widget-additions.css?v=1779758720">
+  <link rel="stylesheet" href="css/base.css?v=1779760550">
+  <link rel="stylesheet" href="css/miro.css?v=1779760550">
+  <link rel="stylesheet" href="css/life-widget-additions.css?v=1779760550">
 </head>
 
 <body>
@@ -671,6 +671,21 @@
           <img id="bg-img-prev-el" style="width:100%;height:100%;object-fit:cover">
         </div>
       </div>
+      <div class="fg" style="margin-top: 15px; border-top: 1px solid var(--bd); padding-top: 15px; display: flex; flex-direction: column; gap: 8px;">
+        <label style="font-weight: bold; color: var(--tx); font-size: 0.75rem; display: flex; align-items: center; gap: 6px;">🎗️ Ribbon Background Color</label>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 0.72rem; cursor: pointer; color: var(--tx); user-select: none;">
+            <input type="checkbox" id="bg-ribbon-use" style="width: 15px; height: 15px; cursor: pointer;">
+            Enable unified ribbon color across all pages
+          </label>
+        </div>
+        <div id="bg-ribbon-color-row" style="display: flex; gap: 8px; align-items: center; opacity: 0.5; pointer-events: none; transition: opacity 0.2s;">
+          <input type="color" id="bg-ribbon-picker" value="#121420"
+            style="width:38px;height:32px;border-radius:7px;border:1px solid var(--bd);cursor:pointer;background:transparent">
+          <input type="text" class="fi" id="bg-ribbon-hex" placeholder="#121420" value="#121420" style="flex:1; font-size:0.75rem;">
+          <button class="btn bg-btn" id="bg-ribbon-clr" style="padding: 6px 12px; font-size: 0.7rem; color: var(--red); cursor: pointer;">Reset</button>
+        </div>
+      </div>
       <div class="ma">
         <button class="btn bg-btn bsm danger" id="bg-clr-btn" style="margin-right:auto;color:var(--red)">✕ Clear
           BG</button>
@@ -737,41 +752,41 @@
   </div>
 
     <!-- Core -->
-    <script src="js/core/namespace.js?v=1779758720"></script>
-    <script src="js/core/events.js?v=1779758720"></script>
-    <script src="js/core/utils.js?v=1779758720"></script>
+    <script src="js/core/namespace.js?v=1779760550"></script>
+    <script src="js/core/events.js?v=1779760550"></script>
+    <script src="js/core/utils.js?v=1779760550"></script>
 
     <!-- Data Layer -->
-    <script src="js/data/firebase.js?v=1779758720"></script>
-    <script src="js/data/offline.js?v=1779758720"></script>
-    <script src="js/data/sync.js?v=1779758720"></script>
+    <script src="js/data/firebase.js?v=1779760550"></script>
+    <script src="js/data/offline.js?v=1779760550"></script>
+    <script src="js/data/sync.js?v=1779760550"></script>
 
     <!-- UI Layer -->
-    <script src="js/ui/toasts.js?v=1779758720"></script>
-    <script src="js/ui/modals.js?v=1779758720"></script>
-    <script src="js/ui/toolbar.js?v=1779758720"></script>
-    <script src="js/ui/search.js?v=1779758720"></script>
-    <script src="js/ui/inbox-ui.js?v=1779758720"></script>
+    <script src="js/ui/toasts.js?v=1779760550"></script>
+    <script src="js/ui/modals.js?v=1779760550"></script>
+    <script src="js/ui/toolbar.js?v=1779760550"></script>
+    <script src="js/ui/search.js?v=1779760550"></script>
+    <script src="js/ui/inbox-ui.js?v=1779760550"></script>
 
     <!-- Miro Modules -->
-    <script src="js/miro/miro-state.js?v=1779758720"></script>
-    <script src="js/miro/render/builders.js?v=1779758720"></script>
-    <script src="js/miro/layout/grid.js?v=1779758720"></script>
-    <script src="js/miro/layout/slices.js?v=1779758720"></script>
+    <script src="js/miro/miro-state.js?v=1779760550"></script>
+    <script src="js/miro/render/builders.js?v=1779760550"></script>
+    <script src="js/miro/layout/grid.js?v=1779760550"></script>
+    <script src="js/miro/layout/slices.js?v=1779760550"></script>
 
     <!-- Original files (now wrappers) -->
-    <script src="js/miro-engine.js?v=1779758720"></script>
-    <script src="js/life-widget.js?v=1779758720"></script>
-    <script src="js/thumbnails.js?v=1779758720"></script>
-    <script src="js/core/health.js?v=1779758720"></script>
-    <script src="js/app.js?v=1779758720"></script>
+    <script src="js/miro-engine.js?v=1779760550"></script>
+    <script src="js/life-widget.js?v=1779760550"></script>
+    <script src="js/thumbnails.js?v=1779760550"></script>
+    <script src="js/core/health.js?v=1779760550"></script>
+    <script src="js/app.js?v=1779760550"></script>
     <script>
       // ─── Zooper-first: auto-open after auth, defer secondary scripts ───
       var _mainAppLoaded=false;
       function _loadMainApp(){
         if(_mainAppLoaded)return;_mainAppLoaded=true;
         ['js/outline.js','js/alignment.js'].forEach(function(src){
-          var s=document.createElement('script');s.src=src+'?v=1779758720';document.body.appendChild(s);
+          var s=document.createElement('script');s.src=src+'?v=1779760550';document.body.appendChild(s);
         });
       }
       // Auto-open Zooper after user is authenticated

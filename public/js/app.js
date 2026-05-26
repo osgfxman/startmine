@@ -2204,6 +2204,24 @@ document.getElementById('bg-btn').onclick = () => {
   } else {
     switchBgTab('solid');
   }
+
+  // Populate Ribbon Color settings
+  const useRibbon = !!(D.settings && D.settings.useRibbonBg);
+  const ribbonColor = (D.settings && D.settings.ribbonBg) || '#121420';
+  const cb = document.getElementById('bg-ribbon-use');
+  const picker = document.getElementById('bg-ribbon-picker');
+  const hexInput = document.getElementById('bg-ribbon-hex');
+  if (cb && picker && hexInput) {
+    cb.checked = useRibbon;
+    picker.value = ribbonColor.startsWith('#') && ribbonColor.length >= 7 ? ribbonColor : '#121420';
+    hexInput.value = ribbonColor;
+    const row = document.getElementById('bg-ribbon-color-row');
+    if (row) {
+      row.style.opacity = useRibbon ? '1' : '0.5';
+      row.style.pointerEvents = useRibbon ? 'auto' : 'none';
+    }
+  }
+
   openM('m-bg');
 };
 
@@ -2260,6 +2278,43 @@ function buildBgSwatches() {
     };
     gc.appendChild(s);
   });
+}
+
+const ribbonUse = document.getElementById('bg-ribbon-use');
+if (ribbonUse) {
+  ribbonUse.onchange = function () {
+    const row = document.getElementById('bg-ribbon-color-row');
+    if (row) {
+      row.style.opacity = this.checked ? '1' : '0.5';
+      row.style.pointerEvents = this.checked ? 'auto' : 'none';
+    }
+  };
+}
+const ribbonPicker = document.getElementById('bg-ribbon-picker');
+if (ribbonPicker) {
+  ribbonPicker.oninput = function () {
+    const hexInput = document.getElementById('bg-ribbon-hex');
+    if (hexInput) hexInput.value = this.value;
+  };
+}
+const ribbonHex = document.getElementById('bg-ribbon-hex');
+if (ribbonHex) {
+  ribbonHex.oninput = function () {
+    const picker = document.getElementById('bg-ribbon-picker');
+    const val = this.value.trim();
+    if (picker && /^#[0-9a-fA-F]{6}$/.test(val)) {
+      picker.value = val;
+    }
+  };
+}
+const ribbonClr = document.getElementById('bg-ribbon-clr');
+if (ribbonClr) {
+  ribbonClr.onclick = function () {
+    const picker = document.getElementById('bg-ribbon-picker');
+    const hexInput = document.getElementById('bg-ribbon-hex');
+    if (picker) picker.value = '#121420';
+    if (hexInput) hexInput.value = '#121420';
+  };
 }
 
 document.getElementById('bg-solid-picker').oninput = function () {
@@ -2329,6 +2384,16 @@ document.getElementById('ok-bg').onclick = () => {
     pg.bg = _bgTempValue;
     pg.bgType = 'image';
   }
+
+  // Save Ribbon Color settings
+  if (!D.settings) D.settings = {};
+  const useRibbonEl = document.getElementById('bg-ribbon-use');
+  const ribbonHexEl = document.getElementById('bg-ribbon-hex');
+  if (useRibbonEl && ribbonHexEl) {
+    D.settings.useRibbonBg = useRibbonEl.checked;
+    D.settings.ribbonBg = ribbonHexEl.value.trim() || '#121420';
+  }
+
   sv();
   applyBG();
   applyContrast();
@@ -3635,18 +3700,36 @@ document.getElementById('dup-del-all').onclick = () => {
 function applyContrast() {
   const pg = cp();
   const ribbon = document.getElementById('ribbon');
+  const envGroup = document.getElementById('env-group-container');
+  const ptabs = document.getElementById('ptabs');
   if (!ribbon) return;
-  let isLight = false;
-  if (pg.bgType === 'solid' && pg.bg) {
-    isLight = isCssColorLight(pg.bg);
-  } else if (pg.bgType === 'image' && pg.bg) {
-    isLight = false; // images are usually dark enough
-  } else if (pg.bgType === 'gradient' && pg.bg) {
-    // Check first color in gradient
-    const m = pg.bg.match(/#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|rgba?\([^)]+\)/);
-    if (m) isLight = isCssColorLight(m[0]);
+
+  const useRibbon = !!(D.settings && D.settings.useRibbonBg && D.settings.ribbonBg);
+  if (useRibbon) {
+    const bg = D.settings.ribbonBg;
+    ribbon.style.background = bg;
+    if (envGroup) envGroup.style.background = 'transparent';
+    if (ptabs) ptabs.style.background = 'transparent';
+
+    const isLight = isCssColorLight(bg);
+    ribbon.classList.toggle('contrast-light', isLight);
+  } else {
+    ribbon.style.background = '';
+    if (envGroup) envGroup.style.background = '';
+    if (ptabs) ptabs.style.background = '';
+
+    let isLight = false;
+    if (pg && pg.bgType === 'solid' && pg.bg) {
+      isLight = isCssColorLight(pg.bg);
+    } else if (pg && pg.bgType === 'image' && pg.bg) {
+      isLight = false; // images are usually dark enough
+    } else if (pg && pg.bgType === 'gradient' && pg.bg) {
+      // Check first color in gradient
+      const m = pg.bg.match(/#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|rgba?\([^)]+\)/);
+      if (m) isLight = isCssColorLight(m[0]);
+    }
+    ribbon.classList.toggle('contrast-light', isLight);
   }
-  ribbon.classList.toggle('contrast-light', isLight);
 }
 function isCssColorLight(c) {
   if (!c) return false;
