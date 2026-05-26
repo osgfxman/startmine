@@ -887,30 +887,106 @@ function zoomToFitSelection() {
   showToast('🔍 Zoom to fit');
 }
 
+window._ctrlPressed = false;
+window._altPressed = false;
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Control') window._ctrlPressed = true;
+  if (e.key === 'Alt') window._altPressed = true;
+});
+window.addEventListener('keyup', (e) => {
+  if (e.key === 'Control') window._ctrlPressed = false;
+  if (e.key === 'Alt') window._altPressed = false;
+});
+window.addEventListener('blur', () => {
+  window._ctrlPressed = false;
+  window._altPressed = false;
+});
+
 // Zoom controls
-document.getElementById('mz-slider').oninput = function () {
+document.getElementById('mz-slider').oninput = function (e) {
   const page = cp();
-  page.zoom = +this.value;
-  applyZoomPan(page);
-  sv();
+  const zoomVal = +this.value;
+  const hasGuides = page && (page._guidesMode || (page.vGuides && page.vGuides.length > 0) || (page.hGuides && page.hGuides.length > 0) || (page.customCells && page.customCells.length > 0));
+  const isCtrlAlt = (e && e.ctrlKey && e.altKey) || (window._ctrlPressed && window._altPressed);
+
+  if (hasGuides && isCtrlAlt) {
+    if (page.cellStates) {
+      for (const cellKey in page.cellStates) {
+        if (page.cellStates.hasOwnProperty(cellKey)) {
+          page.cellStates[cellKey].zoom = zoomVal;
+        }
+      }
+    }
+    const mzPct = document.getElementById('mz-pct');
+    if (mzPct) mzPct.textContent = zoomVal + '%';
+    if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+    sv();
+  } else {
+    page.zoom = zoomVal;
+    applyZoomPan(page);
+    sv();
+  }
 };
-document.getElementById('mz-in').onclick = () => {
+document.getElementById('mz-in').onclick = (e) => {
   const page = cp();
-  page.zoom = Math.min(400, (page.zoom || 100) + 10);
-  document.getElementById('mz-slider').value = page.zoom;
-  document.getElementById('mz-slider').oninput();
+  const hasGuides = page && (page._guidesMode || (page.vGuides && page.vGuides.length > 0) || (page.hGuides && page.hGuides.length > 0) || (page.customCells && page.customCells.length > 0));
+  const isCtrlAlt = (e && e.ctrlKey && e.altKey) || (window._ctrlPressed && window._altPressed);
+
+  if (hasGuides && isCtrlAlt) {
+    let currentZoom = 100;
+    if (page.cellStates) {
+      const keys = Object.keys(page.cellStates);
+      if (keys.length > 0) currentZoom = page.cellStates[keys[0]].zoom || 100;
+    }
+    const newZoom = Math.min(400, currentZoom + 10);
+    document.getElementById('mz-slider').value = newZoom;
+    document.getElementById('mz-slider').oninput(e);
+  } else {
+    page.zoom = Math.min(400, (page.zoom || 100) + 10);
+    document.getElementById('mz-slider').value = page.zoom;
+    document.getElementById('mz-slider').oninput(e);
+  }
 };
-document.getElementById('mz-out').onclick = () => {
+document.getElementById('mz-out').onclick = (e) => {
   const page = cp();
-  page.zoom = Math.max(1, (page.zoom || 100) - 10);
-  document.getElementById('mz-slider').value = page.zoom;
-  document.getElementById('mz-slider').oninput();
+  const hasGuides = page && (page._guidesMode || (page.vGuides && page.vGuides.length > 0) || (page.hGuides && page.hGuides.length > 0) || (page.customCells && page.customCells.length > 0));
+  const isCtrlAlt = (e && e.ctrlKey && e.altKey) || (window._ctrlPressed && window._altPressed);
+
+  if (hasGuides && isCtrlAlt) {
+    let currentZoom = 100;
+    if (page.cellStates) {
+      const keys = Object.keys(page.cellStates);
+      if (keys.length > 0) currentZoom = page.cellStates[keys[0]].zoom || 100;
+    }
+    const newZoom = Math.max(1, currentZoom - 10);
+    document.getElementById('mz-slider').value = newZoom;
+    document.getElementById('mz-slider').oninput(e);
+  } else {
+    page.zoom = Math.max(1, (page.zoom || 100) - 10);
+    document.getElementById('mz-slider').value = page.zoom;
+    document.getElementById('mz-slider').oninput(e);
+  }
 };
-document.getElementById('mz-reset').onclick = () => {
+document.getElementById('mz-reset').onclick = (e) => {
   const page = cp();
-  page.zoom = 100;
-  document.getElementById('mz-slider').value = 100;
-  document.getElementById('mz-slider').oninput();
+  const hasGuides = page && (page._guidesMode || (page.vGuides && page.vGuides.length > 0) || (page.hGuides && page.hGuides.length > 0) || (page.customCells && page.customCells.length > 0));
+  const isCtrlAlt = (e && e.ctrlKey && e.altKey) || (window._ctrlPressed && window._altPressed);
+
+  if (hasGuides && isCtrlAlt) {
+    if (page.cellStates) {
+      for (const cellKey in page.cellStates) {
+        if (page.cellStates.hasOwnProperty(cellKey)) {
+          page.cellStates[cellKey].zoom = 100;
+        }
+      }
+    }
+    document.getElementById('mz-slider').value = 100;
+    document.getElementById('mz-slider').oninput(e);
+  } else {
+    page.zoom = 100;
+    document.getElementById('mz-slider').value = 100;
+    document.getElementById('mz-slider').oninput(e);
+  }
 };
 document.getElementById('mz-fit').onclick = () => {
   const page = cp();

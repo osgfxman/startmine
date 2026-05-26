@@ -14,6 +14,10 @@
   let _cellPanStartX = 0, _cellPanStartY = 0;
   let _slicesClipboard = null;
   let _activeLabelDrag = null;
+  
+  window._mergeSelectionMode = false;
+  window._splitSelectionMode = false;
+  window._selectedCellsForMerge = new Set();
 
   // Add css styles for rulers, guide handles, cell viewports, and lock badges immediately on load
   if (!document.getElementById('miro-slices-css')) {
@@ -491,6 +495,10 @@
     }
   }
 
+  window.parseCellKey = parseCellKey;
+  window.getActiveCells = getActiveCells;
+  window.mergeMiroCellRange = mergeMiroCellRange;
+
   function parseTitleAndIcon(titleStr) {
     if (!titleStr) return { title: '', icon: null };
     // Match http/https URLs or base64 data URIs
@@ -776,7 +784,7 @@
 
       // Retrieve or initialize cell zoom & pan state
       if (!page.cellStates[cellKey]) {
-        page.cellStates[cellKey] = { zoom: 100, panX: 0, panY: 0 };
+        page.cellStates[cellKey] = { zoom: 30, panX: 0, panY: 0 };
         cellMetadataChanged = true;
       }
       const cellState = page.cellStates[cellKey];
@@ -806,6 +814,30 @@
       }
       if (cellState.changeCount > 0) {
         lbl.setAttribute('title', `Started: ${cellState.firstSetAt || ''} (${cellState.changeCount})`);
+      }
+
+      // Checkbox for merge/split selection
+      if (window._mergeSelectionMode) {
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'miro-cell-merge-cb';
+        cb.dataset.cellKey = cellKey;
+        cb.style.cssText = 'width: 16px; height: 16px; cursor: pointer; pointer-events: auto; z-index: 100; margin-right: 6px; accent-color: #6c8fff;';
+        if (window._selectedCellsForMerge && window._selectedCellsForMerge.has(cellKey)) {
+          cb.checked = true;
+        }
+        cb.onclick = (e) => {
+          e.stopPropagation(); // prevent opening settings modal
+        };
+        cb.onchange = (e) => {
+          if (!window._selectedCellsForMerge) window._selectedCellsForMerge = new Set();
+          if (cb.checked) {
+            window._selectedCellsForMerge.add(cellKey);
+          } else {
+            window._selectedCellsForMerge.delete(cellKey);
+          }
+        };
+        lbl.appendChild(cb);
       }
 
       // Determine icon and title
@@ -923,7 +955,7 @@
 
       // Retrieve or initialize cell zoom & pan state
       if (!page.cellStates[cellKey]) {
-        page.cellStates[cellKey] = { zoom: 100, panX: 0, panY: 0 };
+        page.cellStates[cellKey] = { zoom: 30, panX: 0, panY: 0 };
       }
       const state = page.cellStates[cellKey];
       
@@ -1454,7 +1486,13 @@
     function fitSingleCell(cellKey, cellW, cellH) {
       const cards = (page.miroCards || []).filter(card => card.cell === cellKey);
       if (cards.length === 0) {
-        page.cellStates[cellKey] = { zoom: 100, panX: 0, panY: 0 };
+        if (!page.cellStates[cellKey]) {
+          page.cellStates[cellKey] = { zoom: 30, panX: 0, panY: 0 };
+        } else {
+          page.cellStates[cellKey].zoom = 30;
+          page.cellStates[cellKey].panX = 0;
+          page.cellStates[cellKey].panY = 0;
+        }
         return;
       }
 
@@ -1479,7 +1517,13 @@
       const panX = (cellW - (minX + maxX) * fitZoom) / 2;
       const panY = (cellH - (minY + maxY) * fitZoom) / 2;
 
-      page.cellStates[cellKey] = { zoom: zPercent, panX, panY };
+      if (!page.cellStates[cellKey]) {
+        page.cellStates[cellKey] = { zoom: zPercent, panX, panY };
+      } else {
+        page.cellStates[cellKey].zoom = zPercent;
+        page.cellStates[cellKey].panX = panX;
+        page.cellStates[cellKey].panY = panY;
+      }
       clampCellState(cellKey, cellW, cellH);
     }
 
@@ -1518,7 +1562,7 @@
 
     // Partition cards
     partitionMiroCardsIntoCells(page, W, H);
-    page.cellStates = {};
+    if (!page.cellStates) page.cellStates = {};
     page._guidesMode = true; // turn on guides mode
     
     // Auto-fit immediately for best fit
@@ -2223,6 +2267,22 @@
     if (!page || !page.cellStates) return;
     const state = page.cellStates[cellKey] || {};
 
+    // Acknowledge Update (only if hasUnacknowledgedChange is true)
+    if (state.hasUnacknowledgedChange) {
+      const ackItem = document.createElement('div');
+      ackItem.className = 'miro-slices-menu-item';
+      ackItem.style.color = '#ff8a65';
+      ackItem.textContent = '✔️ Acknowledge Update';
+      ackItem.onclick = () => {
+        state.hasUnacknowledgedChange = false;
+        menu.remove();
+        sv();
+        buildMiroCanvas();
+        if (typeof showToast === 'function') showToast('✔️ Update acknowledged');
+      };
+      menu.appendChild(ackItem);
+    }
+
     // Copy Title
     const copyItem = document.createElement('div');
     copyItem.className = 'miro-slices-menu-item';
@@ -2411,6 +2471,255 @@
     buildMiroCanvas();
   }
 
+  window.splitMiroCell = function splitMiroCell(cellKey, C, R) {
+    const page = cp();
+    if (!page) return;
+
+    const canvas = document.getElementById('miro-canvas');
+    if (!canvas) return;
+    const W = canvas.clientWidth;
+    const H = canvas.clientHeight;
+
+    // Save cards to absolute coordinates first
+    if (typeof window.mergeMiroCellsIntoCards === 'function') {
+      window.mergeMiroCellsIntoCards(page, W, H);
+    }
+
+    const span = parseCellKey(cellKey);
+    if (!span) return;
+
+    const vg = [0, ...(page.vGuides || []).sort((a,b)=>a-b), 1];
+    const hg = [0, ...(page.hGuides || []).sort((a,b)=>a-b), 1];
+
+    const xStart = vg[span.cStart];
+    const xEnd = vg[span.cEnd + 1];
+    const yStart = hg[span.rStart];
+    const yEnd = hg[span.rEnd + 1];
+
+    // If it was a merged cell, remove it
+    if (page.mergedCells) {
+      page.mergedCells = page.mergedCells.filter(m => !(m.cStart === span.cStart && m.rStart === span.rStart && m.cEnd === span.cEnd && m.rEnd === span.rEnd));
+    }
+
+    if (!page.vGuides) page.vGuides = [];
+    if (!page.hGuides) page.hGuides = [];
+
+    // Add new vertical guides
+    for (let i = 1; i < C; i++) {
+      const val = xStart + (i / C) * (xEnd - xStart);
+      if (!page.vGuides.some(v => Math.abs(v - val) < 0.001)) {
+        page.vGuides.push(val);
+      }
+    }
+
+    // Add new horizontal guides
+    for (let j = 1; j < R; j++) {
+      const val = yStart + (j / R) * (yEnd - yStart);
+      if (!page.hGuides.some(h => Math.abs(h - val) < 0.001)) {
+        page.hGuides.push(val);
+      }
+    }
+
+    // Sort guides
+    page.vGuides.sort((a,b)=>a-b);
+    page.hGuides.sort((a,b)=>a-b);
+
+    // Re-partition cards
+    if (typeof window.partitionMiroCardsIntoCells === 'function') {
+      window.partitionMiroCardsIntoCells(page, W, H);
+    }
+
+    sv();
+    buildMiroCanvas();
+  };
+
+  window.autoAlignMiroGuides = function autoAlignMiroGuides() {
+    const page = cp();
+    if (!page) return;
+
+    const cols = (page.vGuides || []).length + 1;
+    const rows = (page.hGuides || []).length + 1;
+
+    const canvas = document.getElementById('miro-canvas');
+    if (!canvas) return;
+    const W = canvas.clientWidth;
+    const H = canvas.clientHeight;
+
+    // Save cards to absolute coordinates first
+    if (typeof window.mergeMiroCellsIntoCards === 'function') {
+      window.mergeMiroCellsIntoCards(page, W, H);
+    }
+
+    page.vGuides = [];
+    page.hGuides = [];
+
+    for (let i = 1; i < cols; i++) {
+      page.vGuides.push(i / cols);
+    }
+    for (let i = 1; i < rows; i++) {
+      page.hGuides.push(i / rows);
+    }
+
+    if (typeof window.partitionMiroCardsIntoCells === 'function') {
+      window.partitionMiroCardsIntoCells(page, W, H);
+    }
+    
+    sv();
+    buildMiroCanvas();
+
+    if (typeof showToast === 'function') showToast('⚖️ Guides aligned equally!');
+  };
+
+  function setupMiroSlicesButtons() {
+    const mergeBtn = document.getElementById('mz-merge-btn');
+    const splitBtn = document.getElementById('mz-split-btn');
+    const alignBtn = document.getElementById('mz-align-btn');
+    const cancelBtn = document.getElementById('mz-cancel-op');
+
+    if (!mergeBtn || !splitBtn || !alignBtn || !cancelBtn) return;
+
+    mergeBtn.onclick = () => {
+      const page = cp();
+      if (!page || page.pageType !== 'miro') return;
+
+      if (!window._mergeSelectionMode) {
+        // Enter merge mode
+        window._mergeSelectionMode = true;
+        window._splitSelectionMode = false;
+        window._selectedCellsForMerge = new Set();
+
+        mergeBtn.textContent = '✓';
+        splitBtn.style.display = 'none';
+        alignBtn.style.display = 'none';
+        cancelBtn.style.display = 'inline-block';
+
+        if (typeof showToast === 'function') showToast('🔗 Merge mode active: Check cells to merge');
+        buildMiroCanvas();
+      } else {
+        // Confirm merge
+        const checked = window._selectedCellsForMerge;
+        if (!checked || checked.size < 2) {
+          alert('Please select at least 2 cells to merge.');
+          return;
+        }
+
+        let minCol = Infinity, minRow = Infinity;
+        let maxCol = -Infinity, maxRow = -Infinity;
+        let hasGrid = false;
+
+        checked.forEach(cellKey => {
+          if (!cellKey.startsWith('cc_')) {
+            const span = parseCellKey(cellKey);
+            if (span) {
+              hasGrid = true;
+              minCol = Math.min(minCol, span.cStart);
+              minRow = Math.min(minRow, span.rStart);
+              maxCol = Math.max(maxCol, span.cEnd);
+              maxRow = Math.max(maxRow, span.rEnd);
+            }
+          }
+        });
+
+        if (!hasGrid) {
+          alert('Only standard grid cells can be merged.');
+          return;
+        }
+
+        // Perform merge
+        mergeMiroCellRange(page, minCol, minRow, maxCol, maxRow);
+
+        // Reset state
+        window._mergeSelectionMode = false;
+        window._selectedCellsForMerge = new Set();
+
+        mergeBtn.textContent = '🔗';
+        splitBtn.style.display = 'inline-block';
+        alignBtn.style.display = 'inline-block';
+        cancelBtn.style.display = 'none';
+
+        if (typeof showToast === 'function') showToast('🔗 Cells merged successfully');
+        sv();
+        buildMiroCanvas();
+      }
+    };
+
+    splitBtn.onclick = () => {
+      const page = cp();
+      if (!page || page.pageType !== 'miro') return;
+
+      if (!window._splitSelectionMode) {
+        // Enter split mode
+        window._splitSelectionMode = true;
+        window._mergeSelectionMode = true;
+        window._selectedCellsForMerge = new Set();
+
+        splitBtn.textContent = '✓';
+        mergeBtn.style.display = 'none';
+        alignBtn.style.display = 'none';
+        cancelBtn.style.display = 'inline-block';
+
+        if (typeof showToast === 'function') showToast('🥞 Split mode active: Check a cell to split');
+        buildMiroCanvas();
+      } else {
+        // Confirm split
+        const checked = window._selectedCellsForMerge;
+        if (!checked || checked.size !== 1) {
+          alert('Please select exactly 1 cell to split.');
+          return;
+        }
+
+        const targetCellKey = Array.from(checked)[0];
+        
+        // Prompt user
+        const gridVal = prompt('Enter columns and rows to split this cell into (e.g. 2,2 or 3,1):', '2,2');
+        if (gridVal === null) return; // cancelled
+        
+        const parts = gridVal.split(',');
+        const cols = parseInt(parts[0]);
+        const rows = parseInt(parts[1]);
+
+        if (isNaN(cols) || isNaN(rows) || cols < 1 || rows < 1 || cols > 20 || rows > 20) {
+          alert('Please enter valid columns and rows (1-20).');
+          return;
+        }
+
+        // Perform split
+        splitMiroCell(targetCellKey, cols, rows);
+
+        // Reset state
+        window._splitSelectionMode = false;
+        window._mergeSelectionMode = false;
+        window._selectedCellsForMerge = new Set();
+
+        splitBtn.textContent = '🥞';
+        mergeBtn.style.display = 'inline-block';
+        alignBtn.style.display = 'inline-block';
+        cancelBtn.style.display = 'none';
+
+        if (typeof showToast === 'function') showToast('🥞 Cell split successfully');
+      }
+    };
+
+    alignBtn.onclick = () => {
+      autoAlignMiroGuides();
+    };
+
+    cancelBtn.onclick = () => {
+      window._mergeSelectionMode = false;
+      window._splitSelectionMode = false;
+      window._selectedCellsForMerge = new Set();
+
+      mergeBtn.textContent = '🔗';
+      splitBtn.textContent = '🥞';
+      mergeBtn.style.display = 'inline-block';
+      splitBtn.style.display = 'inline-block';
+      alignBtn.style.display = 'inline-block';
+      cancelBtn.style.display = 'none';
+
+      buildMiroCanvas();
+    };
+  }
+
   // Register namespace
   SM.miro.layout = SM.miro.layout || {};
   SM.miro.layout.initMiroSlices = window.initMiroSlices;
@@ -2421,11 +2730,20 @@
   SM.miro.layout.getMiroCardDragZoom = window.getMiroCardDragZoom;
   SM.miro.layout.clampMiroCardDrag = window.clampMiroCardDrag;
   SM.miro.layout.createMiroGrid = window.createMiroGrid;
+  SM.miro.layout.splitMiroCell = window.splitMiroCell;
+  SM.miro.layout.autoAlignMiroGuides = window.autoAlignMiroGuides;
+  SM.miro.layout.mergeMiroCellRange = window.mergeMiroCellRange;
+  SM.miro.layout.parseCellKey = window.parseCellKey;
+  SM.miro.layout.getActiveCells = window.getActiveCells;
 
   // Run init on startup
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => window.initMiroSlices());
+    document.addEventListener('DOMContentLoaded', () => {
+      window.initMiroSlices();
+      setupMiroSlicesButtons();
+    });
   } else {
     window.initMiroSlices();
+    setupMiroSlicesButtons();
   }
 })();
