@@ -3707,6 +3707,7 @@ function applyContrast() {
   const mtb = document.getElementById('miro-toolbar');
   const mtbr = document.getElementById('miro-toolbar-right');
   const mz = document.getElementById('miro-zoom');
+  const ctxMenu = document.getElementById('miro-ctx-menu');
 
   const useRibbon = !!(D.settings && D.settings.useRibbonBg && D.settings.ribbonBg);
   if (useRibbon) {
@@ -3723,6 +3724,7 @@ function applyContrast() {
     if (mtb) mtb.classList.toggle('contrast-light', isLight);
     if (mtbr) mtbr.classList.toggle('contrast-light', isLight);
     if (mz) mz.classList.toggle('contrast-light', isLight);
+    if (ctxMenu) ctxMenu.classList.toggle('contrast-light', isLight);
   } else {
     ribbon.style.background = '';
     if (envGroup) envGroup.style.background = '';
@@ -3745,6 +3747,7 @@ function applyContrast() {
     if (mtb) mtb.classList.toggle('contrast-light', isLight);
     if (mtbr) mtbr.classList.toggle('contrast-light', isLight);
     if (mz) mz.classList.toggle('contrast-light', isLight);
+    if (ctxMenu) ctxMenu.classList.toggle('contrast-light', isLight);
   }
 }
 function isCssColorLight(c) {

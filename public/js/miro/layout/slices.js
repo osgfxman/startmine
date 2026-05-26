@@ -1100,6 +1100,7 @@
 
       const z = state.zoom / 100;
       cellBoard.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${z})`;
+      cellBoard.style.setProperty('--inv-zoom', 1 / z);
 
       // Render card child elements
       const cellCards = (page.miroCards || []).filter(card => card.cell === cellKey);

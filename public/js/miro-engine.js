@@ -381,6 +381,7 @@ function convertSelectedTo(targetType) {
   let _rubberBanding = false;
   let _rbStartX = 0,
     _rbStartY = 0;
+  let _rbCellKey = null;
   let _wheelSvTimer = null;
 
   canvas.addEventListener('mousedown', (e) => {
@@ -486,11 +487,29 @@ function convertSelectedTo(targetType) {
     // Left-click on empty space: start rubber-band selection if miro page
     if (isMiro) {
       _rubberBanding = true;
-      const zoom = (page.zoom || 100) / 100;
-      const canvasRect = canvas.getBoundingClientRect();
-      _rbStartX = (e.clientX - canvasRect.left - (page.panX || 0)) / zoom;
-      _rbStartY = (e.clientY - canvasRect.top - (page.panY || 0)) / zoom;
       const box = document.getElementById('miro-sel-box');
+      if (insideViewport) {
+        _rbCellKey = insideViewport.dataset.cellKey;
+        const cellBoard = insideViewport.querySelector('.miro-cell-board');
+        if (cellBoard) {
+          cellBoard.appendChild(box);
+          const cellRect = cellBoard.getBoundingClientRect();
+          const cellState = (page.cellStates && page.cellStates[_rbCellKey]) || { zoom: 100 };
+          const cellZoom = (cellState.zoom || 100) / 100;
+          _rbStartX = (e.clientX - cellRect.left) / cellZoom;
+          _rbStartY = (e.clientY - cellRect.top) / cellZoom;
+        } else {
+          _rbCellKey = null;
+        }
+      }
+      if (!_rbCellKey) {
+        const board = document.getElementById('miro-board');
+        if (board) board.appendChild(box);
+        const zoom = (page.zoom || 100) / 100;
+        const canvasRect = canvas.getBoundingClientRect();
+        _rbStartX = (e.clientX - canvasRect.left - (page.panX || 0)) / zoom;
+        _rbStartY = (e.clientY - canvasRect.top - (page.panY || 0)) / zoom;
+      }
       box.style.left = _rbStartX + 'px';
       box.style.top = _rbStartY + 'px';
       box.style.width = '0px';
@@ -534,10 +553,23 @@ function convertSelectedTo(targetType) {
     // Rubber-band drag
     if (_rubberBanding) {
       const page = cp();
-      const zoom = (page.zoom || 100) / 100;
-      const canvasRect = canvas.getBoundingClientRect();
-      const curX = (e.clientX - canvasRect.left - (page.panX || 0)) / zoom;
-      const curY = (e.clientY - canvasRect.top - (page.panY || 0)) / zoom;
+      let curX = 0, curY = 0;
+      if (_rbCellKey) {
+        const cellViewport = document.querySelector(`.miro-cell-viewport[data-cell-key="${_rbCellKey}"]`);
+        const cellBoard = cellViewport ? cellViewport.querySelector('.miro-cell-board') : null;
+        if (cellBoard) {
+          const cellRect = cellBoard.getBoundingClientRect();
+          const cellState = (page.cellStates && page.cellStates[_rbCellKey]) || { zoom: 100 };
+          const cellZoom = (cellState.zoom || 100) / 100;
+          curX = (e.clientX - cellRect.left) / cellZoom;
+          curY = (e.clientY - cellRect.top) / cellZoom;
+        }
+      } else {
+        const zoom = (page.zoom || 100) / 100;
+        const canvasRect = canvas.getBoundingClientRect();
+        curX = (e.clientX - canvasRect.left - (page.panX || 0)) / zoom;
+        curY = (e.clientY - canvasRect.top - (page.panY || 0)) / zoom;
+      }
       const box = document.getElementById('miro-sel-box');
       const x = Math.min(_rbStartX, curX);
       const y = Math.min(_rbStartY, curY);
@@ -592,8 +624,19 @@ function convertSelectedTo(targetType) {
           });
         } else {
           (page2.miroCards || []).forEach((c) => {
-            const abs = getCardAbsoluteCoords(c, page2, canvasW, canvasH);
-            const intersects = !(abs.x + abs.w < x || abs.x > x + w || abs.y + abs.h < y || abs.y > y + h);
+            let intersects = false;
+            if (_rbCellKey) {
+              if (c.cell === _rbCellKey) {
+                const cx = c.x || 0;
+                const cy = c.y || 0;
+                const cw = c.w || 280;
+                const ch = c.h || 240;
+                intersects = !(cx + cw < x || cx > x + w || cy + ch < y || cy > y + h);
+              }
+            } else {
+              const abs = getCardAbsoluteCoords(c, page2, canvasW, canvasH);
+              intersects = !(abs.x + abs.w < x || abs.x > x + w || abs.y + abs.h < y || abs.y > y + h);
+            }
             if (c.locked) return; // Locked elements are invisible to selection
             if (intersects) addMiroSelect(c.id);
             else if (!e.ctrlKey && !e.metaKey) removeMiroSelect(c.id);
@@ -668,7 +711,15 @@ function convertSelectedTo(targetType) {
       setTimeout(() => {
         _justRubberBanded = false;
       }, 50);
-      document.getElementById('miro-sel-box').style.display = 'none';
+      const box = document.getElementById('miro-sel-box');
+      if (box) {
+        box.style.display = 'none';
+        const board = document.getElementById('miro-board');
+        if (board && box.parentNode !== board) {
+          board.appendChild(box);
+        }
+      }
+      _rbCellKey = null;
       document.getElementById('miro-canvas').style.cursor = 'grab';
 
       if (window._mergeSelectionMode) {
