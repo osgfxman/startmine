@@ -4699,6 +4699,10 @@ td.mg-sel {
 .cal-event-form {
   z-index: 20;
   animation: calFormFadeIn 0.2s ease-out;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
 }
 
 @keyframes calFormFadeIn {
@@ -4706,55 +4710,66 @@ td.mg-sel {
   to { transform: translateY(0) scale(1); opacity: 1; }
 }
 
+.cal-event-form label {
+  color: #64748b !important;
+  font-weight: 600 !important;
+  font-size: 0.68rem !important;
+  margin-bottom: 3px !important;
+}
+
 .cal-form-input {
-  background: rgba(255,255,255,.06);
-  border: 1px solid rgba(255,255,255,.12);
-  border-radius: 6px;
-  color: #eee;
-  font-size: .7rem;
-  padding: 6px 8px;
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 8px !important;
+  color: #0f172a !important;
+  font-size: .75rem !important;
+  padding: 8px 12px !important;
   outline: none;
   width: 100%;
   box-sizing: border-box;
   font-family: var(--font);
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 .cal-form-input:focus {
-  border-color: rgba(108, 143, 255, 0.5);
+  border-color: #6c8fff !important;
+  box-shadow: 0 0 0 3px rgba(108, 143, 255, 0.15) !important;
 }
 .cal-form-input::placeholder {
-  color: #666;
+  color: #94a3b8 !important;
 }
 
-/* datetime-local dark styling */
+/* datetime-local and date light styling */
+.cal-form-input[type="date"],
 .cal-form-input[type="datetime-local"] {
-  color-scheme: dark;
+  color-scheme: light !important;
+  color: #0f172a !important;
 }
 
 .cal-form-select {
-  background: rgba(255,255,255,.06);
-  border: 1px solid rgba(255,255,255,.12);
-  border-radius: 6px;
-  color: #eee;
-  font-size: .7rem;
-  padding: 6px 8px;
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 8px !important;
+  color: #0f172a !important;
+  font-size: .75rem !important;
+  padding: 8px 12px !important;
   outline: none;
   width: 100%;
   box-sizing: border-box;
   font-family: var(--font);
   cursor: pointer;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M3 5l3 3 3-3z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  padding-right: 24px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M3 5l3 3 3-3z'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 10px center !important;
+  padding-right: 28px !important;
 }
 .cal-form-select:focus {
-  border-color: rgba(108, 143, 255, 0.5);
+  border-color: #6c8fff !important;
+  box-shadow: 0 0 0 3px rgba(108, 143, 255, 0.15) !important;
 }
 .cal-form-select option {
-  background: #1a1c2e;
-  color: #eee;
+  background: #ffffff !important;
+  color: #0f172a !important;
 }
 
 textarea.cal-form-input {
@@ -4763,19 +4778,20 @@ textarea.cal-form-input {
 }
 
 .cal-form-btn {
-  background: rgba(255,255,255,.08);
-  border: 1px solid rgba(255,255,255,.12);
-  border-radius: 6px;
-  color: #ccc;
-  font-size: .65rem;
-  padding: 5px 12px;
+  background: #f1f5f9 !important;
+  border: none !important;
+  border-radius: 8px !important;
+  color: #475569 !important;
+  font-size: .7rem !important;
+  font-weight: 600 !important;
+  padding: 7px 16px !important;
   cursor: pointer;
   font-family: var(--font);
   transition: all 0.15s;
 }
 .cal-form-btn:hover {
-  background: rgba(255,255,255,.15);
-  color: #fff;
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
 }
 .cal-form-btn:disabled {
   opacity: 0.5;
@@ -4783,25 +4799,57 @@ textarea.cal-form-input {
 }
 
 .cal-form-btn-primary {
-  background: rgba(74, 122, 255, 0.3);
-  border-color: rgba(74, 122, 255, 0.5);
-  color: #8ab4ff;
-  font-weight: 600;
+  background: #4f46e5 !important;
+  color: #ffffff !important;
 }
 .cal-form-btn-primary:hover {
-  background: rgba(74, 122, 255, 0.5);
-  color: #fff;
+  background: #4338ca !important;
+  color: #ffffff !important;
 }
 
 .cal-form-btn-danger {
-  background: rgba(229, 85, 85, 0.15);
-  border-color: rgba(229, 85, 85, 0.3);
-  color: #e55;
+  background: #fee2e2 !important;
+  color: #ef4444 !important;
   margin-right: auto;
 }
 .cal-form-btn-danger:hover {
-  background: rgba(229, 85, 85, 0.3);
-  color: #ff7777;
+  background: #fecaca !important;
+  color: #dc2626 !important;
+}
+
+.cal-time-digit {
+  background: #f1f5f9 !important;
+  border: 1.5px solid #e2e8f0 !important;
+  border-radius: 6px !important;
+  color: #0f172a !important;
+  font-size: .8rem !important;
+  font-weight: 700 !important;
+  padding: 4px 8px !important;
+  transition: all 0.15s;
+}
+.cal-time-digit:focus {
+  border-color: #6c8fff !important;
+  background: #ffffff !important;
+}
+
+.cal-time-sep {
+  color: #64748b !important;
+}
+
+.cal-time-arrow {
+  background: #f1f5f9 !important;
+  border: none !important;
+  border-radius: 4px !important;
+  color: #64748b !important;
+  cursor: pointer;
+  font-size: .45rem !important;
+  padding: 2px 4px !important;
+  transition: all 0.15s;
+  line-height: 1;
+}
+.cal-time-arrow:hover {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
 }
 
 /* Calendar resize handles */

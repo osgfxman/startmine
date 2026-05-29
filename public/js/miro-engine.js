@@ -1627,6 +1627,44 @@ async function _fixBase64ImagesOnPage() {
 // Run 3s after page loads
 setTimeout(() => _fixBase64ImagesOnPage(), 3000);
 
+// ─── Localize Remote Image URL ───
+function localizeCardImageUrl(card) {
+  if (!card || !card.imageUrl) return;
+  if (card.imageUrl.startsWith('data:image')) return;
+  if (/imgbb\.com|imgur\.com|i\.ibb\.co/i.test(card.imageUrl)) return;
+
+  console.log('[ImgLocalize] Attempting to localize remote image URL:', card.imageUrl);
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = function() {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const base64 = canvas.toDataURL('image/png');
+      if (base64 && base64.length > 100) {
+        card.imageUrl = base64;
+        console.log('[ImgLocalize] ✅ Converted remote image to base64:', card.id);
+        sv();
+        // Trigger _fixBase64ImagesOnPage to upload this new Base64 to ImgBB and update Firebase/DOM
+        setTimeout(() => {
+          if (typeof _fixBase64ImagesOnPage === 'function') {
+            _fixBase64ImagesOnPage();
+          }
+        }, 1000);
+      }
+    } catch (e) {
+      console.warn('[ImgLocalize] ⚠️ Failed to canvas-convert remote image:', e);
+    }
+  };
+  img.onerror = function(err) {
+    console.warn('[ImgLocalize] ⚠️ Failed to load remote image for localizing:', err);
+  };
+  img.src = card.imageUrl;
+}
+
 // ─── Text Widget ───
 document.getElementById('miro-opt-text').onclick = () => {
   document.getElementById('miro-add-menu').classList.remove('show');
@@ -2372,6 +2410,20 @@ document.addEventListener('paste', (e) => {
   }
 
   function executePaste(text, html, dataUrl, imageBlob) {
+    if (!dataUrl && html) {
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const img = doc.querySelector('img');
+        if (img && img.src) {
+          dataUrl = img.src;
+          console.log('[PASTE] Extracted image source from clipboard HTML:', dataUrl);
+        }
+      } catch (err) {
+        console.error('[PASTE] Failed to parse fallback image src from HTML:', err);
+      }
+    }
+
     // Check for HTML from Miro or other rich text sources
     if (html) {
       console.log('--- RAW CLIPBOARD HTML ---');
@@ -2814,6 +2866,9 @@ document.addEventListener('paste', (e) => {
 
             page.miroCards.push(card);
             _miroSelected.add(newId);
+            if (card.type === 'image') {
+              localizeCardImageUrl(card);
+            }
           });
           sv(); buildMiroCanvas(); if (typeof buildOutline === 'function') buildOutline();
 
@@ -3019,6 +3074,7 @@ document.addEventListener('paste', (e) => {
         }
         page.miroCards.push(card);
         sv(); buildMiroCanvas(); if (typeof buildOutline === 'function') buildOutline();
+        localizeCardImageUrl(card);
       };
       img.src = dataUrl;
     }
@@ -7392,6 +7448,7 @@ async function createCalendarEvent(calendarId, summary, startDateTime, endDateTi
     body: JSON.stringify(body)
   });
   if (!res.ok) { const err = await res.text(); throw new Error('Create failed: ' + err); }
+  if (typeof window._clearCalendarCache === 'function') window._clearCalendarCache();
   return await res.json();
 }
 
@@ -7419,6 +7476,7 @@ async function updateCalendarEvent(calendarId, eventId, updates) {
     }
   }
   if (!res.ok) { const err = await res.text(); throw new Error('Update failed: ' + err); }
+  if (typeof window._clearCalendarCache === 'function') window._clearCalendarCache();
   return await res.json();
 }
 
@@ -7430,6 +7488,7 @@ async function deleteCalendarEvent(calendarId, eventId) {
     headers: { 'Authorization': 'Bearer ' + _googleAccessToken }
   });
   if (!res.ok && res.status !== 204) { const err = await res.text(); throw new Error('Delete failed: ' + err); }
+  if (typeof window._clearCalendarCache === 'function') window._clearCalendarCache();
 }
 
 // ─── Event Form (in-widget popup) ───
@@ -7453,7 +7512,7 @@ function showCalendarEventForm(container, el, card, opts) {
   // Title (optional)
   const titleLabel = document.createElement('label');
   titleLabel.textContent = 'Event Title (optional)';
-  titleLabel.style.cssText = 'font-size:.65rem;color:#aaa;margin-bottom:2px;';
+  titleLabel.style.cssText = 'font-size:.65rem;margin-bottom:2px;';
   const titleInp = document.createElement('input');
   titleInp.type = 'text';
   titleInp.className = 'cal-form-input';
@@ -7463,7 +7522,7 @@ function showCalendarEventForm(container, el, card, opts) {
   // Calendar selector — buttons instead of dropdown
   const calLabel = document.createElement('label');
   calLabel.textContent = 'Calendar';
-  calLabel.style.cssText = 'font-size:.65rem;color:#aaa;margin-bottom:2px;margin-top:6px;';
+  calLabel.style.cssText = 'font-size:.65rem;margin-bottom:2px;margin-top:6px;';
   const calBtnRow = document.createElement('div');
   calBtnRow.className = 'cal-selector-row';
   calBtnRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-top:2px;';
@@ -7477,7 +7536,7 @@ function showCalendarEventForm(container, el, card, opts) {
       btn.type = 'button';
       btn.className = 'cal-selector-btn';
       const bgColor = cal.backgroundColor || '#4285f4';
-      btn.style.cssText = `background:${bgColor}22;border:2px solid ${bgColor};border-radius:6px;color:#ddd;font-size:.58rem;padding:3px 8px;cursor:pointer;font-family:var(--font);transition:all .15s;white-space:nowrap;`;
+      btn.style.cssText = `background:${bgColor}12;border:1.5px solid ${bgColor};border-radius:6px;color:#475569;font-size:.58rem;padding:3px 8px;cursor:pointer;font-family:var(--font);transition:all .15s;white-space:nowrap;font-weight:600;`;
       btn.textContent = cal.summary.length > 18 ? cal.summary.substring(0, 16) + '…' : cal.summary;
       btn.title = cal.summary;
       btn.dataset.calId = cal.id;
@@ -7496,9 +7555,9 @@ function showCalendarEventForm(container, el, card, opts) {
         calBtnRow.querySelectorAll('.cal-selector-btn').forEach(b => {
           const c = calendars.find(cc => cc.id === b.dataset.calId);
           const bc = c ? (c.backgroundColor || '#4285f4') : '#4285f4';
-          b.style.background = bc + '22';
-          b.style.color = '#ddd';
-          b.style.fontWeight = '400';
+          b.style.background = bc + '12';
+          b.style.color = '#475569';
+          b.style.fontWeight = '600';
         });
         btn.style.background = bgColor;
         btn.style.color = '#fff';
@@ -7519,7 +7578,7 @@ function showCalendarEventForm(container, el, card, opts) {
   // Start time picker
   const startWrap = document.createElement('div');
   startWrap.style.cssText = 'flex:1;';
-  startWrap.innerHTML = '<label style="font-size:.65rem;color:#aaa;">Start</label>';
+  startWrap.innerHTML = '<label style="font-size:.65rem;">Start</label>';
   const startPicker = _buildAnalogTimePicker(startTime);
   startWrap.appendChild(startPicker.el);
   timeRow.appendChild(startWrap);
@@ -7527,7 +7586,7 @@ function showCalendarEventForm(container, el, card, opts) {
   // End time picker
   const endWrap = document.createElement('div');
   endWrap.style.cssText = 'flex:1;';
-  endWrap.innerHTML = '<label style="font-size:.65rem;color:#aaa;">End</label>';
+  endWrap.innerHTML = '<label style="font-size:.65rem;">End</label>';
   const endPicker = _buildAnalogTimePicker(endTime);
   endWrap.appendChild(endPicker.el);
   timeRow.appendChild(endWrap);
@@ -7538,12 +7597,12 @@ function showCalendarEventForm(container, el, card, opts) {
   const startDateInp = document.createElement('input');
   startDateInp.type = 'date';
   startDateInp.className = 'cal-form-input';
-  startDateInp.style.cssText = 'flex:1;color-scheme:dark;font-size:.65rem;';
+  startDateInp.style.cssText = 'flex:1;font-size:.65rem;';
   startDateInp.value = _toDateStr(startTime);
   const endDateInp = document.createElement('input');
   endDateInp.type = 'date';
   endDateInp.className = 'cal-form-input';
-  endDateInp.style.cssText = 'flex:1;color-scheme:dark;font-size:.65rem;';
+  endDateInp.style.cssText = 'flex:1;font-size:.65rem;';
   endDateInp.value = _toDateStr(endTime);
   dateRow.appendChild(startDateInp);
   dateRow.appendChild(endDateInp);
@@ -7551,7 +7610,7 @@ function showCalendarEventForm(container, el, card, opts) {
   // Description (optional)
   const descLabel = document.createElement('label');
   descLabel.textContent = 'Description (optional)';
-  descLabel.style.cssText = 'font-size:.65rem;color:#aaa;margin-top:6px;margin-bottom:2px;';
+  descLabel.style.cssText = 'font-size:.65rem;margin-top:6px;margin-bottom:2px;';
   const descInp = document.createElement('textarea');
   descInp.className = 'cal-form-input';
   descInp.style.cssText = 'height:32px;resize:vertical;';
@@ -7716,7 +7775,7 @@ function showCalendarEventForm(container, el, card, opts) {
     if (e.target === overlay) { overlay.remove(); document.removeEventListener('keydown', _onEscForm); }
   });
 
-  form.style.cssText = 'background:var(--s2,#1e1e2e);border:1px solid var(--bd,#333);border-radius:14px;padding:18px 22px;min-width:340px;max-width:420px;width:90vw;box-shadow:0 12px 48px rgba(0,0,0,.7);display:flex;flex-direction:column;gap:4px;color:var(--tx,#eee);font-family:var(--font,Inter,sans-serif);';
+  form.style.cssText = 'border-radius:14px;padding:18px 22px;min-width:340px;max-width:420px;width:90vw;display:flex;flex-direction:column;gap:4px;font-family:var(--font,Inter,sans-serif);';
   form.addEventListener('mousedown', e => { if (e.button === 0) e.stopPropagation(); });
   form.addEventListener('click', e => e.stopPropagation());
   form.addEventListener('wheel', e => e.stopPropagation());
@@ -7763,7 +7822,8 @@ function _buildAnalogTimePicker(initialDate) {
   hDisp.addEventListener('keydown', (e) => { if(e.key==='Enter'){e.preventDefault();hDisp.blur();} });
   const sep = document.createElement('span');
   sep.textContent = ':';
-  sep.style.cssText = 'color:#aaa;font-size:.8rem;font-weight:700;';
+  sep.className = 'cal-time-sep';
+  sep.style.cssText = 'font-size:.8rem;font-weight:700;';
   const mDisp = document.createElement('span');
   mDisp.className = 'cal-time-digit';
   mDisp.contentEditable = true;

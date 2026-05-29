@@ -1,6 +1,6 @@
 {
-  "name": "Startmine",
-  "short_name": "Startmine",
+  "name": "QuranGFX Backyard",
+  "short_name": "QuranGFX Backyard",
   "description": "Your personal bookmark & productivity hub",
   "id": "/",
   "start_url": "/",
@@ -12,13 +12,25 @@
   "categories": ["productivity", "utilities"],
   "icons": [
     {
-      "src": "/icon-512.png",
+      "src": "/tomato-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/tomato-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/tomato-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/tomato-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

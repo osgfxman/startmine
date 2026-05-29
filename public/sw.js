@@ -7,37 +7,40 @@
  * @safety Always test caching logic carefully. Never cache Firebase API endpoints.
  */
 /* ─── Startmine Service Worker ─── */
-const CACHE_NAME = 'startmine-1779807867';
+const CACHE_NAME = 'startmine-1780014078';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/inbox.html',
   '/manifest.json',
-  '/css/base.css?v=1779807867',
-  '/css/miro.css?v=1779807867',
-  '/css/life-widget-additions.css?v=1779807867',
-  '/js/core/namespace.js?v=1779807867',
-  '/js/core/events.js?v=1779807867',
-  '/js/core/utils.js?v=1779807867',
-  '/js/data/firebase.js?v=1779807867',
-  '/js/data/offline.js?v=1779807867',
-  '/js/data/sync.js?v=1779807867',
-  '/js/ui/toasts.js?v=1779807867',
-  '/js/ui/modals.js?v=1779807867',
-  '/js/ui/toolbar.js?v=1779807867',
-  '/js/ui/search.js?v=1779807867',
-  '/js/ui/inbox-ui.js?v=1779807867',
-  '/js/miro/miro-state.js?v=1779807867',
-  '/js/miro/render/builders.js?v=1779807867',
-  '/js/miro/layout/grid.js?v=1779807867',
-  '/js/miro/layout/slices.js?v=1779807867',
-  '/js/core/health.js?v=1779807867',
-  '/js/app.js?v=1779807867',
-  '/js/miro-engine.js?v=1779807867',
-  '/js/life-widget.js?v=1779807867',
-  '/js/thumbnails.js?v=1779807867',
-  '/js/outline.js?v=1779807867',
-  '/js/alignment.js?v=1779807867',
+  '/tomato-192.png',
+  '/tomato-512.png',
+  '/tomato-favicon.ico',
+  '/css/base.css?v=1780014078',
+  '/css/miro.css?v=1780014078',
+  '/css/life-widget-additions.css?v=1780014078',
+  '/js/core/namespace.js?v=1780014078',
+  '/js/core/events.js?v=1780014078',
+  '/js/core/utils.js?v=1780014078',
+  '/js/data/firebase.js?v=1780014078',
+  '/js/data/offline.js?v=1780014078',
+  '/js/data/sync.js?v=1780014078',
+  '/js/ui/toasts.js?v=1780014078',
+  '/js/ui/modals.js?v=1780014078',
+  '/js/ui/toolbar.js?v=1780014078',
+  '/js/ui/search.js?v=1780014078',
+  '/js/ui/inbox-ui.js?v=1780014078',
+  '/js/miro/miro-state.js?v=1780014078',
+  '/js/miro/render/builders.js?v=1780014078',
+  '/js/miro/layout/grid.js?v=1780014078',
+  '/js/miro/layout/slices.js?v=1780014078',
+  '/js/core/health.js?v=1780014078',
+  '/js/app.js?v=1780014078',
+  '/js/miro-engine.js?v=1780014078',
+  '/js/life-widget.js?v=1780014078',
+  '/js/thumbnails.js?v=1780014078',
+  '/js/outline.js?v=1780014078',
+  '/js/alignment.js?v=1780014078',
 ];
 
 // External CDN assets to cache
@@ -159,10 +162,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For local static assets: network-first for JS/CSS, cache-first for others
+  // For local static assets: network-first for JS/CSS/HTML and root path, cache-first for other assets
   if (url.origin === self.location.origin) {
-    // JS and CSS files: always try network first to get latest code
-    if (url.pathname.endsWith('.js') || url.pathname.endsWith('.css')) {
+    // JS, CSS and HTML files (including root path): always try network first to get latest code
+    if (url.pathname.endsWith('.js') || 
+        url.pathname.endsWith('.css') || 
+        url.pathname === '/' || 
+        url.pathname.endsWith('.html')) {
       event.respondWith(
         fetch(event.request).then((resp) => {
           if (resp.ok) {
@@ -170,10 +176,21 @@ self.addEventListener('fetch', (event) => {
             caches.open(CACHE_NAME).then((c) => c.put(event.request, clone));
           }
           return resp;
-        }).catch(() => caches.match(event.request) || new Response('Offline', { status: 503 }))
+        }).catch(() => {
+          // Fallback: if offline and requesting root or index.html, serve cached index
+          if (url.pathname === '/' || url.pathname.endsWith('/index.html')) {
+            return caches.match('/index.html') || caches.match('/');
+          }
+          // Fallback for inbox page
+          if (url.pathname.includes('/inbox')) {
+            return caches.match('/inbox.html');
+          }
+          return caches.match(event.request) || new Response('Offline', { status: 503 });
+        })
       );
       return;
     }
+
     event.respondWith(
       caches.match(event.request).then((cached) => {
         if (cached) return cached;

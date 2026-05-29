@@ -480,34 +480,6 @@ auth.onAuthStateChanged((user) => {
       restoreGoogleToken();
     }
     
-    // Remember Me logic: if token is expired or missing, prepare silent re-auth on first interaction
-    if (localStorage.getItem('sm_remember_me') === 'true' && isGoogleTokenExpired()) {
-      let reauthInProgress = false;
-      function onFirstUserInteraction() {
-        if (reauthInProgress) return;
-        if (localStorage.getItem('sm_remember_me') === 'true' && isGoogleTokenExpired()) {
-          reauthInProgress = true;
-          console.log('[AUTH] User interacted. Initiating background Google token refresh popup...');
-          manualGoogleReAuth().then(() => {
-            console.log('[AUTH] Background Google token refresh successful!');
-            // Reload page columns / cards to fetch fresh events
-            if (typeof buildCols === 'function') buildCols();
-          }).catch((err) => {
-            console.warn('[AUTH] Background Google token refresh failed:', err);
-          }).finally(() => {
-            reauthInProgress = false;
-          });
-        }
-        // Remove listeners immediately on first try
-        document.removeEventListener('mousedown', onFirstUserInteraction);
-        document.removeEventListener('touchstart', onFirstUserInteraction);
-        document.removeEventListener('keydown', onFirstUserInteraction);
-      }
-      document.addEventListener('mousedown', onFirstUserInteraction);
-      document.addEventListener('touchstart', onFirstUserInteraction);
-      document.addEventListener('keydown', onFirstUserInteraction);
-    }
-
     if (SM.core.runHealthCheck) SM.core.runHealthCheck();
     initDB();
   } else {
@@ -515,6 +487,10 @@ auth.onAuthStateChanged((user) => {
     DB_REF = null;
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('root').style.display = 'none';
+    const spinner = document.getElementById('splash-spinner');
+    if (spinner) spinner.style.display = 'none';
+    const loginBtn = document.getElementById('login-btn');
+    if (loginBtn) loginBtn.style.display = 'flex';
     db.ref().off();
   }
 });
@@ -713,15 +689,11 @@ function initDB() {
     return;
   }
 
-  // Load sharded listeners immediately so that offline cache loads instantly 
-  // and listeners are attached without blocking on legacy migration check
-  setupShardedListeners();
-
-  // Backwards compatibility migration check: run in background asynchronously
-  db.ref(DB_REF).once('value', (snap) => {
+  // Check if legacy monolithic data exists FIRST before attaching sharded listeners
+  db.ref(DB_REF).once('value').then((snap) => {
     const rawData = snap.val();
     if (rawData && rawData.pages && Array.isArray(rawData.pages)) {
-      console.log('[MIGRATION] Monolithic legacy layout found. Migrating to sharded layout in background...');
+      console.log('[MIGRATION] Monolithic legacy layout found. Migrating to sharded layout...');
       const meta = {
         settings: rawData.settings || { engine: 'bm', accent: '#6c8fff' },
         curEnv: rawData.curEnv || 'e0',
@@ -765,14 +737,15 @@ function initDB() {
       // Clear the old monolith
       updates[DB_REF] = null;
 
-      db.ref().update(updates).then(() => {
+      return db.ref().update(updates).then(() => {
         console.log('[MIGRATION] Legacy data migration complete!');
-      }).catch((err) => {
-        console.error('[MIGRATION] Legacy data migration update failed:', err);
       });
     }
-  }, (err) => {
+  }).catch((err) => {
     console.warn('[MIGRATION] Monolithic layout read error or permission denied (possibly already sharded):', err.message);
+  }).finally(() => {
+    // ALWAYS setup sharded listeners AFTER checking/running migration
+    setupShardedListeners();
   });
 }
 
