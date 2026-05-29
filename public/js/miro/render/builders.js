@@ -71,6 +71,7 @@
       embed: 'buildMiroEmbed',
       'overlay-page': 'buildMiroOverlayWidget',
       life: 'buildMiroLifeWidget',
+      dyntitle: 'buildMiroDynamicTitleCard',
     };
     try {
       page.miroCards.forEach((card) => {

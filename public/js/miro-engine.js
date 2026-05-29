@@ -86,6 +86,14 @@ function performUndo() {
 
 function getCardAbsoluteCoords(card, page, canvasW, canvasH) {
   if (!card.cell) {
+    if (card.pinned || card.type === 'dyntitle') {
+      return {
+        x: card._pinScreenX || card.x || 0,
+        y: card._pinScreenY || card.y || 0,
+        w: card._pinScreenW || card.w || 280,
+        h: card._pinScreenH || card.h || 240
+      };
+    }
     return {
       x: card.x || 0,
       y: card.y || 0,
@@ -112,6 +120,15 @@ function getCardAbsoluteCoords(card, page, canvasW, canvasH) {
       cellLeft = (vg[c] || 0) * canvasW;
       cellTop = (hg[r] || 0) * canvasH;
     }
+  }
+
+  if (card.pinned || card.type === 'dyntitle') {
+    return {
+      x: cellLeft + (card._pinCellX || 0),
+      y: cellTop + (card._pinCellY || 0),
+      w: card._pinCellW || card.w || 200,
+      h: card._pinCellH || card.h || 150
+    };
   }
 
   const state = (page.cellStates && page.cellStates[card.cell]) || { zoom: 100, panX: 0, panY: 0 };
@@ -1726,7 +1743,7 @@ document.getElementById('miro-canvas').addEventListener('drop', (e) => {
 function setActiveTool(tool) {
   _activeTool = tool;
   document.querySelectorAll('.mtb-btn').forEach(b => b.classList.remove('sel'));
-  const btnMap = { select: 'mtb-select', sticky: 'mtb-sticky', text: 'mtb-text', shape: 'mtb-shape', pen: 'mtb-pen', grid: 'mtb-grid', mindmap: 'mtb-mindmap', image: 'mtb-image', card: 'mtb-card', widget: 'mtb-widget', trello: 'mtb-trello', embed: 'mtb-embed', 'overlay-page': null };
+  const btnMap = { select: 'mtb-select', sticky: 'mtb-sticky', text: 'mtb-text', shape: 'mtb-shape', pen: 'mtb-pen', grid: 'mtb-grid', mindmap: 'mtb-mindmap', image: 'mtb-image', card: 'mtb-card', widget: 'mtb-widget', trello: 'mtb-trello', embed: 'mtb-embed', 'overlay-page': null, 'dyn-title': 'mtb-dyn-title' };
   const btn = document.getElementById(btnMap[tool]);
   if (btn) btn.classList.add('sel');
   _penMode = tool === 'pen';
@@ -1739,6 +1756,7 @@ function setActiveTool(tool) {
   _trelloCreateMode = tool === 'trello';
   _embedCreateMode = tool === 'embed';
   _overlayPageCreateMode = (tool === 'overlay-page');
+  _dyntitleCreateMode = tool === 'dyn-title';
 
   const hint = document.getElementById('sn-create-hint');
   if (_stickyCreateMode) { hint.textContent = '📝 Click anywhere to place a sticky note • Press Esc to cancel'; hint.style.display = 'block'; }
@@ -1749,10 +1767,11 @@ function setActiveTool(tool) {
   else if (_trelloCreateMode) { hint.textContent = '📋 Click anywhere to place Trello lists • Press Esc to cancel'; hint.style.display = 'block'; }
   else if (_embedCreateMode) { hint.textContent = '🌐 Click anywhere to place an embed web view • Press Esc to cancel'; hint.style.display = 'block'; }
   else if (_overlayPageCreateMode) { var _opn = ['2Days','Gantt Chart','Statistics','Fruit Tracker']; hint.textContent = _opn[_overlayPageCreateIdx] + ' - Click anywhere to place widget'; hint.style.display = 'block'; }
+  else if (_dyntitleCreateMode) { hint.textContent = '🏷️ Click anywhere to place a Dynamic Title • Press Esc to cancel'; hint.style.display = 'block'; }
   else { hint.style.display = 'none'; }
 
   document.getElementById('miro-pen-toolbar').classList.toggle('show', _penMode);
-  const cursor = (_penMode || _shapeMode || _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode || _embedCreateMode || _overlayPageCreateMode || _overlayPageCreateMode) ? 'crosshair' : 'grab';
+  const cursor = (_penMode || _shapeMode || _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode || _embedCreateMode || _overlayPageCreateMode || _dyntitleCreateMode) ? 'crosshair' : 'grab';
   document.getElementById('miro-canvas').style.cursor = cursor;
   if (!_shapeMode) document.getElementById('miro-shape-panel').classList.remove('show');
 }
@@ -1764,13 +1783,14 @@ document.getElementById('mtb-sticky').onclick = () => setActiveTool('sticky');
 document.getElementById('mtb-text').onclick = () => setActiveTool('text');
 document.getElementById('mtb-widget').onclick = () => setActiveTool('widget');
 document.getElementById('mtb-trello').onclick = () => setActiveTool('trello');
+document.getElementById('mtb-dyn-title').onclick = () => setActiveTool('dyn-title');
 
 // Canvas click handler for click-to-place modes
 document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
   if (e.button !== 0 && e.type !== 'touchstart') return;
 
   // Check if ANY creation mode is active
-  const anyCreateMode = _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode || _embedCreateMode || _overlayPageCreateMode;
+  const anyCreateMode = _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode || _embedCreateMode || _overlayPageCreateMode || _dyntitleCreateMode;
   if (!anyCreateMode) return;
 
   // Only block clicks on toolbar controls themselves
@@ -1790,6 +1810,8 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
     let bx = (clickX - (page.panX || 0)) / zoom;
     let by = (clickY - (page.panY || 0)) / zoom;
     let targetCell = null;
+    let cellLeft = 0;
+    let cellTop = 0;
 
     const hasSlices = page && (page._guidesMode || (page.vGuides && page.vGuides.length > 0) || (page.hGuides && page.hGuides.length > 0) || (page.customCells && page.customCells.length > 0));
     if (hasSlices) {
@@ -1841,7 +1863,7 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
 
       const state = page.cellStates[targetCell] || { zoom: 100, panX: 0, panY: 0 };
       const cellZoom = state.zoom / 100;
-      let cellLeft = 0, cellTop = 0;
+      cellLeft = 0; cellTop = 0;
 
       if (targetCustomCell) {
         cellLeft = targetCustomCell.x * W;
@@ -1967,6 +1989,47 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
         }
         sv(); buildMiroCanvas(); buildOutline();
       }
+    } else if (_dyntitleCreateMode) {
+      let pcX = 0, pcY = 0;
+      if (targetCell) {
+        const cellEl = document.querySelector(`.miro-cell-viewport[data-cell-key="${targetCell}"]`);
+        if (cellEl) {
+          const cellW = cellEl.clientWidth;
+          const cellH = cellEl.clientHeight;
+          pcX = Math.max(0, Math.min(cellW - 200, clickX - cellLeft - 100));
+          pcY = Math.max(0, Math.min(cellH - 80, clickY - cellTop - 40));
+        } else {
+          pcX = clickX - cellLeft - 100;
+          pcY = clickY - cellTop - 40;
+        }
+      } else {
+        pcX = clickX - 100;
+        pcY = clickY - 40;
+      }
+
+      page.miroCards.push({
+        id: uid(),
+        type: 'dyntitle',
+        title: '',
+        dynamicType: '',
+        pinned: true,
+        w: 120,
+        h: 40,
+        _pinCellW: 120,
+        _pinCellH: 40,
+        x: bx - 60,
+        y: by - 20,
+        _pinCellX: pcX,
+        _pinCellY: pcY,
+        _pinScreenX: clickX - 60,
+        _pinScreenY: clickY - 20,
+        _pinScreenW: 120,
+        _pinScreenH: 40
+      });
+      if (targetCell) {
+        page.miroCards[page.miroCards.length - 1].cell = targetCell;
+      }
+      sv(); buildMiroCanvas(); buildOutline();
     }
   } catch (err) {
     console.error('[TOOL CREATE ERROR]', err);
@@ -2223,6 +2286,12 @@ document.addEventListener('keydown', (e) => {
                 } else {
                   delete c.cell;
                 }
+                if (c.pinned || c.type === 'dyntitle') {
+                  c._pinCellX = c.x;
+                  c._pinCellY = c.y;
+                  c._pinCellW = c.w || 200;
+                  c._pinCellH = c.h || 80;
+                }
                 page.miroCards.push(c); _miroSelected.add(c.id);
               });
               sv(); buildMiroCanvas(); buildOutline(); return;
@@ -2273,6 +2342,7 @@ document.addEventListener('keydown', (e) => {
       case 'i': case 'ه': e.preventDefault(); document.getElementById('mtb-image').click(); break;
       case 'b': case 'لا': e.preventDefault(); document.getElementById('mtb-card').click(); break;
       case 'e': case 'ث': e.preventDefault(); document.getElementById('mtb-embed').click(); break;
+      case 'y': case 'ئ': e.preventDefault(); document.getElementById('mtb-dyn-title').click(); break;
       case 'escape':
         setActiveTool('select');
         document.getElementById('miro-shape-panel').classList.remove('show');
@@ -2360,6 +2430,12 @@ document.addEventListener('paste', (e) => {
             delete c.cell;
           }
           if (c.t === 'sticky') c.contentEditable = false;
+          if (c.pinned || c.type === 'dyntitle') {
+            c._pinCellX = c.x;
+            c._pinCellY = c.y;
+            c._pinCellW = c.w || 200;
+            c._pinCellH = c.h || 80;
+          }
           page.miroCards.push(c);
           _miroSelected.add(c.id);
         });

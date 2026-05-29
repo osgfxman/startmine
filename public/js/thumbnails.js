@@ -397,7 +397,11 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
     if (card.type === 'grid' && e.target.closest('td') && e.target.closest('td').contentEditable === 'true') return;
 
     e.stopPropagation();
-    if (e.ctrlKey || e.metaKey) { toggleMiroSelect(card.id); return; }
+    if (card.type === 'dyntitle') {
+      if (!e.ctrlKey) return;
+    } else {
+      if (e.ctrlKey || e.metaKey) { toggleMiroSelect(card.id); return; }
+    }
 
     // Group-aware selection: auto-select all group siblings unless group is "open"
     // If the card is ALREADY selected, keep the current selection (for multi-drag)
@@ -427,7 +431,8 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
     if (_canvas) _canvas.classList.add('miro-dragging');
 
     const page = cp();
-    const zoom = typeof window.getMiroCardDragZoom === 'function' ? window.getMiroCardDragZoom(card) : ((page.zoom || 100) / 100);
+    const isPinnedCard = card.pinned || card.type === 'dyntitle';
+    const zoom = isPinnedCard ? 1 : (typeof window.getMiroCardDragZoom === 'function' ? window.getMiroCardDragZoom(card) : ((page.zoom || 100) / 100));
     const startX = e.clientX, startY = e.clientY;
 
     // Set active-dragging-cell z-index boost on viewports of selected cards
@@ -448,9 +453,12 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
     _miroSelected.forEach(cid => {
       const c = (page.miroCards || []).find(x => x.id === cid);
       if (c) {
-        c._dragStartX = c.x || 0;
-        c._dragStartY = c.y || 0;
-        origPositions.set(cid, { x: c.x || 0, y: c.y || 0 });
+        const isPinned = c.pinned || c.type === 'dyntitle';
+        const currentX = isPinned ? (c.cell ? (c._pinCellX || 0) : (c._pinScreenX || 0)) : (c.x || 0);
+        const currentY = isPinned ? (c.cell ? (c._pinCellY || 0) : (c._pinScreenY || 0)) : (c.y || 0);
+        c._dragStartX = currentX;
+        c._dragStartY = currentY;
+        origPositions.set(cid, { x: currentX, y: currentY, pinned: isPinned });
       }
     });
 
@@ -724,19 +732,49 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
       origPositions.forEach((orig, cid) => {
         const c = (page.miroCards || []).find(x => x.id === cid);
         if (!c) return;
-        let nx = orig.x + finalDx;
-        let ny = orig.y + finalDy;
-        if (!ev.ctrlKey && !ev.altKey && typeof window.clampMiroCardDrag === 'function') {
-          const clamped = window.clampMiroCardDrag(c, nx, ny);
-          nx = clamped.x;
-          ny = clamped.y;
-        }
-        c.x = nx;
-        c.y = ny;
-        const cardEl = document.querySelector(`[data-cid="${cid}"]`);
-        if (cardEl) {
-          cardEl.style.left = c.x + 'px';
-          cardEl.style.top = c.y + 'px';
+        if (orig.pinned) {
+          const ldx = ev.clientX - startX;
+          const ldy = ev.clientY - startY;
+          let nx = orig.x + ldx;
+          let ny = orig.y + ldy;
+          if (c.cell) {
+            const cellEl = document.querySelector(`.miro-cell-viewport[data-cell-key="${c.cell}"]`);
+            if (cellEl) {
+              const cellW = cellEl.clientWidth;
+              const cellH = cellEl.clientHeight;
+              const cardW = c._pinCellW || c.w || 200;
+              const cardH = c._pinCellH || c.h || 80;
+              nx = Math.max(0, Math.min(cellW - cardW, nx));
+              ny = Math.max(0, Math.min(cellH - cardH, ny));
+            }
+            c._pinCellX = nx;
+            c._pinCellY = ny;
+          } else {
+            nx = Math.max(0, Math.min(window.innerWidth - (c._pinScreenW || c.w || 200), nx));
+            ny = Math.max(0, Math.min(window.innerHeight - (c._pinScreenH || c.h || 80), ny));
+            c._pinScreenX = nx;
+            c._pinScreenY = ny;
+          }
+          const cardEl = document.querySelector(`[data-cid="${cid}"]`);
+          if (cardEl) {
+            cardEl.style.left = nx + 'px';
+            cardEl.style.top = ny + 'px';
+          }
+        } else {
+          let nx = orig.x + finalDx;
+          let ny = orig.y + finalDy;
+          if (!ev.ctrlKey && !ev.altKey && typeof window.clampMiroCardDrag === 'function') {
+            const clamped = window.clampMiroCardDrag(c, nx, ny);
+            nx = clamped.x;
+            ny = clamped.y;
+          }
+          c.x = nx;
+          c.y = ny;
+          const cardEl = document.querySelector(`[data-cid="${cid}"]`);
+          if (cardEl) {
+            cardEl.style.left = c.x + 'px';
+            cardEl.style.top = c.y + 'px';
+          }
         }
       });
       updateMiroSelFrame();
@@ -794,13 +832,14 @@ function attach8WayResize(el, card, minW, minH) {
       if (card.locked) return; // Prevent resize if locked
       e.stopPropagation();
       const page = cp();
-      const zoom = (page.zoom || 100) / 100;
+      const isPinned = card.pinned || card.type === 'dyntitle';
+      const zoom = isPinned ? 1 : ((page.zoom || 100) / 100);
       const sx = e.clientX,
         sy = e.clientY;
-      const oX = card.x || 0,
-        oY = card.y || 0,
-        oW = card.w || 280,
-        oH = card.h || 240;
+      const oX = isPinned ? (card.cell ? (card._pinCellX || 0) : (card._pinScreenX || 0)) : (card.x || 0),
+        oY = isPinned ? (card.cell ? (card._pinCellY || 0) : (card._pinScreenY || 0)) : (card.y || 0),
+        oW = isPinned ? (card.cell ? (card._pinCellW || card.w || 200) : (card._pinScreenW || card.w || 200)) : (card.w || 280),
+        oH = isPinned ? (card.cell ? (card._pinCellH || card.h || 150) : (card._pinScreenH || card.h || 150)) : (card.h || 240);
       function onMove(ev) {
         const dx = (ev.clientX - sx) / zoom;
         const dy = (ev.clientY - sy) / zoom;
@@ -865,7 +904,16 @@ function attach8WayResize(el, card, minW, minH) {
 
         // Apply width first so that minH() can compute the wrapped height correctly
         el.style.width = nw + 'px';
-        card.w = nw;
+        if (isPinned) {
+          if (card.cell) {
+            card._pinCellW = nw;
+          } else {
+            card._pinScreenW = nw;
+          }
+          card.w = nw;
+        } else {
+          card.w = nw;
+        }
 
         const cMinH = typeof minH === 'function' ? minH() : minH;
         if (nh < cMinH) {
@@ -873,9 +921,23 @@ function attach8WayResize(el, card, minW, minH) {
           nh = cMinH;
         }
 
-        card.x = nx;
-        card.y = ny;
-        card.h = nh;
+        if (isPinned) {
+          if (card.cell) {
+            card._pinCellX = nx;
+            card._pinCellY = ny;
+            card._pinCellH = nh;
+          } else {
+            card._pinScreenX = nx;
+            card._pinScreenY = ny;
+            card._pinScreenH = nh;
+          }
+          card.w = nw;
+          card.h = nh;
+        } else {
+          card.x = nx;
+          card.y = ny;
+          card.h = nh;
+        }
         el.style.left = nx + 'px';
         el.style.top = ny + 'px';
         el.style.height = nh + 'px';
@@ -1014,6 +1076,37 @@ function attachLockUI(el, card) {
   el.appendChild(btn);
 
   // ─── Pin/Unpin Button (bottom-right, separate from lock at top-left) ───
+  if (card.type === 'dyntitle') {
+    if (card.pinned) {
+      requestAnimationFrame(() => {
+        if (card.cell) {
+          const cellEl = document.querySelector(`.miro-cell-viewport[data-cell-key="${card.cell}"]`);
+          if (cellEl) {
+            cellEl.appendChild(el);
+            el.style.position = 'absolute';
+            el.style.left = (card._pinCellX || 0) + 'px';
+            el.style.top = (card._pinCellY || 0) + 'px';
+            el.style.width = (card._pinCellW || card.w || 200) + 'px';
+            el.style.height = (card._pinCellH || card.h || 80) + 'px';
+            el.style.zIndex = '20';
+            el.style.transform = 'none';
+          }
+        } else {
+          const pinnedLayer = document.getElementById('miro-pinned-layer');
+          if (pinnedLayer) {
+            pinnedLayer.appendChild(el);
+            el.style.position = 'fixed';
+            el.style.left = (card._pinScreenX || 100) + 'px';
+            el.style.top = (card._pinScreenY || 100) + 'px';
+            el.style.width = (card._pinScreenW || card.w || 200) + 'px';
+            el.style.height = (card._pinScreenH || card.h || 80) + 'px';
+          }
+        }
+      });
+    }
+    return;
+  }
+
   const pinBtn = document.createElement('button');
   pinBtn.className = 'mc-pin';
   pinBtn.style.cssText = 'position:absolute;bottom:4px;right:4px;z-index:9;background:rgba(0,0,0,.55);border:none;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;cursor:pointer;font-size:0.7rem;opacity:0;transition:opacity .12s;';
@@ -1165,9 +1258,7 @@ function attachLockUI(el, card) {
 
   // Show pin button on hover (like lock button)
   el.addEventListener('mouseenter', () => { pinBtn.style.opacity = '1'; });
-  el.addEventListener('mouseleave', () => { if (!card.pinned) pinBtn.style.opacity = '0'; });
-  // If already pinned, keep it visible
-  if (card.pinned) pinBtn.style.opacity = '1';
+  el.addEventListener('mouseleave', () => { pinBtn.style.opacity = '0'; });
 
   // If card was saved as pinned, re-apply on load
   if (card.pinned) {
@@ -2237,14 +2328,12 @@ function buildMiroImage(card) {
   img.src = card.imageUrl;
   img.alt = card.label || 'Image';
   img.draggable = false;
-  img.style.height = (card.h || 200) + 'px';
   if (cap && cap.position === 'above') img.style.order = '2';
   img.onerror = () => {
     img.style.display = 'none';
     const ph = document.createElement('div');
     ph.className = 'mi-placeholder';
     ph.textContent = '🖼️';
-    ph.style.height = (card.h || 200) + 'px';
     el.insertBefore(ph, img);
   };
 

@@ -65,6 +65,11 @@
   z-index: 20;
   white-space: nowrap;
   box-shadow: 0 1px 3px rgba(0,0,0,.3);
+  opacity: 0;
+  transition: opacity .12s;
+}
+*:hover > .miro-pinned-indicator {
+  opacity: 1;
 }
 
 /* ── Zoom-aware floating UI: stays constant screen size at any zoom ── */
@@ -1888,8 +1893,9 @@
 
 .miro-image .mi-img {
   width: 100%;
+  height: 100%;
+  flex: 1;
   min-height: 0;
-  flex-shrink: 0;
   object-fit: contain;
   display: block;
   pointer-events: none;
@@ -1898,6 +1904,7 @@
 
 .miro-image .mi-placeholder {
   flex: 1;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;

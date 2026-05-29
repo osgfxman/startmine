@@ -376,6 +376,93 @@
         .miro-cell-modal .mcm-btn-save:hover {
           background: #5a7de8;
         }
+        .miro-dyntitle-card {
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          box-sizing: border-box;
+          padding: 6px 12px;
+          border-radius: 8px;
+          background: transparent;
+          border: 1px dashed transparent;
+          box-shadow: none;
+          color: #000000;
+          font-family: var(--font, 'Inter', sans-serif);
+          font-weight: bold;
+          font-size: 0.65rem;
+          user-select: none;
+          cursor: grab;
+          overflow: hidden;
+          transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+        }
+        .miro-dyntitle-card:hover {
+          background: rgba(0, 0, 0, 0.06);
+          border-color: rgba(0, 0, 0, 0.15);
+        }
+        .miro-dyntitle-card:active {
+          cursor: grabbing;
+        }
+        .miro-dyntitle-card.has-change {
+          background: rgba(255, 107, 53, 0.9) !important;
+          color: #fff !important;
+          box-shadow: 0 0 12px rgba(255, 107, 53, 0.8) !important;
+          border-color: transparent !important;
+          animation: dyntitle-glow 2s infinite alternate !important;
+        }
+        .miro-dyntitle-card.has-change * {
+          color: #fff !important;
+          text-shadow: none !important;
+        }
+        @keyframes dyntitle-glow {
+          0% { box-shadow: 0 0 8px rgba(255, 107, 53, 0.6); }
+          100% { box-shadow: 0 0 18px rgba(255, 107, 53, 1); }
+        }
+        .miro-dyntitle-card .mdc-header {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          width: 100%;
+          justify-content: center;
+        }
+        .miro-dyntitle-card .mdc-icon {
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .miro-dyntitle-card .mdc-icon img {
+          max-width: 100%;
+          max-height: 100%;
+          object-fit: contain;
+        }
+        .miro-dyntitle-card .mdc-title {
+          font-size: 0.65rem;
+          font-weight: bold;
+          text-align: center;
+          white-space: nowrap;
+          text-overflow: ellipsis;
+          overflow: hidden;
+          color: #000000;
+        }
+        .miro-dyntitle-card .mdc-time-row {
+          display: flex;
+          align-items: baseline;
+          gap: 4px;
+          justify-content: center;
+          width: 100%;
+        }
+        .miro-dyntitle-card .mdc-time-val {
+          font-size: 0.65rem;
+          font-weight: bold;
+          font-variant-numeric: tabular-nums;
+          color: #000000;
+          text-shadow: none;
+        }
+        .miro-dyntitle-card .mdc-progress-val {
+          font-size: 0.6rem;
+          color: rgba(0, 0, 0, 0.7);
+        }
     `;
     document.head.appendChild(style);
   }
@@ -1240,6 +1327,7 @@
         embed: 'buildMiroEmbed',
         'overlay-page': 'buildMiroOverlayWidget',
         life: 'buildMiroLifeWidget',
+        dyntitle: 'buildMiroDynamicTitleCard',
       };
 
       cellCards.forEach((card) => {
@@ -3028,6 +3116,35 @@
     const page = cp();
     if (!page) return;
 
+    if (page._layoutGuidesMode) {
+      // Align cell-specific layout guides equally
+      if (page.cellGuides) {
+        for (const cellKey in page.cellGuides) {
+          const guides = page.cellGuides[cellKey];
+          if (guides) {
+            const vCount = (guides.v || []).length;
+            const hCount = (guides.h || []).length;
+            if (vCount > 0) {
+              guides.v = [];
+              for (let i = 1; i <= vCount; i++) {
+                guides.v.push(i / (vCount + 1));
+              }
+            }
+            if (hCount > 0) {
+              guides.h = [];
+              for (let i = 1; i <= hCount; i++) {
+                guides.h.push(i / (hCount + 1));
+              }
+            }
+          }
+        }
+      }
+      sv();
+      buildMiroCanvas();
+      if (typeof showToast === 'function') showToast('⚖️ Layout Guides aligned equally!');
+      return;
+    }
+
     const cols = (page.vGuides || []).length + 1;
     const rows = (page.hGuides || []).length + 1;
 
@@ -3058,7 +3175,7 @@
     sv();
     buildMiroCanvas();
 
-    if (typeof showToast === 'function') showToast('⚖️ Guides aligned equally!');
+    if (typeof showToast === 'function') showToast('⚖️ Slices aligned equally!');
   };
 
   function setupMiroSlicesButtons() {
@@ -3204,7 +3321,471 @@
     };
   }
 
+  window.buildMiroDynamicTitleCard = function buildMiroDynamicTitleCard(card) {
+    const el = document.createElement('div');
+    el.className = 'miro-card miro-dyntitle-card';
+    el.dataset.cid = card.id;
+
+    // Default dimensions
+    el.style.left = (card.pinned ? (card._pinCellX || 0) : (card.x || 0)) + 'px';
+    el.style.top = (card.pinned ? (card._pinCellY || 0) : (card.y || 0)) + 'px';
+    el.style.width = (card.pinned ? (card._pinCellW || card.w || 120) : (card.w || 120)) + 'px';
+    el.style.height = (card.pinned ? (card._pinCellH || card.h || 40) : (card.h || 40)) + 'px';
+
+    // Alarm checking (Active value comparison)
+    const currentDynamicVal = card.dynamicType ? getDynamicTitleValue(card.dynamicType) : '';
+    let cardChanged = false;
+    if (card.dynamicType) {
+      if (card.lastDynamicValue !== currentDynamicVal) {
+        if (card.lastDynamicValue) {
+          card.changeCount = (card.changeCount || 0) + 1;
+          card.hasUnacknowledgedChange = true;
+        } else {
+          card.firstSetAt = new Date().toLocaleString();
+          card.changeCount = 0;
+          card.hasUnacknowledgedChange = false;
+        }
+        card.lastDynamicValue = currentDynamicVal;
+        cardChanged = true;
+      }
+    }
+    if (cardChanged) {
+      setTimeout(() => sv(), 0);
+    }
+
+    if (card.hasUnacknowledgedChange) {
+      el.classList.add('has-change');
+    }
+
+    // Dismiss alarm on click
+    el.addEventListener('click', (e) => {
+      // If clicking inside delete or resize, do nothing
+      if (e.target.closest('.mc-del, [class^="mc-resize-"]')) return;
+      if (card.hasUnacknowledgedChange) {
+        card.hasUnacknowledgedChange = false;
+        el.classList.remove('has-change');
+        sv();
+        buildMiroCanvas();
+        if (typeof showToast === 'function') showToast('✔️ Alarm acknowledged');
+      }
+    });
+
+    // Double-click -> settings modal
+    el.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      showDynamicTitleCardSettingsModal(card);
+    });
+
+    // Delete Button (Standard)
+    const del = document.createElement('button');
+    del.className = 'mc-del';
+    del.textContent = '✕';
+    del.onclick = (e) => {
+      e.stopPropagation();
+      if (typeof deleteMiroCard === 'function') deleteMiroCard(card.id);
+    };
+    el.appendChild(del);
+
+    // Inner content container
+    const inner = document.createElement('div');
+    inner.className = 'mdc-inner';
+    inner.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;overflow:hidden;';
+
+    // Header row (Icon + Static Title)
+    const header = document.createElement('div');
+    header.className = 'mdc-header';
+
+    // Icon (ImgBB or standard URL)
+    if (card.iconUrl) {
+      const iconWrap = document.createElement('div');
+      iconWrap.className = 'mdc-icon';
+      const iconSize = card.iconSize || 24;
+      iconWrap.style.width = iconSize + 'px';
+      iconWrap.style.height = iconSize + 'px';
+      
+      const img = document.createElement('img');
+      img.src = card.iconUrl;
+      img.style.width = '100%';
+      img.style.height = '100%';
+      iconWrap.appendChild(img);
+      header.appendChild(iconWrap);
+    }
+
+    // Color tag dot
+    if (card.themeColor) {
+      const dot = document.createElement('span');
+      dot.className = 'miro-cell-color-tag';
+      dot.style.background = card.themeColor;
+      dot.style.cssText = 'width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; margin-right: 4px;';
+      header.appendChild(dot);
+    }
+
+    const hasIcon = !!card.iconUrl;
+    const hasDynamic = !!card.dynamicType;
+    const hasTitle = !!card.title;
+    const showPlaceholder = !hasIcon && !hasDynamic && !hasTitle;
+
+    if (hasTitle || showPlaceholder) {
+      const titleEl = document.createElement('div');
+      titleEl.className = 'mdc-title';
+      titleEl.textContent = hasTitle ? card.title : '🏷️';
+      header.appendChild(titleEl);
+    }
+
+    inner.appendChild(header);
+
+    // Time row (Dynamic clock value + progress)
+    if (card.dynamicType) {
+      const timeRow = document.createElement('div');
+      timeRow.className = 'mdc-time-row';
+
+      const timeVal = document.createElement('span');
+      timeVal.className = 'mdc-time-val';
+      timeVal.textContent = currentDynamicVal;
+      timeRow.appendChild(timeVal);
+
+      const progressVal = getDynamicProgressValue(card.dynamicType);
+      if (progressVal) {
+        const progEl = document.createElement('span');
+        progEl.className = 'mdc-progress-val';
+        progEl.textContent = `(${progressVal})`;
+        timeRow.appendChild(progEl);
+      }
+
+      inner.appendChild(timeRow);
+    }
+
+    el.appendChild(inner);
+
+    // Drag constraints:
+    // Dragging of dyntitle cards is strictly blocked unless the Ctrl key is pressed.
+    if (typeof miroSetupCardDrag === 'function') {
+      miroSetupCardDrag(el, card, ['.mc-del', '[class^="mc-resize-"]']);
+    }
+    if (typeof attach8WayResize === 'function') {
+      attach8WayResize(el, card, 20, 20);
+    }
+
+    return el;
+  };
+
+  window.showDynamicTitleCardSettingsModal = function showDynamicTitleCardSettingsModal(card) {
+    // Remove any existing modal
+    document.querySelectorAll('.miro-cell-modal-overlay').forEach(el => el.remove());
+
+    const overlay = document.createElement('div');
+    overlay.className = 'miro-cell-modal-overlay';
+
+    const modal = document.createElement('div');
+    modal.className = 'miro-cell-modal';
+
+    const h3 = document.createElement('h3');
+    h3.textContent = `🏷️ Dynamic Title Card Settings`;
+    modal.appendChild(h3);
+
+    // Row: Title Input
+    const titleRow = document.createElement('div');
+    titleRow.className = 'mcm-row';
+    const titleLabel = document.createElement('label');
+    titleLabel.textContent = 'Static Title';
+    const titleInput = document.createElement('input');
+    titleInput.type = 'text';
+    titleInput.value = card.title || '';
+    titleInput.placeholder = 'e.g. Current Task';
+    titleRow.appendChild(titleLabel);
+    titleRow.appendChild(titleInput);
+    modal.appendChild(titleRow);
+
+    // Row: Dynamic Title Type Select
+    const dynamicRow = document.createElement('div');
+    dynamicRow.className = 'mcm-row';
+    const dynamicLabel = document.createElement('label');
+    dynamicLabel.textContent = 'Dynamic Title Type';
+    const dynamicSelect = document.createElement('select');
+    dynamicSelect.style.cssText = 'width: 100%; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 6px 10px; color: #fff; font-size: 0.75rem; outline: none; box-sizing: border-box;';
+    
+    const dynamicOptions = [
+      { val: '', label: 'None (Static Only)' },
+      { val: 'pomodoro', label: 'This Pomodoro' },
+      { val: 'session', label: 'This Session' },
+      { val: 'day', label: 'This Day' },
+      { val: '2days', label: '2Days Back2Back' },
+      { val: '3days', label: '3 Days' },
+      { val: 'weekend', label: 'Weekend Project' },
+      { val: 'week', label: 'This Week' },
+      { val: 'sprint', label: 'This Sprint' },
+      { val: 'month', label: 'This Month' },
+      { val: 'quarter', label: 'This Quarter' },
+      { val: 'year', label: 'This Year' },
+      { val: '5years', label: 'This 5 Years' },
+      { val: 'next5years', label: 'Next 5' }
+    ];
+
+    dynamicOptions.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = opt.val;
+      o.textContent = opt.label;
+      o.style.cssText = 'background: #1a1d2e; color: #fff;';
+      if (card.dynamicType === opt.val) o.selected = true;
+      dynamicSelect.appendChild(o);
+    });
+    dynamicRow.appendChild(dynamicLabel);
+    dynamicRow.appendChild(dynamicSelect);
+    modal.appendChild(dynamicRow);
+
+    // Tracker Info (if dynamic changes have occurred)
+    if (card.firstSetAt && card.changeCount !== undefined) {
+      const trackerRow = document.createElement('div');
+      trackerRow.className = 'mcm-row';
+      trackerRow.style.cssText = 'font-size: 0.65rem; color: rgba(255,255,255,0.45); margin-top: 4px; margin-bottom: 8px;';
+      trackerRow.innerHTML = `<span>Tracker: Started <strong>${card.firstSetAt}</strong> (${card.changeCount} changes)</span>`;
+      modal.appendChild(trackerRow);
+    }
+
+    // Acknowledge update checkbox if active
+    let ackCheckbox = null;
+    if (card.hasUnacknowledgedChange) {
+      const ackRow = document.createElement('div');
+      ackRow.className = 'mcm-row';
+      ackRow.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-top: 8px; margin-bottom: 8px;';
+      
+      ackCheckbox = document.createElement('input');
+      ackCheckbox.type = 'checkbox';
+      ackCheckbox.id = 'mcm-ack-change-card';
+      ackCheckbox.style.cssText = 'width: 16px; height: 16px; accent-color: #ff6b35; cursor: pointer;';
+      
+      const ackLabel = document.createElement('label');
+      ackLabel.htmlFor = 'mcm-ack-change-card';
+      ackLabel.style.cssText = 'font-size: 0.7rem; color: #ff8a65; cursor: pointer; user-select: none; margin: 0;';
+      ackLabel.textContent = 'Acknowledge Update (Clear Highlight)';
+      
+      ackRow.appendChild(ackCheckbox);
+      ackRow.appendChild(ackLabel);
+      modal.appendChild(ackRow);
+    }
+
+    // Row: Icon Image Upload / Url
+    const iconRow = document.createElement('div');
+    iconRow.className = 'mcm-row';
+    const iconLabel = document.createElement('label');
+    iconLabel.textContent = 'Icon Image';
+    iconRow.appendChild(iconLabel);
+
+    const iconContainer = document.createElement('div');
+    iconContainer.style.cssText = 'display:flex;align-items:center;gap:12px;margin-top:4px;';
+
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.style.display = 'none';
+
+    const uploadBtn = document.createElement('button');
+    uploadBtn.type = 'button';
+    uploadBtn.className = 'mcm-btn mcm-btn-cancel';
+    uploadBtn.style.cssText = 'padding:6px 12px;font-size:0.65rem;';
+    uploadBtn.textContent = card.iconUrl ? 'Change Image' : 'Choose Image…';
+
+    const prevImg = document.createElement('img');
+    prevImg.style.cssText = 'width:32px;height:32px;object-fit:contain;border-radius:4px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);display:none;';
+    if (card.iconUrl) {
+      prevImg.src = card.iconUrl;
+      prevImg.style.display = 'block';
+    }
+
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'mcm-btn mcm-btn-cancel';
+    clearBtn.style.cssText = 'padding:6px 12px;font-size:0.65rem;color:#ff4444;background:rgba(255,68,68,0.1);display: ' + (card.iconUrl ? 'block' : 'none') + ';';
+    clearBtn.textContent = 'Remove';
+
+    let currentIconUrl = card.iconUrl || '';
+
+    fileInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const base64 = ev.target.result;
+        prevImg.src = base64;
+        prevImg.style.display = 'block';
+        uploadBtn.textContent = 'Uploading…';
+        uploadBtn.disabled = true;
+
+        if (typeof window.uploadToImgBB === 'function') {
+          window.uploadToImgBB(base64).then(url => {
+            uploadBtn.disabled = false;
+            if (url) {
+              currentIconUrl = url;
+              uploadBtn.textContent = 'Uploaded ✓';
+              clearBtn.style.display = 'block';
+              if (typeof showToast === 'function') showToast('✅ Icon uploaded to ImgBB!');
+            } else {
+              uploadBtn.textContent = '⚠️ Upload Failed';
+              prevImg.style.display = currentIconUrl ? 'block' : 'none';
+              prevImg.src = currentIconUrl || '';
+              if (typeof showToast === 'function') showToast('❌ Upload failed.');
+            }
+          });
+        } else {
+          // Inline upload fallback
+          fetch('https://api.imgbb.com/1/upload?key=129f1b49da234235959ee4405ac9ebb1', {
+            method: 'POST',
+            body: new URLSearchParams({ image: base64.split(',')[1] })
+          })
+          .then(res => res.json())
+          .then(data => {
+            uploadBtn.disabled = false;
+            if (data.success) {
+              currentIconUrl = data.data.url;
+              uploadBtn.textContent = 'Uploaded ✓';
+              clearBtn.style.display = 'block';
+              if (typeof showToast === 'function') showToast('✅ Icon uploaded to ImgBB!');
+            } else {
+              uploadBtn.textContent = '⚠️ Upload Failed';
+              prevImg.style.display = currentIconUrl ? 'block' : 'none';
+              prevImg.src = currentIconUrl || '';
+              if (typeof showToast === 'function') showToast('❌ Upload failed.');
+            }
+          })
+          .catch(() => {
+            uploadBtn.disabled = false;
+            uploadBtn.textContent = '⚠️ Upload Failed';
+            prevImg.style.display = currentIconUrl ? 'block' : 'none';
+            prevImg.src = currentIconUrl || '';
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+      fileInput.value = '';
+    };
+
+    uploadBtn.onclick = () => fileInput.click();
+    clearBtn.onclick = () => {
+      currentIconUrl = '';
+      prevImg.style.display = 'none';
+      prevImg.src = '';
+      clearBtn.style.display = 'none';
+      uploadBtn.textContent = 'Choose Image…';
+    };
+
+    iconContainer.appendChild(fileInput);
+    iconContainer.appendChild(uploadBtn);
+    iconContainer.appendChild(clearBtn);
+    iconContainer.appendChild(prevImg);
+    iconRow.appendChild(iconContainer);
+    modal.appendChild(iconRow);
+
+    // Row: Icon Size Slider
+    const sizeRow = document.createElement('div');
+    sizeRow.className = 'mcm-row';
+    const sizeLabel = document.createElement('label');
+    sizeLabel.textContent = 'Icon Size (pixels)';
+    sizeRow.appendChild(sizeLabel);
+    const sizeContainer = document.createElement('div');
+    sizeContainer.className = 'mcm-bg-row';
+
+    const sizeSlider = document.createElement('input');
+    sizeSlider.type = 'range';
+    sizeSlider.min = '8';
+    sizeSlider.max = '120';
+    sizeSlider.value = card.iconSize || 24;
+
+    const sizeVal = document.createElement('span');
+    sizeVal.className = 'mcm-opacity-val';
+    sizeVal.textContent = sizeSlider.value + 'px';
+    sizeSlider.oninput = () => { sizeVal.textContent = sizeSlider.value + 'px'; };
+
+    sizeContainer.appendChild(sizeSlider);
+    sizeContainer.appendChild(sizeVal);
+    sizeRow.appendChild(sizeContainer);
+    modal.appendChild(sizeRow);
+
+    // Row: Theme Color Tag selection
+    const colorRow = document.createElement('div');
+    colorRow.className = 'mcm-row';
+    const colorLabel = document.createElement('label');
+    colorLabel.textContent = 'Theme Color';
+    colorRow.appendChild(colorLabel);
+    const colorContainer = document.createElement('div');
+    colorContainer.className = 'mcm-colors';
+    let selectedColor = card.themeColor || '#6c8fff';
+
+    _colorTagPalette.forEach(hex => {
+      const sw = document.createElement('div');
+      sw.className = 'mcm-csw' + (selectedColor === hex ? ' sel' : '');
+      sw.style.background = hex;
+      sw.onclick = () => {
+        selectedColor = hex;
+        colorContainer.querySelectorAll('.mcm-csw').forEach(s => s.classList.remove('sel'));
+        sw.classList.add('sel');
+      };
+      colorContainer.appendChild(sw);
+    });
+    colorRow.appendChild(colorContainer);
+    modal.appendChild(colorRow);
+
+    // Actions (Cancel / Save)
+    const actions = document.createElement('div');
+    actions.className = 'mcm-actions';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'mcm-btn mcm-btn-cancel';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.onclick = () => overlay.remove();
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'mcm-btn mcm-btn-save';
+    saveBtn.textContent = 'Save';
+    saveBtn.onclick = () => {
+      const oldDynamicType = card.dynamicType || '';
+      const newDynamicType = dynamicSelect.value || '';
+
+      card.title = titleInput.value.trim() || '';
+      card.dynamicType = newDynamicType;
+      card.iconUrl = currentIconUrl;
+      card.iconSize = parseInt(sizeSlider.value) || 24;
+      card.themeColor = selectedColor;
+
+      if (ackCheckbox && ackCheckbox.checked) {
+        card.hasUnacknowledgedChange = false;
+      }
+
+      if (newDynamicType !== oldDynamicType) {
+        if (newDynamicType) {
+          card.lastDynamicValue = getDynamicTitleValue(newDynamicType);
+          card.firstSetAt = new Date().toLocaleString();
+          card.changeCount = 0;
+          card.hasUnacknowledgedChange = false;
+        } else {
+          delete card.lastDynamicValue;
+          delete card.firstSetAt;
+          delete card.changeCount;
+          delete card.hasUnacknowledgedChange;
+        }
+      }
+
+      overlay.remove();
+      sv();
+      buildMiroCanvas();
+    };
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(saveBtn);
+    modal.appendChild(actions);
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    overlay.onclick = (e) => {
+      if (e.target === overlay) overlay.remove();
+    };
+  };
+
   // Register namespace
+  SM.miro.layout = SM.miro.layout || {};
+  SM.miro.layout.buildMiroDynamicTitleCard = window.buildMiroDynamicTitleCard;
+  SM.miro.layout.showDynamicTitleCardSettingsModal = window.showDynamicTitleCardSettingsModal;
   SM.miro.layout = SM.miro.layout || {};
   SM.miro.layout.initMiroSlices = window.initMiroSlices;
   SM.miro.layout.renderMiroSlices = window.renderMiroSlices;

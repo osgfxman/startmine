@@ -36,6 +36,7 @@
   window._trelloCreateMode = false;
   window._embedCreateMode = false;
   window._overlayPageCreateMode = false;
+  window._dyntitleCreateMode = false;
   window._overlayPageCreateIdx = 0;
   window._gridPickerRows = 3;
   window._gridPickerCols = 3;
@@ -91,6 +92,8 @@
     set embedCreateMode(v) { window._embedCreateMode = v; },
     get overlayPageCreateMode() { return window._overlayPageCreateMode; },
     set overlayPageCreateMode(v) { window._overlayPageCreateMode = v; },
+    get dyntitleCreateMode() { return window._dyntitleCreateMode; },
+    set dyntitleCreateMode(v) { window._dyntitleCreateMode = v; },
     get mouseX() { return window._mouseX; },
     set mouseX(v) { window._mouseX = v; },
     get mouseY() { return window._mouseY; },
