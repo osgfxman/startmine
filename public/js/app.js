@@ -4034,6 +4034,22 @@ function updateGuidesButtonState() {
   }
 }
 
+function updateLayoutGuidesButtonState() {
+  const page = cp();
+  const btn = document.getElementById('mz-layout-guides-btn');
+  if (btn) {
+    const isActive = !!(page && page.pageType === 'miro' && page._layoutGuidesMode);
+    btn.classList.toggle('active-toggle', isActive);
+    if (isActive) {
+      btn.style.background = 'rgba(108, 143, 255, 0.2)';
+      btn.style.color = '#4a7aff';
+    } else {
+      btn.style.background = '';
+      btn.style.color = '';
+    }
+  }
+}
+
 document.getElementById('mz-guides-btn').onclick = () => {
   const page = cp();
   if (!page || page.pageType !== 'miro') return;
@@ -4054,6 +4070,20 @@ document.getElementById('mz-guides-btn').onclick = () => {
   sv();
   if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
   updateGuidesButtonState();
+};
+
+document.getElementById('mz-layout-guides-btn').onclick = () => {
+  const page = cp();
+  if (!page || page.pageType !== 'miro') return;
+  
+  page._layoutGuidesMode = !page._layoutGuidesMode;
+  if (!page._layoutGuidesMode) {
+    // Clean up rulers and drawing states
+    document.querySelectorAll('.miro-cell-ruler').forEach(el => el.remove());
+  }
+  sv();
+  if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+  updateLayoutGuidesButtonState();
 };
 
 document.getElementById('mz-grid-btn').onclick = () => {
@@ -4153,12 +4183,14 @@ function buildCols() {
   
   if (isMiro) {
     page._guidesMode = false;
+    page._layoutGuidesMode = false;
     if (typeof window.initMiroSlices === 'function') {
       window.initMiroSlices();
     }
     if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
     if (typeof buildOutline === 'function') buildOutline();
     if (typeof updateGuidesButtonState === 'function') updateGuidesButtonState();
+    if (typeof updateLayoutGuidesButtonState === 'function') updateLayoutGuidesButtonState();
     return;
   }
   

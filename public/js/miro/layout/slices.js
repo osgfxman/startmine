@@ -19,6 +19,25 @@
   window._splitSelectionMode = false;
   window._selectedCellsForMerge = new Set();
 
+  window._miroCtrlPressed = false;
+  let _ctrlPressed = false;
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Control') {
+      _ctrlPressed = true;
+      window._miroCtrlPressed = true;
+    }
+  });
+  window.addEventListener('keyup', (e) => {
+    if (e.key === 'Control') {
+      _ctrlPressed = false;
+      window._miroCtrlPressed = false;
+    }
+  });
+  window.addEventListener('blur', () => {
+    _ctrlPressed = false;
+    window._miroCtrlPressed = false;
+  });
+
   // Add css styles for rulers, guide handles, cell viewports, and lock badges immediately on load
   if (!document.getElementById('miro-slices-css')) {
     const style = document.createElement('style');
@@ -83,6 +102,62 @@
           background: #ff6b35 !important;
           box-shadow: 0 0 8px rgba(255, 107, 53, 0.8) !important;
         }
+        .miro-cell-ruler {
+          position: absolute;
+          background: #1a1d2e;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          z-index: 1010;
+          box-sizing: border-box;
+          user-select: none;
+        }
+        .miro-cell-ruler-top {
+          left: 15px; top: 0; right: 0; height: 15px;
+          border-bottom: 2px solid #57ca85;
+          background-image: linear-gradient(90deg, rgba(255, 255, 255, 0.15) 1px, transparent 1px);
+          background-size: 10px 100%;
+        }
+        .miro-cell-ruler-left {
+          left: 0; top: 15px; bottom: 0; width: 15px;
+          border-right: 2px solid #57ca85;
+          background-image: linear-gradient(rgba(255, 255, 255, 0.15) 1px, transparent 1px);
+          background-size: 100% 10px;
+        }
+        .miro-cell-ruler-corner {
+          left: 0; top: 0; width: 15px; height: 15px;
+          background: #121420;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          z-index: 1011;
+        }
+        .miro-layout-guide-v {
+          position: absolute;
+          top: 0; bottom: 0;
+          width: 7px;
+          margin-left: -3px;
+          cursor: col-resize;
+          z-index: 1005;
+        }
+        .miro-layout-guide-h {
+          position: absolute;
+          left: 0; right: 0;
+          height: 7px;
+          margin-top: -3px;
+          cursor: row-resize;
+          z-index: 1005;
+        }
+        .miro-layout-guide-line {
+          position: absolute;
+          pointer-events: none;
+        }
+        .miro-layout-guide-line.miro-layout-guide-line-v {
+          top: 0; bottom: 0; left: 2px; width: 2px;
+          background: #57ca85;
+          box-shadow: 0 0 6px rgba(87, 202, 133, 0.7);
+        }
+        .miro-layout-guide-line.miro-layout-guide-line-h {
+          left: 0; right: 0; top: 2px; height: 2px;
+          background: #57ca85;
+          box-shadow: 0 0 6px rgba(87, 202, 133, 0.7);
+        }
         .miro-cell-viewport {
           position: absolute;
           box-sizing: border-box;
@@ -95,6 +170,10 @@
         .miro-dragging .miro-cell-viewport {
           overflow: visible !important;
           z-index: 10000 !important;
+        }
+        .miro-cell-viewport.miro-active-dragging-cell {
+          overflow: visible !important;
+          z-index: 30000 !important;
         }
         .miro-cell-label {
           position: absolute;
@@ -739,6 +818,40 @@
       return;
     }
 
+    if (window._activeLayoutGuideDrag) {
+      const drag = window._activeLayoutGuideDrag;
+      const page = cp();
+      if (!page) return;
+      const cellEl = document.querySelector(`.miro-cell-viewport[data-cell-key="${drag.cellKey}"]`);
+      if (!cellEl) return;
+      const rect = cellEl.getBoundingClientRect();
+
+      if (drag.type === 'v') {
+        const delta = e.clientX - drag.startClient;
+        let newPct = drag.startPct + (delta / rect.width);
+        newPct = Math.max(0.01, Math.min(0.99, newPct));
+        if (page.cellGuides && page.cellGuides[drag.cellKey]) {
+          page.cellGuides[drag.cellKey].v[drag.idx] = newPct;
+        }
+        const el = cellEl.querySelector(`.miro-layout-guide-v[data-cell-key="${drag.cellKey}"][data-idx="${drag.idx}"]`);
+        if (el) {
+          el.style.left = (newPct * 100) + '%';
+        }
+      } else {
+        const delta = e.clientY - drag.startClient;
+        let newPct = drag.startPct + (delta / rect.height);
+        newPct = Math.max(0.01, Math.min(0.99, newPct));
+        if (page.cellGuides && page.cellGuides[drag.cellKey]) {
+          page.cellGuides[drag.cellKey].h[drag.idx] = newPct;
+        }
+        const el = cellEl.querySelector(`.miro-layout-guide-h[data-cell-key="${drag.cellKey}"][data-idx="${drag.idx}"]`);
+        if (el) {
+          el.style.top = (newPct * 100) + '%';
+        }
+      }
+      return;
+    }
+
     if (!_activeGuideDrag) return;
     const page = cp();
     if (!page) return;
@@ -776,6 +889,13 @@
   });
 
   document.addEventListener('mouseup', (e) => {
+    if (window._activeLayoutGuideDrag) {
+      window._activeLayoutGuideDrag = null;
+      sv();
+      buildMiroCanvas();
+      return;
+    }
+
     if (_activeLabelDrag) {
       const drag = _activeLabelDrag;
       drag.cloneEl.remove();
@@ -1157,6 +1277,114 @@
       });
 
       cellDiv.appendChild(cellBoard);
+
+      // --- LAYOUT GUIDES & LOCAL RULERS IMPLEMENTATION ---
+      if (!page.cellGuides) page.cellGuides = {};
+      if (!page.cellGuides[cellKey]) page.cellGuides[cellKey] = { v: [], h: [] };
+
+      // Render local rulers if layout guides edit mode is active
+      if (page._layoutGuidesMode) {
+        const crTop = document.createElement('div');
+        crTop.className = 'miro-cell-ruler miro-cell-ruler-top';
+        const crLeft = document.createElement('div');
+        crLeft.className = 'miro-cell-ruler miro-cell-ruler-left';
+        const crCorner = document.createElement('div');
+        crCorner.className = 'miro-cell-ruler miro-cell-ruler-corner';
+
+        crTop.onmousedown = (e) => {
+          e.stopPropagation(); e.preventDefault();
+          const rect = cellDiv.getBoundingClientRect();
+          const pct = (e.clientX - rect.left) / rect.width;
+          if (!page.cellGuides) page.cellGuides = {};
+          if (!page.cellGuides[cellKey]) page.cellGuides[cellKey] = { v: [], h: [] };
+          page.cellGuides[cellKey].v.push(pct);
+          sv();
+          buildMiroCanvas();
+          const idx = page.cellGuides[cellKey].v.length - 1;
+          window._activeLayoutGuideDrag = { cellKey, type: 'v', idx, startPct: pct, startClient: e.clientX };
+        };
+
+        crLeft.onmousedown = (e) => {
+          e.stopPropagation(); e.preventDefault();
+          const rect = cellDiv.getBoundingClientRect();
+          const pct = (e.clientY - rect.top) / rect.height;
+          if (!page.cellGuides) page.cellGuides = {};
+          if (!page.cellGuides[cellKey]) page.cellGuides[cellKey] = { v: [], h: [] };
+          page.cellGuides[cellKey].h.push(pct);
+          sv();
+          buildMiroCanvas();
+          const idx = page.cellGuides[cellKey].h.length - 1;
+          window._activeLayoutGuideDrag = { cellKey, type: 'h', idx, startPct: pct, startClient: e.clientY };
+        };
+
+        cellDiv.appendChild(crCorner);
+        cellDiv.appendChild(crTop);
+        cellDiv.appendChild(crLeft);
+      }
+
+      // Render vertical and horizontal layout guides
+      const guides = page.cellGuides && page.cellGuides[cellKey];
+      if (guides) {
+        (guides.v || []).forEach((pct, idx) => {
+          const seg = document.createElement('div');
+          seg.className = 'miro-layout-guide-v';
+          seg.dataset.cellKey = cellKey;
+          seg.dataset.idx = idx;
+          seg.style.left = (pct * 100) + '%';
+          seg.style.top = '0';
+          seg.style.bottom = '0';
+
+          const line = document.createElement('div');
+          line.className = 'miro-layout-guide-line miro-layout-guide-line-v';
+          seg.appendChild(line);
+
+          if (!page._layoutGuidesMode) {
+            seg.style.pointerEvents = 'none';
+            seg.style.cursor = 'default';
+          } else {
+            seg.onmousedown = (e) => {
+              e.stopPropagation(); e.preventDefault();
+              window._activeLayoutGuideDrag = { cellKey, type: 'v', idx, startPct: pct, startClient: e.clientX };
+            };
+            seg.oncontextmenu = (e) => {
+              e.preventDefault(); e.stopPropagation();
+              showLayoutGuideContextMenu(e, cellKey, 'v', idx);
+            };
+          }
+          cellDiv.appendChild(seg);
+        });
+
+        (guides.h || []).forEach((pct, idx) => {
+          const seg = document.createElement('div');
+          seg.className = 'miro-layout-guide-h';
+          seg.dataset.cellKey = cellKey;
+          seg.dataset.idx = idx;
+          seg.style.top = (pct * 100) + '%';
+          seg.style.left = '0';
+          seg.style.right = '0';
+
+          const line = document.createElement('div');
+          line.className = 'miro-layout-guide-line miro-layout-guide-line-h';
+          seg.appendChild(line);
+
+          if (!page._layoutGuidesMode) {
+            seg.style.pointerEvents = 'none';
+            seg.style.cursor = 'default';
+          } else {
+            seg.onmousedown = (e) => {
+              e.stopPropagation(); e.preventDefault();
+              window._activeLayoutGuideDrag = { cellKey, type: 'h', idx, startPct: pct, startClient: e.clientY };
+            };
+            seg.oncontextmenu = (e) => {
+              e.preventDefault(); e.stopPropagation();
+              showLayoutGuideContextMenu(e, cellKey, 'h', idx);
+            };
+          }
+          cellDiv.appendChild(seg);
+        });
+      }
+      // --- END LAYOUT GUIDES ---
+
       canvas.appendChild(cellDiv);
     }
 
@@ -1337,6 +1565,33 @@
       menu.remove();
       sv();
       buildMiroCanvas();
+    };
+    menu.appendChild(delItem);
+
+    document.body.appendChild(menu);
+    const closeMenu = () => { menu.remove(); document.removeEventListener('click', closeMenu); };
+    setTimeout(() => document.addEventListener('click', closeMenu), 100);
+  }
+
+  // Show custom context menu for locking or deleting layout guides
+  function showLayoutGuideContextMenu(e, cellKey, type, idx) {
+    document.querySelectorAll('.miro-slices-menu').forEach(el => el.remove());
+    const menu = document.createElement('div');
+    menu.className = 'miro-slices-menu';
+    menu.style.left = e.clientX + 'px';
+    menu.style.top = e.clientY + 'px';
+
+    const page = cp();
+    const delItem = document.createElement('div');
+    delItem.className = 'miro-slices-menu-item';
+    delItem.textContent = '🗑️ Delete Guide';
+    delItem.onclick = () => {
+      if (page.cellGuides && page.cellGuides[cellKey] && page.cellGuides[cellKey][type]) {
+        page.cellGuides[cellKey][type].splice(idx, 1);
+        sv();
+        buildMiroCanvas();
+      }
+      menu.remove();
     };
     menu.appendChild(delItem);
 
@@ -1562,7 +1817,7 @@
     return (page.zoom || 100) / 100;
   };
 
-  // Clamps card x/y coords to keep it inside cell boundaries
+  // Clamps card x/y coords to keep it inside cell boundaries and layout guides
   window.clampMiroCardDrag = function clampMiroCardDrag(card, x, y) {
     const page = cp();
     if (!page || !card.cell || !page.cellStates || !page.cellStates[card.cell]) return { x, y };
@@ -1581,8 +1836,76 @@
     const minY = -state.panY / zoom;
     const maxY = (cellH - state.panY) / zoom - (card.h || 240);
 
-    const clampedX = maxX >= minX ? Math.max(minX, Math.min(maxX, x)) : minX;
-    const clampedY = maxY >= minY ? Math.max(minY, Math.min(maxY, y)) : minY;
+    let clampedX = maxX >= minX ? Math.max(minX, Math.min(maxX, x)) : minX;
+    let clampedY = maxY >= minY ? Math.max(minY, Math.min(maxY, y)) : minY;
+
+    // Apply layout guides blocking and snapping
+    const ctrlPressed = !!(window._miroCtrlPressed || _ctrlPressed);
+    const guides = page.cellGuides && page.cellGuides[card.cell];
+    if (guides && !ctrlPressed) {
+      const snapDist = 8 / zoom;
+      
+      // Vertical Guides
+      if (guides.v && guides.v.length > 0 && card._dragStartX !== undefined) {
+        const startX = card._dragStartX;
+        const localGuidesV = guides.v.map(pct => (pct * cellW - state.panX) / zoom);
+        
+        localGuidesV.forEach(gx => {
+          // Snap right edge
+          if (Math.abs((clampedX + card.w) - gx) < snapDist) {
+            clampedX = gx - card.w;
+          }
+          // Snap left edge
+          if (Math.abs(clampedX - gx) < snapDist) {
+            clampedX = gx;
+          }
+
+          // Block crossing
+          if (startX + card.w <= gx) {
+            // Card was fully to the left
+            if (clampedX + card.w > gx) {
+              clampedX = gx - card.w;
+            }
+          } else if (startX >= gx) {
+            // Card was fully to the right
+            if (clampedX < gx) {
+              clampedX = gx;
+            }
+          }
+        });
+      }
+
+      // Horizontal Guides
+      if (guides.h && guides.h.length > 0 && card._dragStartY !== undefined) {
+        const startY = card._dragStartY;
+        const localGuidesH = guides.h.map(pct => (pct * cellH - state.panY) / zoom);
+        
+        localGuidesH.forEach(gy => {
+          // Snap bottom edge
+          if (Math.abs((clampedY + card.h) - gy) < snapDist) {
+            clampedY = gy - card.h;
+          }
+          // Snap top edge
+          if (Math.abs(clampedY - gy) < snapDist) {
+            clampedY = gy;
+          }
+
+          // Block crossing
+          if (startY + card.h <= gy) {
+            // Card was fully above
+            if (clampedY + card.h > gy) {
+              clampedY = gy - card.h;
+            }
+          } else if (startY >= gy) {
+            // Card was fully below
+            if (clampedY < gy) {
+              clampedY = gy;
+            }
+          }
+        });
+      }
+    }
+
     return { x: clampedX, y: clampedY };
   };
 

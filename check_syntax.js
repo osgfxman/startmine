@@ -4,7 +4,9 @@ const vm = require('vm');
 const files = [
   './public/js/app.js',
   './public/js/miro-engine.js',
-  './public/js/life-widget.js'
+  './public/js/life-widget.js',
+  './public/js/miro/layout/slices.js',
+  './public/js/thumbnails.js'
 ];
 
 let allOk = true;

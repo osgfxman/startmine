@@ -430,11 +430,28 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
     const zoom = typeof window.getMiroCardDragZoom === 'function' ? window.getMiroCardDragZoom(card) : ((page.zoom || 100) / 100);
     const startX = e.clientX, startY = e.clientY;
 
+    // Set active-dragging-cell z-index boost on viewports of selected cards
+    const activeViewports = new Set();
+    _miroSelected.forEach(cid => {
+      const c = (page.miroCards || []).find(x => x.id === cid);
+      if (c && c.cell) {
+        const cellEl = document.querySelector(`.miro-cell-viewport[data-cell-key="${c.cell}"]`);
+        if (cellEl) {
+          cellEl.classList.add('miro-active-dragging-cell');
+          activeViewports.add(cellEl);
+        }
+      }
+    });
+
     // Original positions of what we are currently dragging
     let origPositions = new Map();
     _miroSelected.forEach(cid => {
       const c = (page.miroCards || []).find(x => x.id === cid);
-      if (c) origPositions.set(cid, { x: c.x || 0, y: c.y || 0 });
+      if (c) {
+        c._dragStartX = c.x || 0;
+        c._dragStartY = c.y || 0;
+        origPositions.set(cid, { x: c.x || 0, y: c.y || 0 });
+      }
     });
 
     let moved = false;
@@ -732,11 +749,22 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
       const _canvasElement = document.getElementById('miro-canvas');
       if (_canvasElement) _canvasElement.classList.remove('miro-dragging');
 
+      // Remove z-index boost class from active cell viewports
+      activeViewports.forEach(cellEl => {
+        cellEl.classList.remove('miro-active-dragging-cell');
+      });
+
       // Clear snap guides
       const snapSvg = document.getElementById('snap-guides');
       if (snapSvg) snapSvg.innerHTML = '';
-      // Cleanup z-indexes
+
+      // Cleanup starting positions & z-indexes
       origPositions.forEach((orig, cid) => {
+        const c = (page.miroCards || []).find(x => x.id === cid);
+        if (c) {
+          delete c._dragStartX;
+          delete c._dragStartY;
+        }
         const cardEl = document.querySelector(`[data-cid="${cid}"]`);
         if (cardEl) cardEl.style.zIndex = '';
       });
