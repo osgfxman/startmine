@@ -535,14 +535,19 @@
   } catch (e) { /* timeout */ }
   return null;
 };
-  window.deleteMiroCard = function deleteMiroCard(cid) {
-  const page = cp();
-  if (!page.miroCards) return;
-  page.miroCards = page.miroCards.filter((c) => c.id !== cid);
-  sv();
-  buildMiroCanvas();
-  if (typeof buildOutline === 'function') buildOutline();
-};
+  window.deleteMiroCard = function deleteMiroCard(cid, pageId) {
+    const page = pageId ? (D.pages.find(p => p.id === pageId) || cp()) : (D.pages.find(p => p.miroCards && p.miroCards.some(c => c.id === cid)) || cp());
+    if (!page || !page.miroCards) return;
+    page.miroCards = page.miroCards.filter((c) => c.id !== cid);
+    sv();
+    const curPg = cp();
+    if (curPg.pageType === 'slicer') {
+      buildCols();
+    } else {
+      buildMiroCanvas();
+    }
+    if (typeof buildOutline === 'function') buildOutline();
+  };
 
 SM.miro.render = SM.miro.render || {};
 SM.miro.render.buildMiroCanvas = typeof buildMiroCanvas !== 'undefined' ? buildMiroCanvas : window.buildMiroCanvas;

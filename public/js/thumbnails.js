@@ -430,7 +430,8 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
     const _canvas = document.getElementById('miro-canvas');
     if (_canvas) _canvas.classList.add('miro-dragging');
 
-    const page = cp();
+    const cardPageId = el.dataset.pageId || D.cur;
+    const page = D.pages.find(p => p.id === cardPageId) || cp();
     const isPinnedCard = card.pinned || card.type === 'dyntitle';
     const zoom = isPinnedCard ? 1 : (typeof window.getMiroCardDragZoom === 'function' ? window.getMiroCardDragZoom(card) : ((page.zoom || 100) / 100));
     const startX = e.clientX, startY = e.clientY;
@@ -831,7 +832,8 @@ function attach8WayResize(el, card, minW, minH) {
     handle.addEventListener('mousedown', (e) => {
       if (card.locked) return; // Prevent resize if locked
       e.stopPropagation();
-      const page = cp();
+      const cardPageId = el.dataset.pageId || D.cur;
+      const page = D.pages.find(p => p.id === cardPageId) || cp();
       const isPinned = card.pinned || card.type === 'dyntitle';
       const zoom = isPinned ? 1 : ((page.zoom || 100) / 100);
       const sx = e.clientX,

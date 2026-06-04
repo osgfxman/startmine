@@ -1306,12 +1306,19 @@ document.getElementById('ok-miro-sticky').onclick = () => {
   const text = document.getElementById('sn-add-text').value.trim();
   const color = document.querySelector('.sn-csw.sel')?.dataset.color || 'yellow';
   const shape = document.querySelector('.sn-shp.sel')?.dataset.shape || 'square';
-  const page = cp();
+  const targetPageId = window._miroAddTargetPageId || D.cur;
+  const page = D.pages.find(p => p.id === targetPageId) || cp();
   if (!page.miroCards) page.miroCards = [];
-  const canvas = document.getElementById('miro-canvas');
   const zoom = (page.zoom || 100) / 100;
-  const cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
-  const cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+  let cx = 200, cy = 200;
+  if (window._miroAddTargetPageId) {
+    cx = -(page.panX || 0) / zoom + 200;
+    cy = -(page.panY || 0) / zoom + 150;
+  } else {
+    const canvas = document.getElementById('miro-canvas');
+    cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
+    cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+  }
   const w = shape === 'square' ? 200 : 280;
   const h = shape === 'square' ? 200 : 160;
   const card = {
@@ -1327,8 +1334,13 @@ document.getElementById('ok-miro-sticky').onclick = () => {
   };
   page.miroCards.push(card);
   sv();
-  buildMiroCanvas();
-  buildOutline();
+  if (window._miroAddTargetPageId) {
+    buildCols();
+  } else {
+    buildMiroCanvas();
+  }
+  if (typeof buildOutline === 'function') buildOutline();
+  window._miroAddTargetPageId = null;
   closeM('m-miro-sticky');
 };
 
@@ -1349,17 +1361,29 @@ document.getElementById('ok-miro-add').onclick = () => {
   if (!url) return;
   if (!url.startsWith('http')) url = 'https://' + url;
   const label = document.getElementById('miro-add-label').value.trim() || domainOf(url);
-  const page = cp();
+  const targetPageId = window._miroAddTargetPageId || D.cur;
+  const page = D.pages.find(p => p.id === targetPageId) || cp();
   if (!page.miroCards) page.miroCards = [];
-  const canvas = document.getElementById('miro-canvas');
   const zoom = (page.zoom || 100) / 100;
-  const cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
-  const cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+  let cx = 200, cy = 200;
+  if (window._miroAddTargetPageId) {
+    cx = -(page.panX || 0) / zoom + 200;
+    cy = -(page.panY || 0) / zoom + 150;
+  } else {
+    const canvas = document.getElementById('miro-canvas');
+    cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
+    cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+  }
   const card = { id: uid(), url, label, x: cx - 140, y: cy - 120, w: 280, h: 240 };
   page.miroCards.push(card);
   sv();
-  buildMiroCanvas();
-  buildOutline();
+  if (window._miroAddTargetPageId) {
+    buildCols();
+  } else {
+    buildMiroCanvas();
+  }
+  if (typeof buildOutline === 'function') buildOutline();
+  window._miroAddTargetPageId = null;
   closeM('m-miro-add');
 };
 
@@ -1418,12 +1442,19 @@ document.getElementById('miro-img-file').onchange = function (e) {
 document.getElementById('ok-miro-image').onclick = () => {
   if (!_miroImgData) return;
   const label = document.getElementById('miro-img-label').value.trim();
-  const page = cp();
+  const targetPageId = window._miroAddTargetPageId || D.cur;
+  const page = D.pages.find(p => p.id === targetPageId) || cp();
   if (!page.miroCards) page.miroCards = [];
-  const canvas = document.getElementById('miro-canvas');
   const zoom = (page.zoom || 100) / 100;
-  const cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
-  const cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+  let cx = 200, cy = 200;
+  if (window._miroAddTargetPageId) {
+    cx = -(page.panX || 0) / zoom + 200;
+    cy = -(page.panY || 0) / zoom + 150;
+  } else {
+    const canvas = document.getElementById('miro-canvas');
+    cx = (canvas.clientWidth / 2 - (page.panX || 0)) / zoom;
+    cy = (canvas.clientHeight / 2 - (page.panY || 0)) / zoom;
+  }
 
   // Scale to max 400px wide, preserving aspect ratio
   const maxW = 400;
@@ -1446,8 +1477,13 @@ document.getElementById('ok-miro-image').onclick = () => {
   };
   page.miroCards.push(card);
   sv();
-  buildMiroCanvas();
-  buildOutline();
+  if (window._miroAddTargetPageId) {
+    buildCols();
+  } else {
+    buildMiroCanvas();
+  }
+  if (typeof buildOutline === 'function') buildOutline();
+  window._miroAddTargetPageId = null;
   closeM('m-miro-image');
   _miroImgData = null;
 };

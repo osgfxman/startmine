@@ -3845,18 +3845,11 @@ function buildTabs() {
     tab.appendChild(cd);
     tab.appendChild(nm);
     if (groupPages.length > 1 && !pg.id.startsWith('time_')) tab.appendChild(x);
-    // Right-click: export this page
+    // Right-click: show custom page tab context menu
     tab.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const grp = D.groups.find(g => g.id === pg.groupId);
-      const env = grp ? D.environments.find(ev => ev.id === grp.envId) : null;
-      openSelIO('export', {
-        settings: D.settings,
-        environments: env ? [env] : [],
-        groups: grp ? [grp] : [],
-        pages: [pg]
-      });
+      if (typeof showPageTabContextMenu === 'function') {
+        showPageTabContextMenu(e, pg, nm, cd);
+      }
     });
     bar.insertBefore(tab, addBtn);
   });
@@ -4128,6 +4121,7 @@ function buildCols() {
   console.log('[RENDER] Rendering page:', page.name, 'pageType:', page.pageType, 'widgets:', (page.widgets||[]).length, 'miroCards:', (page.miroCards||[]).length);
   
   const wrap = document.getElementById('cw');
+  wrap.classList.remove('cw-slicer');
   if (page.id.startsWith('time_')) {
     document.getElementById('miro-canvas').classList.add('hidden');
     document.body.classList.remove('miro-active');
@@ -4194,6 +4188,14 @@ function buildCols() {
     return;
   }
   
+  if (page.pageType === 'slicer') {
+    wrap.innerHTML = '';
+    wrap.style.gridTemplateColumns = '';
+    buildSlicerPage(page, wrap);
+    if (typeof buildOutline === 'function') buildOutline();
+    return;
+  }
+
   wrap.innerHTML = '';
   wrap.style.gridTemplateColumns = `repeat(${page.cols || 3},minmax(0,1fr))`;
   for (let ci = 0; ci < (page.cols || 3); ci++) {
@@ -4814,12 +4816,14 @@ document.getElementById('ok-aw').onclick = () => {
     items: selType !== 'note' ? [] : undefined,
     content: selType === 'note' ? '' : undefined,
   };
-  const page = cp();
+  const targetPageId = window._widgetAddTargetPageId || D.cur;
+  const page = D.pages.find(p => p.id === targetPageId) || cp();
   if (!page.widgets) page.widgets = [];
   page.widgets.push(w);
   sv();
   buildCols();
   closeM('m-aw');
+  window._widgetAddTargetPageId = null;
 };
 document.getElementById('bm-u').addEventListener('blur', () => {
   const u = document.getElementById('bm-u').value.trim();
@@ -5275,6 +5279,1127 @@ window.convertPageToMiro = function (pageId) {
 // in setupShardedListeners() for instant loading.
 // Clean up any leftover stale cache on first load:
 try { localStorage.removeItem('startmine_cache'); localStorage.removeItem('startmine_cache_ts'); } catch(e) {}
+
+/* ─── Slicer Grid (Page Aggregation) ─── */
+window._widgetAddTargetPageId = null;
+window._miroAddTargetPageId = null;
+window._slicerMergeMode = false;
+window._slicerSelectedCells = null;
+
+function injectSlicerStyles() {
+  if (document.getElementById('slicer-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'slicer-styles';
+  style.textContent = `
+    #cw.cw-slicer {
+      display: flex !important;
+      flex-direction: column !important;
+      flex: 1 !important;
+      padding: 0 !important;
+      gap: 0 !important;
+      height: 0 !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
+      position: relative !important;
+      background: #11141c !important;
+    }
+    .slicer-grid-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .slicer-controls-toggle {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 10001;
+      background: rgba(28, 32, 45, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #aaa;
+      border-radius: 50%;
+      width: 34px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      transition: all 0.2s;
+      user-select: none;
+    }
+    .slicer-controls-toggle:hover {
+      color: #fff;
+      background: rgba(108, 143, 255, 0.25);
+      border-color: rgba(108, 143, 255, 0.4);
+      box-shadow: 0 0 10px rgba(108, 143, 255, 0.3);
+    }
+    .slicer-controls {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10000;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding: 8px 16px;
+      background: rgba(20, 24, 35, 0.95);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: 12px;
+      border: 1px solid rgba(108, 143, 255, 0.35);
+      font-size: 0.85rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      opacity: 0;
+      pointer-events: none;
+    }
+    .slicer-controls.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .slicer-controls input[type="number"] {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+      border-radius: 4px;
+      padding: 4px 6px;
+      width: 45px;
+      text-align: center;
+      outline: none;
+    }
+    .slicer-controls button {
+      background: var(--ac, #6c8fff);
+      border: none;
+      color: #fff;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 0.8rem;
+      transition: all 0.2s;
+    }
+    .slicer-controls button:hover {
+      filter: brightness(1.1);
+    }
+    .slicer-controls button.cancel-btn {
+      background: rgba(255, 255, 255, 0.1);
+    }
+    .slicer-controls button.cancel-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+    .slicer-controls button.merge-active {
+      background: #ffaa00 !important;
+      animation: pulse-merge 1.5s infinite;
+    }
+    .slicer-controls .merge-help {
+      color: #ffaa00;
+      font-weight: bold;
+      margin-left: 8px;
+    }
+    .slicer-grid {
+      display: grid;
+      width: 100%;
+      height: 100%;
+      gap: 1px;
+      background: #2b3040;
+      padding: 0;
+      margin: 0;
+      box-sizing: border-box;
+      flex: 1;
+    }
+    .slicer-cell {
+      display: flex;
+      flex-direction: column;
+      background: #11141c;
+      overflow: hidden;
+      position: relative;
+      height: 100%;
+      width: 100%;
+    }
+    .slicer-cell.selected-for-merge {
+      box-shadow: inset 0 0 0 3px #ffaa00 !important;
+      z-index: 100;
+    }
+    .slicer-cell-floating-toolbar {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(20, 24, 35, 0.9);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      padding: 4px 8px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      transform: translateY(-5px);
+    }
+    .slicer-cell:hover .slicer-cell-floating-toolbar {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+    .slicer-cell-floating-toolbar select {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+      font-size: 0.75rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      outline: none;
+      cursor: pointer;
+    }
+    .slicer-cell-floating-toolbar select option {
+      background: #1c202d;
+      color: #fff;
+    }
+    .slicer-cell-floating-toolbar .cell-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .slicer-cell-floating-toolbar button {
+      background: rgba(255, 255, 255, 0.12);
+      border: none;
+      color: #fff;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .slicer-cell-floating-toolbar button:hover {
+      background: rgba(108, 143, 255, 0.25);
+      color: #fff;
+    }
+    .slicer-cell-body {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+      background: #11141c;
+      flex: 1;
+    }
+    .slicer-empty-cell {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100%;
+      color: rgba(255, 255, 255, 0.25);
+      font-size: 0.85rem;
+      gap: 6px;
+      user-select: none;
+    }
+    .slicer-empty-cell span {
+      font-size: 1.5rem;
+    }
+    .slicer-miro-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #11141c;
+      user-select: none;
+    }
+    .slicer-miro-board {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform-origin: 0 0;
+      width: 50000px;
+      height: 50000px;
+      pointer-events: auto;
+    }
+    .slicer-widget-container {
+      display: flex;
+      gap: 2px;
+      height: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 2px;
+      box-sizing: border-box;
+      background: #11141c;
+    }
+    .slicer-widget-col {
+      flex: 1;
+      min-width: 200px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow-y: auto;
+      background: rgba(255, 255, 255, 0.01);
+      border-radius: 4px;
+      padding: 4px;
+      border: 1px dashed rgba(255, 255, 255, 0.04);
+      box-sizing: border-box;
+      height: 100%;
+    }
+    .slicer-widget-col.dragover {
+      background: rgba(108, 143, 255, 0.1);
+      border-color: var(--ac, #6c8fff);
+    }
+    .slicer-widget-col .add-w {
+      margin-top: auto;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px dashed rgba(255, 255, 255, 0.08);
+      color: #666;
+      padding: 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      transition: all 0.2s;
+    }
+    .slicer-widget-col .add-w:hover {
+      background: rgba(255, 255, 255, 0.06);
+      color: #aaa;
+    }
+    @keyframes pulse-merge {
+      0% { box-shadow: inset 0 0 0 3px rgba(255, 170, 0, 0.4); }
+      70% { box-shadow: inset 0 0 0 8px rgba(255, 170, 0, 0.1); }
+      100% { box-shadow: inset 0 0 0 3px rgba(255, 170, 0, 0.4); }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function getSlicerActiveCells(page) {
+  const rows = page.gridRows || 2;
+  const cols = page.gridCols || 2;
+  const merged = page.mergedCells || [];
+  const covered = Array.from({ length: rows }, () => Array(cols).fill(false));
+  const cells = [];
+
+  merged.forEach((m, idx) => {
+    if (m.rStart >= 0 && m.rStart < rows && m.cStart >= 0 && m.cStart < cols &&
+        m.rEnd >= 0 && m.rEnd < rows && m.cEnd >= 0 && m.cEnd < cols) {
+      cells.push({
+        id: `merged_${idx}`,
+        rStart: m.rStart,
+        cStart: m.cStart,
+        rEnd: m.rEnd,
+        cEnd: m.cEnd,
+        isMerged: true,
+        key: `${m.rStart}_${m.cStart}`
+      });
+      for (let r = m.rStart; r <= m.rEnd; r++) {
+        for (let c = m.cStart; c <= m.cEnd; c++) {
+          covered[r][c] = true;
+        }
+      }
+    }
+  });
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (!covered[r][c]) {
+        cells.push({
+          id: `cell_${r}_${c}`,
+          rStart: r,
+          cStart: c,
+          rEnd: r,
+          cEnd: c,
+          isMerged: false,
+          key: `${r}_${c}`
+        });
+      }
+    }
+  }
+  return cells;
+}
+
+function autofitSlicerCell(page, cellKey, targetPage, cellW, cellH) {
+  if (!page.cellStates) page.cellStates = {};
+  const cards = targetPage.miroCards || [];
+  if (cards.length === 0) {
+    page.cellStates[cellKey] = { zoom: 100, panX: 0, panY: 0 };
+    return;
+  }
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  cards.forEach(c => {
+    const x = c.x || 0, y = c.y || 0;
+    const w = c.w || 200, h = c.h || 200;
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x + w > maxX) maxX = x + w;
+    if (y + h > maxY) maxY = y + h;
+  });
+  const bw = maxX - minX;
+  const bh = maxY - minY;
+  if (bw <= 0 || bh <= 0) {
+    page.cellStates[cellKey] = { zoom: 100, panX: 0, panY: 0 };
+    return;
+  }
+  const padding = 20;
+  const availW = cellW - padding * 2;
+  const availH = cellH - padding * 2;
+  const fitZoom = Math.min(availW / bw, availH / bh);
+  const newZoomNum = Math.max(10, Math.min(400, Math.round(fitZoom * 100)));
+  const newZoom = newZoomNum / 100;
+  const panX = (cellW - (minX + maxX) * newZoom) / 2;
+  const panY = (cellH - (minY + maxY) * newZoom) / 2;
+  page.cellStates[cellKey] = { zoom: newZoomNum, panX, panY };
+}
+
+function buildSlicerPage(page, wrap) {
+  injectSlicerStyles();
+  
+  const containerEl = document.createElement('div');
+  containerEl.className = 'slicer-grid-container';
+  
+  // 1. Controls Toggle Button (Floating Gear/Grid Settings)
+  const toggleEl = document.createElement('div');
+  toggleEl.className = 'slicer-controls-toggle';
+  toggleEl.innerHTML = '⚙️';
+  toggleEl.title = 'Slicer Grid Settings';
+  
+  // 2. Render controls panel
+  const controlsEl = document.createElement('div');
+  controlsEl.className = 'slicer-controls';
+  controlsEl.innerHTML = `
+    <span style="font-weight:600;margin-right:8px;color:#fff;">📐 Slicer Layout:</span>
+    <label style="color:#aaa;margin-right:4px;">Rows:</label>
+    <input type="number" id="slicer-rows-input" min="1" max="10" value="${page.gridRows || 2}">
+    <label style="color:#aaa;margin-right:4px;margin-left:8px;">Cols:</label>
+    <input type="number" id="slicer-cols-input" min="1" max="10" value="${page.gridCols || 2}">
+    <button id="slicer-apply-btn" style="margin-left:12px;">Apply</button>
+    <button id="slicer-merge-btn" class="${window._slicerMergeMode ? 'merge-active' : ''}" style="margin-left:8px;">
+      ${window._slicerMergeMode ? 'Confirm Merge' : 'Merge'}
+    </button>
+  `;
+  
+  if (window._slicerMergeMode) {
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'cancel-btn';
+    cancelBtn.style.marginLeft = '6px';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.onclick = (e) => {
+      e.stopPropagation();
+      window._slicerMergeMode = false;
+      window._slicerSelectedCells = null;
+      buildCols();
+    };
+    controlsEl.appendChild(cancelBtn);
+    
+    const helpText = document.createElement('span');
+    helpText.className = 'merge-help';
+    helpText.textContent = 'Select cells, then click Confirm';
+    controlsEl.appendChild(helpText);
+  } else {
+    // Add Revert / Cancel Split button to completely restore to a normal page
+    const revertBtn = document.createElement('button');
+    revertBtn.style.marginLeft = '8px';
+    revertBtn.style.background = 'rgba(255, 94, 94, 0.2)';
+    revertBtn.style.color = '#ff5e5e';
+    revertBtn.style.border = '1px solid rgba(255, 94, 94, 0.3)';
+    revertBtn.textContent = '🔓 Revert Page';
+    revertBtn.title = 'Convert this page back to a standard view';
+    revertBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (confirm('Revert this split-screen layout back to a standard page?')) {
+        let firstPageId = null;
+        if (page.cellPages) {
+          const keys = Object.keys(page.cellPages);
+          if (keys.length > 0) firstPageId = page.cellPages[keys[0]];
+        }
+        const targetPage = firstPageId ? D.pages.find(p => p.id === firstPageId) : null;
+        page.pageType = targetPage ? targetPage.pageType : 'miro';
+        sv();
+        switchActivePage(page.id);
+      }
+    };
+    controlsEl.appendChild(revertBtn);
+
+    if (page.mergedCells && page.mergedCells.length > 0) {
+      const resetBtn = document.createElement('button');
+      resetBtn.style.marginLeft = '6px';
+      resetBtn.style.background = 'rgba(255, 255, 255, 0.08)';
+      resetBtn.style.border = '1px solid rgba(255, 255, 255, 0.15)';
+      resetBtn.textContent = 'Reset Merges';
+      resetBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (confirm('Reset all cell merges?')) {
+          page.mergedCells = [];
+          page.cellStates = {};
+          sv();
+          buildCols();
+        }
+      };
+      controlsEl.appendChild(resetBtn);
+    }
+  }
+  
+  toggleEl.onclick = (e) => {
+    e.stopPropagation();
+    controlsEl.classList.toggle('show');
+    toggleEl.style.color = controlsEl.classList.contains('show') ? '#6c8fff' : '#aaa';
+  };
+  
+  // Keep controls open if merge mode is active
+  if (window._slicerMergeMode) {
+    controlsEl.classList.add('show');
+    toggleEl.style.color = '#6c8fff';
+  }
+  
+  // Row/Col inputs and Apply action
+  controlsEl.querySelector('#slicer-apply-btn').onclick = (e) => {
+    e.stopPropagation();
+    const r = parseInt(document.getElementById('slicer-rows-input').value);
+    const c = parseInt(document.getElementById('slicer-cols-input').value);
+    if (isNaN(r) || r < 1 || r > 10 || isNaN(c) || c < 1 || c > 10) {
+      alert('Please enter valid dimensions between 1x1 and 10x10.');
+      return;
+    }
+    page.gridRows = r;
+    page.gridCols = c;
+    page.mergedCells = (page.mergedCells || []).filter(m => 
+      m.rStart < r && m.rEnd < r && m.cStart < c && m.cEnd < c
+    );
+    const newCellPages = {};
+    for (const key in (page.cellPages || {})) {
+      const [row, col] = key.split('_').map(Number);
+      if (row < r && col < c) {
+        newCellPages[key] = page.cellPages[key];
+      }
+    }
+    page.cellPages = newCellPages;
+    sv();
+    buildCols();
+  };
+  
+  // Merge action
+  controlsEl.querySelector('#slicer-merge-btn').onclick = (e) => {
+    e.stopPropagation();
+    if (!window._slicerMergeMode) {
+      window._slicerMergeMode = true;
+      window._slicerSelectedCells = new Set();
+      buildCols();
+    } else {
+      const selected = Array.from(window._slicerSelectedCells).map(k => {
+        const [r, c] = k.split('_').map(Number);
+        return { r, c };
+      });
+      if (selected.length < 2) {
+        alert('Please select at least 2 cells to merge.');
+        return;
+      }
+      let minR = Infinity, maxR = -Infinity;
+      let minC = Infinity, maxC = -Infinity;
+      selected.forEach(cell => {
+        minR = Math.min(minR, cell.r);
+        maxR = Math.max(maxR, cell.r);
+        minC = Math.min(minC, cell.c);
+        maxC = Math.max(maxC, cell.c);
+      });
+      const area = (maxR - minR + 1) * (maxC - minC + 1);
+      if (selected.length !== area) {
+        alert('Selected cells must form a contiguous rectangular block with no gaps.');
+        return;
+      }
+      page.mergedCells = (page.mergedCells || []).filter(m => {
+        const intersect = !(
+          m.rEnd < minR || m.rStart > maxR ||
+          m.cEnd < minC || m.cStart > maxC
+        );
+        return !intersect;
+      });
+      page.mergedCells.push({ rStart: minR, cStart: minC, rEnd: maxR, cEnd: maxC });
+      
+      const targetKey = `${minR}_${minC}`;
+      let inheritedPageId = null;
+      selected.forEach(cell => {
+        const k = `${cell.r}_${cell.c}`;
+        if (page.cellPages[k]) {
+          if (!inheritedPageId) inheritedPageId = page.cellPages[k];
+          delete page.cellPages[k];
+        }
+      });
+      if (inheritedPageId) {
+        page.cellPages[targetKey] = inheritedPageId;
+      }
+      window._slicerMergeMode = false;
+      window._slicerSelectedCells = null;
+      sv();
+      buildCols();
+    }
+  };
+  
+  // 3. Render grid
+  const gridEl = document.createElement('div');
+  gridEl.className = 'slicer-grid';
+  gridEl.style.gridTemplateRows = `repeat(${page.gridRows || 2}, minmax(0, 1fr))`;
+  gridEl.style.gridTemplateColumns = `repeat(${page.gridCols || 2}, minmax(0, 1fr))`;
+  
+  const cells = getSlicerActiveCells(page);
+  cells.forEach(cell => {
+    const cellEl = document.createElement('div');
+    cellEl.className = 'slicer-cell';
+    cellEl.style.gridRowStart = cell.rStart + 1;
+    cellEl.style.gridRowEnd = cell.rEnd + 2;
+    cellEl.style.gridColumnStart = cell.cStart + 1;
+    cellEl.style.gridColumnEnd = cell.cEnd + 2;
+    
+    if (window._slicerMergeMode) {
+      cellEl.style.cursor = 'pointer';
+      const slots = [];
+      for (let r = cell.rStart; r <= cell.rEnd; r++) {
+        for (let c = cell.cStart; c <= cell.cEnd; c++) {
+          slots.push(`${r}_${c}`);
+        }
+      }
+      const isSel = slots.some(s => window._slicerSelectedCells.has(s));
+      if (isSel) cellEl.classList.add('selected-for-merge');
+      
+      cellEl.onclick = () => {
+        const anySelected = slots.some(s => window._slicerSelectedCells.has(s));
+        if (anySelected) {
+          slots.forEach(s => window._slicerSelectedCells.delete(s));
+          cellEl.classList.remove('selected-for-merge');
+        } else {
+          slots.forEach(s => window._slicerSelectedCells.add(s));
+          cellEl.classList.add('selected-for-merge');
+        }
+        const count = window._slicerSelectedCells.size;
+        document.getElementById('slicer-merge-btn').textContent = count > 0 ? `Confirm Merge (${count} slots)` : 'Confirm Merge';
+      };
+      gridEl.appendChild(cellEl);
+      return;
+    }
+    
+    // Normal Cell rendering: Floating Toolbar overlay
+    const toolbarEl = document.createElement('div');
+    toolbarEl.className = 'slicer-cell-floating-toolbar';
+    
+    const selectEl = document.createElement('select');
+    selectEl.innerHTML = `<option value="">-- Select Page --</option>`;
+    D.pages.filter(p => p.id !== page.id && !p.id.startsWith('time_')).forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = `${p.pageType === 'miro' ? '🖼️' : '🗂️'} ${p.name}`;
+      if (page.cellPages && page.cellPages[cell.key] === p.id) {
+        opt.selected = true;
+      }
+      selectEl.appendChild(opt);
+    });
+    toolbarEl.appendChild(selectEl);
+    
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'slicer-cell-body';
+    
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'cell-actions';
+    
+    const targetPageId = page.cellPages ? page.cellPages[cell.key] : null;
+    if (targetPageId) {
+      const targetPage = D.pages.find(p => p.id === targetPageId);
+      if (targetPage) {
+        // Load target page cached data if needed
+        if ((!targetPage.miroCards || targetPage.miroCards.length === 0) && (!targetPage.widgets || targetPage.widgets.length === 0)) {
+          const cached = getCachedPageData(targetPageId);
+          if (cached) {
+            targetPage.miroCards = cached.miroCards || [];
+            targetPage.widgets = cached.widgets || [];
+            targetPage.zoom = cached.zoom || 100;
+            targetPage.panX = cached.panX || 0;
+            targetPage.panY = cached.panY || 0;
+          }
+        }
+        
+        // Maximize button (direct link to original page)
+        const maxBtn = document.createElement('button');
+        maxBtn.innerHTML = '🔗';
+        maxBtn.title = 'Go to original page';
+        maxBtn.onclick = () => {
+          switchActivePage(targetPage.id);
+        };
+        actionsEl.appendChild(maxBtn);
+        
+        if (targetPage.pageType === 'miro') {
+          // Miro Actions
+          const stickyBtn = document.createElement('button');
+          stickyBtn.textContent = '＋ Sticky';
+          stickyBtn.onclick = () => {
+            window._miroAddTargetPageId = targetPage.id;
+            openM('m-miro-sticky');
+          };
+          actionsEl.appendChild(stickyBtn);
+          
+          const cardBtn = document.createElement('button');
+          cardBtn.textContent = '＋ Card';
+          cardBtn.onclick = () => {
+            window._miroAddTargetPageId = targetPage.id;
+            openM('m-miro-add');
+          };
+          actionsEl.appendChild(cardBtn);
+          
+          const fitBtn = document.createElement('button');
+          fitBtn.innerHTML = '🔍 Fit';
+          fitBtn.onclick = () => {
+            const cellW = bodyEl.clientWidth || 300;
+            const cellH = bodyEl.clientHeight || 200;
+            autofitSlicerCell(page, cell.key, targetPage, cellW, cellH);
+            sv();
+            buildCols();
+          };
+          actionsEl.appendChild(fitBtn);
+          
+          // Render Miro board inside bodyEl
+          if (!page.cellStates) page.cellStates = {};
+          let state = page.cellStates[cell.key];
+          if (!state) {
+            // Autofit by default on first load!
+            setTimeout(() => {
+              const cellW = bodyEl.clientWidth || 300;
+              const cellH = bodyEl.clientHeight || 200;
+              autofitSlicerCell(page, cell.key, targetPage, cellW, cellH);
+              sv();
+              buildCols();
+            }, 50);
+            state = { zoom: 100, panX: 0, panY: 0 };
+          }
+          
+          const miroContainer = document.createElement('div');
+          miroContainer.className = 'slicer-miro-container';
+          
+          const miroBoard = document.createElement('div');
+          miroBoard.className = 'slicer-miro-board';
+          const zoom = (state.zoom || 100) / 100;
+          miroBoard.style.transform = `translate(${state.panX || 0}px, ${state.panY || 0}px) scale(${zoom})`;
+          
+          const buildersMap = {
+            sticky: 'buildMiroSticky',
+            image: 'buildMiroImage',
+            text: 'buildMiroText',
+            shape: 'buildMiroShape',
+            pen: 'buildMiroPen',
+            grid: 'buildMiroGridCard',
+            mindmap: 'buildMiroMindMap',
+            trello: 'buildMiroTrello',
+            bwidget: 'buildMiroBookmarkWidget',
+            array: 'buildMiroArray',
+            calendar: 'buildMiroGantt',
+            gantt: 'buildMiroGantt',
+            embed: 'buildMiroEmbed',
+            'overlay-page': 'buildMiroOverlayWidget',
+            life: 'buildMiroLifeWidget',
+            dyntitle: 'buildMiroDynamicTitleCard',
+          };
+          
+          (targetPage.miroCards || []).forEach(card => {
+            const fnName = buildersMap[card.type];
+            const fn = fnName ? window[fnName] : null;
+            const fallback = window.buildMiroCard;
+            let cardEl;
+            if (typeof fn === 'function') cardEl = fn(card);
+            else if (typeof fallback === 'function') cardEl = fallback(card);
+            
+            if (cardEl) {
+              cardEl.dataset.pageId = targetPage.id;
+              cardEl.querySelectorAll('*').forEach(child => {
+                child.dataset.pageId = targetPage.id;
+              });
+              miroBoard.appendChild(cardEl);
+            }
+          });
+          
+          // Event handlers for pan/zoom
+          let isPanning = false;
+          let startX = 0, startY = 0;
+          let startPanX = 0, startPanY = 0;
+          
+          miroContainer.addEventListener('mousedown', (e) => {
+            if (e.target === miroContainer || e.target === miroBoard || e.button === 1 || e.button === 2) {
+              isPanning = true;
+              startX = e.clientX;
+              startY = e.clientY;
+              startPanX = state.panX || 0;
+              startPanY = state.panY || 0;
+              miroContainer.style.cursor = 'grabbing';
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          });
+          
+          window.addEventListener('mousemove', (e) => {
+            if (!isPanning) return;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            state.panX = startPanX + dx;
+            state.panY = startPanY + dy;
+            miroBoard.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${(state.zoom || 100)/100})`;
+          });
+          
+          window.addEventListener('mouseup', () => {
+            if (isPanning) {
+              isPanning = false;
+              miroContainer.style.cursor = '';
+              sv();
+            }
+          });
+          
+          miroContainer.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const rect = miroContainer.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            const curZoom = (state.zoom || 100) / 100;
+            const boardX = (mouseX - state.panX) / curZoom;
+            const boardY = (mouseY - state.panY) / curZoom;
+            
+            const zoomFactor = 1.1;
+            let newZoom = e.deltaY < 0 ? curZoom * zoomFactor : curZoom / zoomFactor;
+            newZoom = Math.max(0.1, Math.min(4.0, newZoom));
+            const zPercent = Math.round(newZoom * 100);
+            
+            state.zoom = zPercent;
+            state.panX = mouseX - boardX * newZoom;
+            state.panY = mouseY - boardY * newZoom;
+            
+            miroBoard.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${newZoom})`;
+            sv();
+          }, { passive: false });
+          
+          miroContainer.appendChild(miroBoard);
+          bodyEl.appendChild(miroContainer);
+          
+        } else {
+          // Widget Dashboard
+          const addWBtn = document.createElement('button');
+          addWBtn.textContent = '＋ Widget';
+          addWBtn.onclick = () => {
+            window._widgetAddTargetPageId = targetPage.id;
+            pColIdx = 0;
+            openM('m-aw');
+          };
+          actionsEl.appendChild(addWBtn);
+          
+          const columnsContainer = document.createElement('div');
+          columnsContainer.className = 'slicer-widget-container';
+          
+          const colCount = targetPage.cols || 3;
+          for (let ci = 0; ci < colCount; ci++) {
+            const colEl = document.createElement('div');
+            colEl.className = 'slicer-widget-col';
+            colEl.dataset.ci = ci;
+            
+            colEl.addEventListener('dragover', (e) => {
+              e.preventDefault();
+              colEl.classList.add('dragover');
+            });
+            colEl.addEventListener('dragleave', () => colEl.classList.remove('dragover'));
+            colEl.addEventListener('drop', (e) => {
+              e.preventDefault();
+              colEl.classList.remove('dragover');
+              if (!dragWid) return;
+              const w = (targetPage.widgets || []).find((x) => x.id === dragWid);
+              if (w) {
+                w.col = ci;
+                sv();
+                buildCols();
+              }
+              dragWid = null;
+            });
+            
+            const colWidgets = (targetPage.widgets || []).filter((w) => w.col === ci);
+            if (ci === colCount - 1) {
+              (targetPage.widgets || []).filter((w) => w.col >= colCount).forEach((w) => colWidgets.push(w));
+            }
+            colWidgets.forEach(w => {
+              colEl.appendChild(buildWidget(w));
+            });
+            
+            const colAddW = document.createElement('button');
+            colAddW.className = 'add-w';
+            colAddW.textContent = '＋ Widget';
+            colAddW.onclick = () => {
+              window._widgetAddTargetPageId = targetPage.id;
+              pColIdx = ci;
+              openM('m-aw');
+            };
+            colEl.appendChild(colAddW);
+            columnsContainer.appendChild(colEl);
+          }
+          bodyEl.appendChild(columnsContainer);
+        }
+      }
+    } else {
+      const emptyEl = document.createElement('div');
+      emptyEl.className = 'slicer-empty-cell';
+      emptyEl.innerHTML = `<span>📐</span>Select page`;
+      bodyEl.appendChild(emptyEl);
+    }
+    
+    // Split button / Close Split button for cell toolbar
+    if (cell.isMerged) {
+      const splitBtn = document.createElement('button');
+      splitBtn.textContent = '🥞 Split';
+      splitBtn.title = 'Split merged cell';
+      splitBtn.onclick = () => {
+        page.mergedCells = (page.mergedCells || []).filter(m => 
+          !(m.rStart === cell.rStart && m.cStart === cell.cStart && 
+            m.rEnd === cell.rEnd && m.cEnd === cell.cEnd)
+        );
+        if (page.cellStates) delete page.cellStates[cell.key];
+        sv();
+        buildCols();
+      };
+      actionsEl.insertBefore(splitBtn, actionsEl.firstChild);
+    }
+    
+    // Close (Remove) Split Page from this cell
+    if (targetPageId) {
+      const closeSplitBtn = document.createElement('button');
+      closeSplitBtn.innerHTML = '✕';
+      closeSplitBtn.title = 'Remove page from cell';
+      closeSplitBtn.style.color = '#ff5e5e';
+      closeSplitBtn.onclick = () => {
+        if (confirm('Remove this page split?')) {
+          delete page.cellPages[cell.key];
+          if (page.cellStates) delete page.cellStates[cell.key];
+          sv();
+          buildCols();
+        }
+      };
+      actionsEl.appendChild(closeSplitBtn);
+    }
+    
+    selectEl.onchange = () => {
+      const nextPid = selectEl.value;
+      if (!page.cellPages) page.cellPages = {};
+      if (nextPid) {
+        page.cellPages[cell.key] = nextPid;
+        if (page.cellStates) delete page.cellStates[cell.key];
+      } else {
+        delete page.cellPages[cell.key];
+      }
+      sv();
+      buildCols();
+    };
+    
+    toolbarEl.appendChild(actionsEl);
+    cellEl.appendChild(toolbarEl);
+    cellEl.appendChild(bodyEl);
+    gridEl.appendChild(cellEl);
+  });
+  
+  containerEl.appendChild(toggleEl);
+  containerEl.appendChild(controlsEl);
+  containerEl.appendChild(gridEl);
+  wrap.appendChild(containerEl);
+}
+
+function showPageTabContextMenu(e, pg, nm, cd) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  // Inject styles if they don't exist
+  if (!document.getElementById('custom-ctx-menu-styles')) {
+    const style = document.createElement('style');
+    style.id = 'custom-ctx-menu-styles';
+    style.textContent = `
+      .custom-ctx-menu {
+        position: fixed;
+        background: rgba(28, 32, 45, 0.98);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(108, 143, 255, 0.25);
+        border-radius: 12px;
+        padding: 6px 0;
+        min-width: 180px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        z-index: 999999;
+        display: flex;
+        flex-direction: column;
+        font-family: 'DM Sans', sans-serif;
+      }
+      .custom-ctx-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 16px;
+        color: #e4e4e4;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        user-select: none;
+        text-align: right;
+        direction: rtl;
+      }
+      .custom-ctx-item:hover {
+        background: rgba(108, 143, 255, 0.15);
+        color: #fff;
+      }
+      .custom-ctx-item.danger:hover {
+        background: rgba(255, 94, 94, 0.2);
+        color: #ff5e5e;
+      }
+      .custom-ctx-sep {
+        height: 1px;
+        background: rgba(255, 255, 255, 0.08);
+        margin: 4px 0;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  // Close any existing menus first
+  const existing = document.querySelector('.custom-ctx-menu');
+  if (existing) existing.remove();
+
+  const menu = document.createElement('div');
+  menu.className = 'custom-ctx-menu';
+
+  // 1. Rename Page
+  const renameItem = document.createElement('div');
+  renameItem.className = 'custom-ctx-item';
+  renameItem.innerHTML = `<span>✏️</span> <span>إعادة تسمية الصفحة</span>`;
+  renameItem.onclick = () => {
+    menu.remove();
+    nm.contentEditable = 'true';
+    nm.focus();
+    const range = document.createRange();
+    range.selectNodeContents(nm);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  };
+  menu.appendChild(renameItem);
+
+  // 2. Change Color
+  const colorItem = document.createElement('div');
+  colorItem.className = 'custom-ctx-item';
+  colorItem.innerHTML = `<span>🎨</span> <span>تغيير لون التبويب</span>`;
+  colorItem.onclick = (ev) => {
+    menu.remove();
+    if (typeof openTcPop === 'function') {
+      openTcPop(e, pg.id);
+    }
+  };
+  menu.appendChild(colorItem);
+
+  // Separator
+  const sep1 = document.createElement('div');
+  sep1.className = 'custom-ctx-sep';
+  menu.appendChild(sep1);
+
+  // 3. Change Page Type
+  const types = [
+    { type: 'miro', name: 'Miro Infinite Canvas', icon: '🖼️' },
+    { type: 'bookmarks', name: 'Widgets Dashboard', icon: '🗂️' },
+    { type: 'slicer', name: 'Slicer Grid', icon: '📐' }
+  ];
+
+  types.forEach(t => {
+    const typeItem = document.createElement('div');
+    typeItem.className = 'custom-ctx-item';
+    if (pg.pageType === t.type) {
+      typeItem.style.fontWeight = 'bold';
+      typeItem.style.color = 'var(--ac, #6c8fff)';
+    }
+    typeItem.innerHTML = `<span>${t.icon}</span> <span>${t.name}</span>`;
+    typeItem.onclick = () => {
+      menu.remove();
+      if (pg.pageType !== t.type) {
+        pg.pageType = t.type;
+        if (t.type === 'slicer') {
+          if (!pg.gridRows) pg.gridRows = 2;
+          if (!pg.gridCols) pg.gridCols = 2;
+          if (!pg.cellPages) pg.cellPages = {};
+          if (!pg.mergedCells) pg.mergedCells = [];
+        }
+        sv();
+        switchActivePage(pg.id);
+      }
+    };
+    menu.appendChild(typeItem);
+  });
+
+  // Separator
+  const sep2 = document.createElement('div');
+  sep2.className = 'custom-ctx-sep';
+  menu.appendChild(sep2);
+
+  // 4. Export Page (Selective Export)
+  const exportItem = document.createElement('div');
+  exportItem.className = 'custom-ctx-item';
+  exportItem.innerHTML = `<span>📦</span> <span>تصدير الصفحة</span>`;
+  exportItem.onclick = () => {
+    menu.remove();
+    if (typeof openSelIO === 'function') {
+      const grp = D.groups.find(g => g.id === pg.groupId);
+      const env = grp ? D.environments.find(ev => ev.id === grp.envId) : null;
+      openSelIO('export', {
+        settings: D.settings,
+        environments: env ? [env] : [],
+        groups: grp ? [grp] : [],
+        pages: [pg]
+      });
+    }
+  };
+  menu.appendChild(exportItem);
+
+  // Separator
+  const sep3 = document.createElement('div');
+  sep3.className = 'custom-ctx-sep';
+  menu.appendChild(sep3);
+
+  // 5. Delete Page
+  const deleteItem = document.createElement('div');
+  deleteItem.className = 'custom-ctx-item danger';
+  deleteItem.innerHTML = `<span>🗑️</span> <span>حذف الصفحة</span>`;
+  deleteItem.onclick = () => {
+    menu.remove();
+    if (typeof delPage === 'function') {
+      delPage(pg.id);
+    }
+  };
+  menu.appendChild(deleteItem);
+
+  // Positioning
+  document.body.appendChild(menu);
+  const rect = menu.getBoundingClientRect();
+  let x = e.clientX;
+  let y = e.clientY;
+  
+  if (x + rect.width > window.innerWidth) {
+    x = window.innerWidth - rect.width - 10;
+  }
+  if (y + rect.height > window.innerHeight) {
+    y = window.innerHeight - rect.height - 10;
+  }
+  
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+
+  // Dismiss on clicking outside
+  const dismiss = (ev) => {
+    if (!menu.contains(ev.target)) {
+      menu.remove();
+      document.removeEventListener('mousedown', dismiss);
+    }
+  };
+  setTimeout(() => {
+    document.addEventListener('mousedown', dismiss);
+  }, 10);
+}
+
+window.showPageTabContextMenu = showPageTabContextMenu;
+window.buildSlicerPage = buildSlicerPage;
+window.autofitSlicerCell = autofitSlicerCell;
+window.getSlicerActiveCells = getSlicerActiveCells;
 
 // Window aliases for backward compatibility
 SM.renderAll = typeof renderAll !== 'undefined' ? renderAll : window.renderAll;
