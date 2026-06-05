@@ -3414,14 +3414,17 @@ document.getElementById('settings-btn').onclick = () => {
   envSel.value = D.settings.defaultEnv || '__last__';
   grpSel.value = D.settings.defaultGroup || '__last__';
   pgSel.value = D.settings.defaultPage || '__last__';
+  document.getElementById('set-slicer-headers-fixed').checked = !!D.settings.slicerHeadersFixed;
   openM('m-settings');
 };
 document.getElementById('ok-settings').onclick = () => {
   D.settings.defaultEnv = document.getElementById('set-def-env').value;
   D.settings.defaultGroup = document.getElementById('set-def-grp').value;
   D.settings.defaultPage = document.getElementById('set-def-pg').value;
+  D.settings.slicerHeadersFixed = document.getElementById('set-slicer-headers-fixed').checked;
   sv();
   closeM('m-settings');
+  buildCols();
 };
 
 // Move/Copy Widget
@@ -5771,6 +5774,14 @@ function injectSlicerStyles() {
       70% { box-shadow: inset 0 0 0 8px rgba(255, 170, 0, 0.1); }
       100% { box-shadow: inset 0 0 0 3px rgba(255, 170, 0, 0.4); }
     }
+    .slicer-headers-fixed .slicer-cell-header {
+      position: relative !important;
+      opacity: 1 !important;
+      pointer-events: auto !important;
+    }
+    .slicer-headers-fixed .slicer-cell-body {
+      height: calc(100% - 24px) !important;
+    }
   `;
   document.head.appendChild(style);
 }
@@ -5982,13 +5993,17 @@ function setupSlicerSubPageListeners(slicerPage) {
   if (!slicerPage.cellPages) return;
   if (_offlineMode) return; // Do not attach Firebase listeners in offline mode
 
-  // Get unique subpage IDs to listen to
-  const subPageIds = [...new Set(Object.values(slicerPage.cellPages))];
+  // Get unique subpage IDs to listen to, filtering out slicer pages to prevent circular listeners
+  const subPageIds = [...new Set(Object.values(slicerPage.cellPages))].filter(subPid => {
+    const pg = D.pages.find(p => p && p.id === subPid);
+    return pg && pg.pageType !== 'slicer';
+  });
   
   subPageIds.forEach(subPid => {
     if (!subPid || subPid === slicerPage.id) return;
     
     const path = `users/${USER_ID}/startmine_pages/${subPid}`;
+    let initial = true;
     const callback = (snap) => {
       if (isOwnWrite()) return;
       const pData = snap.val() || { widgets: [], miroCards: [] };
@@ -6042,14 +6057,15 @@ function setupSlicerSubPageListeners(slicerPage) {
           ts: pg.ts
         });
 
-        // Trigger rebuild to update Slicer view
-        if (cp().id === slicerPage.id) {
+        // Trigger rebuild to update Slicer view (only if not the initial synchronous call)
+        if (!initial && cp().id === slicerPage.id) {
           buildCols();
         }
       }
     };
 
     db.ref(path).on('value', callback);
+    initial = false;
     window._activeSubPageListeners.push({ path, callback });
   });
 }
@@ -6091,6 +6107,9 @@ function buildSlicerPage(page, wrap) {
   
   const containerEl = document.createElement('div');
   containerEl.className = 'slicer-grid-container';
+  if (D.settings && D.settings.slicerHeadersFixed) {
+    containerEl.classList.add('slicer-headers-fixed');
+  }
   
   // Bind bottom Slicer toolbar controls
   const tbRowsInput = document.getElementById('slicer-tb-rows');
@@ -6474,7 +6493,14 @@ function buildSlicerPage(page, wrap) {
           bodyEl.appendChild(bgOverlay);
         }
         
-        if (targetPage.pageType === 'miro') {
+        if (targetPage.pageType === 'slicer') {
+          console.warn('Nested slicer pages are not supported.');
+          const errorEl = document.createElement('div');
+          errorEl.className = 'slicer-empty-cell';
+          errorEl.style.cssText = 'height:100%;display:flex;align-items:center;justify-content:center;background:#1a0c10;z-index:2;position:relative;';
+          errorEl.innerHTML = `<div style="color:#ff5e5e;font-size:0.85rem;font-weight:500;text-align:center;padding:20px;">⚠️ Nested Slicer Page not supported</div>`;
+          bodyEl.appendChild(errorEl);
+        } else if (targetPage.pageType === 'miro') {
           let state = page.cellStates[cell.key];
           if (!state) {
             setTimeout(() => {
@@ -6970,20 +6996,32 @@ function buildSlicerPage(page, wrap) {
       contentEl.appendChild(titleEl);
 
       const selectEl = document.createElement('select');
-      selectEl.style.cssText = 'width:100%;background:#0a0c10;border:1px solid rgba(255,255,255,0.15);color:#fff;font-size:0.8rem;padding:8px 12px;border-radius:8px;outline:none;cursor:pointer;';
+      selectEl.style.cssText = 'width:100%;background:#000;border:1px solid rgba(255,255,255,0.15);color:#fff;font-size:0.8rem;padding:8px 12px;border-radius:8px;outline:none;cursor:pointer;';
       
       const defOpt = document.createElement('option');
       defOpt.value = '';
       defOpt.textContent = 'Select existing page...';
       selectEl.appendChild(defOpt);
 
-      const otherPages = (D.pages || []).filter(p => p && p.id !== page.id);
-      otherPages.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.id;
-        opt.textContent = `${p.pageType === 'miro' ? '🖼️' : '🗂️'} ${p.name}`;
-        selectEl.appendChild(opt);
-      });
+      const populateOptions = () => {
+        if (selectEl.children.length > 1) return; // already populated
+        const otherPages = (D.pages || [])
+          .filter(p => p && p.id !== page.id && p.pageType !== 'slicer')
+          .sort((a, b) => {
+            const tsA = a.ts || 0;
+            const tsB = b.ts || 0;
+            return tsB - tsA; // newest first
+          });
+        otherPages.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.style.background = '#000';
+          opt.textContent = `${p.pageType === 'miro' ? '🖼️' : '🗂️'} ${p.name}`;
+          selectEl.appendChild(opt);
+        });
+      };
+      selectEl.addEventListener('focus', populateOptions);
+      selectEl.addEventListener('mousedown', populateOptions);
 
       selectEl.onchange = () => {
         const nextPid = selectEl.value;
