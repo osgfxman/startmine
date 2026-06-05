@@ -3414,14 +3414,14 @@ document.getElementById('settings-btn').onclick = () => {
   envSel.value = D.settings.defaultEnv || '__last__';
   grpSel.value = D.settings.defaultGroup || '__last__';
   pgSel.value = D.settings.defaultPage || '__last__';
-  document.getElementById('set-slicer-headers-fixed').checked = !!D.settings.slicerHeadersFixed;
+  document.getElementById('set-slicer-headers-autohide').checked = !!D.settings.slicerHeadersAutoHide;
   openM('m-settings');
 };
 document.getElementById('ok-settings').onclick = () => {
   D.settings.defaultEnv = document.getElementById('set-def-env').value;
   D.settings.defaultGroup = document.getElementById('set-def-grp').value;
   D.settings.defaultPage = document.getElementById('set-def-pg').value;
-  D.settings.slicerHeadersFixed = document.getElementById('set-slicer-headers-fixed').checked;
+  D.settings.slicerHeadersAutoHide = document.getElementById('set-slicer-headers-autohide').checked;
   sv();
   closeM('m-settings');
   buildCols();
@@ -4253,7 +4253,9 @@ function buildCols() {
   if (maf) maf.classList.toggle('show', isMiro);
   
   const mtb = document.getElementById('miro-toolbar');
-  if (mtb) mtb.classList.toggle('show', isMiro || page.pageType === 'slicer');
+  const toolbarShown = isMiro || page.pageType === 'slicer';
+  if (mtb) mtb.classList.toggle('show', toolbarShown);
+  document.body.classList.toggle('left-toolbar-active', toolbarShown);
   
   const colsWrap = document.getElementById('cols-wrap');
   if (colsWrap) colsWrap.style.display = isMiro ? 'none' : 'flex';
@@ -5510,7 +5512,7 @@ function injectSlicerStyles() {
       z-index: 100;
     }
     .slicer-cell-header {
-      position: absolute;
+      position: relative;
       top: 0;
       left: 0;
       right: 0;
@@ -5529,14 +5531,10 @@ function injectSlicerStyles() {
       font-size: 0.68rem;
       z-index: 10000;
       user-select: none;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
-      overflow: visible !important;
-    }
-    .slicer-cell:hover .slicer-cell-header {
       opacity: 1;
       pointer-events: auto;
+      transition: opacity 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+      overflow: visible !important;
     }
     .slicer-cell-header.has-change {
       background: rgba(255, 107, 53, 0.95) !important;
@@ -5610,7 +5608,7 @@ function injectSlicerStyles() {
     }
     .slicer-cell-body {
       width: 100%;
-      height: 100%;
+      height: calc(100% - 24px);
       position: relative;
       overflow: hidden;
       background: transparent;
@@ -5774,13 +5772,17 @@ function injectSlicerStyles() {
       70% { box-shadow: inset 0 0 0 8px rgba(255, 170, 0, 0.1); }
       100% { box-shadow: inset 0 0 0 3px rgba(255, 170, 0, 0.4); }
     }
-    .slicer-headers-fixed .slicer-cell-header {
-      position: relative !important;
+    .slicer-headers-autohide .slicer-cell-header {
+      position: absolute !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+    .slicer-headers-autohide .slicer-cell:hover .slicer-cell-header {
       opacity: 1 !important;
       pointer-events: auto !important;
     }
-    .slicer-headers-fixed .slicer-cell-body {
-      height: calc(100% - 24px) !important;
+    .slicer-headers-autohide .slicer-cell-body {
+      height: 100% !important;
     }
   `;
   document.head.appendChild(style);
@@ -6107,8 +6109,8 @@ function buildSlicerPage(page, wrap) {
   
   const containerEl = document.createElement('div');
   containerEl.className = 'slicer-grid-container';
-  if (D.settings && D.settings.slicerHeadersFixed) {
-    containerEl.classList.add('slicer-headers-fixed');
+  if (D.settings && D.settings.slicerHeadersAutoHide) {
+    containerEl.classList.add('slicer-headers-autohide');
   }
   
   // Bind bottom Slicer toolbar controls
@@ -6491,6 +6493,15 @@ function buildSlicerPage(page, wrap) {
           const bgOverlay = document.createElement('div');
           bgOverlay.style.cssText = `position:absolute;inset:0;pointer-events:none;z-index:0;background:${bg};opacity:${opacity};`;
           bodyEl.appendChild(bgOverlay);
+        }
+        
+        if (cellState.headerColor) {
+          const opacity = cellState.headerOpacity != null ? cellState.headerOpacity : 0.4;
+          const hex = cellState.headerColor;
+          const r = parseInt(hex.slice(1, 3), 16);
+          const g = parseInt(hex.slice(3, 5), 16);
+          const b = parseInt(hex.slice(5, 7), 16);
+          headerEl.style.background = `rgba(${r}, ${g}, ${b}, ${opacity})`;
         }
         
         if (targetPage.pageType === 'slicer') {
@@ -6904,6 +6915,13 @@ function buildSlicerPage(page, wrap) {
             
             miroBoard.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${newZoom})`;
             updateSlicerCellGrid(miroContainer, state, targetPage);
+            
+            // Update the zoom text directly in the DOM
+            const headerZoomSpan = miroContainer.closest('.slicer-cell')?.querySelector('.slicer-cell-zoom-text');
+            if (headerZoomSpan) {
+              headerZoomSpan.textContent = `${zPercent}%`;
+            }
+            
             sv();
           }, { passive: false });
           

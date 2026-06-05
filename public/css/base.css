@@ -2739,4 +2739,25 @@ body:not(.outline-open) #root {
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
   flex-shrink: 1 !important;
+}
+
+/* Shifting layout when left toolbar is active (shown) */
+body.left-toolbar-active #ribbon {
+  margin-left: 32px !important;
+  width: calc(100% - 64px) !important;
+}
+body.left-toolbar-active #cw {
+  margin-left: 32px !important;
+  width: calc(100% - 64px) !important;
+}
+body.left-toolbar-active #miro-canvas {
+  margin-left: 32px !important;
+  width: calc(100% - 64px) !important;
+}
+
+/* Toolbar button icon alignment: center bottom */
+.mtb-btn {
+  justify-content: center !important;
+  align-items: flex-end !important;
+  padding-bottom: 2px !important; /* subtle padding to sit nicely at the bottom */
 }

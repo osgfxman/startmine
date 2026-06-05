@@ -2679,6 +2679,36 @@
     bgRow.appendChild(bgContainer);
     modal.appendChild(bgRow);
 
+    // Row: Header Color & Opacity
+    const headerBgRow = document.createElement('div');
+    headerBgRow.className = 'mcm-row';
+    const headerBgLabel = document.createElement('label');
+    headerBgLabel.textContent = 'Header Color & Opacity';
+    headerBgRow.appendChild(headerBgLabel);
+    const headerBgContainer = document.createElement('div');
+    headerBgContainer.className = 'mcm-bg-row';
+
+    const headerColorInput = document.createElement('input');
+    headerColorInput.type = 'color';
+    headerColorInput.value = state.headerColor || '#141823';
+
+    const headerOpacitySlider = document.createElement('input');
+    headerOpacitySlider.type = 'range';
+    headerOpacitySlider.min = '0';
+    headerOpacitySlider.max = '100';
+    headerOpacitySlider.value = Math.round((state.headerOpacity != null ? state.headerOpacity : 0.4) * 100);
+
+    const headerOpacityVal = document.createElement('span');
+    headerOpacityVal.className = 'mcm-opacity-val';
+    headerOpacityVal.textContent = headerOpacitySlider.value + '%';
+    headerOpacitySlider.oninput = () => { headerOpacityVal.textContent = headerOpacitySlider.value + '%'; };
+
+    headerBgContainer.appendChild(headerColorInput);
+    headerBgContainer.appendChild(headerOpacitySlider);
+    headerBgContainer.appendChild(headerOpacityVal);
+    headerBgRow.appendChild(headerBgContainer);
+    modal.appendChild(headerBgRow);
+
     // Row: Merge Cells / Custom Cell Actions
     const mergeRow = document.createElement('div');
     mergeRow.className = 'mcm-row';
@@ -2897,6 +2927,10 @@
         delete state.bgColor;
         delete state.bgOpacity;
       }
+
+      const hoVal = parseInt(headerOpacitySlider.value);
+      state.headerColor = headerColorInput.value;
+      state.headerOpacity = hoVal / 100;
 
       if (ackCheckbox && ackCheckbox.checked) {
         state.hasUnacknowledgedChange = false;
