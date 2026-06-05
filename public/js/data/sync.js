@@ -50,10 +50,10 @@
   updates[metaRef] = meta;
   updates[pagesMetaRef] = pagesMeta;
 
-  // Push all page data (active page from memory, others from cache)
   D.pages.forEach(p => {
     if (!p) return;
     let widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, customCells, ts, cellGuides, _layoutGuidesMode;
+    let gridRows, gridCols, cellPages, slicerColSizes, slicerRowSizes;
     if (p.id === D.cur) {
       p.ts = Date.now();
       // Active page: use live in-memory data
@@ -68,6 +68,11 @@
       customCells = p.customCells || [];
       cellGuides = p.cellGuides || {};
       _layoutGuidesMode = p._layoutGuidesMode || false;
+      gridRows = p.gridRows || null;
+      gridCols = p.gridCols || null;
+      cellPages = p.cellPages || null;
+      slicerColSizes = p.slicerColSizes || null;
+      slicerRowSizes = p.slicerRowSizes || null;
       ts = p.ts;
     } else {
       // Non-active page: always prefer cache (memory is evicted)
@@ -94,6 +99,11 @@
         customCells = cached.customCells || [];
         cellGuides = cached.cellGuides || {};
         _layoutGuidesMode = cached._layoutGuidesMode || false;
+        gridRows = cached.gridRows || null;
+        gridCols = cached.gridCols || null;
+        cellPages = cached.cellPages || null;
+        slicerColSizes = cached.slicerColSizes || null;
+        slicerRowSizes = cached.slicerRowSizes || null;
         ts = cached.ts || p.ts || Date.now();
       } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0) || (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode || (p.customCells && p.customCells.length > 0) || p._layoutGuidesMode || p.cellGuides) {
         widgets = p.widgets || [];
@@ -107,6 +117,11 @@
         customCells = p.customCells || [];
         cellGuides = p.cellGuides || {};
         _layoutGuidesMode = p._layoutGuidesMode || false;
+        gridRows = p.gridRows || null;
+        gridCols = p.gridCols || null;
+        cellPages = p.cellPages || null;
+        slicerColSizes = p.slicerColSizes || null;
+        slicerRowSizes = p.slicerRowSizes || null;
         ts = p.ts || Date.now();
       } else {
         // SAFETY: skip to avoid overwriting Firebase with empty data
@@ -126,6 +141,11 @@
       customCells,
       cellGuides,
       _layoutGuidesMode,
+      gridRows,
+      gridCols,
+      cellPages,
+      slicerColSizes,
+      slicerRowSizes,
       ts
     };
   });
@@ -540,6 +560,7 @@
       D.pages.forEach(p => {
         if (!p) return;
         let widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, customCells, ts, cellGuides, _layoutGuidesMode;
+        let gridRows, gridCols, cellPages, slicerColSizes, slicerRowSizes;
         if (p.id === D.cur) {
           p.ts = Date.now(); // Update live page timestamp
           // Active page — use live data
@@ -554,6 +575,11 @@
           customCells = p.customCells || [];
           cellGuides = p.cellGuides || {};
           _layoutGuidesMode = p._layoutGuidesMode || false;
+          gridRows = p.gridRows || null;
+          gridCols = p.gridCols || null;
+          cellPages = p.cellPages || null;
+          slicerColSizes = p.slicerColSizes || null;
+          slicerRowSizes = p.slicerRowSizes || null;
           ts = p.ts;
         } else {
           // NON-ACTIVE page — try cache, then memory
@@ -580,6 +606,11 @@
             customCells = cached.customCells || [];
             cellGuides = cached.cellGuides || {};
             _layoutGuidesMode = cached._layoutGuidesMode || false;
+            gridRows = cached.gridRows || null;
+            gridCols = cached.gridCols || null;
+            cellPages = cached.cellPages || null;
+            slicerColSizes = cached.slicerColSizes || null;
+            slicerRowSizes = cached.slicerRowSizes || null;
             ts = cached.ts || p.ts || Date.now();
           } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0) || (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode || (p.customCells && p.customCells.length > 0) || p._layoutGuidesMode || p.cellGuides) {
             widgets = p.widgets || [];
@@ -593,6 +624,11 @@
             customCells = p.customCells || [];
             cellGuides = p.cellGuides || {};
             _layoutGuidesMode = p._layoutGuidesMode || false;
+            gridRows = p.gridRows || null;
+            gridCols = p.gridCols || null;
+            cellPages = p.cellPages || null;
+            slicerColSizes = p.slicerColSizes || null;
+            slicerRowSizes = p.slicerRowSizes || null;
             ts = p.ts || Date.now();
           } else {
             // ⛔ ABSOLUTE GUARD: NEVER write empty data to Firebase
@@ -620,6 +656,11 @@
           customCells,
           cellGuides,
           _layoutGuidesMode,
+          gridRows,
+          gridCols,
+          cellPages,
+          slicerColSizes,
+          slicerRowSizes,
           ts
         };
         _savedCount++;
@@ -678,6 +719,11 @@
               updates[`users/${USER_ID}/startmine_pages/${activePg.id}/customCells`] = activePg.customCells || [];
               updates[`users/${USER_ID}/startmine_pages/${activePg.id}/cellGuides`] = activePg.cellGuides || {};
               updates[`users/${USER_ID}/startmine_pages/${activePg.id}/_layoutGuidesMode`] = activePg._layoutGuidesMode || false;
+              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/gridRows`] = activePg.gridRows || null;
+              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/gridCols`] = activePg.gridCols || null;
+              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/cellPages`] = activePg.cellPages || null;
+              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/slicerColSizes`] = activePg.slicerColSizes || null;
+              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/slicerRowSizes`] = activePg.slicerRowSizes || null;
 
               const oldWidgets = JSON.parse(_lastSyncedPageData.widgets || '[]');
               const oldCards = JSON.parse(_lastSyncedPageData.miroCards || '[]');
@@ -736,6 +782,11 @@
                 customCells: activePg.customCells || [],
                 cellGuides: activePg.cellGuides || {},
                 _layoutGuidesMode: activePg._layoutGuidesMode || false,
+                gridRows: activePg.gridRows || null,
+                gridCols: activePg.gridCols || null,
+                cellPages: activePg.cellPages || null,
+                slicerColSizes: activePg.slicerColSizes || null,
+                slicerRowSizes: activePg.slicerRowSizes || null,
                 ts: activePg.ts
               };
             }
@@ -768,6 +819,11 @@
               customCells: p.customCells || [],
               cellGuides: p.cellGuides || {},
               _layoutGuidesMode: p._layoutGuidesMode || false,
+              gridRows: p.gridRows || null,
+              gridCols: p.gridCols || null,
+              cellPages: p.cellPages || null,
+              slicerColSizes: p.slicerColSizes || null,
+              slicerRowSizes: p.slicerRowSizes || null,
               ts: p.ts
             };
           }
@@ -856,6 +912,11 @@
         customCells: activePg.customCells || [],
         cellGuides: activePg.cellGuides || {},
         _layoutGuidesMode: activePg._layoutGuidesMode || false,
+        gridRows: activePg.gridRows || null,
+        gridCols: activePg.gridCols || null,
+        cellPages: activePg.cellPages || null,
+        slicerColSizes: activePg.slicerColSizes || null,
+        slicerRowSizes: activePg.slicerRowSizes || null,
         ts: activePg.ts || Date.now()
       });
 

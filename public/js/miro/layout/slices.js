@@ -711,16 +711,31 @@
   function parseCellKey(cellKey) {
     if (!cellKey) return null;
     const parts = cellKey.split('_');
-    if (parts.length === 2) {
-      const c = parseInt(parts[0]), r = parseInt(parts[1]);
-      return { cStart: c, rStart: r, cEnd: c, rEnd: r };
-    } else if (parts.length === 4) {
-      return {
-        cStart: parseInt(parts[0]),
-        rStart: parseInt(parts[1]),
-        cEnd: parseInt(parts[2]),
-        rEnd: parseInt(parts[3])
-      };
+    const isSlicer = (typeof cp === 'function' && cp() && cp().pageType === 'slicer');
+    if (isSlicer) {
+      if (parts.length === 2) {
+        const r = parseInt(parts[0]), c = parseInt(parts[1]);
+        return { rStart: r, cStart: c, rEnd: r, cEnd: c };
+      } else if (parts.length === 4) {
+        return {
+          rStart: parseInt(parts[0]),
+          cStart: parseInt(parts[1]),
+          rEnd: parseInt(parts[2]),
+          cEnd: parseInt(parts[3])
+        };
+      }
+    } else {
+      if (parts.length === 2) {
+        const c = parseInt(parts[0]), r = parseInt(parts[1]);
+        return { cStart: c, rStart: r, cEnd: c, rEnd: r };
+      } else if (parts.length === 4) {
+        return {
+          cStart: parseInt(parts[0]),
+          rStart: parseInt(parts[1]),
+          cEnd: parseInt(parts[2]),
+          rEnd: parseInt(parts[3])
+        };
+      }
     }
     return null;
   }
@@ -772,6 +787,7 @@
   window.parseCellKey = parseCellKey;
   window.getActiveCells = getActiveCells;
   window.mergeMiroCellRange = mergeMiroCellRange;
+  window.showCellSettingsModal = showCellSettingsModal;
 
   function parseTitleAndIcon(titleStr) {
     if (!titleStr) return { title: '', icon: null };
@@ -1218,6 +1234,7 @@
       }
       const line1Text = parsedTitle || dynamicVal || defaultName;
       const titleSpan = document.createElement('span');
+      titleSpan.className = 'miro-cell-title-text';
       titleSpan.textContent = line1Text;
       row1.appendChild(titleSpan);
       textStack.appendChild(row1);
@@ -1225,6 +1242,7 @@
       // Row 2: Dynamic value (only if User Title was used on Row 1)
       if (parsedTitle && dynamicVal) {
         const row2 = document.createElement('div');
+        row2.className = 'miro-cell-dyn-row';
         row2.style.cssText = 'font-size: 0.6rem; opacity: 0.85; font-weight: normal;';
         row2.textContent = dynamicVal;
         textStack.appendChild(row2);
@@ -1282,6 +1300,22 @@
       });
 
       cellDiv.appendChild(lbl);
+
+      // Mouse hover event listener to track hovered cell
+      cellDiv.addEventListener('mouseenter', () => {
+        window._hoveredCellKey = cellKey;
+        if (typeof window.updateTabTitleForHoveredCell === 'function') {
+          window.updateTabTitleForHoveredCell();
+        }
+      });
+      cellDiv.addEventListener('mouseleave', () => {
+        if (window._hoveredCellKey === cellKey) {
+          window._hoveredCellKey = null;
+          if (typeof window.updateTabTitleForHoveredCell === 'function') {
+            window.updateTabTitleForHoveredCell();
+          }
+        }
+      });
 
       // Internal cell board
       const cellBoard = document.createElement('div');
@@ -2331,7 +2365,11 @@
     let c = 0, r = 0;
     if (!isCustomCell) {
       const parts = cellKey.split('_');
-      c = parseInt(parts[0]); r = parseInt(parts[1]);
+      if (page.pageType === 'slicer') {
+        r = parseInt(parts[0]); c = parseInt(parts[1]);
+      } else {
+        c = parseInt(parts[0]); r = parseInt(parts[1]);
+      }
     }
 
     const overlay = document.createElement('div');
@@ -2676,7 +2714,8 @@
 
         overlay.remove();
         sv();
-        buildMiroCanvas();
+        if (page.pageType === 'slicer') buildCols();
+        else buildMiroCanvas();
       };
       actionContainer.appendChild(delCellBtn);
       mergeRow.appendChild(actionContainer);
@@ -2701,13 +2740,15 @@
           if (!confirm('Split this merged cell back into individual grid cells?')) return;
           page.mergedCells = (page.mergedCells || []).filter(m => !(m.cStart === span.cStart && m.rStart === span.rStart && m.cEnd === span.cEnd && m.rEnd === span.rEnd));
           
-          // Re-partition cards
-          const canvas = document.getElementById('miro-canvas');
-          if (canvas) partitionMiroCardsIntoCells(page, canvas.clientWidth, canvas.clientHeight);
-          
           overlay.remove();
           sv();
-          buildMiroCanvas();
+          if (page.pageType === 'slicer') {
+            buildCols();
+          } else {
+            const canvas = document.getElementById('miro-canvas');
+            if (canvas) partitionMiroCardsIntoCells(page, canvas.clientWidth, canvas.clientHeight);
+            buildMiroCanvas();
+          }
         };
         mergeContainer.appendChild(unmergeBtn);
       } else {
@@ -2718,11 +2759,20 @@
         mergeColBtn.textContent = '🔗 Merge Column';
         mergeColBtn.onclick = () => {
           if (!confirm(`Merge all cells in column ${c+1}?`)) return;
-          const totalRows = (page.hGuides || []).length + 1;
-          mergeMiroCellRange(page, c, 0, c, totalRows - 1);
+          if (page.pageType === 'slicer') {
+            const totalRows = page.gridRows || 2;
+            page.mergedCells = (page.mergedCells || []).filter(m => {
+              return m.cStart > c || m.cEnd < c;
+            });
+            page.mergedCells.push({ rStart: 0, cStart: c, rEnd: totalRows - 1, cEnd: c });
+          } else {
+            const totalRows = (page.hGuides || []).length + 1;
+            mergeMiroCellRange(page, c, 0, c, totalRows - 1);
+          }
           overlay.remove();
           sv();
-          buildMiroCanvas();
+          if (page.pageType === 'slicer') buildCols();
+          else buildMiroCanvas();
         };
 
         const mergeRowBtn = document.createElement('button');
@@ -2732,18 +2782,27 @@
         mergeRowBtn.textContent = '🔗 Merge Row';
         mergeRowBtn.onclick = () => {
           if (!confirm(`Merge all cells in row ${r+1}?`)) return;
-          const totalCols = (page.vGuides || []).length + 1;
-          mergeMiroCellRange(page, 0, r, totalCols - 1, r);
+          if (page.pageType === 'slicer') {
+            const totalCols = page.gridCols || 2;
+            page.mergedCells = (page.mergedCells || []).filter(m => {
+              return m.rStart > r || m.rEnd < r;
+            });
+            page.mergedCells.push({ rStart: r, cStart: 0, rEnd: r, cEnd: totalCols - 1 });
+          } else {
+            const totalCols = (page.vGuides || []).length + 1;
+            mergeMiroCellRange(page, 0, r, totalCols - 1, r);
+          }
           overlay.remove();
           sv();
-          buildMiroCanvas();
+          if (page.pageType === 'slicer') buildCols();
+          else buildMiroCanvas();
         };
 
         mergeContainer.appendChild(mergeColBtn);
         mergeContainer.appendChild(mergeRowBtn);
 
-        const totalCols = (page.vGuides || []).length + 1;
-        const totalRows = (page.hGuides || []).length + 1;
+        const totalCols = page.pageType === 'slicer' ? (page.gridCols || 2) : ((page.vGuides || []).length + 1);
+        const totalRows = page.pageType === 'slicer' ? (page.gridRows || 2) : ((page.hGuides || []).length + 1);
         if (totalCols > 1 || totalRows > 1) {
           const customContainer = document.createElement('div');
           customContainer.style.cssText = 'display:flex;align-items:center;gap:6px;width:100%;margin-top:8px;font-size:0.65rem;';
@@ -2781,10 +2840,22 @@
               return;
             }
             if (!confirm(`Merge cells from [${c+1}, ${r+1}] to [${cEnd+1}, ${rEnd+1}]?`)) return;
-            mergeMiroCellRange(page, c, r, cEnd, rEnd);
+            if (page.pageType === 'slicer') {
+              page.mergedCells = (page.mergedCells || []).filter(m => {
+                const intersect = !(
+                  m.rEnd < r || m.rStart > rEnd ||
+                  m.cEnd < c || m.cStart > cEnd
+                );
+                return !intersect;
+              });
+              page.mergedCells.push({ rStart: r, cStart: c, rEnd: rEnd, cEnd: cEnd });
+            } else {
+              mergeMiroCellRange(page, c, r, cEnd, rEnd);
+            }
             overlay.remove();
             sv();
-            buildMiroCanvas();
+            if (page.pageType === 'slicer') buildCols();
+            else buildMiroCanvas();
           };
 
           customContainer.appendChild(colSel);
@@ -2847,7 +2918,8 @@
 
       overlay.remove();
       sv();
-      buildMiroCanvas();
+      if (page.pageType === 'slicer') buildCols();
+      else buildMiroCanvas();
     };
 
     actions.appendChild(cancelBtn);
@@ -3811,8 +3883,143 @@
     };
   };
 
+  window.getDynamicTitleValue = getDynamicTitleValue;
+
+  function updateTabTitleForHoveredCell() {
+    if (typeof cp !== 'function') return;
+    const page = cp();
+    if (!page) {
+      document.title = 'QuranGFX Backyard';
+      return;
+    }
+    
+    if (window._hoveredCellKey && page.cellStates && page.cellStates[window._hoveredCellKey]) {
+      const cellState = page.cellStates[window._hoveredCellKey];
+      if (cellState.dynamicType) {
+        const dynamicVal = getDynamicTitleValue(cellState.dynamicType);
+        const userTitle = cellState.title || '';
+        const parsedTitle = userTitle ? parseTitleAndIcon(userTitle).title : '';
+        
+        let defaultName = '';
+        const isCustom = window._hoveredCellKey.startsWith('cc_');
+        if (isCustom) {
+          const customCell = page.customCells && page.customCells.find(cc => cc.id === window._hoveredCellKey);
+          defaultName = customCell ? (customCell.title || 'Screen') : 'Screen';
+        } else {
+          const span = parseCellKey(window._hoveredCellKey);
+          if (span) {
+            defaultName = `Cell [${span.cStart+1}, ${span.rStart+1}]`;
+            if (span.cStart !== span.cEnd || span.rStart !== span.rEnd) {
+              defaultName = `Merged Cell [${span.cStart+1},${span.rStart+1} to ${span.cEnd+1},${span.rEnd+1}]`;
+            }
+          } else {
+            defaultName = `Cell`;
+          }
+        }
+        
+        const displayTitle = parsedTitle || defaultName;
+        document.title = `[${dynamicVal}] ${displayTitle} | ${page.name}`;
+      } else {
+        const userTitle = cellState.title || '';
+        const parsedTitle = userTitle ? parseTitleAndIcon(userTitle).title : '';
+        if (parsedTitle) {
+          document.title = `${parsedTitle} | ${page.name}`;
+        } else {
+          document.title = `${page.name} - QuranGFX Backyard`;
+        }
+      }
+    } else {
+      document.title = `${page.name} - QuranGFX Backyard`;
+    }
+  }
+  window.updateTabTitleForHoveredCell = updateTabTitleForHoveredCell;
+
+  // Periodic ticker to update cell dynamic titles and tab title every second
+  setInterval(() => {
+    if (typeof cp !== 'function') return;
+    const page = cp();
+    if (!page) return;
+    
+    // 1. Update document/tab title if a cell is hovered
+    if (window._hoveredCellKey) {
+      updateTabTitleForHoveredCell();
+    }
+    
+    // 2. Update cell headers dynamically if pageType is miro
+    if (page.pageType === 'miro') {
+      const viewports = document.querySelectorAll('.miro-cell-viewport');
+      viewports.forEach(cellDiv => {
+        const cellKey = cellDiv.dataset.cellKey;
+        if (!cellKey || !page.cellStates) return;
+        const cellState = page.cellStates[cellKey];
+        if (!cellState || !cellState.dynamicType) return;
+        
+        const dynamicVal = getDynamicTitleValue(cellState.dynamicType);
+        const progressVal = getDynamicProgressValue(cellState.dynamicType);
+        
+        const userTitle = cellState.title || '';
+        let parsedTitle = userTitle;
+        if (!cellState.icon && userTitle) {
+          parsedTitle = parseTitleAndIcon(userTitle).title;
+        }
+        
+        if (parsedTitle) {
+          const dynRow = cellDiv.querySelector('.miro-cell-dyn-row');
+          if (dynRow) {
+            dynRow.textContent = dynamicVal;
+          }
+        } else {
+          const titleSpan = cellDiv.querySelector('.miro-cell-title-text');
+          if (titleSpan) {
+            titleSpan.textContent = dynamicVal;
+          }
+        }
+        
+        const progSpan = cellDiv.querySelector('.miro-cell-progress-text');
+        if (progSpan) {
+          progSpan.textContent = progressVal;
+        }
+      });
+    } else if (page.pageType === 'slicer') {
+      const cellHeaders = document.querySelectorAll('.slicer-cell-header');
+      cellHeaders.forEach(header => {
+        const cellKey = header.dataset.cellKey;
+        if (!cellKey || !page.cellStates) return;
+        const cellState = page.cellStates[cellKey];
+        if (!cellState || !cellState.dynamicType) return;
+        
+        const dynamicVal = getDynamicTitleValue(cellState.dynamicType);
+        const progressVal = getDynamicProgressValue(cellState.dynamicType);
+        
+        const userTitle = cellState.title || '';
+        let parsedTitle = userTitle;
+        if (!cellState.icon && userTitle) {
+          parsedTitle = parseTitleAndIcon(userTitle).title;
+        }
+        
+        if (parsedTitle) {
+          const dynRow = header.querySelector('.slicer-cell-dyn-row');
+          if (dynRow) {
+            dynRow.textContent = dynamicVal;
+          }
+        } else {
+          const titleSpan = header.querySelector('.slicer-cell-title-text');
+          if (titleSpan) {
+            titleSpan.textContent = dynamicVal;
+          }
+        }
+        
+        const progSpan = header.querySelector('.slicer-cell-progress-text');
+        if (progSpan) {
+          progSpan.textContent = progressVal;
+        }
+      });
+    }
+  }, 1000);
+
   // Register namespace
   SM.miro.layout = SM.miro.layout || {};
+  SM.miro.layout.getDynamicTitleValue = getDynamicTitleValue;
   SM.miro.layout.buildMiroDynamicTitleCard = window.buildMiroDynamicTitleCard;
   SM.miro.layout.showDynamicTitleCardSettingsModal = window.showDynamicTitleCardSettingsModal;
   SM.miro.layout = SM.miro.layout || {};
