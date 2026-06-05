@@ -780,9 +780,43 @@ function renderMeta() {
 // Switch the active synchronized payload
 function switchActivePage(pageId) {
   window._lastSyncedPageData = null;
+
+  // Clear any existing subpage listeners
+  if (window._activeSubPageListeners) {
+    window._activeSubPageListeners.forEach(item => {
+      try {
+        db.ref(item.path).off('value', item.callback);
+      } catch(e) { console.warn('[SYNC SUB DETACH]', e); }
+    });
+  }
+  window._activeSubPageListeners = [];
+
   // ─── Safe Eviction: ONLY clear memory after verified cache write ───
   const prevPg = cp();
   if (prevPg && prevPg.id !== pageId) {
+    // Save all subpages of the Slicer page to local cache
+    if (prevPg.pageType === 'slicer' && prevPg.cellPages) {
+      Object.values(prevPg.cellPages).forEach(subPid => {
+        const subPg = D.pages.find(p => p && p.id === subPid);
+        if (subPg) {
+          cachePageDataSafe(subPid, {
+            widgets: subPg.widgets || [],
+            miroCards: subPg.miroCards || [],
+            vGuides: subPg.vGuides || [],
+            hGuides: subPg.hGuides || [],
+            _guidesMode: subPg._guidesMode || false,
+            lockedGuides: subPg.lockedGuides || [],
+            cellStates: subPg.cellStates || {},
+            mergedCells: subPg.mergedCells || [],
+            customCells: subPg.customCells || [],
+            cellGuides: subPg.cellGuides || {},
+            _layoutGuidesMode: subPg._layoutGuidesMode || false,
+            ts: subPg.ts || Date.now()
+          });
+        }
+      });
+    }
+
     const prevItemCount = (prevPg.widgets || []).length + (prevPg.miroCards || []).length;
     if (prevItemCount > 0) {
       // Save to cache and VERIFY before evicting from memory
@@ -805,7 +839,6 @@ function switchActivePage(pageId) {
         // Cache FAILED! Keep data in memory — DO NOT evict!
         console.error(`[EVICTION BLOCKED] Page "${prevPg.name}" (${prevPg.id}) has ${prevItemCount} items but cache write failed. Keeping in memory!`);
         if (typeof showToast === 'function') showToast('⚠️ Cache full — keeping page data in memory (safe)', 5000);
-        // Still write to IndexedDB asynchronously (already done in cachePageDataSafe)
       }
     } else {
       // Empty page — safe to evict (nothing to lose)
@@ -854,6 +887,9 @@ function switchActivePage(pageId) {
         widgets: JSON.stringify(pg.widgets),
         miroCards: JSON.stringify(pg.miroCards)
       };
+      if (pg.pageType === 'slicer') {
+        setupSlicerSubPageListeners(pg);
+      }
     }
     buildCols();
   } else {
@@ -885,6 +921,9 @@ function switchActivePage(pageId) {
             widgets: JSON.stringify(pg.widgets),
             miroCards: JSON.stringify(pg.miroCards)
           };
+          if (pg.pageType === 'slicer') {
+            setupSlicerSubPageListeners(pg);
+          }
           buildCols();
           console.log(`[IDB RESTORE] Page "${pg.name}" loaded from IndexedDB (${(pg.widgets||[]).length}w + ${(pg.miroCards||[]).length}c)`);
         }
@@ -980,6 +1019,9 @@ function switchActivePage(pageId) {
           widgets: JSON.stringify(pg.widgets),
           miroCards: JSON.stringify(pg.miroCards)
         };
+        if (pg.pageType === 'slicer') {
+          setupSlicerSubPageListeners(pg);
+        }
         buildCols();
       }
     }
@@ -4170,7 +4212,7 @@ function buildCols() {
   if (maf) maf.classList.toggle('show', isMiro);
   
   const mtb = document.getElementById('miro-toolbar');
-  if (mtb) mtb.classList.toggle('show', isMiro);
+  if (mtb) mtb.classList.toggle('show', isMiro || page.pageType === 'slicer');
   
   const colsWrap = document.getElementById('cols-wrap');
   if (colsWrap) colsWrap.style.display = isMiro ? 'none' : 'flex';
@@ -4191,6 +4233,7 @@ function buildCols() {
   if (page.pageType === 'slicer') {
     wrap.innerHTML = '';
     wrap.style.gridTemplateColumns = '';
+    wrap.classList.add('cw-slicer');
     buildSlicerPage(page, wrap);
     if (typeof buildOutline === 'function') buildOutline();
     return;
@@ -5301,7 +5344,7 @@ function injectSlicerStyles() {
       min-height: 0 !important;
       overflow: hidden !important;
       position: relative !important;
-      background: #11141c !important;
+      background: transparent !important;
     }
     .slicer-grid-container {
       position: relative;
@@ -5415,7 +5458,7 @@ function injectSlicerStyles() {
     .slicer-cell {
       display: flex;
       flex-direction: column;
-      background: #11141c;
+      background: transparent;
       overflow: hidden;
       position: relative;
       height: 100%;
@@ -5487,7 +5530,7 @@ function injectSlicerStyles() {
       height: 100%;
       position: relative;
       overflow: hidden;
-      background: #11141c;
+      background: transparent;
       flex: 1;
     }
     .slicer-empty-cell {
@@ -5509,7 +5552,7 @@ function injectSlicerStyles() {
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #11141c;
+      background: transparent;
       user-select: none;
     }
     .slicer-miro-board {
@@ -5529,7 +5572,7 @@ function injectSlicerStyles() {
       overflow-y: hidden;
       padding: 2px;
       box-sizing: border-box;
-      background: #11141c;
+      background: transparent;
     }
     .slicer-widget-col {
       flex: 1;
@@ -5650,6 +5693,207 @@ function autofitSlicerCell(page, cellKey, targetPage, cellW, cellH) {
   const panX = (cellW - (minX + maxX) * newZoom) / 2;
   const panY = (cellH - (minY + maxY) * newZoom) / 2;
   page.cellStates[cellKey] = { zoom: newZoomNum, panX, panY };
+}
+
+function applyCellBackground(container, targetPage) {
+  if (!targetPage.bg) {
+    const defaultBg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+    container.style.background = `radial-gradient(ellipse 70% 50% at 50% -5%, rgba(108,143,255,0.1) 0%, transparent 65%), ${defaultBg || '#f3f4f6'}`;
+    return;
+  }
+  if (targetPage.bgType === 'image') {
+    container.style.background = `url('${targetPage.bg}') center/cover no-repeat`;
+  } else {
+    container.style.background = targetPage.bg;
+  }
+}
+
+function getGridColorForPage(targetPage) {
+  let isLight = false;
+  if (!targetPage.bg) {
+    const defaultBg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+    if (defaultBg.startsWith('#')) {
+      isLight = isHexColorLight(defaultBg);
+    } else {
+      isLight = true;
+    }
+  } else if (targetPage.bgType !== 'image') {
+    if (targetPage.bg.startsWith('#')) {
+      isLight = isHexColorLight(targetPage.bg);
+    } else if (targetPage.bg.startsWith('rgb')) {
+      isLight = isRgbColorLight(targetPage.bg);
+    }
+  }
+  return isLight ? 'rgba(0,0,0,' : 'rgba(255,255,255,';
+}
+
+function isHexColorLight(hex) {
+  hex = hex.replace('#', '');
+  if (hex.length === 3) {
+    hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+  }
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  const luma = (r * 299 + g * 587 + b * 114) / 1000;
+  return luma > 140;
+}
+
+function isRgbColorLight(rgb) {
+  const m = rgb.match(/\d+/g);
+  if (m && m.length >= 3) {
+    const r = parseInt(m[0]), g = parseInt(m[1]), b = parseInt(m[2]);
+    const luma = (r * 299 + g * 587 + b * 114) / 1000;
+    return luma > 140;
+  }
+  return true;
+}
+
+function updateSlicerCellGrid(container, state, targetPage) {
+  if (!container || !state || !targetPage) return;
+  const overlay = container.querySelector('.slicer-miro-grid-overlay');
+  if (!overlay) return;
+
+  const zoom = (state.zoom || 100) / 100;
+  const panX = state.panX || 0;
+  const panY = state.panY || 0;
+
+  const BASE = 10;
+  const FACTOR = 5;
+
+  let fine = BASE;
+  while (fine * zoom < 8) fine *= FACTOR;
+  while (fine * zoom > 200) fine /= FACTOR;
+
+  const medium = fine * FACTOR;
+  const coarse = medium * FACTOR;
+
+  const fineScreen = fine * zoom;
+  const medScreen = medium * zoom;
+  const coarseScreen = coarse * zoom;
+
+  const fineAlpha = clamp((fineScreen - 6) / 25, 0, 1) * 0.05;
+  const medAlpha = clamp((medScreen - 6) / 40, 0, 1) * 0.10;
+  const coarseAlpha = clamp((coarseScreen - 6) / 60, 0, 1) * 0.16;
+
+  const layers = [];
+  const sizes = [];
+  const positions = [];
+
+  const colorPrefix = getGridColorForPage(targetPage);
+
+  function addLevel(screenSize, alpha) {
+    if (alpha < 0.002) return;
+    const c = `${colorPrefix}${alpha.toFixed(4)})`;
+    layers.push(
+      `linear-gradient(${c} 1px, transparent 1px)`,
+      `linear-gradient(90deg, ${c} 1px, transparent 1px)`,
+    );
+    const s = `${screenSize}px ${screenSize}px`;
+    sizes.push(s, s);
+    const ox = panX % screenSize;
+    const oy = panY % screenSize;
+    const p = `${ox}px ${oy}px`;
+    positions.push(p, p);
+  }
+
+  addLevel(fineScreen, fineAlpha);
+  addLevel(medScreen, medAlpha);
+  addLevel(coarseScreen, coarseAlpha);
+
+  if (layers.length) {
+    overlay.style.backgroundImage = layers.join(',');
+    overlay.style.backgroundSize = sizes.join(',');
+    overlay.style.backgroundPosition = positions.join(',');
+  } else {
+    overlay.style.backgroundImage = 'none';
+  }
+}
+
+function setupSlicerSubPageListeners(slicerPage) {
+  // Clear any existing subpage listeners first
+  if (window._activeSubPageListeners) {
+    window._activeSubPageListeners.forEach(item => {
+      try {
+        db.ref(item.path).off('value', item.callback);
+      } catch(e) { console.warn('[SYNC SUB DETACH]', e); }
+    });
+  }
+  window._activeSubPageListeners = [];
+
+  if (!slicerPage.cellPages) return;
+  if (_offlineMode) return; // Do not attach Firebase listeners in offline mode
+
+  // Get unique subpage IDs to listen to
+  const subPageIds = [...new Set(Object.values(slicerPage.cellPages))];
+  
+  subPageIds.forEach(subPid => {
+    if (!subPid || subPid === slicerPage.id) return;
+    
+    const path = `users/${USER_ID}/startmine_pages/${subPid}`;
+    const callback = (snap) => {
+      if (isOwnWrite()) return;
+      const pData = snap.val() || { widgets: [], miroCards: [] };
+      
+      const pg = D.pages.find(p => p && p.id === subPid);
+      if (pg) {
+        // Timestamp Guard
+        const incomingTs = pData.ts || 0;
+        const localTs = pg.ts || 0;
+        if (localTs > incomingTs) {
+          console.warn(`[FIREBASE SUB GUARD ⛔] Local data for subpage "${pg.name}" is newer (${localTs}) than incoming (${incomingTs}) — ignoring update.`);
+          return;
+        }
+
+        // Overwrite empty guard (same as main page)
+        const incomingW = (pData.widgets || []).length;
+        const incomingC = (pData.miroCards || []).length;
+        const incomingG = (pData.vGuides || []).length + (pData.hGuides || []).length + (pData.customCells || []).length;
+        const localW = (pg.widgets || []).length;
+        const localC = (pg.miroCards || []).length;
+        const localG = (pg.vGuides || []).length + (pg.hGuides || []).length + (pg.customCells || []).length;
+        const incomingEmpty = (incomingW === 0 && incomingC === 0 && incomingG === 0);
+        const localHasData = (localW > 0 || localC > 0 || localG > 0);
+        if (incomingEmpty && localHasData && incomingTs <= localTs) {
+          console.error(`[FIREBASE SUB GUARD ⛔] Incoming data for subpage "${pg.name}" is EMPTY but local has data — IGNORING Firebase update!`);
+          return;
+        }
+
+        pg.widgets = pData.widgets || [];
+        pg.miroCards = pData.miroCards || [];
+        pg.vGuides = pData.vGuides || [];
+        pg.hGuides = pData.hGuides || [];
+        pg._guidesMode = pData._guidesMode || false;
+        pg.lockedGuides = pData.lockedGuides || [];
+        pg.cellStates = pData.cellStates || {};
+        pg.mergedCells = pData.mergedCells || [];
+        pg.customCells = pData.customCells || [];
+        pg.ts = incomingTs;
+
+        // Cache locally
+        cachePageData(subPid, {
+          widgets: pg.widgets,
+          miroCards: pg.miroCards,
+          vGuides: pg.vGuides,
+          hGuides: pg.hGuides,
+          _guidesMode: pg._guidesMode,
+          lockedGuides: pg.lockedGuides,
+          cellStates: pg.cellStates,
+          mergedCells: pg.mergedCells,
+          customCells: pg.customCells,
+          ts: pg.ts
+        });
+
+        // Trigger rebuild to update Slicer view
+        if (cp().id === slicerPage.id) {
+          buildCols();
+        }
+      }
+    };
+
+    db.ref(path).on('value', callback);
+    window._activeSubPageListeners.push({ path, callback });
+  });
 }
 
 function buildSlicerPage(page, wrap) {
@@ -5926,23 +6170,6 @@ function buildSlicerPage(page, wrap) {
         actionsEl.appendChild(maxBtn);
         
         if (targetPage.pageType === 'miro') {
-          // Miro Actions
-          const stickyBtn = document.createElement('button');
-          stickyBtn.textContent = '＋ Sticky';
-          stickyBtn.onclick = () => {
-            window._miroAddTargetPageId = targetPage.id;
-            openM('m-miro-sticky');
-          };
-          actionsEl.appendChild(stickyBtn);
-          
-          const cardBtn = document.createElement('button');
-          cardBtn.textContent = '＋ Card';
-          cardBtn.onclick = () => {
-            window._miroAddTargetPageId = targetPage.id;
-            openM('m-miro-add');
-          };
-          actionsEl.appendChild(cardBtn);
-          
           const fitBtn = document.createElement('button');
           fitBtn.innerHTML = '🔍 Fit';
           fitBtn.onclick = () => {
@@ -5971,7 +6198,17 @@ function buildSlicerPage(page, wrap) {
           
           const miroContainer = document.createElement('div');
           miroContainer.className = 'slicer-miro-container';
-          
+          applyCellBackground(miroContainer, targetPage);
+
+          const gridOverlay = document.createElement('div');
+          gridOverlay.className = 'slicer-miro-grid-overlay';
+          gridOverlay.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:1;';
+          miroContainer.appendChild(gridOverlay);
+
+          // Update grid cursor style initially based on active tool
+          const anyCreateMode = window._stickyCreateMode || window._textCreateMode || window._gridCreateMode || window._mindmapCreateMode || window._widgetCreateMode || window._trelloCreateMode || window._embedCreateMode || window._overlayPageCreateMode || window._dyntitleCreateMode || window._penMode || window._shapeMode;
+          miroContainer.style.cursor = anyCreateMode ? 'crosshair' : 'grab';
+
           const miroBoard = document.createElement('div');
           miroBoard.className = 'slicer-miro-board';
           const zoom = (state.zoom || 100) / 100;
@@ -6012,23 +6249,311 @@ function buildSlicerPage(page, wrap) {
               miroBoard.appendChild(cardEl);
             }
           });
+
+          // Render grid lines initially
+          updateSlicerCellGrid(miroContainer, state, targetPage);
           
           // Event handlers for pan/zoom
           let isPanning = false;
           let startX = 0, startY = 0;
           let startPanX = 0, startPanY = 0;
+
+          // Event handlers for drawing/shapes inside cell
+          let cellShapeDrawing = false;
+          let cellPenDrawing = false;
+          let cellPenPoints = [];
+          let liveSvg = null;
+          let previewEl = null;
+          let shapeStartX = 0;
+          let shapeStartY = 0;
           
           miroContainer.addEventListener('mousedown', (e) => {
-            if (e.target === miroContainer || e.target === miroBoard || e.button === 1 || e.button === 2) {
-              isPanning = true;
-              startX = e.clientX;
-              startY = e.clientY;
-              startPanX = state.panX || 0;
-              startPanY = state.panY || 0;
-              miroContainer.style.cursor = 'grabbing';
+            if (e.target.closest('.slicer-cell-floating-toolbar, .sn-toolbar, .mt-toolbar, .mc-del')) return;
+            if (e.button !== 0 && e.type !== 'touchstart') {
+              // Middle or right click: start panning
+              if (e.button === 1 || e.button === 2) {
+                isPanning = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                startPanX = state.panX || 0;
+                startPanY = state.panY || 0;
+                miroContainer.style.cursor = 'grabbing';
+                e.preventDefault();
+                e.stopPropagation();
+              }
+              return;
+            }
+
+            const currentZoom = (state.zoom || 100) / 100;
+
+            // Handle shape drawing mode
+            if (window._shapeMode) {
               e.preventDefault();
               e.stopPropagation();
+              cellShapeDrawing = true;
+              const rect = miroContainer.getBoundingClientRect();
+              shapeStartX = (e.clientX - rect.left - (state.panX || 0)) / currentZoom;
+              shapeStartY = (e.clientY - rect.top - (state.panY || 0)) / currentZoom;
+              previewEl = document.createElement('div');
+              previewEl.style.cssText = `position:absolute;border:2px dashed var(--ac);pointer-events:none;z-index:9999;left:${shapeStartX}px;top:${shapeStartY}px;width:0;height:0;`;
+              miroBoard.appendChild(previewEl);
+
+              const onMove = (ev) => {
+                if (!cellShapeDrawing || !previewEl) return;
+                const r = miroContainer.getBoundingClientRect();
+                const mx = (ev.clientX - r.left - (state.panX || 0)) / currentZoom;
+                const my = (ev.clientY - r.top - (state.panY || 0)) / currentZoom;
+                const x = Math.min(shapeStartX, mx), y = Math.min(shapeStartY, my);
+                const w = Math.abs(mx - shapeStartX), h = Math.abs(my - shapeStartY);
+                previewEl.style.left = x + 'px';
+                previewEl.style.top = y + 'px';
+                previewEl.style.width = w + 'px';
+                previewEl.style.height = h + 'px';
+              };
+
+              const onUp = (ev) => {
+                cellShapeDrawing = false;
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                if (previewEl) { previewEl.remove(); previewEl = null; }
+                const r = miroContainer.getBoundingClientRect();
+                const mx = (ev.clientX - r.left - (state.panX || 0)) / currentZoom;
+                const my = (ev.clientY - r.top - (state.panY || 0)) / currentZoom;
+                const w = Math.abs(mx - shapeStartX), h = Math.abs(my - shapeStartY);
+                if (w < 10 && h < 10) return;
+                const x = Math.min(shapeStartX, mx), y = Math.min(shapeStartY, my);
+                
+                const tPage = D.pages.find(p => p.id === targetPageId);
+                if (tPage) {
+                  if (!tPage.miroCards) tPage.miroCards = [];
+                  tPage.miroCards.push({
+                    id: uid(), type: 'shape', shape: window._activeShapeType || 'rect',
+                    x, y, w: Math.max(w, 40), h: Math.max(h, 40),
+                    fillColor: 'none', strokeColor: '#333333', strokeWidth: 2, opacity: 1
+                  });
+                  sv();
+                  buildCols();
+                }
+              };
+
+              document.addEventListener('mousemove', onMove);
+              document.addEventListener('mouseup', onUp);
+              return;
             }
+
+            // Handle pen drawing mode
+            if (window._penMode) {
+              e.preventDefault();
+              e.stopPropagation();
+              cellPenDrawing = true;
+              const rect = miroContainer.getBoundingClientRect();
+              const bx = (e.clientX - rect.left - (state.panX || 0)) / currentZoom;
+              const by = (e.clientY - rect.top - (state.panY || 0)) / currentZoom;
+              cellPenPoints = [{ x: bx, y: by }];
+
+              liveSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+              liveSvg.setAttribute('width', '99999');
+              liveSvg.setAttribute('height', '99999');
+              liveSvg.style.cssText = 'position:absolute;left:0;top:0;pointer-events:none;z-index:9999;overflow:visible;';
+              const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+              pathEl.setAttribute('d', `M${bx},${by}`);
+              pathEl.setAttribute('fill', 'none');
+              pathEl.setAttribute('stroke', document.getElementById('pen-color').value || '#333');
+              pathEl.setAttribute('stroke-width', document.getElementById('pen-width').value || '3');
+              pathEl.setAttribute('stroke-linecap', 'round');
+              pathEl.setAttribute('stroke-linejoin', 'round');
+              liveSvg.appendChild(pathEl);
+              miroBoard.appendChild(liveSvg);
+
+              const onMove = (ev) => {
+                if (!cellPenDrawing || !liveSvg) return;
+                const r = miroContainer.getBoundingClientRect();
+                const mx = (ev.clientX - r.left - (state.panX || 0)) / currentZoom;
+                const my = (ev.clientY - r.top - (state.panY || 0)) / currentZoom;
+                cellPenPoints.push({ x: mx, y: my });
+                let d = `M${cellPenPoints[0].x},${cellPenPoints[0].y}`;
+                for (let i = 1; i < cellPenPoints.length; i++) d += ` L${cellPenPoints[i].x},${cellPenPoints[i].y}`;
+                liveSvg.querySelector('path').setAttribute('d', d);
+              };
+
+              const onUp = () => {
+                cellPenDrawing = false;
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                if (liveSvg) { liveSvg.remove(); liveSvg = null; }
+                if (cellPenPoints.length < 2) return;
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                cellPenPoints.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); });
+                const pad = 10;
+                const w = maxX - minX + pad * 2, h = maxY - minY + pad * 2;
+                const normalized = cellPenPoints.map(p => ({ x: p.x - minX + pad, y: p.y - minY + pad }));
+                
+                const tPage = D.pages.find(p => p.id === targetPageId);
+                if (tPage) {
+                  if (!tPage.miroCards) tPage.miroCards = [];
+                  tPage.miroCards.push({
+                    id: uid(), type: 'pen', points: normalized,
+                    x: minX - pad, y: minY - pad, w, h,
+                    penColor: document.getElementById('pen-color').value || '#333',
+                    penWidth: +(document.getElementById('pen-width').value) || 3
+                  });
+                  sv();
+                  buildCols();
+                }
+              };
+
+              document.addEventListener('mousemove', onMove);
+              document.addEventListener('mouseup', onUp);
+              return;
+            }
+
+            // Handle click-to-place tools
+            const anyCreate = window._stickyCreateMode || window._textCreateMode || window._gridCreateMode || window._mindmapCreateMode || window._widgetCreateMode || window._trelloCreateMode || window._embedCreateMode || window._overlayPageCreateMode || window._dyntitleCreateMode;
+            if (anyCreate) {
+              e.preventDefault();
+              e.stopPropagation();
+              
+              try {
+                const rect = miroContainer.getBoundingClientRect();
+                const clickX = e.clientX - rect.left;
+                const clickY = e.clientY - rect.top;
+                const bx = (clickX - (state.panX || 0)) / currentZoom;
+                const by = (clickY - (state.panY || 0)) / currentZoom;
+                
+                const tPage = D.pages.find(p => p.id === targetPageId);
+                if (!tPage) return;
+                if (!tPage.miroCards) tPage.miroCards = [];
+                
+                const newId = uid();
+                
+                if (window._stickyCreateMode) {
+                  tPage.miroCards.push({ id: newId, type: 'sticky', text: '', color: 'yellow', shape: 'rect', x: bx - 140, y: by - 80, w: 280, h: 160 });
+                  sv();
+                  buildCols();
+                  setTimeout(() => {
+                    const el = document.querySelector(`.slicer-cell[data-cell-key="${cell.key}"] [data-cid="${newId}"] .ms-text`);
+                    if (el) {
+                      el.contentEditable = true;
+                      el.focus();
+                      const tb = el.closest('.miro-sticky')?.querySelector('.sn-toolbar');
+                      if (tb) tb.classList.add('show');
+                    }
+                  }, 100);
+                } else if (window._textCreateMode) {
+                  tPage.miroCards.push({ id: newId, type: 'text', text: '', x: bx - 60, y: by - 15, w: 200, h: 40, fontSize: 24, font: 'Inter', fontColor: '#333333', align: 'right' });
+                  sv();
+                  buildCols();
+                  setTimeout(() => {
+                    const el = document.querySelector(`.slicer-cell[data-cell-key="${cell.key}"] [data-cid="${newId}"] .mt-text`);
+                    if (el) {
+                      el.contentEditable = true;
+                      el.focus();
+                      const tb = el.closest('.miro-text')?.querySelector('.mt-toolbar');
+                      if (tb) tb.classList.add('show');
+                    }
+                  }, 100);
+                } else if (window._gridCreateMode) {
+                  const rows = window._gridPickerRows || 3, cols = window._gridPickerCols || 3;
+                  const rdInput = document.getElementById('mgp-rd');
+                  const cdInput = document.getElementById('mgp-cd');
+                  const rowH = rdInput ? parseInt(rdInput.value) || 40 : 40;
+                  const colW = cdInput ? parseInt(cdInput.value) || 120 : 120;
+                  const cellsData = [];
+                  for (let r = 0; r < rows; r++) { const row = []; for (let c = 0; c < cols; c++) row.push(''); cellsData.push(row); }
+                  const w = cols * colW, h = rows * rowH;
+                  const colWidths = Array(cols).fill(colW);
+                  const rowHeights = Array(rows).fill(rowH);
+                  tPage.miroCards.push({ id: uid(), type: 'grid', rows, cols, cells: cellsData, colWidths, rowHeights, x: bx - w / 2, y: by - h / 2, w, h, headerColor: 'none', borderColor: '#555' });
+                  sv();
+                  buildCols();
+                } else if (window._mindmapCreateMode) {
+                  const rootId = uid(), child1 = uid(), child2 = uid(), child3 = uid();
+                  tPage.miroCards.push({
+                    id: uid(), type: 'mindmap', x: bx - 300, y: by - 200, w: 600, h: 400,
+                    root: {
+                      id: rootId, text: 'Main Topic', color: '#6c8fff',
+                      children: [
+                        { id: child1, text: 'Branch 1', color: '#ff6b6b', children: [] },
+                        { id: child2, text: 'Branch 2', color: '#51cf66', children: [] },
+                        { id: child3, text: 'Branch 3', color: '#ffd43b', children: [] },
+                      ],
+                    },
+                  });
+                  sv();
+                  buildCols();
+                } else if (window._widgetCreateMode) {
+                  tPage.miroCards.push({ id: uid(), type: 'bwidget', title: 'Bookmarks', emoji: '🗂️', items: [], x: bx - 160, y: by - 200, w: 320, h: 400, color: { r: 255, g: 255, b: 255, a: 1 } });
+                  sv();
+                  buildCols();
+                } else if (window._trelloCreateMode) {
+                  const gap = 20;
+                  const lw = 260, lh = 380;
+                  const lists = [
+                    { title: '2Do', color: '#6c8fff' },
+                    { title: 'In Progress', color: '#ffd43b' },
+                    { title: 'Done', color: '#51cf66' }
+                  ];
+                  const totalW = lists.length * lw + (lists.length - 1) * gap;
+                  const startX = bx - totalW / 2;
+                  lists.forEach((l, i) => {
+                    tPage.miroCards.push({ id: uid(), type: 'trello', title: l.title, listColor: l.color, cards: [], x: startX + i * (lw + gap), y: by - lh / 2, w: lw, h: lh });
+                  });
+                  sv();
+                  buildCols();
+                } else if (window._overlayPageCreateMode) {
+                  const opIdx = window._overlayPageCreateIdx;
+                  tPage.miroCards.push({ id: uid(), type: 'overlay-page', overlayPage: opIdx, x: bx - Math.floor(window.innerWidth*0.42), y: by - Math.floor(window.innerHeight*0.4), w: Math.floor(window.innerWidth*0.85), h: Math.floor(window.innerHeight*0.8), calOffset: 0, calTheme: 'light', ganttView: '2week', ganttRowHeight: 50 });
+                  sv();
+                  buildCols();
+                } else if (window._embedCreateMode) {
+                  const url = prompt('🌐 Enter published URL (Google Sheets chart, web page, etc.):');
+                  if (url && url.trim()) {
+                    tPage.miroCards.push({ id: uid(), type: 'embed', embedUrl: url.trim(), cropRect: null, refreshMin: 15, x: bx - 300, y: by - 200, w: 600, h: 400 });
+                    sv();
+                    buildCols();
+                  }
+                } else if (window._dyntitleCreateMode) {
+                  tPage.miroCards.push({
+                    id: uid(),
+                    type: 'dyntitle',
+                    title: '',
+                    dynamicType: '',
+                    pinned: true,
+                    w: 120,
+                    h: 40,
+                    _pinCellW: 120,
+                    _pinCellH: 40,
+                    x: bx - 60,
+                    y: by - 20,
+                    _pinCellX: clickX - 60,
+                    _pinCellY: clickY - 20,
+                    _pinScreenX: clickX - 60,
+                    _pinScreenY: clickY - 20,
+                    _pinScreenW: 120,
+                    _pinScreenH: 40
+                  });
+                  sv();
+                  buildCols();
+                }
+
+                if (typeof window.setActiveTool === 'function') {
+                  window.setActiveTool('select');
+                }
+              } catch (err) {
+                console.error('[SLICER TOOL CREATE ERROR]', err);
+              }
+              return;
+            }
+
+            // Fallback default click behavior: start panning
+            isPanning = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            startPanX = state.panX || 0;
+            startPanY = state.panY || 0;
+            miroContainer.style.cursor = 'grabbing';
+            e.preventDefault();
+            e.stopPropagation();
           });
           
           window.addEventListener('mousemove', (e) => {
@@ -6038,12 +6563,14 @@ function buildSlicerPage(page, wrap) {
             state.panX = startPanX + dx;
             state.panY = startPanY + dy;
             miroBoard.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${(state.zoom || 100)/100})`;
+            updateSlicerCellGrid(miroContainer, state, targetPage);
           });
           
           window.addEventListener('mouseup', () => {
             if (isPanning) {
               isPanning = false;
-              miroContainer.style.cursor = '';
+              const currentAnyCreate = window._stickyCreateMode || window._textCreateMode || window._gridCreateMode || window._mindmapCreateMode || window._widgetCreateMode || window._trelloCreateMode || window._embedCreateMode || window._overlayPageCreateMode || window._dyntitleCreateMode || window._penMode || window._shapeMode;
+              miroContainer.style.cursor = currentAnyCreate ? 'crosshair' : 'grab';
               sv();
             }
           });
@@ -6069,6 +6596,7 @@ function buildSlicerPage(page, wrap) {
             state.panY = mouseY - boardY * newZoom;
             
             miroBoard.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${newZoom})`;
+            updateSlicerCellGrid(miroContainer, state, targetPage);
             sv();
           }, { passive: false });
           
@@ -6077,17 +6605,9 @@ function buildSlicerPage(page, wrap) {
           
         } else {
           // Widget Dashboard
-          const addWBtn = document.createElement('button');
-          addWBtn.textContent = '＋ Widget';
-          addWBtn.onclick = () => {
-            window._widgetAddTargetPageId = targetPage.id;
-            pColIdx = 0;
-            openM('m-aw');
-          };
-          actionsEl.appendChild(addWBtn);
-          
           const columnsContainer = document.createElement('div');
           columnsContainer.className = 'slicer-widget-container';
+          applyCellBackground(columnsContainer, targetPage);
           
           const colCount = targetPage.cols || 3;
           for (let ci = 0; ci < colCount; ci++) {
@@ -6138,7 +6658,20 @@ function buildSlicerPage(page, wrap) {
     } else {
       const emptyEl = document.createElement('div');
       emptyEl.className = 'slicer-empty-cell';
-      emptyEl.innerHTML = `<span>📐</span>Select page`;
+      applyCellBackground(emptyEl, page);
+
+      const gridOverlay = document.createElement('div');
+      gridOverlay.className = 'slicer-miro-grid-overlay';
+      gridOverlay.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:1;';
+      emptyEl.appendChild(gridOverlay);
+
+      updateSlicerCellGrid(emptyEl, { zoom: 100, panX: 0, panY: 0 }, page);
+
+      const textEl = document.createElement('div');
+      textEl.style.cssText = 'position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--mu);opacity:0.6;';
+      textEl.innerHTML = `<span>📐</span>Select page`;
+      emptyEl.appendChild(textEl);
+
       bodyEl.appendChild(emptyEl);
     }
     
@@ -6398,8 +6931,12 @@ function showPageTabContextMenu(e, pg, nm, cd) {
 
 window.showPageTabContextMenu = showPageTabContextMenu;
 window.buildSlicerPage = buildSlicerPage;
+window.setupSlicerSubPageListeners = setupSlicerSubPageListeners;
 window.autofitSlicerCell = autofitSlicerCell;
 window.getSlicerActiveCells = getSlicerActiveCells;
+window.applyCellBackground = applyCellBackground;
+window.updateSlicerCellGrid = updateSlicerCellGrid;
+window.getGridColorForPage = getGridColorForPage;
 
 // Window aliases for backward compatibility
 SM.renderAll = typeof renderAll !== 'undefined' ? renderAll : window.renderAll;

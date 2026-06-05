@@ -1895,27 +1895,56 @@
   };
 
   // Calculate local zoom level for card dragging
+  // Calculate local zoom level for card dragging
   window.getMiroCardDragZoom = function getMiroCardDragZoom(card) {
-    const page = cp();
-    if (page && page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0))) {
-      if (card.cell && page.cellStates && page.cellStates[card.cell]) {
-        return page.cellStates[card.cell].zoom / 100;
+    const activePg = cp();
+    if (activePg) {
+      if (activePg.pageType === 'slicer' && activePg.cellPages) {
+        // Find the subpage containing this card
+        const targetPage = D.pages.find(p => p && p.miroCards && p.miroCards.some(c => c.id === card.id));
+        if (targetPage) {
+          const cellKey = typeof getCellKeyForPageId === 'function' ? getCellKeyForPageId(activePg, targetPage.id) : null;
+          if (cellKey && activePg.cellStates && activePg.cellStates[cellKey]) {
+            return activePg.cellStates[cellKey].zoom / 100;
+          }
+        }
+      } else if (activePg.vGuides && (activePg.vGuides.length > 0 || (activePg.hGuides && activePg.hGuides.length > 0))) {
+        if (card.cell && activePg.cellStates && activePg.cellStates[card.cell]) {
+          return activePg.cellStates[card.cell].zoom / 100;
+        }
       }
+      return (activePg.zoom || 100) / 100;
     }
-    return (page.zoom || 100) / 100;
+    return 1;
   };
 
   // Clamps card x/y coords to keep it inside cell boundaries and layout guides
   window.clampMiroCardDrag = function clampMiroCardDrag(card, x, y) {
     const page = cp();
-    if (!page || !card.cell || !page.cellStates || !page.cellStates[card.cell]) return { x, y };
+    if (!page) return { x, y };
 
-    const cellEl = document.querySelector(`.miro-cell-viewport[data-cell-key="${card.cell}"]`);
-    if (!cellEl) return { x, y };
+    let cellKey = card.cell;
+    let state = null;
+    let cellEl = null;
+
+    if (page.pageType === 'slicer') {
+      const targetPage = D.pages.find(p => p && p.miroCards && p.miroCards.some(c => c.id === card.id));
+      if (targetPage) {
+        cellKey = typeof getCellKeyForPageId === 'function' ? getCellKeyForPageId(page, targetPage.id) : null;
+        if (cellKey && page.cellStates && page.cellStates[cellKey]) {
+          state = page.cellStates[cellKey];
+          cellEl = document.querySelector(`.slicer-cell[data-cell-key="${cellKey}"]`);
+        }
+      }
+    } else if (card.cell && page.cellStates && page.cellStates[card.cell]) {
+      state = page.cellStates[card.cell];
+      cellEl = document.querySelector(`.miro-cell-viewport[data-cell-key="${card.cell}"]`);
+    }
+
+    if (!state || !cellEl) return { x, y };
 
     const cellW = cellEl.clientWidth;
     const cellH = cellEl.clientHeight;
-    const state = page.cellStates[card.cell];
     const zoom = state.zoom / 100;
 
     // Local coordinates limits

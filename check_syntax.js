@@ -6,7 +6,9 @@ const files = [
   './public/js/miro-engine.js',
   './public/js/life-widget.js',
   './public/js/miro/layout/slices.js',
-  './public/js/thumbnails.js'
+  './public/js/thumbnails.js',
+  './public/js/data/offline.js',
+  './public/js/data/sync.js'
 ];
 
 let allOk = true;

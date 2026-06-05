@@ -11,9 +11,20 @@
   let _buildingCanvas = false;
   window.buildMiroCanvas = function buildMiroCanvas() {
   if (_buildingCanvas) { console.warn('[RECURSION BLOCKED]'); return; }
+  const page = cp();
+  if (page && page.pageType === 'slicer') {
+    if (typeof window.buildSlicerPage === 'function') {
+      const wrap = document.getElementById('cw');
+      if (wrap) {
+        wrap.innerHTML = '';
+        wrap.style.gridTemplateColumns = '';
+        window.buildSlicerPage(page, wrap);
+      }
+    }
+    return;
+  }
   _buildingCanvas = true;
   try {
-    const page = cp();
     if (!page.miroCards) page.miroCards = [];
     const board = document.getElementById('miro-board');
     if (board) {

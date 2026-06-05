@@ -419,6 +419,29 @@
         cellGuides: activePg.cellGuides || {},
         _layoutGuidesMode: activePg._layoutGuidesMode || false
       });
+
+      // Cache all subpages of the slicer page
+      if (activePg.pageType === 'slicer' && activePg.cellPages) {
+        Object.values(activePg.cellPages).forEach(subPid => {
+          const subPg = D.pages.find(p => p && p.id === subPid);
+          if (subPg) {
+            cachePageData(subPid, {
+              widgets: subPg.widgets || [],
+              miroCards: subPg.miroCards || [],
+              vGuides: subPg.vGuides || [],
+              hGuides: subPg.hGuides || [],
+              _guidesMode: subPg._guidesMode || false,
+              lockedGuides: subPg.lockedGuides || [],
+              cellStates: subPg.cellStates || {},
+              mergedCells: subPg.mergedCells || [],
+              customCells: subPg.customCells || [],
+              cellGuides: subPg.cellGuides || {},
+              _layoutGuidesMode: subPg._layoutGuidesMode || false,
+              ts: subPg.ts || Date.now()
+            });
+          }
+        });
+      }
     }
     const meta = {
       settings: D.settings, curEnv: D.curEnv, curGroup: D.curGroup,
@@ -605,107 +628,150 @@
         console.warn(`[SV SUMMARY] Saved: ${_savedCount} pages, Skipped (protected): ${_skippedCount} pages`);
       }
     } else {
-      // Only upload the heavy data for the active page
+      // Only upload the heavy data for the active page (and subpages if active is slicer)
       const activePg = cp();
       if (activePg) {
-        // ─── DATA LOSS GUARD: Don't overwrite non-empty Firebase data with empty data ───
-        const curHasData = (activePg.widgets && activePg.widgets.length > 0) || (activePg.miroCards && activePg.miroCards.length > 0);
-        if (!curHasData && _lastSyncedPageData) {
-          const oldHadWidgets = JSON.parse(_lastSyncedPageData.widgets || '[]').length > 0;
-          const oldHadCards = JSON.parse(_lastSyncedPageData.miroCards || '[]').length > 0;
-          if (oldHadWidgets || oldHadCards) {
-            console.error(`[SV GUARD] 🚨 Refusing to overwrite page "${activePg.name}" — was non-empty, now empty!`);
-            if (typeof showToast === 'function') showToast('⚠️ Data loss prevented — page was not saved (empty data detected)', 5000);
-            setOwnWrite(false);
-            return;
-          }
-        }
-        // ─── VERSION REGRESSION GUARD ───
-        if (isVersionRegression(activePg.id, activePg.widgets, activePg.miroCards)) {
-          console.error(`[SV GUARD] 🚨 Version regression on "${activePg.name}" — save blocked!`);
-          if (typeof showToast === 'function') showToast('⚠️ Suspicious data drop detected — save blocked', 5000);
-          setOwnWrite(false);
-          return;
-        }
-        trackPageVersion(activePg.id, activePg.widgets, activePg.miroCards);
-        activePg.ts = Date.now(); // Update timestamp on every save
-        if (_lastSyncedPageData) {
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/ts`] = activePg.ts;
-
-          const curWidgetsStr = JSON.stringify(activePg.widgets || []);
-          const curCardsStr = JSON.stringify(activePg.miroCards || []);
-
-          // Always write guides/slices properties when _lastSyncedPageData is active
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/vGuides`] = activePg.vGuides || [];
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/hGuides`] = activePg.hGuides || [];
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/_guidesMode`] = activePg._guidesMode || false;
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/lockedGuides`] = activePg.lockedGuides || [];
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/cellStates`] = activePg.cellStates || {};
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/mergedCells`] = activePg.mergedCells || [];
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/customCells`] = activePg.customCells || [];
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/cellGuides`] = activePg.cellGuides || {};
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}/_layoutGuidesMode`] = activePg._layoutGuidesMode || false;
-
-          const oldWidgets = JSON.parse(_lastSyncedPageData.widgets || '[]');
-          const oldCards = JSON.parse(_lastSyncedPageData.miroCards || '[]');
-          const curWidgets = activePg.widgets || [];
-          const curCards = activePg.miroCards || [];
-
-          let widgetsChanged = false;
-          if (oldWidgets.length !== curWidgets.length) widgetsChanged = true;
-          else {
-            for (let i = 0; i < curWidgets.length; i++) {
-              if (!curWidgets[i] || !oldWidgets[i] || curWidgets[i].id !== oldWidgets[i].id) { widgetsChanged = true; break; }
+        const pagesToSave = [activePg];
+        if (activePg.pageType === 'slicer' && activePg.cellPages) {
+          Object.values(activePg.cellPages).forEach(subPid => {
+            const subPg = D.pages.find(p => p && p.id === subPid);
+            if (subPg && !pagesToSave.some(p => p.id === subPid)) {
+              pagesToSave.push(subPg);
             }
-          }
+          });
+        }
 
-          if (widgetsChanged) {
-            updates[`users/${USER_ID}/startmine_pages/${activePg.id}/widgets`] = curWidgets;
-          } else {
-            for (let i = 0; i < curWidgets.length; i++) {
-              if (!curWidgets[i] || !oldWidgets[i] || JSON.stringify(curWidgets[i]) !== JSON.stringify(oldWidgets[i])) {
-                updates[`users/${USER_ID}/startmine_pages/${activePg.id}/widgets/${i}`] = curWidgets[i];
+        pagesToSave.forEach(p => {
+          if (p.id === activePg.id) {
+            // ─── DATA LOSS GUARD: Don't overwrite non-empty Firebase data with empty data ───
+            const curHasData = (activePg.widgets && activePg.widgets.length > 0) || (activePg.miroCards && activePg.miroCards.length > 0);
+            if (!curHasData && _lastSyncedPageData) {
+              const oldHadWidgets = JSON.parse(_lastSyncedPageData.widgets || '[]').length > 0;
+              const oldHadCards = JSON.parse(_lastSyncedPageData.miroCards || '[]').length > 0;
+              if (oldHadWidgets || oldHadCards) {
+                console.error(`[SV GUARD] 🚨 Refusing to overwrite page "${activePg.name}" — was non-empty, now empty!`);
+                if (typeof showToast === 'function') showToast('⚠️ Data loss prevented — page was not saved (empty data detected)', 5000);
+                return;
               }
             }
-          }
-
-          let cardsChanged = false;
-          if (oldCards.length !== curCards.length) cardsChanged = true;
-          else {
-            for (let i = 0; i < curCards.length; i++) {
-              if (!curCards[i] || !oldCards[i] || curCards[i].id !== oldCards[i].id) { cardsChanged = true; break; }
+            // ─── VERSION REGRESSION GUARD ───
+            if (isVersionRegression(activePg.id, activePg.widgets, activePg.miroCards)) {
+              console.error(`[SV GUARD] 🚨 Version regression on "${activePg.name}" — save blocked!`);
+              if (typeof showToast === 'function') showToast('⚠️ Suspicious data drop detected — save blocked', 5000);
+              return;
             }
-          }
+            trackPageVersion(activePg.id, activePg.widgets, activePg.miroCards);
+            activePg.ts = Date.now(); // Update timestamp on every save
+            if (_lastSyncedPageData) {
+              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/ts`] = activePg.ts;
 
-          if (cardsChanged) {
-            updates[`users/${USER_ID}/startmine_pages/${activePg.id}/miroCards`] = curCards;
+              const curWidgetsStr = JSON.stringify(activePg.widgets || []);
+              const curCardsStr = JSON.stringify(activePg.miroCards || []);
+
+              // Always write guides/slices properties when _lastSyncedPageData is active
+              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/vGuides`] = activePg.vGuides || [];
+              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/hGuides`] = activePg.hGuides || [];
+              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/_guidesMode`] = activePg._guidesMode || false;
+              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/lockedGuides`] = activePg.lockedGuides || [];
+              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/cellStates`] = activePg.cellStates || {};
+              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/mergedCells`] = activePg.mergedCells || [];
+              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/customCells`] = activePg.customCells || [];
+              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/cellGuides`] = activePg.cellGuides || {};
+              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/_layoutGuidesMode`] = activePg._layoutGuidesMode || false;
+
+              const oldWidgets = JSON.parse(_lastSyncedPageData.widgets || '[]');
+              const oldCards = JSON.parse(_lastSyncedPageData.miroCards || '[]');
+              const curWidgets = activePg.widgets || [];
+              const curCards = activePg.miroCards || [];
+
+              let widgetsChanged = false;
+              if (oldWidgets.length !== curWidgets.length) widgetsChanged = true;
+              else {
+                for (let i = 0; i < curWidgets.length; i++) {
+                  if (!curWidgets[i] || !oldWidgets[i] || curWidgets[i].id !== oldWidgets[i].id) { widgetsChanged = true; break; }
+                }
+              }
+
+              if (widgetsChanged) {
+                updates[`users/${USER_ID}/startmine_pages/${activePg.id}/widgets`] = curWidgets;
+              } else {
+                for (let i = 0; i < curWidgets.length; i++) {
+                  if (!curWidgets[i] || !oldWidgets[i] || JSON.stringify(curWidgets[i]) !== JSON.stringify(oldWidgets[i])) {
+                    updates[`users/${USER_ID}/startmine_pages/${activePg.id}/widgets/${i}`] = curWidgets[i];
+                  }
+                }
+              }
+
+              let cardsChanged = false;
+              if (oldCards.length !== curCards.length) cardsChanged = true;
+              else {
+                for (let i = 0; i < curCards.length; i++) {
+                  if (!curCards[i] || !oldCards[i] || curCards[i].id !== oldCards[i].id) { cardsChanged = true; break; }
+                }
+              }
+
+              if (cardsChanged) {
+                updates[`users/${USER_ID}/startmine_pages/${activePg.id}/miroCards`] = curCards;
+              } else {
+                for (let i = 0; i < curCards.length; i++) {
+                  if (!curCards[i] || !oldCards[i] || JSON.stringify(curCards[i]) !== JSON.stringify(oldCards[i])) {
+                    updates[`users/${USER_ID}/startmine_pages/${activePg.id}/miroCards/${i}`] = curCards[i];
+                  }
+                }
+              }
+
+              // Update baseline payload
+              _lastSyncedPageData.widgets = curWidgetsStr;
+              _lastSyncedPageData.miroCards = curCardsStr;
+            } else {
+              updates[`users/${USER_ID}/startmine_pages/${activePg.id}`] = {
+                widgets: activePg.widgets || [],
+                miroCards: activePg.miroCards || [],
+                vGuides: activePg.vGuides || [],
+                hGuides: activePg.hGuides || [],
+                _guidesMode: activePg._guidesMode || false,
+                lockedGuides: activePg.lockedGuides || [],
+                cellStates: activePg.cellStates || {},
+                mergedCells: activePg.mergedCells || [],
+                customCells: activePg.customCells || [],
+                cellGuides: activePg.cellGuides || {},
+                _layoutGuidesMode: activePg._layoutGuidesMode || false,
+                ts: activePg.ts
+              };
+            }
           } else {
-            for (let i = 0; i < curCards.length; i++) {
-              if (!curCards[i] || !oldCards[i] || JSON.stringify(curCards[i]) !== JSON.stringify(oldCards[i])) {
-                updates[`users/${USER_ID}/startmine_pages/${activePg.id}/miroCards/${i}`] = curCards[i];
+            // For subpages, write their whole payload directly
+            const subHasData = (p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0);
+            if (!subHasData) {
+              const cached = getCachedPageData(p.id);
+              if (cached && ((cached.widgets && cached.widgets.length > 0) || (cached.miroCards && cached.miroCards.length > 0))) {
+                console.warn(`[SV GUARD ⛔] Subpage "${p.name}" (${p.id}) resolved to empty in memory but had cached data — save skipped to prevent data loss.`);
+                return;
               }
             }
-          }
+            if (isVersionRegression(p.id, p.widgets, p.miroCards)) {
+              console.error(`[SV GUARD] 🚨 Version regression on subpage "${p.name}" — save blocked!`);
+              return;
+            }
+            trackPageVersion(p.id, p.widgets, p.miroCards);
+            p.ts = Date.now();
 
-          // Update baseline payload
-          _lastSyncedPageData.widgets = curWidgetsStr;
-          _lastSyncedPageData.miroCards = curCardsStr;
-        } else {
-          updates[`users/${USER_ID}/startmine_pages/${activePg.id}`] = {
-            widgets: activePg.widgets || [],
-            miroCards: activePg.miroCards || [],
-            vGuides: activePg.vGuides || [],
-            hGuides: activePg.hGuides || [],
-            _guidesMode: activePg._guidesMode || false,
-            lockedGuides: activePg.lockedGuides || [],
-            cellStates: activePg.cellStates || {},
-            mergedCells: activePg.mergedCells || [],
-            customCells: activePg.customCells || [],
-            cellGuides: activePg.cellGuides || {},
-            _layoutGuidesMode: activePg._layoutGuidesMode || false,
-            ts: activePg.ts
-          };
-        }
+            updates[`users/${USER_ID}/startmine_pages/${p.id}`] = {
+              widgets: p.widgets || [],
+              miroCards: p.miroCards || [],
+              vGuides: p.vGuides || [],
+              hGuides: p.hGuides || [],
+              _guidesMode: p._guidesMode || false,
+              lockedGuides: p.lockedGuides || [],
+              cellStates: p.cellStates || {},
+              mergedCells: p.mergedCells || [],
+              customCells: p.customCells || [],
+              cellGuides: p.cellGuides || {},
+              _layoutGuidesMode: p._layoutGuidesMode || false,
+              ts: p.ts
+            };
+          }
+        });
       }
     }
 
@@ -719,20 +785,32 @@
       .then(() => {
         setOwnWrite(false);
         _lastSvTs = Date.now();
-        // Cache active page data to localStorage after successful save
+        // Cache active page (and subpages if slicer) to localStorage after successful save
         const activePg = cp();
         if (activePg) {
-          cachePageData(activePg.id, {
-            widgets: activePg.widgets || [],
-            miroCards: activePg.miroCards || [],
-            vGuides: activePg.vGuides || [],
-            hGuides: activePg.hGuides || [],
-            _guidesMode: activePg._guidesMode || false,
-            lockedGuides: activePg.lockedGuides || [],
-            cellStates: activePg.cellStates || {},
-            mergedCells: activePg.mergedCells || [],
-            customCells: activePg.customCells || [],
-            ts: activePg.ts
+          const pagesToSave = [activePg];
+          if (activePg.pageType === 'slicer' && activePg.cellPages) {
+            Object.values(activePg.cellPages).forEach(subPid => {
+              const subPg = D.pages.find(p => p && p.id === subPid);
+              if (subPg && !pagesToSave.some(p => p.id === subPid)) {
+                pagesToSave.push(subPg);
+              }
+            });
+          }
+
+          pagesToSave.forEach(p => {
+            cachePageData(p.id, {
+              widgets: p.widgets || [],
+              miroCards: p.miroCards || [],
+              vGuides: p.vGuides || [],
+              hGuides: p.hGuides || [],
+              _guidesMode: p._guidesMode || false,
+              lockedGuides: p.lockedGuides || [],
+              cellStates: p.cellStates || {},
+              mergedCells: p.mergedCells || [],
+              customCells: p.customCells || [],
+              ts: p.ts
+            });
           });
         }
         // Clean up any pending deleted page nodes from Firebase
@@ -780,6 +858,29 @@
         _layoutGuidesMode: activePg._layoutGuidesMode || false,
         ts: activePg.ts || Date.now()
       });
+
+      // Cache all subpages of the slicer page
+      if (activePg.pageType === 'slicer' && activePg.cellPages) {
+        Object.values(activePg.cellPages).forEach(subPid => {
+          const subPg = D.pages.find(p => p && p.id === subPid);
+          if (subPg) {
+            cachePageData(subPg.id, {
+              widgets: subPg.widgets || [],
+              miroCards: subPg.miroCards || [],
+              vGuides: subPg.vGuides || [],
+              hGuides: subPg.hGuides || [],
+              _guidesMode: subPg._guidesMode || false,
+              lockedGuides: subPg.lockedGuides || [],
+              cellStates: subPg.cellStates || {},
+              mergedCells: subPg.mergedCells || [],
+              customCells: subPg.customCells || [],
+              cellGuides: subPg.cellGuides || {},
+              _layoutGuidesMode: subPg._layoutGuidesMode || false,
+              ts: subPg.ts || Date.now()
+            });
+          }
+        });
+      }
     }
     const meta = {
       settings: D.settings, curEnv: D.curEnv, curGroup: D.curGroup,

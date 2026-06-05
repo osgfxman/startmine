@@ -50,6 +50,13 @@
   function cp() {
     return D.pages.find((p) => p.id === D.cur) || D.pages[0];
   }
+  function getCellKeyForPageId(slicerPage, pageId) {
+    if (!slicerPage || !slicerPage.cellPages) return null;
+    for (const [key, pid] of Object.entries(slicerPage.cellPages)) {
+      if (pid === pageId) return key;
+    }
+    return null;
+  }
   function fw(id) {
     for (const p of D.pages) {
       let w = (p.widgets || []).find((x) => x.id === id);
@@ -110,6 +117,7 @@
   window.SM.core.letterColor = letterColor;
   window.SM.core.domainOf = domainOf;
   window.SM.core.cp = cp;
+  window.SM.core.getCellKeyForPageId = getCellKeyForPageId;
   window.SM.core.fw = fw;
   window.SM.core.mkFav = mkFav;
   window.SM.core.showLetter = showLetter;
@@ -124,6 +132,7 @@
   window.SM.core.expose('letterColor', letterColor);
   window.SM.core.expose('domainOf', domainOf);
   window.SM.core.expose('cp', cp);
+  window.SM.core.expose('getCellKeyForPageId', getCellKeyForPageId);
   window.SM.core.expose('fw', fw);
   window.SM.core.expose('mkFav', mkFav);
   window.SM.core.expose('showLetter', showLetter);

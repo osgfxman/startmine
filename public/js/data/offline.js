@@ -85,6 +85,14 @@
       if (window._activePageListener) {
         window.db.ref(window._activePageListener).off();
       }
+      if (window._activeSubPageListeners) {
+        window._activeSubPageListeners.forEach(item => {
+          try {
+            window.db.ref(item.path).off('value', item.callback);
+          } catch(e) {}
+        });
+        window._activeSubPageListeners = [];
+      }
     }
   }
 

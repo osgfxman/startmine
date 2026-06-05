@@ -1809,6 +1809,9 @@ function setActiveTool(tool) {
   document.getElementById('miro-pen-toolbar').classList.toggle('show', _penMode);
   const cursor = (_penMode || _shapeMode || _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode || _embedCreateMode || _overlayPageCreateMode || _dyntitleCreateMode) ? 'crosshair' : 'grab';
   document.getElementById('miro-canvas').style.cursor = cursor;
+  document.querySelectorAll('.slicer-miro-container').forEach(c => {
+    c.style.cursor = cursor;
+  });
   if (!_shapeMode) document.getElementById('miro-shape-panel').classList.remove('show');
 }
 
