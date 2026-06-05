@@ -5507,48 +5507,76 @@ function injectSlicerStyles() {
       z-index: 100;
     }
     .slicer-cell-header {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: rgba(20, 24, 35, 0.95);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      padding: 6px 12px;
-      height: 36px;
+      background: rgba(20, 24, 35, 0.4);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 2px 8px;
+      height: 24px;
       box-sizing: border-box;
       color: #fff;
       font-family: var(--font, 'Inter', sans-serif);
-      font-size: 0.75rem;
-      z-index: 999;
+      font-size: 0.68rem;
+      z-index: 10000;
       user-select: none;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+      overflow: visible !important;
+    }
+    .slicer-cell:hover .slicer-cell-header {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .slicer-cell-header.has-change {
+      background: rgba(255, 107, 53, 0.95) !important;
+      color: #fff !important;
+      box-shadow: 0 0 12px rgba(255, 107, 53, 0.8) !important;
+      animation: dyntitle-glow 2s infinite alternate !important;
+      opacity: 1 !important;
+      pointer-events: auto !important;
+    }
+    .slicer-cell-header.has-change * {
+      color: #fff !important;
+    }
+    @keyframes dyntitle-glow {
+      0% { box-shadow: 0 0 8px rgba(255, 107, 53, 0.6); }
+      100% { box-shadow: 0 0 18px rgba(255, 107, 53, 1); }
     }
     .slicer-cell-header-left {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       font-weight: 600;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      overflow: visible;
       white-space: nowrap;
     }
     .slicer-cell-header-center {
       display: flex;
       align-items: center;
       gap: 12px;
-      font-size: 0.7rem;
+      font-size: 0.65rem;
       color: rgba(255, 255, 255, 0.7);
     }
     .slicer-cell-header-right {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 4px;
     }
     .slicer-cell-header-right button {
       background: rgba(255, 255, 255, 0.08);
       border: 1px solid rgba(255, 255, 255, 0.1);
       color: #ccc;
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 0.7rem;
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 0.65rem;
       cursor: pointer;
       transition: all 0.2s;
       display: flex;
@@ -5561,14 +5589,14 @@ function injectSlicerStyles() {
       color: #fff;
     }
     .slicer-cell-color-tag {
-      width: 8px;
-      height: 8px;
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
       display: inline-block;
       flex-shrink: 0;
     }
     .slicer-cell-dyn-row {
-      font-size: 0.7rem;
+      font-size: 0.65rem;
       opacity: 0.9;
     }
     .slicer-cell-progress-text {
@@ -5579,7 +5607,7 @@ function injectSlicerStyles() {
     }
     .slicer-cell-body {
       width: 100%;
-      height: calc(100% - 36px);
+      height: 100%;
       position: relative;
       overflow: hidden;
       background: transparent;
@@ -5643,7 +5671,7 @@ function injectSlicerStyles() {
     }
     .slicer-empty-cell-actions select {
       width: 100%;
-      background: rgba(255, 255, 255, 0.05);
+      background: #0a0c10;
       border: 1px solid rgba(255, 255, 255, 0.15);
       color: #fff;
       font-size: 0.8rem;
@@ -5653,7 +5681,7 @@ function injectSlicerStyles() {
       cursor: pointer;
     }
     .slicer-empty-cell-actions select option {
-      background: #1c202d;
+      background: #0a0c10;
       color: #fff;
     }
     .slicer-empty-cell-buttons {
@@ -6182,6 +6210,22 @@ function buildSlicerPage(page, wrap) {
     };
   }
   
+  const tbDistributeBtn = document.getElementById('slicer-tb-distribute');
+  if (tbDistributeBtn) {
+    tbDistributeBtn.onclick = (e) => {
+      e.stopPropagation();
+      const r = page.gridRows || 2;
+      const c = page.gridCols || 2;
+      page.slicerColSizes = Array(c).fill(100 / c);
+      page.slicerRowSizes = Array(r).fill(100 / r);
+      sv();
+      buildCols();
+      if (typeof showToast === 'function') {
+        showToast('⚖️ Split-screen sizes distributed equally!');
+      }
+    };
+  }
+
   if (tbRevertBtn) {
     tbRevertBtn.onclick = (e) => {
       e.stopPropagation();
@@ -6300,7 +6344,7 @@ function buildSlicerPage(page, wrap) {
         if (displayIcon) {
           const iconImg = document.createElement('img');
           iconImg.src = displayIcon;
-          iconImg.style.cssText = `width:${iconSize}px;height:${iconSize}px;object-fit:contain;border-radius:3px;flex-shrink:0;`;
+          iconImg.style.cssText = `width:auto;max-width:${iconSize}px;max-height:${iconSize}px;object-fit:contain;flex-shrink:0;z-index:10001;position:relative;`;
           leftEl.appendChild(iconImg);
         } else {
           const typeIcon = document.createElement('span');
@@ -6317,6 +6361,7 @@ function buildSlicerPage(page, wrap) {
         
         const titleSpan = document.createElement('span');
         titleSpan.className = 'slicer-cell-title-text';
+        titleSpan.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;';
         const dynamicVal = cellState.dynamicType ? window.getDynamicTitleValue(cellState.dynamicType) : '';
         titleSpan.textContent = cellState.title || dynamicVal || targetPage.name;
         leftEl.appendChild(titleSpan);
@@ -6404,6 +6449,20 @@ function buildSlicerPage(page, wrap) {
         };
         rightEl.appendChild(closeSplitBtn);
         headerEl.appendChild(rightEl);
+        
+        if (cellState.hasUnacknowledgedChange) {
+          headerEl.classList.add('has-change');
+        }
+        headerEl.onclick = (e) => {
+          if (e.target.closest('button, select, input, option')) return;
+          if (cellState.hasUnacknowledgedChange) {
+            cellState.hasUnacknowledgedChange = false;
+            headerEl.classList.remove('has-change');
+            sv();
+            buildCols();
+          }
+        };
+        
         cellEl.appendChild(headerEl);
         
         // Apply cell custom background color & opacity
@@ -6430,6 +6489,7 @@ function buildSlicerPage(page, wrap) {
           
           const miroContainer = document.createElement('div');
           miroContainer.className = 'slicer-miro-container';
+          miroContainer.dataset.cellKey = cell.key;
           applyCellBackground(miroContainer, targetPage);
           
           const gridOverlay = document.createElement('div');
@@ -6910,7 +6970,7 @@ function buildSlicerPage(page, wrap) {
       contentEl.appendChild(titleEl);
 
       const selectEl = document.createElement('select');
-      selectEl.style.cssText = 'width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);color:#fff;font-size:0.8rem;padding:8px 12px;border-radius:8px;outline:none;cursor:pointer;';
+      selectEl.style.cssText = 'width:100%;background:#0a0c10;border:1px solid rgba(255,255,255,0.15);color:#fff;font-size:0.8rem;padding:8px 12px;border-radius:8px;outline:none;cursor:pointer;';
       
       const defOpt = document.createElement('option');
       defOpt.value = '';

@@ -3982,6 +3982,7 @@
       });
     } else if (page.pageType === 'slicer') {
       const cellHeaders = document.querySelectorAll('.slicer-cell-header');
+      let slicerChanged = false;
       cellHeaders.forEach(header => {
         const cellKey = header.dataset.cellKey;
         if (!cellKey || !page.cellStates) return;
@@ -3990,6 +3991,21 @@
         
         const dynamicVal = getDynamicTitleValue(cellState.dynamicType);
         const progressVal = getDynamicProgressValue(cellState.dynamicType);
+        
+        // Track transition and set hasUnacknowledgedChange
+        if (cellState.lastDynamicValue !== dynamicVal) {
+          if (cellState.lastDynamicValue) {
+            cellState.changeCount = (cellState.changeCount || 0) + 1;
+            cellState.hasUnacknowledgedChange = true;
+            header.classList.add('has-change');
+          } else {
+            cellState.firstSetAt = new Date().toLocaleString();
+            cellState.changeCount = 0;
+            cellState.hasUnacknowledgedChange = false;
+          }
+          cellState.lastDynamicValue = dynamicVal;
+          slicerChanged = true;
+        }
         
         const userTitle = cellState.title || '';
         let parsedTitle = userTitle;
@@ -4014,6 +4030,9 @@
           progSpan.textContent = progressVal;
         }
       });
+      if (slicerChanged) {
+        if (typeof sv === 'function') sv();
+      }
     }
   }, 1000);
 

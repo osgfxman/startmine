@@ -45,7 +45,19 @@ const UNDO_MAX = 50;
 let _undoInProgress = false;
 function pushUndo() {
   if (_undoInProgress) return;
-  const page = cp();
+  const activePg = cp();
+  let page = null;
+  if (activePg.pageType === 'miro') {
+    page = activePg;
+  } else if (activePg.pageType === 'slicer' && window._hoveredCellKey) {
+    const subPageId = activePg.cellPages ? activePg.cellPages[window._hoveredCellKey] : null;
+    if (subPageId) {
+      const subPage = D.pages.find(p => p.id === subPageId);
+      if (subPage && subPage.pageType === 'miro') {
+        page = subPage;
+      }
+    }
+  }
   if (!page || !page.miroCards) return;
   const snapshot = JSON.stringify(page.miroCards);
   // Don't push if identical to last snapshot
@@ -58,7 +70,19 @@ function performUndo() {
     if (typeof showToast === 'function') showToast('Nothing to undo');
     return;
   }
-  const page = cp();
+  const activePg = cp();
+  let page = null;
+  if (activePg.pageType === 'miro') {
+    page = activePg;
+  } else if (activePg.pageType === 'slicer' && window._hoveredCellKey) {
+    const subPageId = activePg.cellPages ? activePg.cellPages[window._hoveredCellKey] : null;
+    if (subPageId) {
+      const subPage = D.pages.find(p => p.id === subPageId);
+      if (subPage && subPage.pageType === 'miro') {
+        page = subPage;
+      }
+    }
+  }
   if (!page) return;
   const currentState = JSON.stringify(page.miroCards);
   // Skip entries identical to current state (no visible change)
@@ -74,7 +98,11 @@ function performUndo() {
     _undoInProgress = true;
     page.miroCards = JSON.parse(snapshot);
     _miroSelected.clear();
-    buildMiroCanvas();
+    if (activePg.pageType === 'slicer') {
+      buildCols();
+    } else {
+      buildMiroCanvas();
+    }
     sv();
     setTimeout(() => { if (typeof buildOutline === 'function') buildOutline(); }, 50);
     _undoInProgress = false;
@@ -2233,8 +2261,20 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  const page = cp();
-  if (page.pageType !== 'miro') return;
+  const activePg = cp();
+  let page = null;
+  if (activePg.pageType === 'miro') {
+    page = activePg;
+  } else if (activePg.pageType === 'slicer' && window._hoveredCellKey) {
+    const subPageId = activePg.cellPages ? activePg.cellPages[window._hoveredCellKey] : null;
+    if (subPageId) {
+      const subPage = D.pages.find(p => p.id === subPageId);
+      if (subPage && subPage.pageType === 'miro') {
+        page = subPage;
+      }
+    }
+  }
+  if (!page) return;
 
   const key = e.key.toLowerCase();
   const isCmd = e.ctrlKey || e.metaKey;
@@ -2412,6 +2452,20 @@ function getPasteTargetCoords(page) {
   let px = 0, py = 0;
   
   const targetEl = (_mouseX && _mouseY) ? document.elementFromPoint(_mouseX, _mouseY) : null;
+  const slicerContainer = targetEl ? targetEl.closest('.slicer-miro-container') : null;
+  if (slicerContainer) {
+    targetCellKey = slicerContainer.dataset.cellKey;
+    const activePg = cp();
+    const rect = slicerContainer.getBoundingClientRect();
+    const state = (activePg.cellStates && activePg.cellStates[targetCellKey]) || { zoom: 100, panX: 0, panY: 0 };
+    const cellZoom = (state.zoom || 100) / 100;
+    const localX = _mouseX - rect.left;
+    const localY = _mouseY - rect.top;
+    px = (localX - (state.panX || 0)) / cellZoom;
+    py = (localY - (state.panY || 0)) / cellZoom;
+    return { cell: targetCellKey, x: px, y: py };
+  }
+
   const cellViewport = targetEl ? targetEl.closest('.miro-cell-viewport') : null;
   if (cellViewport) {
     targetCellKey = cellViewport.dataset.cellKey;
@@ -2439,8 +2493,29 @@ document.addEventListener('paste', (e) => {
   // Ignore if pasting into an input element
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
 
-  const page = cp();
-  if (page.pageType !== 'miro') return;
+  const activePg = cp();
+  let page = null;
+  if (activePg.pageType === 'miro') {
+    page = activePg;
+  } else if (activePg.pageType === 'slicer' && window._hoveredCellKey) {
+    const subPageId = activePg.cellPages ? activePg.cellPages[window._hoveredCellKey] : null;
+    if (subPageId) {
+      const subPage = D.pages.find(p => p.id === subPageId);
+      if (subPage && subPage.pageType === 'miro') {
+        page = subPage;
+      }
+    }
+  }
+  if (!page) return;
+
+  const triggerRender = () => {
+    if (activePg.pageType === 'slicer') {
+      buildCols();
+    } else {
+      buildMiroCanvas();
+      if (typeof buildOutline === 'function') buildOutline();
+    }
+  };
 
   // Mark paste time IMMEDIATELY to debounce the Ctrl+ر async fallback
   // (On Arabic keyboards, Ctrl+V fires BOTH native paste AND Ctrl+ر keydown)
@@ -2478,7 +2553,7 @@ document.addEventListener('paste', (e) => {
           page.miroCards.push(c);
           _miroSelected.add(c.id);
         });
-        sv(); buildMiroCanvas(); if (typeof buildOutline === 'function') buildOutline();
+        sv(); triggerRender();
       }
     } catch (err) { console.error('Miro Clipboard parse err', err); }
   };
@@ -2985,7 +3060,7 @@ document.addEventListener('paste', (e) => {
               localizeCardImageUrl(card);
             }
           });
-          sv(); buildMiroCanvas(); if (typeof buildOutline === 'function') buildOutline();
+          sv(); triggerRender();
 
           // Upgrade Miro image placeholders that didn't have dataUrl
           page.miroCards.forEach(card => {
@@ -3003,19 +3078,19 @@ document.addEventListener('paste', (e) => {
                 delete card._miroResourceId;
                 delete card._miroBoardId;
                 delete card._miroImgName;
-                sv(); buildMiroCanvas();
+                sv(); triggerRender();
                 console.log('[PASTE] Miro image loaded!', card.w, 'x', card.h);
               };
               tmpImg.onerror = function () {
                 console.warn('[PASTE] Miro image failed to load via img tag. Will show broken image.');
                 delete card._miroResourceId;
                 delete card._miroBoardId;
-                sv(); buildMiroCanvas();
+                sv(); triggerRender();
               };
               tmpImg.src = apiUrl;
             }
           });
-          sv(); buildMiroCanvas();
+          sv(); triggerRender();
           return;
         }
 
@@ -3054,7 +3129,7 @@ document.addEventListener('paste', (e) => {
             page.miroCards.push(card);
             _miroSelected.add(newId);
           });
-          sv(); buildMiroCanvas(); if (typeof buildOutline === 'function') buildOutline();
+          sv(); triggerRender();
         }
         return;
       } else {
@@ -3151,7 +3226,7 @@ document.addEventListener('paste', (e) => {
             page.miroCards.push(card);
             _miroSelected.add(newId);
           });
-          sv(); buildMiroCanvas(); if (typeof buildOutline === 'function') buildOutline();
+          sv(); triggerRender();
           console.log('[PASTE DEBUG] Generic HTML parsed cards rendered, returning!');
           return;
         }
@@ -3188,7 +3263,7 @@ document.addEventListener('paste', (e) => {
           delete card.cell;
         }
         page.miroCards.push(card);
-        sv(); buildMiroCanvas(); if (typeof buildOutline === 'function') buildOutline();
+        sv(); triggerRender();
         localizeCardImageUrl(card);
       };
       img.src = dataUrl;
@@ -3231,7 +3306,7 @@ document.addEventListener('paste', (e) => {
             }
             page.miroCards.push(c); _miroSelected.add(c.id);
           });
-          sv(); buildMiroCanvas(); if (typeof buildOutline === 'function') buildOutline();
+          sv(); triggerRender();
           window._lastMiroPasteTime = Date.now();
           console.log('[PASTE DEBUG] Handled STARTMINE_MIRO internal paste!');
           return;
@@ -3259,7 +3334,7 @@ document.addEventListener('paste', (e) => {
         delete card.cell;
       }
       page.miroCards.push(card);
-      sv(); buildMiroCanvas(); if (typeof buildOutline === 'function') buildOutline();
+      sv(); triggerRender();
       if (typeof queueCardFetch !== 'undefined') queueCardFetch(card.id, url);
       console.log('[PASTE DEBUG] Created URL Bookmark card!');
     } else {
@@ -3271,7 +3346,7 @@ document.addEventListener('paste', (e) => {
         delete card.cell;
       }
       page.miroCards.push(card);
-      sv(); buildMiroCanvas(); if (typeof buildOutline === 'function') buildOutline();
+      sv(); triggerRender();
       console.log('[PASTE DEBUG] Created Plain Text Sticky card!');
     }
   }
