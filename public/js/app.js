@@ -3246,18 +3246,11 @@ function buildGroups() {
     tab.appendChild(cd);
     tab.appendChild(nm);
     if (envGroups.length > 1) tab.appendChild(x);
-    // Right-click: export this group
+    // Right-click: show context menu for group tab
     tab.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const env = D.environments.find(ev => ev.id === g.envId);
-      const grpPages = D.pages.filter(p => p.groupId === g.id);
-      openSelIO('export', {
-        settings: D.settings,
-        environments: env ? [env] : [],
-        groups: [g],
-        pages: grpPages
-      });
+      if (typeof showGroupTabContextMenu === 'function') {
+        showGroupTabContextMenu(e, g, nm);
+      }
     });
     bar.insertBefore(tab, addBtn);
   });
@@ -5492,7 +5485,7 @@ function injectSlicerStyles() {
       width: 100%;
       height: 100%;
       gap: 2px;
-      background: #121420;
+      background: transparent;
       padding: 0;
       margin: 0;
       box-sizing: border-box;
@@ -5519,9 +5512,9 @@ function injectSlicerStyles() {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: rgba(20, 24, 35, 0.4);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
+      background: transparent;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
       border-bottom: 1px solid rgba(255, 255, 255, 0.05);
       padding: 2px 8px;
       height: 24px;
@@ -5575,19 +5568,39 @@ function injectSlicerStyles() {
       background: rgba(255, 255, 255, 0.08);
       border: 1px solid rgba(255, 255, 255, 0.1);
       color: #ccc;
-      padding: 1px 4px;
-      border-radius: 3px;
-      font-size: 0.65rem;
+      padding: 0 5px;
+      min-width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      font-size: 0.75rem;
       cursor: pointer;
       transition: all 0.2s;
       display: flex;
       align-items: center;
       justify-content: center;
+      box-sizing: border-box;
     }
     .slicer-cell-header-right button:hover {
       background: rgba(108, 143, 255, 0.2);
       border-color: var(--ac, #6c8fff);
       color: #fff;
+    }
+    .slicer-cell-header.theme-light {
+      color: #121420 !important;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+    }
+    .slicer-cell-header.theme-light .slicer-cell-header-center {
+      color: rgba(18, 20, 32, 0.7) !important;
+    }
+    .slicer-cell-header.theme-light .slicer-cell-header-right button {
+      color: #121420 !important;
+      background: rgba(0, 0, 0, 0.06) !important;
+      border: 1px solid rgba(0, 0, 0, 0.12) !important;
+    }
+    .slicer-cell-header.theme-light .slicer-cell-header-right button:hover {
+      background: rgba(0, 0, 0, 0.12) !important;
+      border-color: var(--ac, #6c8fff) !important;
+      color: var(--ac, #6c8fff) !important;
     }
     .slicer-cell-color-tag {
       width: 7px;
@@ -5866,17 +5879,66 @@ function autofitSlicerCell(page, cellKey, targetPage, cellW, cellH) {
   page.cellStates[cellKey] = { zoom: newZoomNum, panX, panY };
 }
 
-function applyCellBackground(container, targetPage) {
-  if (!targetPage.bg) {
-    const defaultBg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
-    container.style.background = `radial-gradient(ellipse 70% 50% at 50% -5%, rgba(108,143,255,0.1) 0%, transparent 65%), ${defaultBg || '#f3f4f6'}`;
-    return;
+function applyCellBackground(container, targetPage, cellState) {
+  let baseBg = 'transparent';
+  if (targetPage && targetPage.bg) {
+    if (targetPage.bgType === 'image') {
+      baseBg = `url('${targetPage.bg}') center/cover no-repeat`;
+    } else {
+      baseBg = targetPage.bg;
+    }
   }
-  if (targetPage.bgType === 'image') {
-    container.style.background = `url('${targetPage.bg}') center/cover no-repeat`;
+
+  if (cellState && cellState.bgColor) {
+    const bg = cellState.bgColor;
+    const opacity = cellState.bgOpacity != null ? cellState.bgOpacity : 0.15;
+    const r = parseInt(bg.slice(1, 3), 16);
+    const g = parseInt(bg.slice(3, 5), 16);
+    const b = parseInt(bg.slice(5, 7), 16);
+    const tint = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    if (baseBg && baseBg !== 'transparent') {
+      container.style.background = `linear-gradient(${tint}, ${tint}), ${baseBg}`;
+    } else {
+      container.style.background = tint;
+    }
   } else {
-    container.style.background = targetPage.bg;
+    container.style.background = baseBg;
   }
+}
+
+function getHeaderEffectiveBgColor(cellState, targetPage, parentPage) {
+  const ho = cellState.headerOpacity != null ? cellState.headerOpacity : 0.0;
+  if (cellState.headerColor && ho >= 0.4) {
+    return cellState.headerColor;
+  }
+  const bo = cellState.bgOpacity != null ? cellState.bgOpacity : 0.0;
+  if (cellState.bgColor && bo >= 0.4) {
+    return cellState.bgColor;
+  }
+  if (targetPage && targetPage.bg) {
+    if (targetPage.bgType !== 'image') {
+      return targetPage.bg;
+    }
+  }
+  if (parentPage && parentPage.bg) {
+    if (parentPage.bgType !== 'image') {
+      return parentPage.bg;
+    }
+  }
+  const defaultBg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+  return defaultBg || '#0d0f18';
+}
+
+function isColorLight(color) {
+  if (!color) return false;
+  color = color.trim();
+  if (color.startsWith('#')) return isHexColorLight(color);
+  if (color.startsWith('rgb')) return isRgbColorLight(color);
+  const hexMatch = color.match(/#[0-9a-fA-F]{3,6}/);
+  if (hexMatch) return isHexColorLight(hexMatch[0]);
+  const rgbMatch = color.match(/rgb\([^)]+\)/);
+  if (rgbMatch) return isRgbColorLight(rgbMatch[0]);
+  return false;
 }
 
 function getGridColorForPage(targetPage) {
@@ -6334,10 +6396,14 @@ function buildSlicerPage(page, wrap) {
     const bodyEl = document.createElement('div');
     bodyEl.className = 'slicer-cell-body';
     
+    const cellState = (page.cellStates && page.cellStates[cell.key]) || {};
     const targetPageId = page.cellPages ? page.cellPages[cell.key] : null;
-    if (targetPageId) {
-      const targetPage = D.pages.find(p => p.id === targetPageId);
-      if (targetPage) {
+    const targetPage = targetPageId ? D.pages.find(p => p.id === targetPageId) : null;
+    
+    // Apply page background and cell custom background color to cellEl container
+    applyCellBackground(cellEl, targetPage || page, cellState);
+
+    if (targetPage) {
         if ((!targetPage.miroCards || targetPage.miroCards.length === 0) && (!targetPage.widgets || targetPage.widgets.length === 0)) {
           const cached = getCachedPageData(targetPageId);
           if (cached) {
@@ -6358,7 +6424,6 @@ function buildSlicerPage(page, wrap) {
         const leftEl = document.createElement('div');
         leftEl.className = 'slicer-cell-header-left';
         
-        const cellState = (page.cellStates && page.cellStates[cell.key]) || {};
         let displayIcon = cellState.icon || '';
         let iconSize = cellState.iconSize || 20;
         
@@ -6429,6 +6494,8 @@ function buildSlicerPage(page, wrap) {
             window.showCellSettingsModal(cell.key);
           }
         };
+        settingsBtn.onmousedown = (e) => e.stopPropagation();
+        settingsBtn.ontouchstart = (e) => e.stopPropagation();
         rightEl.appendChild(settingsBtn);
         
         if (targetPage.pageType === 'miro') {
@@ -6443,6 +6510,8 @@ function buildSlicerPage(page, wrap) {
             sv();
             buildCols();
           };
+          fitBtn.onmousedown = (e) => e.stopPropagation();
+          fitBtn.ontouchstart = (e) => e.stopPropagation();
           rightEl.appendChild(fitBtn);
         }
         
@@ -6453,6 +6522,8 @@ function buildSlicerPage(page, wrap) {
           e.stopPropagation();
           switchActivePage(targetPage.id);
         };
+        maxBtn.onmousedown = (e) => e.stopPropagation();
+        maxBtn.ontouchstart = (e) => e.stopPropagation();
         rightEl.appendChild(maxBtn);
         
         const closeSplitBtn = document.createElement('button');
@@ -6468,6 +6539,8 @@ function buildSlicerPage(page, wrap) {
             buildCols();
           }
         };
+        closeSplitBtn.onmousedown = (e) => e.stopPropagation();
+        closeSplitBtn.ontouchstart = (e) => e.stopPropagation();
         rightEl.appendChild(closeSplitBtn);
         headerEl.appendChild(rightEl);
         
@@ -6484,24 +6557,45 @@ function buildSlicerPage(page, wrap) {
           }
         };
         
-        cellEl.appendChild(headerEl);
-        
-        // Apply cell custom background color & opacity
-        if (page.cellStates && page.cellStates[cell.key] && page.cellStates[cell.key].bgColor) {
-          const bg = page.cellStates[cell.key].bgColor;
-          const opacity = page.cellStates[cell.key].bgOpacity != null ? page.cellStates[cell.key].bgOpacity : 0.15;
-          const bgOverlay = document.createElement('div');
-          bgOverlay.style.cssText = `position:absolute;inset:0;pointer-events:none;z-index:0;background:${bg};opacity:${opacity};`;
-          bodyEl.appendChild(bgOverlay);
+        // Apply text/icon color contrast class dynamically
+        const headerTextColorOverride = cellState.headerTextColor || 'auto';
+        let isHeaderLight = false;
+        if (headerTextColorOverride === 'light') {
+          isHeaderLight = false;
+        } else if (headerTextColorOverride === 'dark') {
+          isHeaderLight = true;
+        } else {
+          const effectiveBg = getHeaderEffectiveBgColor(cellState, targetPage, page);
+          isHeaderLight = isColorLight(effectiveBg);
         }
         
+        if (isHeaderLight) {
+          headerEl.classList.add('theme-light');
+        } else {
+          headerEl.classList.remove('theme-light');
+        }
+        
+        cellEl.appendChild(headerEl);
+        
+        // Apply cell custom header background color & opacity & blur dynamically
         if (cellState.headerColor) {
-          const opacity = cellState.headerOpacity != null ? cellState.headerOpacity : 0.4;
+          const opacity = cellState.headerOpacity != null ? cellState.headerOpacity : 0.0;
           const hex = cellState.headerColor;
           const r = parseInt(hex.slice(1, 3), 16);
           const g = parseInt(hex.slice(3, 5), 16);
           const b = parseInt(hex.slice(5, 7), 16);
           headerEl.style.background = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+          if (opacity > 0) {
+            headerEl.style.backdropFilter = 'blur(8px)';
+            headerEl.style.webkitBackdropFilter = 'blur(8px)';
+          } else {
+            headerEl.style.backdropFilter = 'none';
+            headerEl.style.webkitBackdropFilter = 'none';
+          }
+        } else {
+          headerEl.style.background = 'transparent';
+          headerEl.style.backdropFilter = 'none';
+          headerEl.style.webkitBackdropFilter = 'none';
         }
         
         if (targetPage.pageType === 'slicer') {
@@ -6527,7 +6621,6 @@ function buildSlicerPage(page, wrap) {
           const miroContainer = document.createElement('div');
           miroContainer.className = 'slicer-miro-container';
           miroContainer.dataset.cellKey = cell.key;
-          applyCellBackground(miroContainer, targetPage);
           
           const gridOverlay = document.createElement('div');
           gridOverlay.className = 'slicer-miro-grid-overlay';
@@ -6931,7 +7024,6 @@ function buildSlicerPage(page, wrap) {
           // Dashboard Widgets
           const columnsContainer = document.createElement('div');
           columnsContainer.className = 'slicer-widget-container';
-          applyCellBackground(columnsContainer, targetPage);
           
           const colCount = targetPage.cols || 3;
           for (let ci = 0; ci < colCount; ci++) {
@@ -6978,20 +7070,10 @@ function buildSlicerPage(page, wrap) {
           }
           bodyEl.appendChild(columnsContainer);
         }
-      }
     } else {
       // Empty Cell
       const emptyEl = document.createElement('div');
       emptyEl.className = 'slicer-empty-cell';
-      applyCellBackground(emptyEl, page);
-      
-      if (page.cellStates && page.cellStates[cell.key] && page.cellStates[cell.key].bgColor) {
-        const bg = page.cellStates[cell.key].bgColor;
-        const opacity = page.cellStates[cell.key].bgOpacity != null ? page.cellStates[cell.key].bgOpacity : 0.15;
-        const bgOverlay = document.createElement('div');
-        bgOverlay.style.cssText = `position:absolute;inset:0;pointer-events:none;z-index:0;background:${bg};opacity:${opacity};`;
-        emptyEl.appendChild(bgOverlay);
-      }
       
       const gridOverlay = document.createElement('div');
       gridOverlay.className = 'slicer-miro-grid-overlay';
@@ -7435,7 +7517,205 @@ function showPageTabContextMenu(e, pg, nm, cd) {
   }, 10);
 }
 
+function showGroupTabContextMenu(e, g, nm) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  // Inject styles if they don't exist
+  if (!document.getElementById('custom-ctx-menu-styles')) {
+    const style = document.createElement('style');
+    style.id = 'custom-ctx-menu-styles';
+    style.textContent = `
+      .custom-ctx-menu {
+        position: fixed;
+        background: rgba(28, 32, 45, 0.98);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(108, 143, 255, 0.25);
+        border-radius: 12px;
+        padding: 6px 0;
+        min-width: 180px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        z-index: 999999;
+        display: flex;
+        flex-direction: column;
+        font-family: 'DM Sans', sans-serif;
+      }
+      .custom-ctx-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 16px;
+        color: #e4e4e4;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        user-select: none;
+        text-align: right;
+        direction: rtl;
+      }
+      .custom-ctx-item:hover {
+        background: rgba(108, 143, 255, 0.15);
+        color: #fff;
+      }
+      .custom-ctx-item.danger:hover {
+        background: rgba(255, 94, 94, 0.2);
+        color: #ff5e5e;
+      }
+      .custom-ctx-sep {
+        height: 1px;
+        background: rgba(255, 255, 255, 0.08);
+        margin: 4px 0;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  // Close any existing menus first
+  const existing = document.querySelector('.custom-ctx-menu');
+  if (existing) existing.remove();
+
+  const menu = document.createElement('div');
+  menu.className = 'custom-ctx-menu';
+
+  // 1. Merge Pages (إدمج كل الصفحات)
+  const mergeItem = document.createElement('div');
+  mergeItem.className = 'custom-ctx-item';
+  mergeItem.innerHTML = `<span>📐</span> <span>إدمج كل الصفحات</span>`;
+  mergeItem.onclick = () => {
+    menu.remove();
+    // Filter pages in this group that are not slicer pages
+    const grpPages = (D.pages || []).filter(p => p && p.groupId === g.id && p.pageType !== 'slicer');
+    if (grpPages.length === 0) {
+      if (typeof showToast === 'function') {
+        showToast('❌ لا توجد صفحات لدمجها في هذه المجموعة!');
+      }
+      return;
+    }
+
+    // Calculate grid rows and cols based on pages count
+    const count = grpPages.length;
+    let rows = 2;
+    let cols = 2;
+    if (count <= 2) {
+      rows = 1;
+      cols = count;
+    } else if (count <= 4) {
+      rows = 2;
+      cols = 2;
+    } else if (count <= 6) {
+      rows = 2;
+      cols = 3;
+    } else if (count <= 8) {
+      rows = 2;
+      cols = 4;
+    } else if (count <= 9) {
+      rows = 3;
+      cols = 3;
+    } else if (count <= 12) {
+      rows = 3;
+      cols = 4;
+    } else {
+      cols = Math.ceil(Math.sqrt(count));
+      rows = Math.ceil(count / cols);
+    }
+
+    const newPageId = 'p_' + uid();
+    const newPage = {
+      id: newPageId,
+      groupId: g.id,
+      name: `${g.name} - Merge`,
+      pageType: 'slicer',
+      zoom: 100,
+      panX: 0,
+      panY: 0,
+      bg: '',
+      bgType: 'none',
+      gridRows: rows,
+      gridCols: cols,
+      slicerColSizes: Array(cols).fill(100 / cols),
+      slicerRowSizes: Array(rows).fill(100 / rows),
+      cellPages: {},
+      cellStates: {},
+      mergedCells: [],
+      widgets: [],
+      miroCards: [],
+      ts: Date.now()
+    };
+
+    let idx = 0;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (idx < grpPages.length) {
+          const subPage = grpPages[idx];
+          const cellKey = `${r}_${c}`;
+          newPage.cellPages[cellKey] = subPage.id;
+          newPage.cellStates[cellKey] = { zoom: 30, panX: 0, panY: 0 };
+          idx++;
+        }
+      }
+    }
+
+    D.pages.push(newPage);
+    D.cur = newPageId;
+    D.curGroup = g.id;
+    sv(true, true); // Save immediately
+    switchActivePage(newPageId);
+    if (typeof showToast === 'function') {
+      showToast('✅ تم دمج كل الصفحات بنجاح!');
+    }
+  };
+  menu.appendChild(mergeItem);
+
+  // 2. Export Group (تصدير المجموعة)
+  const exportItem = document.createElement('div');
+  exportItem.className = 'custom-ctx-item';
+  exportItem.innerHTML = `<span>📦</span> <span>تصدير المجموعة</span>`;
+  exportItem.onclick = () => {
+    menu.remove();
+    if (typeof openSelIO === 'function') {
+      const env = D.environments.find(ev => ev.id === g.envId);
+      const grpPages = D.pages.filter(p => p.groupId === g.id);
+      openSelIO('export', {
+        settings: D.settings,
+        environments: env ? [env] : [],
+        groups: [g],
+        pages: grpPages
+      });
+    }
+  };
+  menu.appendChild(exportItem);
+
+  // Positioning
+  document.body.appendChild(menu);
+  const rect = menu.getBoundingClientRect();
+  let x = e.clientX;
+  let y = e.clientY;
+  
+  if (x + rect.width > window.innerWidth) {
+    x = window.innerWidth - rect.width - 10;
+  }
+  if (y + rect.height > window.innerHeight) {
+    y = window.innerHeight - rect.height - 10;
+  }
+  
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+
+  // Dismiss on clicking outside
+  const dismiss = (ev) => {
+    if (!menu.contains(ev.target)) {
+      menu.remove();
+      document.removeEventListener('mousedown', dismiss);
+    }
+  };
+  setTimeout(() => {
+    document.addEventListener('mousedown', dismiss);
+  }, 10);
+}
+
 window.showPageTabContextMenu = showPageTabContextMenu;
+window.showGroupTabContextMenu = showGroupTabContextMenu;
 window.buildSlicerPage = buildSlicerPage;
 window.setupSlicerSubPageListeners = setupSlicerSubPageListeners;
 window.autofitSlicerCell = autofitSlicerCell;

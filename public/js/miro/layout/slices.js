@@ -2696,7 +2696,7 @@
     headerOpacitySlider.type = 'range';
     headerOpacitySlider.min = '0';
     headerOpacitySlider.max = '100';
-    headerOpacitySlider.value = Math.round((state.headerOpacity != null ? state.headerOpacity : 0.4) * 100);
+    headerOpacitySlider.value = Math.round((state.headerOpacity != null ? state.headerOpacity : 0) * 100);
 
     const headerOpacityVal = document.createElement('span');
     headerOpacityVal.className = 'mcm-opacity-val';
@@ -2708,6 +2708,51 @@
     headerBgContainer.appendChild(headerOpacityVal);
     headerBgRow.appendChild(headerBgContainer);
     modal.appendChild(headerBgRow);
+
+    // Row: Header Text Color Override
+    const headerTextRow = document.createElement('div');
+    headerTextRow.className = 'mcm-row';
+    const headerTextLabel = document.createElement('label');
+    headerTextLabel.textContent = 'Header Text/Icon Color';
+    headerTextRow.appendChild(headerTextLabel);
+
+    const headerTextColorSelect = document.createElement('select');
+    headerTextColorSelect.style.cssText = 'width: 100%; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 6px 10px; color: #fff; font-size: 0.75rem; outline: none; box-sizing: border-box;';
+    
+    const textOpts = [
+      { val: 'auto', label: 'Auto (Contrast-based)' },
+      { val: 'light', label: 'Light (White)' },
+      { val: 'dark', label: 'Dark (Black)' }
+    ];
+    textOpts.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = opt.val;
+      o.textContent = opt.label;
+      o.style.cssText = 'background: #1a1d2e; color: #fff;';
+      if ((state.headerTextColor || 'auto') === opt.val) o.selected = true;
+      headerTextColorSelect.appendChild(o);
+    });
+    headerTextRow.appendChild(headerTextColorSelect);
+    modal.appendChild(headerTextRow);
+
+    // Row: Apply to All Headers Checkbox
+    const applyAllRow = document.createElement('div');
+    applyAllRow.className = 'mcm-row';
+    applyAllRow.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-top: 8px; margin-bottom: 8px;';
+
+    const applyAllCheckbox = document.createElement('input');
+    applyAllCheckbox.type = 'checkbox';
+    applyAllCheckbox.id = 'mcm-apply-all-headers';
+    applyAllCheckbox.style.cssText = 'width: 16px; height: 16px; accent-color: #6c8fff; cursor: pointer;';
+
+    const applyAllLabel = document.createElement('label');
+    applyAllLabel.htmlFor = 'mcm-apply-all-headers';
+    applyAllLabel.style.cssText = 'font-size: 0.75rem; color: #aaa; cursor: pointer; user-select: none; margin: 0;';
+    applyAllLabel.textContent = 'Apply current header settings to all cells in this page';
+
+    applyAllRow.appendChild(applyAllCheckbox);
+    applyAllRow.appendChild(applyAllLabel);
+    modal.appendChild(applyAllRow);
 
     // Row: Merge Cells / Custom Cell Actions
     const mergeRow = document.createElement('div');
@@ -2931,9 +2976,26 @@
       const hoVal = parseInt(headerOpacitySlider.value);
       state.headerColor = headerColorInput.value;
       state.headerOpacity = hoVal / 100;
+      state.headerTextColor = headerTextColorSelect.value;
 
       if (ackCheckbox && ackCheckbox.checked) {
         state.hasUnacknowledgedChange = false;
+      }
+
+      const applyAll = applyAllCheckbox.checked;
+      if (applyAll && page.pageType === 'slicer') {
+        const activeCells = (typeof window.getSlicerActiveCells === 'function')
+          ? window.getSlicerActiveCells(page)
+          : [];
+        activeCells.forEach(cell => {
+          if (!page.cellStates[cell.key]) {
+            page.cellStates[cell.key] = { zoom: 100, panX: 0, panY: 0 };
+          }
+          const cState = page.cellStates[cell.key];
+          cState.headerColor = state.headerColor;
+          cState.headerOpacity = state.headerOpacity;
+          cState.headerTextColor = state.headerTextColor;
+        });
       }
 
       if (newDynamicType !== oldDynamicType) {
