@@ -419,6 +419,22 @@
   // Extracted sv
   window.sv = function (saveAll = false, immediate = false) {
   if (!USER_ID) return;
+
+  // Immediately update timestamps in memory to prevent Firebase listener race conditions/reversions during debounce
+  const activePg = cp();
+  if (activePg) {
+    const nowTs = Date.now();
+    activePg.ts = nowTs;
+    if (activePg.pageType === 'slicer' && activePg.cellPages) {
+      Object.values(activePg.cellPages).forEach(subPid => {
+        const subPg = D.pages.find(p => p && p.id === subPid);
+        if (subPg) {
+          subPg.ts = nowTs;
+        }
+      });
+    }
+  }
+
   // Capture undo snapshot before saving (for Miro pages)
   if (typeof pushUndo === 'function') { try { pushUndo(); } catch(e) {} }
 
@@ -686,7 +702,7 @@
           if (p.id === activePg.id) {
             // ─── DATA LOSS GUARD: Don't overwrite non-empty Firebase data with empty data ───
             const curHasData = (activePg.widgets && activePg.widgets.length > 0) || (activePg.miroCards && activePg.miroCards.length > 0);
-            if (!curHasData && _lastSyncedPageData) {
+            if (!curHasData && _lastSyncedPageData && !activePg._hasBeenLoaded) {
               const oldHadWidgets = JSON.parse(_lastSyncedPageData.widgets || '[]').length > 0;
               const oldHadCards = JSON.parse(_lastSyncedPageData.miroCards || '[]').length > 0;
               if (oldHadWidgets || oldHadCards) {
@@ -793,7 +809,7 @@
           } else {
             // For subpages, write their whole payload directly
             const subHasData = (p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0);
-            if (!subHasData) {
+            if (!subHasData && !p._hasBeenLoaded) {
               const cached = getCachedPageData(p.id);
               if (cached && ((cached.widgets && cached.widgets.length > 0) || (cached.miroCards && cached.miroCards.length > 0))) {
                 console.warn(`[SV GUARD ⛔] Subpage "${p.name}" (${p.id}) resolved to empty in memory but had cached data — save skipped to prevent data loss.`);

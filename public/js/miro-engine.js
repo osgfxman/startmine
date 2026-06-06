@@ -49,8 +49,9 @@ function pushUndo() {
   let page = null;
   if (activePg.pageType === 'miro') {
     page = activePg;
-  } else if (activePg.pageType === 'slicer' && window._hoveredCellKey) {
-    const subPageId = activePg.cellPages ? activePg.cellPages[window._hoveredCellKey] : null;
+  } else if (activePg.pageType === 'slicer' && (window._hoveredCellKey || window._activeCellKey)) {
+    const cellKey = window._hoveredCellKey || window._activeCellKey;
+    const subPageId = activePg.cellPages ? activePg.cellPages[cellKey] : null;
     if (subPageId) {
       const subPage = D.pages.find(p => p.id === subPageId);
       if (subPage && subPage.pageType === 'miro') {
@@ -74,8 +75,9 @@ function performUndo() {
   let page = null;
   if (activePg.pageType === 'miro') {
     page = activePg;
-  } else if (activePg.pageType === 'slicer' && window._hoveredCellKey) {
-    const subPageId = activePg.cellPages ? activePg.cellPages[window._hoveredCellKey] : null;
+  } else if (activePg.pageType === 'slicer' && (window._hoveredCellKey || window._activeCellKey)) {
+    const cellKey = window._hoveredCellKey || window._activeCellKey;
+    const subPageId = activePg.cellPages ? activePg.cellPages[cellKey] : null;
     if (subPageId) {
       const subPage = D.pages.find(p => p.id === subPageId);
       if (subPage && subPage.pageType === 'miro') {
@@ -2262,11 +2264,47 @@ document.addEventListener('keydown', (e) => {
   }
 
   const activePg = cp();
+  if (!activePg) return;
+  if (activePg.pageType !== 'miro' && activePg.pageType !== 'slicer') return;
+
+  const key = e.key.toLowerCase();
+  const isCmd = e.ctrlKey || e.metaKey;
+
+  // Tools Shortcuts
+  if (!isCmd) {
+    let processed = true;
+    switch (key) {
+      case 'v': case 'ر': e.preventDefault(); setActiveTool('select'); break;
+      case 'n': case 'ى': e.preventDefault(); document.getElementById('mtb-sticky').click(); break;
+      case 't': case 'ف': e.preventDefault(); document.getElementById('mtb-text').click(); break;
+      case 's': case 'س': e.preventDefault(); document.getElementById('mtb-shape').click(); break;
+      case 'p': case 'ح': e.preventDefault(); document.getElementById('mtb-pen').click(); break;
+      case 'g': case 'ل': e.preventDefault(); document.getElementById('mtb-grid').click(); break;
+      case 'm': case 'ة': e.preventDefault(); document.getElementById('mtb-mindmap').click(); break;
+      case 'w': case 'ص': e.preventDefault(); document.getElementById('mtb-widget').click(); break;
+      case 'k': case 'ن': e.preventDefault(); document.getElementById('mtb-trello').click(); break;
+      case 'i': case 'ه': e.preventDefault(); document.getElementById('mtb-image').click(); break;
+      case 'b': case 'لا': e.preventDefault(); document.getElementById('mtb-card').click(); break;
+      case 'e': case 'ث': e.preventDefault(); document.getElementById('mtb-embed').click(); break;
+      case 'y': case 'ئ': e.preventDefault(); document.getElementById('mtb-dyn-title').click(); break;
+      case 'escape':
+        setActiveTool('select');
+        document.getElementById('miro-shape-panel').classList.remove('show');
+        if (typeof window._exitCustomCellDrawMode === 'function') window._exitCustomCellDrawMode();
+        break;
+      default:
+        processed = false;
+        break;
+    }
+    if (processed) return;
+  }
+
   let page = null;
   if (activePg.pageType === 'miro') {
     page = activePg;
-  } else if (activePg.pageType === 'slicer' && window._hoveredCellKey) {
-    const subPageId = activePg.cellPages ? activePg.cellPages[window._hoveredCellKey] : null;
+  } else if (activePg.pageType === 'slicer' && (window._hoveredCellKey || window._activeCellKey)) {
+    const cellKey = window._hoveredCellKey || window._activeCellKey;
+    const subPageId = activePg.cellPages ? activePg.cellPages[cellKey] : null;
     if (subPageId) {
       const subPage = D.pages.find(p => p.id === subPageId);
       if (subPage && subPage.pageType === 'miro') {
@@ -2275,9 +2313,6 @@ document.addEventListener('keydown', (e) => {
     }
   }
   if (!page) return;
-
-  const key = e.key.toLowerCase();
-  const isCmd = e.ctrlKey || e.metaKey;
 
   // Undo: Ctrl+Z (works with any keyboard layout via e.code)
   if (isCmd && (key === 'z' || e.code === 'KeyZ')) {
@@ -2406,36 +2441,29 @@ document.addEventListener('keydown', (e) => {
     }).catch(e => console.error(e));
   }
 
-  // Tools Shortcuts
+  // Other Shortcuts requiring resolved page
   if (!isCmd) {
     switch (key) {
-      case 'v': case 'ر': e.preventDefault(); setActiveTool('select'); break;
-      case 'n': case 'ى': e.preventDefault(); document.getElementById('mtb-sticky').click(); break;
-      case 't': case 'ف': e.preventDefault(); document.getElementById('mtb-text').click(); break;
-      case 's': case 'س': e.preventDefault(); document.getElementById('mtb-shape').click(); break;
-      case 'p': case 'ح': e.preventDefault(); document.getElementById('mtb-pen').click(); break;
-      case 'g': case 'ل': e.preventDefault(); document.getElementById('mtb-grid').click(); break;
-      case 'm': case 'ة': e.preventDefault(); document.getElementById('mtb-mindmap').click(); break;
-      case 'w': case 'ص': e.preventDefault(); document.getElementById('mtb-widget').click(); break;
-      case 'k': case 'ن': e.preventDefault(); document.getElementById('mtb-trello').click(); break;
-      case 'i': case 'ه': e.preventDefault(); document.getElementById('mtb-image').click(); break;
-      case 'b': case 'لا': e.preventDefault(); document.getElementById('mtb-card').click(); break;
-      case 'e': case 'ث': e.preventDefault(); document.getElementById('mtb-embed').click(); break;
-      case 'y': case 'ئ': e.preventDefault(); document.getElementById('mtb-dyn-title').click(); break;
-      case 'escape':
-        setActiveTool('select');
-        document.getElementById('miro-shape-panel').classList.remove('show');
-        if (typeof window._exitCustomCellDrawMode === 'function') window._exitCustomCellDrawMode();
-        break;
       case 'delete':
       case 'backspace':
         if (_miroSelected.size > 0) {
           e.preventDefault();
           _miroSelected.forEach(cid => {
-            page.miroCards = (page.miroCards || []).filter(c => c.id !== cid);
+            const p = D.pages.find(pg => pg.miroCards && pg.miroCards.some(c => c.id === cid)) || page;
+            if (p) {
+              p._bypassVersionGuard = true; // Bypass version guard!
+              p.miroCards = (p.miroCards || []).filter(c => c.id !== cid);
+            }
           });
           _miroSelected.clear();
-          sv(); buildMiroCanvas(); buildOutline();
+          sv();
+          const activePg2 = cp();
+          if (activePg2.pageType === 'slicer') {
+            buildCols();
+          } else {
+            buildMiroCanvas();
+          }
+          if (typeof buildOutline === 'function') buildOutline();
         }
         break;
       case 'f': case 'ب':
@@ -2497,8 +2525,9 @@ document.addEventListener('paste', (e) => {
   let page = null;
   if (activePg.pageType === 'miro') {
     page = activePg;
-  } else if (activePg.pageType === 'slicer' && window._hoveredCellKey) {
-    const subPageId = activePg.cellPages ? activePg.cellPages[window._hoveredCellKey] : null;
+  } else if (activePg.pageType === 'slicer' && (window._hoveredCellKey || window._activeCellKey)) {
+    const cellKey = window._hoveredCellKey || window._activeCellKey;
+    const subPageId = activePg.cellPages ? activePg.cellPages[cellKey] : null;
     if (subPageId) {
       const subPage = D.pages.find(p => p.id === subPageId);
       if (subPage && subPage.pageType === 'miro') {

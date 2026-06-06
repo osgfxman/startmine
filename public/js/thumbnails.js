@@ -781,7 +781,7 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
       updateMiroSelFrame();
     }
 
-    function onUp() {
+    function onUp(ev) {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
 
@@ -797,27 +797,130 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
       const snapSvg = document.getElementById('snap-guides');
       if (snapSvg) snapSvg.innerHTML = '';
 
-      // Cleanup starting positions & z-indexes
-      origPositions.forEach((orig, cid) => {
-        const c = (page.miroCards || []).find(x => x.id === cid);
-        if (c) {
-          delete c._dragStartX;
-          delete c._dragStartY;
-        }
-        const cardEl = document.querySelector(`[data-cid="${cid}"]`);
-        if (cardEl) cardEl.style.zIndex = '';
-      });
+      const slicerPage = cp();
+      let crossCellHandled = false;
 
-      if (moved || hasCloned) {
-        // Re-partition cards into cells after drag (handles cross-cell moves)
-        if (typeof window.partitionMiroCardsIntoCells === 'function') {
-          const _canvas = document.getElementById('miro-canvas');
-          if (_canvas && _canvas.clientWidth > 0 && _canvas.clientHeight > 0) {
-            window.partitionMiroCardsIntoCells(page, _canvas.clientWidth, _canvas.clientHeight);
+      if (slicerPage && slicerPage.pageType === 'slicer' && ev && ev.ctrlKey) {
+        const targetMiroContainer = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.slicer-miro-container');
+        if (targetMiroContainer) {
+          const targetCellKey = targetMiroContainer.dataset.cellKey;
+          const targetPageId = slicerPage.cellPages ? slicerPage.cellPages[targetCellKey] : null;
+          const targetSubPage = targetPageId ? D.pages.find(p => p.id === targetPageId) : null;
+          
+          if (targetSubPage && targetSubPage.id !== page.id && targetSubPage.pageType === 'miro') {
+            crossCellHandled = true;
+            
+            const targetCellState = (slicerPage.cellStates && slicerPage.cellStates[targetCellKey]) || { zoom: 100, panX: 0, panY: 0 };
+            const targetZoom = (targetCellState.zoom || 100) / 100;
+            
+            const rect = targetMiroContainer.getBoundingClientRect();
+            const rx = ev.clientX - rect.left;
+            const ry = ev.clientY - rect.top;
+            const tx = (rx - (targetCellState.panX || 0)) / targetZoom;
+            const ty = (ry - (targetCellState.panY || 0)) / targetZoom;
+            
+            // Get source cell info
+            const sourceMiroContainer = el.closest('.slicer-miro-container');
+            const sourceRect = sourceMiroContainer ? sourceMiroContainer.getBoundingClientRect() : rect;
+            const sourceCellKey = typeof getCellKeyForPageId === 'function' ? getCellKeyForPageId(slicerPage, page.id) : null;
+            const sourceCellState = (slicerPage.cellStates && sourceCellKey && slicerPage.cellStates[sourceCellKey]) || { zoom: 100, panX: 0, panY: 0 };
+            const sourceZoom = (sourceCellState.zoom || 100) / 100;
+            
+            const sourceClickX = (startX - sourceRect.left - (sourceCellState.panX || 0)) / sourceZoom;
+            const sourceClickY = (startY - sourceRect.top - (sourceCellState.panY || 0)) / sourceZoom;
+            
+            const selectedIds = Array.from(_miroSelected);
+            
+            selectedIds.forEach(cid => {
+              const c = (page.miroCards || []).find(x => x.id === cid);
+              if (!c) return;
+              
+              const orig = origPositions.get(cid) || { x: c.x || 0, y: c.y || 0 };
+              const offsetX = orig.x - sourceClickX;
+              const offsetY = orig.y - sourceClickY;
+              
+              if (ev.altKey) {
+                // Clone mode
+                const clone = JSON.parse(JSON.stringify(c));
+                clone.id = uid();
+                if (clone.type === 'grid') {
+                  clone.rows.forEach(r => { r.id = uid(); });
+                  clone.cols.forEach(col => { col.id = uid(); });
+                } else if (clone.type === 'mindmap' && clone.root) {
+                  const resetIds = (node) => { node.id = uid(); if (node.children) node.children.forEach(resetIds); };
+                  resetIds(clone.root);
+                }
+                clone.x = tx + offsetX;
+                clone.y = ty + offsetY;
+                
+                if (!targetSubPage.miroCards) targetSubPage.miroCards = [];
+                targetSubPage.miroCards.push(clone);
+                
+                // ALSO remove the original card from the source page since we left a clone at start position
+                const cardIdx = page.miroCards.findIndex(x => x.id === cid);
+                if (cardIdx !== -1) {
+                  page.miroCards.splice(cardIdx, 1);
+                }
+              } else {
+                // Move mode
+                const cardIdx = page.miroCards.findIndex(x => x.id === cid);
+                if (cardIdx !== -1) {
+                  const [movedCard] = page.miroCards.splice(cardIdx, 1);
+                  movedCard.x = tx + offsetX;
+                  movedCard.y = ty + offsetY;
+                  
+                  if (!targetSubPage.miroCards) targetSubPage.miroCards = [];
+                  targetSubPage.miroCards.push(movedCard);
+                }
+              }
+            });
+            
+            page._bypassVersionGuard = true;
+            targetSubPage._bypassVersionGuard = true;
+            clearMiroSelection();
+            sv();
+            buildCols();
+            if (typeof showToast === 'function') {
+              showToast(ev.altKey ? '📋 Copied card to target cell!' : '✂️ Moved card to target cell!');
+            }
           }
         }
-        sv();
-        if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+      }
+
+      if (!crossCellHandled) {
+        // Cleanup starting positions & z-indexes
+        origPositions.forEach((orig, cid) => {
+          const c = (page.miroCards || []).find(x => x.id === cid);
+          if (c) {
+            delete c._dragStartX;
+            delete c._dragStartY;
+          }
+          const cardEl = document.querySelector(`[data-cid="${cid}"]`);
+          if (cardEl) cardEl.style.zIndex = '';
+        });
+
+        if (moved || hasCloned) {
+          // Re-partition cards into cells after drag (handles cross-cell moves)
+          if (typeof window.partitionMiroCardsIntoCells === 'function') {
+            const _canvas = document.getElementById('miro-canvas');
+            if (_canvas && _canvas.clientWidth > 0 && _canvas.clientHeight > 0) {
+              window.partitionMiroCardsIntoCells(page, _canvas.clientWidth, _canvas.clientHeight);
+            }
+          }
+          sv();
+          if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+        }
+      } else {
+        // Cleanup starting positions & z-indexes for moved/cloned cards
+        origPositions.forEach((orig, cid) => {
+          const c = (page.miroCards || []).find(x => x.id === cid);
+          if (c) {
+            delete c._dragStartX;
+            delete c._dragStartY;
+          }
+          const cardEl = document.querySelector(`[data-cid="${cid}"]`);
+          if (cardEl) cardEl.style.zIndex = '';
+        });
       }
     }
     document.addEventListener('mousemove', onMove);
@@ -1470,12 +1573,17 @@ function buildMiroSticky(card) {
   colorBtnWrap.appendChild(colorPopup);
   toolbar.appendChild(colorBtnWrap);
 
-  // Close color popup when clicking outside
-  document.addEventListener('click', (e) => {
+  // Close color popup when clicking outside (self-cleaning)
+  const docClickColor = (e) => {
+    if (!document.body.contains(colorBtnWrap)) {
+      document.removeEventListener('click', docClickColor);
+      return;
+    }
     if (!colorBtnWrap.contains(e.target)) {
       colorPopup.classList.remove('show');
     }
-  });
+  };
+  document.addEventListener('click', docClickColor);
 
   // ── Separator ──
   const sepA = document.createElement('div');
@@ -1642,12 +1750,17 @@ function buildMiroSticky(card) {
   alignWrap.appendChild(alignPopup);
   toolbar.appendChild(alignWrap);
 
-  // Close align popup when clicking outside
-  document.addEventListener('click', (e) => {
+  // Close align popup when clicking outside (self-cleaning)
+  const docClickAlign = (e) => {
+    if (!document.body.contains(alignWrap)) {
+      document.removeEventListener('click', docClickAlign);
+      return;
+    }
     if (!alignWrap.contains(e.target)) {
       alignPopup.classList.remove('show');
     }
-  });
+  };
+  document.addEventListener('click', docClickAlign);
 
   // ── Separator ──
   const sepD = document.createElement('div');
@@ -2027,12 +2140,17 @@ function buildMiroSticky(card) {
   tagBtnWrap.appendChild(tagPopup);
   toolbar.appendChild(tagBtnWrap);
 
-  // Close tag popup when clicking outside
-  document.addEventListener('click', (e) => {
+  // Close tag popup when clicking outside (self-cleaning)
+  const docClickTag = (e) => {
+    if (!document.body.contains(tagBtnWrap)) {
+      document.removeEventListener('click', docClickTag);
+      return;
+    }
     if (!tagBtnWrap.contains(e.target)) {
       tagPopup.classList.remove('show');
     }
-  });
+  };
+  document.addEventListener('click', docClickTag);
 
   // ── Tag strip under sticky note ──
   const tagStrip = document.createElement('div');
@@ -2131,7 +2249,11 @@ function buildMiroSticky(card) {
     });
     toolbar.classList.toggle('show');
   });
-  document.addEventListener('click', (e) => {
+  const docClickSticky = (e) => {
+    if (!document.body.contains(el)) {
+      document.removeEventListener('click', docClickSticky);
+      return;
+    }
     if (!el.contains(e.target)) {
       toolbar.classList.remove('show');
       // Also exit edit mode if clicking outside
@@ -2141,7 +2263,8 @@ function buildMiroSticky(card) {
         sv();
       }
     }
-  });
+  };
+  document.addEventListener('click', docClickSticky);
 
   // Drag (via global helper)
   miroSetupCardDrag(el, card, ['.mc-del', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl', '.ms-shape-toggle', '.sn-toolbar', '.mc-lock']);
@@ -2609,9 +2732,14 @@ function buildMiroText(card) {
   alignWrap.appendChild(alignPopup);
   toolbar.appendChild(alignWrap);
 
-  document.addEventListener('click', (e) => {
+  const docClickTextAlign = (e) => {
+    if (!document.body.contains(alignWrap)) {
+      document.removeEventListener('click', docClickTextAlign);
+      return;
+    }
     if (!alignWrap.contains(e.target)) alignPopup.classList.remove('show');
-  });
+  };
+  document.addEventListener('click', docClickTextAlign);
 
   // ── Separator ──
   const sepC = document.createElement('div');
@@ -2800,7 +2928,11 @@ function buildMiroText(card) {
     document.querySelectorAll('.mt-toolbar.show, .msh-toolbar.show, .sn-toolbar.show').forEach(t => { if (t !== toolbar) t.classList.remove('show'); });
     toolbar.classList.toggle('show');
   });
-  document.addEventListener('click', (e) => {
+  const docClickText = (e) => {
+    if (!document.body.contains(el)) {
+      document.removeEventListener('click', docClickText);
+      return;
+    }
     if (!el.contains(e.target)) {
       toolbar.classList.remove('show');
       if (text.contentEditable === 'true' && !toolbar.contains(e.target)) {
@@ -2812,7 +2944,8 @@ function buildMiroText(card) {
         sv();
       }
     }
-  });
+  };
+  document.addEventListener('click', docClickText);
 
   // Drag (via global helper)
   miroSetupCardDrag(el, card, ['.mc-del', '.mt-toolbar', '.mc-lock']);
@@ -3200,7 +3333,11 @@ function buildMiroShape(card) {
     document.querySelectorAll('.mt-toolbar.show, .msh-toolbar.show, .sn-toolbar.show').forEach(t => { if (t !== toolbar) t.classList.remove('show'); });
     toolbar.classList.toggle('show');
   });
-  document.addEventListener('click', (e) => {
+  const docClickShape = (e) => {
+    if (!document.body.contains(el)) {
+      document.removeEventListener('click', docClickShape);
+      return;
+    }
     if (!el.contains(e.target)) {
       toolbar.classList.remove('show');
       if (textOverlay.contentEditable === 'true') {
@@ -3209,7 +3346,8 @@ function buildMiroShape(card) {
         sv();
       }
     }
-  });
+  };
+  document.addEventListener('click', docClickShape);
 
   // Drag (via global helper)
   miroSetupCardDrag(el, card, ['.mc-del', '.msh-toolbar', '.mc-resize-br', '.mc-resize-bl', '.mc-resize-tr', '.mc-resize-tl']);

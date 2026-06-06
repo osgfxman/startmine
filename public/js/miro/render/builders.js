@@ -549,6 +549,7 @@
   window.deleteMiroCard = function deleteMiroCard(cid, pageId) {
     const page = pageId ? (D.pages.find(p => p.id === pageId) || cp()) : (D.pages.find(p => p.miroCards && p.miroCards.some(c => c.id === cid)) || cp());
     if (!page || !page.miroCards) return;
+    page._bypassVersionGuard = true; // Bypass version guard!
     page.miroCards = page.miroCards.filter((c) => c.id !== cid);
     sv();
     const curPg = cp();
