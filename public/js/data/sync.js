@@ -76,57 +76,77 @@
       ts = p.ts;
     } else {
       // Non-active page: always prefer cache (memory is evicted)
-      const cached = getCachedPageData(p.id);
-      const hasCachedData = cached && (
-        (cached.widgets && cached.widgets.length > 0) ||
-        (cached.miroCards && cached.miroCards.length > 0) ||
-        (cached.vGuides && cached.vGuides.length > 0) ||
-        (cached.hGuides && cached.hGuides.length > 0) ||
-        cached._guidesMode ||
-        (cached.customCells && cached.customCells.length > 0) ||
-        cached._layoutGuidesMode ||
-        cached.cellGuides
-      );
-      if (hasCachedData) {
-        widgets = cached.widgets || [];
-        miroCards = cached.miroCards || [];
-        vGuides = cached.vGuides || [];
-        hGuides = cached.hGuides || [];
-        _guidesMode = cached._guidesMode || false;
-        lockedGuides = cached.lockedGuides || [];
-        cellStates = cached.cellStates || {};
-        mergedCells = cached.mergedCells || [];
-        customCells = cached.customCells || [];
-        cellGuides = cached.cellGuides || {};
-        _layoutGuidesMode = cached._layoutGuidesMode || false;
-        gridRows = cached.gridRows || null;
-        gridCols = cached.gridCols || null;
-        cellPages = cached.cellPages || null;
-        slicerColSizes = cached.slicerColSizes || null;
-        slicerRowSizes = cached.slicerRowSizes || null;
-        ts = cached.ts || p.ts || Date.now();
-      } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0) || (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode || (p.customCells && p.customCells.length > 0) || p._layoutGuidesMode || p.cellGuides) {
-        widgets = p.widgets || [];
-        miroCards = p.miroCards || [];
-        vGuides = p.vGuides || [];
-        hGuides = p.hGuides || [];
-        _guidesMode = p._guidesMode || false;
-        lockedGuides = p.lockedGuides || [];
-        cellStates = p.cellStates || {};
-        mergedCells = p.mergedCells || [];
-        customCells = p.customCells || [];
-        cellGuides = p.cellGuides || {};
-        _layoutGuidesMode = p._layoutGuidesMode || false;
-        gridRows = p.gridRows || null;
-        gridCols = p.gridCols || null;
-        cellPages = p.cellPages || null;
-        slicerColSizes = p.slicerColSizes || null;
-        slicerRowSizes = p.slicerRowSizes || null;
+      if (p._bypassVersionGuard) {
+        widgets = [];
+        miroCards = [];
+        vGuides = [];
+        hGuides = [];
+        _guidesMode = false;
+        lockedGuides = [];
+        cellStates = {};
+        mergedCells = [];
+        customCells = [];
+        cellGuides = {};
+        _layoutGuidesMode = false;
+        gridRows = null;
+        gridCols = null;
+        cellPages = null;
+        slicerColSizes = null;
+        slicerRowSizes = null;
         ts = p.ts || Date.now();
       } else {
-        // SAFETY: skip to avoid overwriting Firebase with empty data
-        console.warn(`[SYNC GUARD] Skipping page "${p.name}" (${p.id}) — no data available`);
-        return;
+        const cached = getCachedPageData(p.id);
+        const hasCachedData = cached && (
+          (cached.widgets && cached.widgets.length > 0) ||
+          (cached.miroCards && cached.miroCards.length > 0) ||
+          (cached.vGuides && cached.vGuides.length > 0) ||
+          (cached.hGuides && cached.hGuides.length > 0) ||
+          cached._guidesMode ||
+          (cached.customCells && cached.customCells.length > 0) ||
+          cached._layoutGuidesMode ||
+          cached.cellGuides
+        );
+        if (hasCachedData) {
+          widgets = cached.widgets || [];
+          miroCards = cached.miroCards || [];
+          vGuides = cached.vGuides || [];
+          hGuides = cached.hGuides || [];
+          _guidesMode = cached._guidesMode || false;
+          lockedGuides = cached.lockedGuides || [];
+          cellStates = cached.cellStates || {};
+          mergedCells = cached.mergedCells || [];
+          customCells = cached.customCells || [];
+          cellGuides = cached.cellGuides || {};
+          _layoutGuidesMode = cached._layoutGuidesMode || false;
+          gridRows = cached.gridRows || null;
+          gridCols = cached.gridCols || null;
+          cellPages = cached.cellPages || null;
+          slicerColSizes = cached.slicerColSizes || null;
+          slicerRowSizes = cached.slicerRowSizes || null;
+          ts = cached.ts || p.ts || Date.now();
+        } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0) || (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode || (p.customCells && p.customCells.length > 0) || p._layoutGuidesMode || p.cellGuides) {
+          widgets = p.widgets || [];
+          miroCards = p.miroCards || [];
+          vGuides = p.vGuides || [];
+          hGuides = p.hGuides || [];
+          _guidesMode = p._guidesMode || false;
+          lockedGuides = p.lockedGuides || [];
+          cellStates = p.cellStates || {};
+          mergedCells = p.mergedCells || [];
+          customCells = p.customCells || [];
+          cellGuides = p.cellGuides || {};
+          _layoutGuidesMode = p._layoutGuidesMode || false;
+          gridRows = p.gridRows || null;
+          gridCols = p.gridCols || null;
+          cellPages = p.cellPages || null;
+          slicerColSizes = p.slicerColSizes || null;
+          slicerRowSizes = p.slicerRowSizes || null;
+          ts = p.ts || Date.now();
+        } else {
+          // SAFETY: skip to avoid overwriting Firebase with empty data
+          console.warn(`[SYNC GUARD] Skipping page "${p.name}" (${p.id}) — no data available`);
+          return;
+        }
       }
     }
     updates[`users/${USER_ID}/startmine_pages/${p.id}`] = {
@@ -163,6 +183,11 @@
           miroCards: JSON.stringify(activePg.miroCards || [])
         };
       }
+      D.pages.forEach(pg => {
+        if (pg && pg._bypassVersionGuard) {
+          delete pg._bypassVersionGuard;
+        }
+      });
       updateOfflineUI();
       showToast('✅ Synced successfully!');
     })
@@ -599,66 +624,88 @@
           ts = p.ts;
         } else {
           // NON-ACTIVE page — try cache, then memory
-          const cached = getCachedPageData(p.id);
-          const hasCachedData = cached && (
-            (cached.widgets && cached.widgets.length > 0) ||
-            (cached.miroCards && cached.miroCards.length > 0) ||
-            (cached.vGuides && cached.vGuides.length > 0) ||
-            (cached.hGuides && cached.hGuides.length > 0) ||
-            cached._guidesMode ||
-            (cached.customCells && cached.customCells.length > 0) ||
-            cached._layoutGuidesMode ||
-            cached.cellGuides
-          );
-          if (hasCachedData) {
-            widgets = cached.widgets || [];
-            miroCards = cached.miroCards || [];
-            vGuides = cached.vGuides || [];
-            hGuides = cached.hGuides || [];
-            _guidesMode = cached._guidesMode || false;
-            lockedGuides = cached.lockedGuides || [];
-            cellStates = cached.cellStates || {};
-            mergedCells = cached.mergedCells || [];
-            customCells = cached.customCells || [];
-            cellGuides = cached.cellGuides || {};
-            _layoutGuidesMode = cached._layoutGuidesMode || false;
-            gridRows = cached.gridRows || null;
-            gridCols = cached.gridCols || null;
-            cellPages = cached.cellPages || null;
-            slicerColSizes = cached.slicerColSizes || null;
-            slicerRowSizes = cached.slicerRowSizes || null;
-            ts = cached.ts || p.ts || Date.now();
-          } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0) || (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode || (p.customCells && p.customCells.length > 0) || p._layoutGuidesMode || p.cellGuides) {
-            widgets = p.widgets || [];
-            miroCards = p.miroCards || [];
-            vGuides = p.vGuides || [];
-            hGuides = p.hGuides || [];
-            _guidesMode = p._guidesMode || false;
-            lockedGuides = p.lockedGuides || [];
-            cellStates = p.cellStates || {};
-            mergedCells = p.mergedCells || [];
-            customCells = p.customCells || [];
-            cellGuides = p.cellGuides || {};
-            _layoutGuidesMode = p._layoutGuidesMode || false;
-            gridRows = p.gridRows || null;
-            gridCols = p.gridCols || null;
-            cellPages = p.cellPages || null;
-            slicerColSizes = p.slicerColSizes || null;
-            slicerRowSizes = p.slicerRowSizes || null;
+          if (p._bypassVersionGuard) {
+            widgets = [];
+            miroCards = [];
+            vGuides = [];
+            hGuides = [];
+            _guidesMode = false;
+            lockedGuides = [];
+            cellStates = {};
+            mergedCells = [];
+            customCells = [];
+            cellGuides = {};
+            _layoutGuidesMode = false;
+            gridRows = null;
+            gridCols = null;
+            cellPages = null;
+            slicerColSizes = null;
+            slicerRowSizes = null;
             ts = p.ts || Date.now();
           } else {
-            // ⛔ ABSOLUTE GUARD: NEVER write empty data to Firebase
-            // This page has no data anywhere — skip it entirely
-            console.warn(`[SV GUARD ⛔] Skipping page "${p.name}" (${p.id}) — EMPTY. Firebase data preserved.`);
-            _skippedCount++;
-            return;
+            const cached = getCachedPageData(p.id);
+            const hasCachedData = cached && (
+              (cached.widgets && cached.widgets.length > 0) ||
+              (cached.miroCards && cached.miroCards.length > 0) ||
+              (cached.vGuides && cached.vGuides.length > 0) ||
+              (cached.hGuides && cached.hGuides.length > 0) ||
+              cached._guidesMode ||
+              (cached.customCells && cached.customCells.length > 0) ||
+              cached._layoutGuidesMode ||
+              cached.cellGuides
+            );
+            if (hasCachedData) {
+              widgets = cached.widgets || [];
+              miroCards = cached.miroCards || [];
+              vGuides = cached.vGuides || [];
+              hGuides = cached.hGuides || [];
+              _guidesMode = cached._guidesMode || false;
+              lockedGuides = cached.lockedGuides || [];
+              cellStates = cached.cellStates || {};
+              mergedCells = cached.mergedCells || [];
+              customCells = cached.customCells || [];
+              cellGuides = cached.cellGuides || {};
+              _layoutGuidesMode = cached._layoutGuidesMode || false;
+              gridRows = cached.gridRows || null;
+              gridCols = cached.gridCols || null;
+              cellPages = cached.cellPages || null;
+              slicerColSizes = cached.slicerColSizes || null;
+              slicerRowSizes = cached.slicerRowSizes || null;
+              ts = cached.ts || p.ts || Date.now();
+            } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0) || (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode || (p.customCells && p.customCells.length > 0) || p._layoutGuidesMode || p.cellGuides) {
+              widgets = p.widgets || [];
+              miroCards = p.miroCards || [];
+              vGuides = p.vGuides || [];
+              hGuides = p.hGuides || [];
+              _guidesMode = p._guidesMode || false;
+              lockedGuides = p.lockedGuides || [];
+              cellStates = p.cellStates || {};
+              mergedCells = p.mergedCells || [];
+              customCells = p.customCells || [];
+              cellGuides = p.cellGuides || {};
+              _layoutGuidesMode = p._layoutGuidesMode || false;
+              gridRows = p.gridRows || null;
+              gridCols = p.gridCols || null;
+              cellPages = p.cellPages || null;
+              slicerColSizes = p.slicerColSizes || null;
+              slicerRowSizes = p.slicerRowSizes || null;
+              ts = p.ts || Date.now();
+            } else {
+              // ⛔ ABSOLUTE GUARD: NEVER write empty data to Firebase
+              // This page has no data anywhere — skip it entirely
+              console.warn(`[SV GUARD ⛔] Skipping page "${p.name}" (${p.id}) — EMPTY. Firebase data preserved.`);
+              _skippedCount++;
+              return;
+            }
           }
         }
         // ⛔ DOUBLE CHECK: Even after loading from cache, if still empty → skip
         if (widgets.length === 0 && miroCards.length === 0 && vGuides.length === 0 && hGuides.length === 0 && !_guidesMode && customCells.length === 0 && Object.keys(cellGuides || {}).length === 0 && !_layoutGuidesMode) {
-          console.warn(`[SV GUARD ⛔] Page "${p.name}" resolved to 0 items — refusing to write.`);
-          _skippedCount++;
-          return;
+          if (!p._bypassVersionGuard) {
+            console.warn(`[SV GUARD ⛔] Page "${p.name}" resolved to 0 items — refusing to write.`);
+            _skippedCount++;
+            return;
+          }
         }
         updates[`users/${USER_ID}/startmine_pages/${p.id}`] = {
           widgets,
@@ -857,6 +904,11 @@
       .then(() => {
         setOwnWrite(false);
         _lastSvTs = Date.now();
+        D.pages.forEach(pg => {
+          if (pg && pg._bypassVersionGuard) {
+            delete pg._bypassVersionGuard;
+          }
+        });
         // Cache active page (and subpages if slicer) to localStorage after successful save
         const activePg = cp();
         if (activePg) {

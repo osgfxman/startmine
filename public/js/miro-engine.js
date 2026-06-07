@@ -2574,6 +2574,27 @@ document.addEventListener('keydown', (e) => {
       case 'backspace':
         if (_miroSelected.size > 0) {
           e.preventDefault();
+          
+          // Check if any page will become empty
+          const pagesToEmpty = [];
+          _miroSelected.forEach(cid => {
+            const p = D.pages.find(pg => pg.miroCards && pg.miroCards.some(c => c.id === cid)) || page;
+            if (p && !pagesToEmpty.includes(p)) {
+              const remaining = (p.miroCards || []).filter(c => !_miroSelected.has(c.id)).length;
+              const hasWidgets = p.widgets && p.widgets.length > 0;
+              if (remaining === 0 && !hasWidgets) {
+                pagesToEmpty.push(p);
+              }
+            }
+          });
+          if (pagesToEmpty.length > 0) {
+            const pageNames = pagesToEmpty.map(p => `"${p.name}"`).join(', ');
+            const msg = pagesToEmpty.length === 1 
+              ? `هل تريد بالتأكيد حذف العنصر الأخير وجعل الصفحة ${pageNames} فارغة تماماً؟`
+              : `حذف العناصر المحددة سيجعل الصفحات التالية فارغة تماماً: ${pageNames}. هل تريد الاستمرار؟`;
+            if (!confirm(msg)) return;
+          }
+
           _miroSelected.forEach(cid => {
             const p = D.pages.find(pg => pg.miroCards && pg.miroCards.some(c => c.id === cid)) || page;
             if (p) {

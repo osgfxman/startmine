@@ -831,6 +831,25 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
             
             const selectedIds = Array.from(_miroSelected);
             
+            // Check if source page will become empty
+            const sourceRemaining = page.miroCards.filter(x => !selectedIds.includes(x.id)).length;
+            const sourceHasWidgets = page.widgets && page.widgets.length > 0;
+            if (sourceRemaining === 0 && !sourceHasWidgets) {
+              const ok = confirm(`هل تريد بالتأكيد نقل العنصر الأخير وجعل الخلية/الصفحة المصدر "${page.name}" فارغة تماماً؟`);
+              if (!ok) {
+                // Restore dragged items coordinates to original positions
+                origPositions.forEach((orig, cid) => {
+                  const c = (page.miroCards || []).find(x => x.id === cid);
+                  if (c) {
+                    c.x = orig.x;
+                    c.y = orig.y;
+                  }
+                });
+                buildCols();
+                return;
+              }
+            }
+            
             selectedIds.forEach(cid => {
               const c = (page.miroCards || []).find(x => x.id === cid);
               if (!c) return;

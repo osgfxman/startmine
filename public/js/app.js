@@ -4870,7 +4870,30 @@ function posPv(ev) {
   pt.style.top = y + 'px';
 }
 function delWidget(wid) {
-  if (!confirm('Delete this widget?')) return;
+  // Check if this widget is the last element on any page
+  let willBeEmpty = false;
+  let affectedPage = null;
+  D.pages.forEach((p) => {
+    if (p && p.widgets && p.widgets.some((w) => w.id === wid)) {
+      const remaining = p.widgets.filter((w) => w.id !== wid).length;
+      const hasCards = p.miroCards && p.miroCards.length > 0;
+      if (remaining === 0 && !hasCards) {
+        willBeEmpty = true;
+        affectedPage = p;
+      }
+    }
+  });
+
+  const promptMsg = willBeEmpty 
+    ? "هذا هو العنصر الأخير في الصفحة. حذف هذا الويدجت سيجعل الصفحة فارغة تماماً. هل تريد الاستمرار؟"
+    : "Delete this widget?";
+
+  if (!confirm(promptMsg)) return;
+
+  if (willBeEmpty && affectedPage) {
+    affectedPage._bypassVersionGuard = true;
+  }
+
   D.pages.forEach((p) => {
     p.widgets = (p.widgets || []).filter((w) => w.id !== wid);
   });
@@ -6524,7 +6547,7 @@ function buildSlicerPage(page, wrap) {
     applyCellBackground(cellEl, targetPage || page, cellState);
 
     if (targetPage) {
-        if ((!targetPage.miroCards || targetPage.miroCards.length === 0) && (!targetPage.widgets || targetPage.widgets.length === 0)) {
+        if ((!targetPage.miroCards || targetPage.miroCards.length === 0) && (!targetPage.widgets || targetPage.widgets.length === 0) && !targetPage._bypassVersionGuard) {
           const cached = getCachedPageData(targetPageId);
           if (cached) {
             targetPage.miroCards = cached.miroCards || [];

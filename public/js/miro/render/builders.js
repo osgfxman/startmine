@@ -549,6 +549,10 @@
   window.deleteMiroCard = function deleteMiroCard(cid, pageId) {
     const page = pageId ? (D.pages.find(p => p.id === pageId) || cp()) : (D.pages.find(p => p.miroCards && p.miroCards.some(c => c.id === cid)) || cp());
     if (!page || !page.miroCards) return;
+    if (page.miroCards.length === 1 && (!page.widgets || page.widgets.length === 0)) {
+      const ok = confirm("هل تريد بالتأكيد حذف العنصر الأخير وجعل الصفحة فارغة تماماً؟");
+      if (!ok) return;
+    }
     page._bypassVersionGuard = true; // Bypass version guard!
     page.miroCards = page.miroCards.filter((c) => c.id !== cid);
     sv();
