@@ -333,7 +333,8 @@
           if (p) {
             const hasData = (p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0);
             const hasGuides = (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode || (p.customCells && p.customCells.length > 0) || p._layoutGuidesMode || p.cellGuides;
-            if (hasData || hasGuides) {
+            const hasSlicer = p.pageType === 'slicer' || p.gridRows !== undefined || p.cellPages !== undefined;
+            if (hasData || hasGuides || hasSlicer) {
               heavyDataMap[p.id] = {
                 widgets: p.widgets || [],
                 miroCards: p.miroCards || [],
@@ -345,7 +346,12 @@
                 mergedCells: p.mergedCells || [],
                 customCells: p.customCells || [],
                 cellGuides: p.cellGuides || {},
-                _layoutGuidesMode: p._layoutGuidesMode || false
+                _layoutGuidesMode: p._layoutGuidesMode || false,
+                gridRows: p.gridRows || null,
+                gridCols: p.gridCols || null,
+                cellPages: p.cellPages || null,
+                slicerColSizes: p.slicerColSizes || null,
+                slicerRowSizes: p.slicerRowSizes || null
               };
             }
           }
@@ -367,6 +373,11 @@
             p.customCells = heavyDataMap[p.id].customCells;
             p.cellGuides = heavyDataMap[p.id].cellGuides;
             p._layoutGuidesMode = heavyDataMap[p.id]._layoutGuidesMode;
+            p.gridRows = heavyDataMap[p.id].gridRows;
+            p.gridCols = heavyDataMap[p.id].gridCols;
+            p.cellPages = heavyDataMap[p.id].cellPages;
+            p.slicerColSizes = heavyDataMap[p.id].slicerColSizes;
+            p.slicerRowSizes = heavyDataMap[p.id].slicerRowSizes;
           }
         });
 
@@ -478,7 +489,12 @@
         mergedCells: activePg.mergedCells || [],
         customCells: activePg.customCells || [],
         cellGuides: activePg.cellGuides || {},
-        _layoutGuidesMode: activePg._layoutGuidesMode || false
+        _layoutGuidesMode: activePg._layoutGuidesMode || false,
+        gridRows: activePg.gridRows || null,
+        gridCols: activePg.gridCols || null,
+        cellPages: activePg.cellPages || null,
+        slicerColSizes: activePg.slicerColSizes || null,
+        slicerRowSizes: activePg.slicerRowSizes || null
       });
 
       // Cache all subpages of the slicer page
@@ -498,6 +514,11 @@
               customCells: subPg.customCells || [],
               cellGuides: subPg.cellGuides || {},
               _layoutGuidesMode: subPg._layoutGuidesMode || false,
+              gridRows: subPg.gridRows || null,
+              gridCols: subPg.gridCols || null,
+              cellPages: subPg.cellPages || null,
+              slicerColSizes: subPg.slicerColSizes || null,
+              slicerRowSizes: subPg.slicerRowSizes || null,
               ts: subPg.ts || Date.now()
             });
           }
@@ -933,6 +954,13 @@
               cellStates: p.cellStates || {},
               mergedCells: p.mergedCells || [],
               customCells: p.customCells || [],
+              cellGuides: p.cellGuides || {},
+              _layoutGuidesMode: p._layoutGuidesMode || false,
+              gridRows: p.gridRows || null,
+              gridCols: p.gridCols || null,
+              cellPages: p.cellPages || null,
+              slicerColSizes: p.slicerColSizes || null,
+              slicerRowSizes: p.slicerRowSizes || null,
               ts: p.ts
             });
           });

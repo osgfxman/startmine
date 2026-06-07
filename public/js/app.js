@@ -429,6 +429,13 @@ function runIntegrityCheck() {
         cellStates: pg.cellStates || {},
         mergedCells: pg.mergedCells || [],
         customCells: pg.customCells || [],
+        gridRows: pg.gridRows || null,
+        gridCols: pg.gridCols || null,
+        cellPages: pg.cellPages || null,
+        slicerColSizes: pg.slicerColSizes || null,
+        slicerRowSizes: pg.slicerRowSizes || null,
+        cellGuides: pg.cellGuides || {},
+        _layoutGuidesMode: pg._layoutGuidesMode || false,
         ts: pg.ts || Date.now()
       });
     }
@@ -444,6 +451,13 @@ function runIntegrityCheck() {
         cellStates: pg.cellStates || {},
         mergedCells: pg.mergedCells || [],
         customCells: pg.customCells || [],
+        gridRows: pg.gridRows || null,
+        gridCols: pg.gridCols || null,
+        cellPages: pg.cellPages || null,
+        slicerColSizes: pg.slicerColSizes || null,
+        slicerRowSizes: pg.slicerRowSizes || null,
+        cellGuides: pg.cellGuides || {},
+        _layoutGuidesMode: pg._layoutGuidesMode || false,
         ts: pg.ts || Date.now()
       });
     }
@@ -847,6 +861,11 @@ function switchActivePage(pageId) {
             customCells: subPg.customCells || [],
             cellGuides: subPg.cellGuides || {},
             _layoutGuidesMode: subPg._layoutGuidesMode || false,
+            gridRows: subPg.gridRows || null,
+            gridCols: subPg.gridCols || null,
+            cellPages: subPg.cellPages || null,
+            slicerColSizes: subPg.slicerColSizes || null,
+            slicerRowSizes: subPg.slicerRowSizes || null,
             ts: subPg.ts || Date.now()
           });
         }
@@ -871,7 +890,9 @@ function switchActivePage(pageId) {
         gridCols: prevPg.gridCols || null,
         cellPages: prevPg.cellPages || null,
         slicerColSizes: prevPg.slicerColSizes || null,
-        slicerRowSizes: prevPg.slicerRowSizes || null
+        slicerRowSizes: prevPg.slicerRowSizes || null,
+        cellGuides: prevPg.cellGuides || {},
+        _layoutGuidesMode: prevPg._layoutGuidesMode || false
       });
       if (cacheOk) {
         // Cache verified — safe to evict
@@ -1058,6 +1079,27 @@ function switchActivePage(pageId) {
       if (pData.customCells !== undefined) pg.customCells = pData.customCells;
       else if (pg.customCells === undefined) pg.customCells = [];
       
+      if (pData.gridRows !== undefined) pg.gridRows = pData.gridRows;
+      else if (pg.gridRows === undefined) pg.gridRows = null;
+      
+      if (pData.gridCols !== undefined) pg.gridCols = pData.gridCols;
+      else if (pg.gridCols === undefined) pg.gridCols = null;
+      
+      if (pData.cellPages !== undefined) pg.cellPages = pData.cellPages;
+      else if (pg.cellPages === undefined) pg.cellPages = null;
+      
+      if (pData.slicerColSizes !== undefined) pg.slicerColSizes = pData.slicerColSizes;
+      else if (pg.slicerColSizes === undefined) pg.slicerColSizes = null;
+      
+      if (pData.slicerRowSizes !== undefined) pg.slicerRowSizes = pData.slicerRowSizes;
+      else if (pg.slicerRowSizes === undefined) pg.slicerRowSizes = null;
+      
+      if (pData.cellGuides !== undefined) pg.cellGuides = pData.cellGuides;
+      else if (pg.cellGuides === undefined) pg.cellGuides = {};
+      
+      if (pData._layoutGuidesMode !== undefined) pg._layoutGuidesMode = pData._layoutGuidesMode;
+      else if (pg._layoutGuidesMode === undefined) pg._layoutGuidesMode = false;
+      
       pg.ts = incomingTs;
       pg._hasBeenLoaded = true;
 
@@ -1072,6 +1114,13 @@ function switchActivePage(pageId) {
         cellStates: pg.cellStates,
         mergedCells: pg.mergedCells,
         customCells: pg.customCells,
+        gridRows: pg.gridRows,
+        gridCols: pg.gridCols,
+        cellPages: pg.cellPages,
+        slicerColSizes: pg.slicerColSizes,
+        slicerRowSizes: pg.slicerRowSizes,
+        cellGuides: pg.cellGuides,
+        _layoutGuidesMode: pg._layoutGuidesMode,
         ts: pg.ts
       });
 
@@ -6204,6 +6253,13 @@ function setupSlicerSubPageListeners(slicerPage) {
         pg.cellStates = pData.cellStates || {};
         pg.mergedCells = pData.mergedCells || [];
         pg.customCells = pData.customCells || [];
+        pg.gridRows = pData.gridRows !== undefined ? pData.gridRows : null;
+        pg.gridCols = pData.gridCols !== undefined ? pData.gridCols : null;
+        pg.cellPages = pData.cellPages !== undefined ? pData.cellPages : null;
+        pg.slicerColSizes = pData.slicerColSizes !== undefined ? pData.slicerColSizes : null;
+        pg.slicerRowSizes = pData.slicerRowSizes !== undefined ? pData.slicerRowSizes : null;
+        pg.cellGuides = pData.cellGuides !== undefined ? pData.cellGuides : {};
+        pg._layoutGuidesMode = pData._layoutGuidesMode !== undefined ? pData._layoutGuidesMode : false;
         pg.ts = incomingTs;
         pg._hasBeenLoaded = true;
 
@@ -6218,6 +6274,13 @@ function setupSlicerSubPageListeners(slicerPage) {
           cellStates: pg.cellStates,
           mergedCells: pg.mergedCells,
           customCells: pg.customCells,
+          gridRows: pg.gridRows,
+          gridCols: pg.gridCols,
+          cellPages: pg.cellPages,
+          slicerColSizes: pg.slicerColSizes,
+          slicerRowSizes: pg.slicerRowSizes,
+          cellGuides: pg.cellGuides,
+          _layoutGuidesMode: pg._layoutGuidesMode,
           ts: pg.ts
         });
 
