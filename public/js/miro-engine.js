@@ -2812,11 +2812,13 @@ document.addEventListener('paste', (e) => {
           'yellow', 'green', 'blue', 'pink', 'orange', 'purple', 'cyan', 'red', 'white', 'gray', 'dark'
         ];
         const exactColorMap = {
-          '#f5f6f8': 'gray', '#fff9b1': 'yellow', '#f5d128': 'yellow', '#f09b55': 'orange',
-          '#d5f692': 'green', '#c9df56': 'green', '#93d275': 'green', '#68cef8': 'cyan',
-          '#fdb8dc': 'pink', '#ff73bd': 'pink', '#c39ce6': 'purple', '#ff6d6d': 'red',
-          '#cde3fa': 'blue', '#8fd14f': 'green', '#568fdb': 'blue', '#000000': 'dark',
-          '#ffffff': 'white', 'transparent': 'white'
+          '#f5f6f8': 'gray', '#fff9b1': 'yellow', '#f5d128': 'yellow', '#fac710': 'yellow',
+          '#f09b55': 'orange', '#f24726': 'red', '#ff6d6d': 'red', '#e6007e': 'pink',
+          '#d5f692': 'green', '#c9df56': 'green', '#93d275': 'green', '#8fd14f': 'green',
+          '#68cef8': 'cyan', '#12cdd4': 'cyan', '#01a6a1': 'cyan',
+          '#fdb8dc': 'pink', '#ff73bd': 'pink', '#c39ce6': 'purple', '#9510ac': 'purple',
+          '#cde3fa': 'blue', '#568fdb': 'blue', '#2d9bf0': 'blue', '#0050b3': 'blue',
+          '#000000': 'dark', '#ffffff': 'white', 'transparent': 'white'
         };
         let colorIdx = 0;
 
@@ -2824,7 +2826,7 @@ document.addEventListener('paste', (e) => {
           let miroJson = null;
           try {
             const rawMeta = span.getAttribute('data-meta') || '';
-            const match = rawMeta.match(/<--\(miro-data-v1\)([\s\S]*?)\(.\/miro-data-v1\)-->/);
+            const match = rawMeta.match(/<--\(miro-data-v1\)([\s\S]*?)\(\/miro-data-v1\)-->/);
             if (match && match[1]) {
               let b64 = match[1].replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
               while (b64.length % 4) b64 += '=';
@@ -2952,6 +2954,27 @@ document.addEventListener('paste', (e) => {
                     try { styleObj = JSON.parse(styleObj); } catch (e) { }
                   }
 
+                  // TEMP DEBUG: show raw sticker data to identify color field
+                  if (type === 'sticker') {
+                    const debugInfo = {
+                      type: type,
+                      styleObj: styleObj,
+                      jdStyle_raw: jd.style,
+                      jdKeys: Object.keys(jd),
+                      jdFillColor: jd.fillColor,
+                      jdBackgroundColor: jd.backgroundColor,
+                      jdSbc: jd.sbc,
+                      jdBc: jd.bc,
+                      jdColor: jd.color,
+                      wdKeys: Object.keys(obj.widgetData),
+                      wdStyle: obj.widgetData.style,
+                      wdFillColor: obj.widgetData.fillColor,
+                      wdColor: obj.widgetData.color,
+                      fullJd: jd
+                    };
+                    console.log('[PASTE-DEBUG] FULL STICKER DATA:', JSON.stringify(debugInfo, null, 2));
+                  }
+
                   // --- Handle Miro SHAPE → Startmine shape ---
                   if (type === 'shape') {
                     const miroShapeType = (jd.shape || jd.shapeType || 'rectangle').toLowerCase();
@@ -3031,23 +3054,67 @@ document.addEventListener('paste', (e) => {
                     let bgColorString = 'yellow';
                     let exactBgHex = null;
 
-                    if (styleObj) {
-                      let hex = styleObj.backgroundColor || styleObj.bc;
-                      if (!hex && styleObj.sbc !== undefined) {
-                        hex = '#' + parseInt(styleObj.sbc).toString(16).padStart(6, '0');
+                    // Comprehensive color parser for stickers:
+                    // handles hex strings, rgb(), integers, AND Miro API named colors
+                    const parseStickerColor = (val) => {
+                      if (val === undefined || val === null || val === '' || val === 'transparent') return null;
+                      const s = String(val).trim();
+                      // Miro API named sticker colors → hex
+                      const miroNamedStickerMap = {
+                        'light_yellow': '#fff9b1', 'yellow': '#f5d128',
+                        'light_orange': '#f09b55', 'orange': '#f09b55',
+                        'light_green': '#d5f692', 'green': '#8fd14f',
+                        'cyan': '#68cef8', 'light_blue': '#cde3fa',
+                        'blue': '#2d9bf0', 'dark_blue': '#568fdb',
+                        'violet': '#c39ce6', 'purple': '#c39ce6',
+                        'light_pink': '#fdb8dc', 'pink': '#ff73bd',
+                        'red': '#ff6d6d', 'dark_red': '#ff6d6d',
+                        'gray': '#f5f6f8', 'black': '#000000',
+                        'dark': '#000000', 'white': '#ffffff'
+                      };
+                      const named = miroNamedStickerMap[s.toLowerCase()];
+                      if (named) return named;
+                      // Hex string
+                      if (s.startsWith('#')) return s.length >= 7 ? s : '#' + s.slice(1).padStart(6, '0');
+                      // rgb()/rgba()
+                      if (s.startsWith('rgb')) {
+                        const m = s.match(/\d+/g);
+                        if (m && m.length >= 3) return '#' + [m[0], m[1], m[2]].map(n => parseInt(n).toString(16).padStart(2, '0')).join('');
                       }
-                      if (hex) {
-                        hex = String(hex);
-                        exactBgHex = hex.toLowerCase();
-                        if (!exactBgHex.startsWith('#')) exactBgHex = '#' + exactBgHex;
-                        bgColorString = exactColorMap[exactBgHex] || 'yellow';
-                      }
+                      // Integer (e.g. sbc field)
+                      const num = parseInt(s);
+                      if (!isNaN(num) && num !== 0) return '#' + num.toString(16).padStart(6, '0').slice(-6);
+                      return null;
+                    };
+
+                    // Search all possible Miro color properties (style + direct widget fields)
+                    const rawStickerHex =
+                      parseStickerColor(styleObj && styleObj.sbc) ||
+                      parseStickerColor(styleObj && styleObj.bc) ||
+                      parseStickerColor(styleObj && styleObj.backgroundColor) ||
+                      parseStickerColor(styleObj && styleObj.fillColor) ||
+                      parseStickerColor(jd.fillColor) ||
+                      parseStickerColor(jd.backgroundColor) ||
+                      parseStickerColor(jd.sbc) ||
+                      parseStickerColor(jd.bc);
+
+                    if (rawStickerHex) {
+                      exactBgHex = rawStickerHex.toLowerCase();
+                      bgColorString = exactColorMap[exactBgHex] || 'yellow';
                     }
 
                     if (!exactBgHex) {
                       bgColorString = miroColors[colorIdx % miroColors.length];
                       colorIdx++;
                     }
+
+                    console.log('[PASTE] Sticker color →', {
+                      exactBgHex, bgColorString,
+                      styleKeys: styleObj ? Object.keys(styleObj).join(',') : 'none',
+                      sbc: styleObj && styleObj.sbc, bc: styleObj && styleObj.bc,
+                      bgc: styleObj && styleObj.backgroundColor, fillColor: styleObj && styleObj.fillColor,
+                      jdFill: jd.fillColor, jdBg: jd.backgroundColor
+                    });
 
                     let cardOpts = {
                       type: startmineType,
