@@ -2063,7 +2063,36 @@
   // Automatically fit zoom and pan for all cells in sliced mode
   window.autofitAllMiroSlices = function autofitAllMiroSlices() {
     const page = cp();
-    if (!page || page.pageType !== 'miro') return;
+    if (!page) return;
+    if (page.pageType !== 'miro' && page.pageType !== 'slicer') return;
+
+    if (page.pageType === 'slicer') {
+      const cells = typeof window.getSlicerActiveCells === 'function' ? window.getSlicerActiveCells(page) : [];
+      cells.forEach(cell => {
+        const targetPageId = page.cellPages ? page.cellPages[cell.key] : null;
+        const targetPage = targetPageId ? D.pages.find(p => p.id === targetPageId) : null;
+        
+        const cellEl = document.querySelector(`.slicer-cell[data-cell-key="${cell.key}"]`);
+        const bodyEl = cellEl ? cellEl.querySelector('.slicer-cell-body') : null;
+        const cellW = bodyEl ? bodyEl.clientWidth || 300 : 300;
+        const cellH = bodyEl ? bodyEl.clientHeight || 200 : 200;
+        
+        if (targetPage && targetPage.pageType === 'miro') {
+          if (typeof window.autofitSlicerCell === 'function') {
+            window.autofitSlicerCell(page, cell.key, targetPage, cellW, cellH);
+          }
+        } else {
+          if (!page.cellStates) page.cellStates = {};
+          page.cellStates[cell.key] = { zoom: 30, panX: 0, panY: 0 };
+        }
+      });
+      sv();
+      if (typeof window.buildCols === 'function') window.buildCols();
+      if (typeof showToast === 'function') {
+        showToast('🔍 Zoom-fitted all cells! (Empty cells set to 30%)');
+      }
+      return;
+    }
     
     const hasGridGuides = page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
     const hasCustomCells = page.customCells && page.customCells.length > 0;
@@ -2581,6 +2610,32 @@
     iconContainer.appendChild(prevImg);
     iconRow.appendChild(iconContainer);
     modal.appendChild(iconRow);
+
+    // Auto-select default icon based on selected dynamic period
+    const defaultIcons = {
+      pomodoro: 'https://i.ibb.co/yF6H6P25/7147adead9bb.png',
+      session: 'https://i.ibb.co/RTTWrFfz/144512bc168a.png',
+      day: 'https://i.ibb.co/Qvm84mk3/f22f2483a025.png',
+      '3days': 'https://i.ibb.co/NdLgjK1R/64a12b31c9d5.png',
+      weekend: 'https://i.ibb.co/N2V1b63B/8e795701ddda.png',
+      week: 'https://i.ibb.co/pgQYGyy/6d5dda01d467.png',
+      sprint: 'https://i.ibb.co/WWjZgDZ4/f9c6927af2df.png',
+      month: 'https://i.ibb.co/bRdPDngZ/611acaf0afbf.png',
+      quarter: 'https://i.ibb.co/4kFQVY3/697364650a99.png',
+      year: 'https://i.ibb.co/20VRP0t2/a9a66507b4b0.png',
+      '5years': 'https://i.ibb.co/VpJy1WbC/15ecd491d8d2.png'
+    };
+
+    dynamicSelect.onchange = () => {
+      const selected = dynamicSelect.value;
+      if (defaultIcons[selected]) {
+        currentIconUrl = defaultIcons[selected];
+        prevImg.src = currentIconUrl;
+        prevImg.style.display = 'block';
+        clearBtn.style.display = 'block';
+        uploadBtn.textContent = 'Change Image';
+      }
+    };
 
     // Row: Icon Size slider
     const sizeRow = document.createElement('div');

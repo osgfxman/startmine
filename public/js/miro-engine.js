@@ -1109,22 +1109,148 @@ function applyZoomPan(page) {
 // Zoom to fit selection (or all elements if nothing selected)
 function zoomToFitSelection() {
   const page = cp();
-  if (!page.miroCards || page.miroCards.length === 0) return;
-  const canvas = document.getElementById('miro-canvas');
+  const isSlicer = page.pageType === 'slicer';
+  const canvas = document.getElementById(isSlicer ? 'cw' : 'miro-canvas');
+  if (!canvas) return;
   const cw = canvas.clientWidth;
   const ch = canvas.clientHeight;
   if (!cw || !ch) return;
 
-  // Get target cards
-  let targets;
-  if (_miroSelected.size > 0) {
-    targets = page.miroCards.filter(c => _miroSelected.has(c.id));
+  const hasGuides = page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
+  const hasCustom = page.customCells && page.customCells.length > 0;
+  const inSlicedMode = isSlicer || hasGuides || hasCustom;
+
+  if (_miroSelected.size === 0) {
+    if (inSlicedMode) {
+      if (typeof window.autofitAllMiroSlices === 'function') {
+        window.autofitAllMiroSlices();
+      }
+      return;
+    }
+    // Normal page, no selection: fit all cards on canvas
+    if (!page.miroCards || page.miroCards.length === 0) return;
+    const targets = page.miroCards;
+    fitCardsInViewport(targets, cw, ch, page, null);
+    return;
+  }
+
+  // There is selection: find targets
+  let targets = [];
+  let cellKey = null;
+  if (isSlicer) {
+    for (const [key, subId] of Object.entries(page.cellPages || {})) {
+      const p = D.pages.find(pg => pg.id === subId);
+      if (p && p.miroCards) {
+        const found = p.miroCards.filter(c => _miroSelected.has(c.id));
+        if (found.length > 0) {
+          targets = found;
+          cellKey = key;
+          break;
+        }
+      }
+    }
   } else {
-    targets = page.miroCards;
+    targets = page.miroCards ? page.miroCards.filter(c => _miroSelected.has(c.id)) : [];
+    if (targets.length > 0) {
+      cellKey = targets[0].cell;
+    }
   }
   if (targets.length === 0) return;
 
-  // Calculate bounding box
+  if (inSlicedMode && cellKey) {
+    // Fit selection inside its cell viewport
+    let cellW = cw;
+    let cellH = ch;
+    const cellEl = document.querySelector(`.slicer-cell[data-cell-key="${cellKey}"]`);
+    const bodyEl = cellEl ? cellEl.querySelector('.slicer-cell-body') : null;
+    if (bodyEl) {
+      cellW = bodyEl.clientWidth || cellW;
+      cellH = bodyEl.clientHeight || cellH;
+    } else {
+      if (cellKey.startsWith('cc_')) {
+        const cc = (page.customCells || []).find(c => c.id === cellKey);
+        if (cc) {
+          cellW = cw * cc.w;
+          cellH = ch * cc.h;
+        }
+      } else {
+        const vg = [0, ...(page.vGuides || []).sort((a,b)=>a-b), 1];
+        const hg = [0, ...(page.hGuides || []).sort((a,b)=>a-b), 1];
+        const parts = cellKey.split('_');
+        if (parts.length >= 2) {
+          const cStart = parseInt(parts[0]);
+          const rStart = parseInt(parts[1]);
+          const cEnd = parts.length === 4 ? parseInt(parts[2]) : cStart;
+          const rEnd = parts.length === 4 ? parseInt(parts[3]) : rStart;
+          cellW = cw * (vg[cEnd+1] - vg[cStart]);
+          cellH = ch * (hg[rEnd+1] - hg[rStart]);
+        }
+      }
+    }
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    targets.forEach(c => {
+      const x = c.x || 0, y = c.y || 0;
+      const w = c.w || 200, h = c.h || 200;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x + w > maxX) maxX = x + w;
+      if (y + h > maxY) maxY = y + h;
+    });
+
+    const bw = maxX - minX;
+    const bh = maxY - minY;
+    if (bw > 0 && bh > 0) {
+      const padding = 30;
+      const zoomW = (cellW - padding) / bw;
+      const zoomH = (cellH - padding) / bh;
+      let fitZoom = Math.min(zoomW, zoomH);
+      fitZoom = Math.max(0.1, Math.min(4.0, fitZoom));
+      const zPercent = Math.round(fitZoom * 100);
+      const panX = (cellW - (minX + maxX) * fitZoom) / 2;
+      const panY = (cellH - (minY + maxY) * fitZoom) / 2;
+
+      if (!page.cellStates) page.cellStates = {};
+      if (!page.cellStates[cellKey]) {
+        page.cellStates[cellKey] = { zoom: zPercent, panX, panY };
+      } else {
+        page.cellStates[cellKey].zoom = zPercent;
+        page.cellStates[cellKey].panX = panX;
+        page.cellStates[cellKey].panY = panY;
+      }
+
+      if (typeof window.clampCellState === 'function') {
+        window.clampCellState(cellKey, cellW, cellH);
+      }
+      
+      sv();
+      if (isSlicer) {
+        buildCols();
+      } else {
+        buildMiroCanvas();
+      }
+      
+      // Highlight single card if it was selected
+      if (targets.length === 1) {
+        const cid = targets[0].id;
+        const el = document.querySelector(`[data-cid="${cid}"]`);
+        if (el) {
+          el.classList.remove('miro-hl');
+          void el.offsetWidth;
+          el.classList.add('miro-hl');
+          el.addEventListener('animationend', () => el.classList.remove('miro-hl'), { once: true });
+        }
+      }
+      
+      showToast('🔍 Zoom to fit cell selection');
+    }
+  } else {
+    // Normal page selection
+    fitCardsInViewport(targets, cw, ch, page, null);
+  }
+}
+
+function fitCardsInViewport(targets, cw, ch, page, cellKey) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   targets.forEach(c => {
     const x = c.x || 0, y = c.y || 0;
@@ -1139,7 +1265,6 @@ function zoomToFitSelection() {
   const bh = maxY - minY;
   if (bw <= 0 || bh <= 0) return;
 
-  // Calculate zoom to fit with 10% padding
   const padding = 0.1;
   const availW = cw * (1 - padding * 2);
   const availH = ch * (1 - padding * 2);
@@ -1147,7 +1272,6 @@ function zoomToFitSelection() {
   const newZoomNum = Math.max(1, Math.min(400, Math.round(fitZoom * 100)));
   const newZoom = newZoomNum / 100;
 
-  // Center the bounding box
   const centerX = (minX + maxX) / 2;
   const centerY = (minY + maxY) / 2;
   page.panX = cw / 2 - centerX * newZoom;
@@ -2312,8 +2436,6 @@ document.addEventListener('keydown', (e) => {
       }
     }
   }
-  if (!page) return;
-
   // Undo: Ctrl+Z (works with any keyboard layout via e.code)
   if (isCmd && (key === 'z' || e.code === 'KeyZ')) {
     e.preventDefault();
@@ -2323,6 +2445,7 @@ document.addEventListener('keydown', (e) => {
 
   // Select All: Ctrl+A / Ctrl+ش — select every card on canvas
   if (isCmd && (key === 'a' || key === 'ش' || e.code === 'KeyA')) {
+    if (!page) return;
     e.preventDefault();
     clearMiroSelection();
     (page.miroCards || []).forEach(c => addMiroSelect(c.id));
@@ -2332,6 +2455,7 @@ document.addEventListener('keydown', (e) => {
 
   // Copy (Cmd/Ctrl + C) or Cmd/Ctrl + ؤ
   if (isCmd && (key === 'c' || key === 'ؤ')) {
+    if (!page) return;
     if (_miroSelected.size > 0 && page.miroCards) {
       const copiedCards = [];
       _miroSelected.forEach(cid => {
@@ -2350,6 +2474,7 @@ document.addEventListener('keydown', (e) => {
 
   // Select All (Cmd/Ctrl + A) or Cmd/Ctrl + ش
   if (isCmd && (key === 'a' || key === 'ش')) {
+    if (!page) return;
     e.preventDefault();
     if (page.miroCards && page.miroCards.length > 0) {
       clearMiroSelection();
@@ -2369,6 +2494,7 @@ document.addEventListener('keydown', (e) => {
 
   // Explicit text-paste fallback for Arabic keyboard (Ctrl+ر) because it won't trigger native OS "paste" event.
   if (isCmd && key === 'ر') {
+    if (!page) return;
     if (window._lastMiroPasteTime && Date.now() - window._lastMiroPasteTime < 1000) return;
 
     navigator.clipboard.readText().then(text => {
@@ -4001,17 +4127,7 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     if (typeof ungroupSelectedCards === 'function') ungroupSelectedCards();
   }
-  // F key → zoom-to-fit selection
-  if (key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
-    if (_miroSelected.size > 0) {
-      e.preventDefault();
-      if (_miroSelected.size === 1) {
-        if (typeof zoomToFitCard === 'function') zoomToFitCard([..._miroSelected][0]);
-      } else {
-        if (typeof zoomToFitCards === 'function') zoomToFitCards([..._miroSelected]);
-      }
-    }
-  }
+
 
   // B key → create bookmark widget at canvas center
   if (key === 'b' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {

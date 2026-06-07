@@ -4209,8 +4209,10 @@ document.getElementById('mz-grid-btn').onclick = () => {
 
 document.getElementById('mz-autofit-btn').onclick = () => {
   const page = cp();
-  if (!page || page.pageType !== 'miro') return;
-  if (typeof window.autofitAllMiroSlices === 'function') {
+  if (!page || (page.pageType !== 'miro' && page.pageType !== 'slicer')) return;
+  if (typeof window.zoomToFitSelection === 'function') {
+    window.zoomToFitSelection();
+  } else if (typeof window.autofitAllMiroSlices === 'function') {
     window.autofitAllMiroSlices();
   }
 };
@@ -5190,6 +5192,17 @@ document.addEventListener('keydown', (e) => {
     document.activeElement.tagName !== 'TEXTAREA' &&
     !document.activeElement.getAttribute('contenteditable')
   ) {
+    const pageObj = cp();
+    if (pageObj && (pageObj.pageType === 'miro' || pageObj.pageType === 'slicer')) {
+      const miroKeys = new Set([
+        'v', 'ر', 'n', 'ى', 't', 'ف', 's', 'س', 'p', 'ح',
+        'g', 'ل', 'm', 'ة', 'w', 'ص', 'k', 'ن', 'i', 'ه',
+        'b', 'e', 'ث', 'y', 'ئ', 'f', 'ب'
+      ]);
+      if (miroKeys.has(e.key.toLowerCase())) {
+        return;
+      }
+    }
     var pageMap = {'1':0, '2':1, '3':2, '4':3, '5':4, '6':5};
     var isShortcutKey = (pageMap[e.key] !== undefined || e.key === 'h' || e.key === 'H' || e.key === '\u0623' || e.key === '\u0627');
     if (!isShortcutKey) {
@@ -5878,7 +5891,13 @@ function autofitSlicerCell(page, cellKey, targetPage, cellW, cellH) {
   if (!page.cellStates) page.cellStates = {};
   const cards = targetPage.miroCards || [];
   if (cards.length === 0) {
-    page.cellStates[cellKey] = { zoom: 30, panX: 0, panY: 0 };
+    if (!page.cellStates[cellKey]) {
+      page.cellStates[cellKey] = { zoom: 30, panX: 0, panY: 0 };
+    } else {
+      page.cellStates[cellKey].zoom = 30;
+      page.cellStates[cellKey].panX = 0;
+      page.cellStates[cellKey].panY = 0;
+    }
     return;
   }
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -5893,7 +5912,13 @@ function autofitSlicerCell(page, cellKey, targetPage, cellW, cellH) {
   const bw = maxX - minX;
   const bh = maxY - minY;
   if (bw <= 0 || bh <= 0) {
-    page.cellStates[cellKey] = { zoom: 30, panX: 0, panY: 0 };
+    if (!page.cellStates[cellKey]) {
+      page.cellStates[cellKey] = { zoom: 30, panX: 0, panY: 0 };
+    } else {
+      page.cellStates[cellKey].zoom = 30;
+      page.cellStates[cellKey].panX = 0;
+      page.cellStates[cellKey].panY = 0;
+    }
     return;
   }
   const padding = 20;
@@ -5904,7 +5929,14 @@ function autofitSlicerCell(page, cellKey, targetPage, cellW, cellH) {
   const newZoom = newZoomNum / 100;
   const panX = (cellW - (minX + maxX) * newZoom) / 2;
   const panY = (cellH - (minY + maxY) * newZoom) / 2;
-  page.cellStates[cellKey] = { zoom: newZoomNum, panX, panY };
+  
+  if (!page.cellStates[cellKey]) {
+    page.cellStates[cellKey] = { zoom: newZoomNum, panX, panY };
+  } else {
+    page.cellStates[cellKey].zoom = newZoomNum;
+    page.cellStates[cellKey].panX = panX;
+    page.cellStates[cellKey].panY = panY;
+  }
 }
 
 function applyCellBackground(container, targetPage, cellState) {
@@ -6428,6 +6460,7 @@ function buildSlicerPage(page, wrap) {
   cells.forEach(cell => {
     const cellEl = document.createElement('div');
     cellEl.className = 'slicer-cell';
+    cellEl.dataset.cellKey = cell.key;
     cellEl.style.gridRowStart = cell.rStart + 1;
     cellEl.style.gridRowEnd = cell.rEnd + 2;
     cellEl.style.gridColumnStart = cell.cStart + 1;

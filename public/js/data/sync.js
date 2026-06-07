@@ -702,7 +702,7 @@
           if (p.id === activePg.id) {
             // ─── DATA LOSS GUARD: Don't overwrite non-empty Firebase data with empty data ───
             const curHasData = (activePg.widgets && activePg.widgets.length > 0) || (activePg.miroCards && activePg.miroCards.length > 0);
-            if (!curHasData && _lastSyncedPageData && !activePg._hasBeenLoaded) {
+            if (!curHasData && _lastSyncedPageData && !activePg._hasBeenLoaded && !activePg._bypassVersionGuard) {
               const oldHadWidgets = JSON.parse(_lastSyncedPageData.widgets || '[]').length > 0;
               const oldHadCards = JSON.parse(_lastSyncedPageData.miroCards || '[]').length > 0;
               if (oldHadWidgets || oldHadCards) {
@@ -809,7 +809,7 @@
           } else {
             // For subpages, write their whole payload directly
             const subHasData = (p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0);
-            if (!subHasData && !p._hasBeenLoaded) {
+            if (!subHasData && !p._hasBeenLoaded && !p._bypassVersionGuard) {
               const cached = getCachedPageData(p.id);
               if (cached && ((cached.widgets && cached.widgets.length > 0) || (cached.miroCards && cached.miroCards.length > 0))) {
                 console.warn(`[SV GUARD ⛔] Subpage "${p.name}" (${p.id}) resolved to empty in memory but had cached data — save skipped to prevent data loss.`);
