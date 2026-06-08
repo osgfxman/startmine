@@ -5280,6 +5280,9 @@ document.addEventListener('keydown', (e) => {
         const targetPageId = cellKey && activePg.cellPages ? activePg.cellPages[cellKey] : null;
         if (targetPageId) {
           switchActivePage(targetPageId);
+          setTimeout(() => {
+            if (typeof zoomToFitSelection === 'function') zoomToFitSelection();
+          }, 100);
         } else {
           if (typeof showToast === 'function') showToast('قف بالماوس فوق خلية تحتوي على صفحة');
         }
@@ -6789,6 +6792,9 @@ function buildSlicerPage(page, wrap) {
         maxBtn.title = 'Go to original page';
         bindHeaderAction(maxBtn, () => {
           switchActivePage(targetPage.id);
+          setTimeout(() => {
+            if (typeof zoomToFitSelection === 'function') zoomToFitSelection();
+          }, 100);
         });
         rightEl.appendChild(maxBtn);
         
