@@ -49,9 +49,17 @@ function pushUndo() {
   let page = null;
   if (activePg.pageType === 'miro') {
     page = activePg;
-  } else if (activePg.pageType === 'slicer' && (window._hoveredCellKey || window._activeCellKey)) {
+  } else if (activePg.pageType === 'slicer') {
+    let subPageId = null;
     const cellKey = window._hoveredCellKey || window._activeCellKey;
-    const subPageId = activePg.cellPages ? activePg.cellPages[cellKey] : null;
+    if (cellKey) {
+      subPageId = activePg.cellPages ? activePg.cellPages[cellKey] : null;
+    }
+    if (!subPageId && _miroSelected.size > 0) {
+      const firstCardId = _miroSelected.values().next().value;
+      const cardPage = getPageForCard(firstCardId);
+      if (cardPage) subPageId = cardPage.id;
+    }
     if (subPageId) {
       const subPage = D.pages.find(p => p.id === subPageId);
       if (subPage && subPage.pageType === 'miro') {
@@ -75,9 +83,17 @@ function performUndo() {
   let page = null;
   if (activePg.pageType === 'miro') {
     page = activePg;
-  } else if (activePg.pageType === 'slicer' && (window._hoveredCellKey || window._activeCellKey)) {
+  } else if (activePg.pageType === 'slicer') {
+    let subPageId = null;
     const cellKey = window._hoveredCellKey || window._activeCellKey;
-    const subPageId = activePg.cellPages ? activePg.cellPages[cellKey] : null;
+    if (cellKey) {
+      subPageId = activePg.cellPages ? activePg.cellPages[cellKey] : null;
+    }
+    if (!subPageId && _miroSelected.size > 0) {
+      const firstCardId = _miroSelected.values().next().value;
+      const cardPage = getPageForCard(firstCardId);
+      if (cardPage) subPageId = cardPage.id;
+    }
     if (subPageId) {
       const subPage = D.pages.find(p => p.id === subPageId);
       if (subPage && subPage.pageType === 'miro') {
@@ -113,6 +129,30 @@ function performUndo() {
 }
 
 
+
+function getPageForCard(cardId) {
+  const activePg = cp();
+  if (activePg.miroCards && activePg.miroCards.some(c => c.id === cardId)) {
+    return activePg;
+  }
+  for (const p of D.pages) {
+    if (p.miroCards && p.miroCards.some(c => c.id === cardId)) {
+      return p;
+    }
+  }
+  return activePg;
+}
+
+function getZTargetPage(cids) {
+  const activePg = cp();
+  if (activePg.pageType === 'slicer') {
+    const firstId = cids.values().next().value;
+    if (firstId) {
+      return getPageForCard(firstId) || activePg;
+    }
+  }
+  return activePg;
+}
 
 function getCardAbsoluteCoords(card, page, canvasW, canvasH) {
   if (!card.cell) {
@@ -205,24 +245,56 @@ function clearMiroSelection() {
   document.getElementById('miro-sel-frame').style.display = 'none';
 }
 function getSelectedCardsBBox() {
-  const page = cp();
+  const activePg = cp();
   const canvas = document.getElementById('miro-canvas');
-  const canvasW = canvas ? canvas.clientWidth : 1000;
-  const canvasH = canvas ? canvas.clientHeight : 800;
 
   let minX = Infinity,
     minY = Infinity,
     maxX = -Infinity,
     maxY = -Infinity;
-  _miroSelected.forEach((cid) => {
-    const c = (page.miroCards || []).find((x) => x.id === cid);
-    if (!c) return;
-    const abs = getCardAbsoluteCoords(c, page, canvasW, canvasH);
-    minX = Math.min(minX, abs.x);
-    minY = Math.min(minY, abs.y);
-    maxX = Math.max(maxX, abs.x + abs.w);
-    maxY = Math.max(maxY, abs.y + abs.h);
-  });
+
+  if (activePg.pageType === 'slicer') {
+    let cardPage = null;
+    let cellKey = null;
+    _miroSelected.forEach((cid) => {
+      if (!cardPage) {
+        cardPage = getPageForCard(cid);
+        if (cardPage) {
+          cellKey = typeof getCellKeyForPageId === 'function' ? getCellKeyForPageId(activePg, cardPage.id) : null;
+        }
+      }
+      const c = cardPage ? (cardPage.miroCards || []).find((x) => x.id === cid) : null;
+      if (!c) return;
+
+      let cellW = 1000, cellH = 800;
+      if (cellKey) {
+        const cellEl = document.querySelector(`.slicer-cell[data-cell-key="${cellKey}"]`);
+        const bodyEl = cellEl ? cellEl.querySelector('.slicer-cell-body') : null;
+        if (bodyEl) {
+          cellW = bodyEl.clientWidth;
+          cellH = bodyEl.clientHeight;
+        }
+      }
+
+      const abs = getCardAbsoluteCoords(c, cardPage, cellW, cellH);
+      minX = Math.min(minX, abs.x);
+      minY = Math.min(minY, abs.y);
+      maxX = Math.max(maxX, abs.x + abs.w);
+      maxY = Math.max(maxY, abs.y + abs.h);
+    });
+  } else {
+    const canvasW = canvas ? canvas.clientWidth : 1000;
+    const canvasH = canvas ? canvas.clientHeight : 800;
+    _miroSelected.forEach((cid) => {
+      const c = (activePg.miroCards || []).find((x) => x.id === cid);
+      if (!c) return;
+      const abs = getCardAbsoluteCoords(c, activePg, canvasW, canvasH);
+      minX = Math.min(minX, abs.x);
+      minY = Math.min(minY, abs.y);
+      maxX = Math.max(maxX, abs.x + abs.w);
+      maxY = Math.max(maxY, abs.y + abs.h);
+    });
+  }
   return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY };
 }
 function updateMiroSelFrame() {
@@ -243,9 +315,32 @@ function updateMiroSelFrame() {
   frame.style.width = bbox.w + pad * 2 + 'px';
   frame.style.height = bbox.h + pad * 2 + 'px';
 
+  // Mount to correct parent element dynamically
+  const activePg = cp();
+  let zoom = (activePg.zoom || 100) / 100;
+
+  if (activePg.pageType === 'slicer') {
+    const firstCardId = _miroSelected.values().next().value;
+    const cardPage = getPageForCard(firstCardId);
+    if (cardPage) {
+      const cellKey = typeof getCellKeyForPageId === 'function' ? getCellKeyForPageId(activePg, cardPage.id) : null;
+      if (cellKey) {
+        const targetBoard = document.querySelector(`.slicer-cell[data-cell-key="${cellKey}"] .slicer-miro-board`);
+        if (targetBoard && frame.parentNode !== targetBoard) {
+          targetBoard.appendChild(frame);
+        }
+        const state = activePg.cellStates[cellKey] || { zoom: 100 };
+        zoom = (state.zoom || 100) / 100;
+      }
+    }
+  } else {
+    const board = document.getElementById('miro-board');
+    if (board && frame.parentNode !== board) {
+      board.appendChild(frame);
+    }
+  }
+
   // Counter-scale interactive elements so they stay constant size on screen
-  const page = cp();
-  const zoom = (page.zoom || 100) / 100;
   const invZoom = Math.min(3, Math.max(0.25, 1 / zoom));
   const handleEls = frame.querySelectorAll('#miro-align-handle, #miro-widget-handle, #miro-multi-lock');
   handleEls.forEach(el => {
@@ -270,7 +365,8 @@ function updateMiroSelFrame() {
   // ── Count types in selection ──
   const typeCounts = {};
   _miroSelected.forEach(cid => {
-    const c = (page.miroCards || []).find(x => x.id === cid);
+    const cardPage = getPageForCard(cid);
+    const c = cardPage ? (cardPage.miroCards || []).find(x => x.id === cid) : null;
     if (c) {
       const t = c.type || 'sticky';
       typeCounts[t] = (typeCounts[t] || 0) + 1;
@@ -294,7 +390,8 @@ function updateMiroSelFrame() {
   // Count sticky colors
   const stickyColorCounts = {};
   _miroSelected.forEach(cid => {
-    const c = (page.miroCards || []).find(x => x.id === cid);
+    const cardPage = getPageForCard(cid);
+    const c = cardPage ? (cardPage.miroCards || []).find(x => x.id === cid) : null;
     if (c && (c.type || 'sticky') === 'sticky') {
       const col = c.color || 'yellow';
       stickyColorCounts[col] = (stickyColorCounts[col] || 0) + 1;
@@ -310,10 +407,10 @@ function updateMiroSelFrame() {
     row.innerHTML = `<span class="dd-icon">${info.icon}</span>${label}<span class="dd-count">${typeCounts[t]}</span>`;
     row.addEventListener('click', (e) => {
       e.stopPropagation();
-      const curPage = cp();
       const toRemove = [];
       _miroSelected.forEach(cid => {
-        const c = (curPage.miroCards || []).find(x => x.id === cid);
+        const cardPage = getPageForCard(cid);
+        const c = cardPage ? (cardPage.miroCards || []).find(x => x.id === cid) : null;
         if (c && (c.type || 'sticky') !== t) toRemove.push(cid);
       });
       toRemove.forEach(cid => removeMiroSelect(cid));
@@ -331,10 +428,10 @@ function updateMiroSelFrame() {
         cRow.innerHTML = `${dot}${col}<span class="dd-count">${cnt}</span>`;
         cRow.addEventListener('click', (ev) => {
           ev.stopPropagation();
-          const curPage = cp();
           const toRemove = [];
           _miroSelected.forEach(cid => {
-            const c = (curPage.miroCards || []).find(x => x.id === cid);
+            const cardPage = getPageForCard(cid);
+            const c = cardPage ? (cardPage.miroCards || []).find(x => x.id === cid) : null;
             if (!c || (c.type || 'sticky') !== 'sticky' || (c.color || 'yellow') !== col) toRemove.push(cid);
           });
           toRemove.forEach(cid => removeMiroSelect(cid));
@@ -365,9 +462,10 @@ function updateMiroSelFrame() {
 // ── Convert selected elements to target type ──
 function convertSelectedTo(targetType) {
   pushUndo();
-  const page = cp();
+  const activePg = cp();
   _miroSelected.forEach(cid => {
-    const c = (page.miroCards || []).find(x => x.id === cid);
+    const cardPage = getPageForCard(cid);
+    const c = cardPage ? (cardPage.miroCards || []).find(x => x.id === cid) : null;
     if (!c) return;
     const oldType = c.type || 'sticky';
     if (oldType === targetType) return;
@@ -398,7 +496,11 @@ function convertSelectedTo(targetType) {
     }
   });
   sv();
-  buildMiroCanvas();
+  if (activePg.pageType === 'slicer') {
+    buildCols();
+  } else {
+    buildMiroCanvas();
+  }
   updateMiroSelFrame();
 }
 
@@ -1961,10 +2063,12 @@ function setActiveTool(tool) {
   else { hint.style.display = 'none'; }
 
   document.getElementById('miro-pen-toolbar').classList.toggle('show', _penMode);
-  const cursor = (_penMode || _shapeMode || _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode || _embedCreateMode || _overlayPageCreateMode || _dyntitleCreateMode) ? 'crosshair' : 'grab';
+  const isCreateMode = _penMode || _shapeMode || _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode || _embedCreateMode || _overlayPageCreateMode || _dyntitleCreateMode;
+  const cursor = isCreateMode ? 'crosshair' : 'grab';
   document.getElementById('miro-canvas').style.cursor = cursor;
+  const slicerCursor = isCreateMode ? 'crosshair' : 'default';
   document.querySelectorAll('.slicer-miro-container').forEach(c => {
-    c.style.cursor = cursor;
+    c.style.cursor = slicerCursor;
   });
   if (!_shapeMode) document.getElementById('miro-shape-panel').classList.remove('show');
 }
@@ -3804,12 +3908,17 @@ window.addEventListener('resize', () => {
 
 // =========== CONVERT SELECTION TO WIDGET ===========
 window.createWidgetFromSelection = function () {
-  const page = cp();
-  if (!page || !page.miroCards || _miroSelected.size < 2) return;
+  const activePg = cp();
+  let cardPage = activePg;
+  if (activePg.pageType === 'slicer') {
+    const firstCardId = _miroSelected.values().next().value;
+    cardPage = getPageForCard(firstCardId) || activePg;
+  }
+  if (!cardPage || !cardPage.miroCards || _miroSelected.size < 2) return;
 
   const selectedCards = [];
   _miroSelected.forEach(cid => {
-    const card = page.miroCards.find(c => c.id === cid && c.type === 'card' && c.url);
+    const card = cardPage.miroCards.find(c => c.id === cid && c.type === 'card' && c.url);
     if (card) selectedCards.push(card);
   });
 
@@ -3858,12 +3967,16 @@ window.createWidgetFromSelection = function () {
     size: 'lg'
   };
 
-  page.miroCards.push(newWidget);
+  cardPage.miroCards.push(newWidget);
 
   // Clear selection and redraw
   clearMiroSelection();
   sv();
-  buildMiroCanvas();
+  if (activePg.pageType === 'slicer') {
+    buildCols();
+  } else {
+    buildMiroCanvas();
+  }
   if (typeof buildOutline === 'function') buildOutline();
 };
 
@@ -3875,7 +3988,8 @@ function getCardIndex(page, cid) {
 }
 
 function zBringToFront(cids) {
-  const page = cp();
+  const activePg = cp();
+  const page = getZTargetPage(cids);
   if (!page || !page.miroCards) return;
   const cards = [];
   const rest = [];
@@ -3885,12 +3999,18 @@ function zBringToFront(cids) {
   });
   if (cards.length === 0) return;
   page.miroCards = [...rest, ...cards];
-  sv(); buildMiroCanvas();
+  sv();
+  if (activePg.pageType === 'slicer') {
+    buildCols();
+  } else {
+    buildMiroCanvas();
+  }
   if (typeof buildOutline === 'function') buildOutline();
 }
 
 function zSendToBack(cids) {
-  const page = cp();
+  const activePg = cp();
+  const page = getZTargetPage(cids);
   if (!page || !page.miroCards) return;
   const cards = [];
   const rest = [];
@@ -3900,12 +4020,18 @@ function zSendToBack(cids) {
   });
   if (cards.length === 0) return;
   page.miroCards = [...cards, ...rest];
-  sv(); buildMiroCanvas();
+  sv();
+  if (activePg.pageType === 'slicer') {
+    buildCols();
+  } else {
+    buildMiroCanvas();
+  }
   if (typeof buildOutline === 'function') buildOutline();
 }
 
 function zBringForward(cids) {
-  const page = cp();
+  const activePg = cp();
+  const page = getZTargetPage(cids);
   if (!page || !page.miroCards) return;
   const arr = page.miroCards;
   // Process from end to start so swaps don't interfere
@@ -3914,12 +4040,18 @@ function zBringForward(cids) {
       [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]];
     }
   }
-  sv(); buildMiroCanvas();
+  sv();
+  if (activePg.pageType === 'slicer') {
+    buildCols();
+  } else {
+    buildMiroCanvas();
+  }
   if (typeof buildOutline === 'function') buildOutline();
 }
 
 function zSendBackward(cids) {
-  const page = cp();
+  const activePg = cp();
+  const page = getZTargetPage(cids);
   if (!page || !page.miroCards) return;
   const arr = page.miroCards;
   // Process from start to end so swaps don't interfere
@@ -3928,17 +4060,28 @@ function zSendBackward(cids) {
       [arr[i], arr[i - 1]] = [arr[i - 1], arr[i]];
     }
   }
-  sv(); buildMiroCanvas();
+  sv();
+  if (activePg.pageType === 'slicer') {
+    buildCols();
+  } else {
+    buildMiroCanvas();
+  }
   if (typeof buildOutline === 'function') buildOutline();
 }
 
 function zDeleteCards(cids) {
-  const page = cp();
+  const activePg = cp();
+  const page = getZTargetPage(cids);
   if (!page || !page.miroCards) return;
   if (typeof pushUndo === 'function') pushUndo();
   page.miroCards = page.miroCards.filter(c => !cids.has(c.id));
   clearMiroSelection();
-  sv(); buildMiroCanvas();
+  sv();
+  if (activePg.pageType === 'slicer') {
+    buildCols();
+  } else {
+    buildMiroCanvas();
+  }
   if (typeof buildOutline === 'function') buildOutline();
 }
 

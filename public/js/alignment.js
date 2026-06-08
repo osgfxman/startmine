@@ -6,7 +6,6 @@
  * @provides window.alignSelected, window.distributeSelected, window.groupSelected
  * @safety Calculate bounding boxes correctly before mutating child coordinates
  */
-// ─── Alignment Handle Drag (Miro-style progressive spacing) ───
 (function () {
   const handle = document.getElementById('miro-align-handle');
   const indicator = document.getElementById('miro-col-indicator');
@@ -30,7 +29,7 @@
     let popup = document.getElementById('align-settings-popup');
     if (popup) popup.remove();
 
-    const page = cp();
+    const page = getZTargetPage(_miroSelected);
     const cards = [];
     _miroSelected.forEach(cid => {
       const c = (page.miroCards || []).find(x => x.id === cid);
@@ -40,7 +39,6 @@
 
     // Detect current layout
     const currentCols = detectCurrentCols(cards);
-    const currentRows = Math.ceil(cards.length / currentCols);
 
     popup = document.createElement('div');
     popup.id = 'align-settings-popup';
@@ -135,7 +133,7 @@
     totalCards = _miroSelected.size;
     baseCols = Math.round(Math.sqrt(totalCards));
 
-    const page = cp();
+    const page = getZTargetPage(_miroSelected);
     origCards = [];
     _miroSelected.forEach((cid) => {
       const c = (page.miroCards || []).find((x) => x.id === cid);
@@ -166,12 +164,29 @@
 
     const isModifier = e.ctrlKey || e.metaKey || e.altKey;
 
+    const activePg = cp();
+    let zoom = (activePg.zoom || 100) / 100;
+    if (activePg.pageType === 'slicer') {
+      const firstId = _miroSelected.values().next().value;
+      const cardPage = firstId ? getPageForCard(firstId) : null;
+      if (cardPage && activePg.cellStates) {
+        const cellKey = typeof getCellKeyForPageId === 'function' ? getCellKeyForPageId(activePg, cardPage.id) : null;
+        if (cellKey) {
+          const state = activePg.cellStates[cellKey] || { zoom: 100 };
+          zoom = (state.zoom || 100) / 100;
+        }
+      }
+    }
+
+    const deltaX = (e.clientX - startX) / zoom;
+    const deltaY = (e.clientY - startY) / zoom;
+
+    let cols = baseCols;
+
     if (isModifier) {
       // ─── MODIFIER MODE: old behavior ───
-      const deltaX = e.clientX - startX;
-      const deltaY = e.clientY - startY;
       const colDelta = Math.round(deltaX / 100);
-      const cols = clamp(baseCols + colDelta, 1, totalCards);
+      cols = clamp(baseCols + colDelta, 1, totalCards);
 
       let extraGapH = 0, extraGapV = 0;
       const verticalGapDelta = Math.max(0, deltaY * 0.5);
@@ -187,18 +202,14 @@
       arrangeGrid(cols, e, extraGapH, extraGapV);
     } else {
       // ─── MIRO-STYLE MODE: progressive columns + spacing ───
-      const totalDeltaX = e.clientX - startX;
-
       // Calculate the total width of a single-row layout (all items side by side, no gap)
       const avgW = uniformW;
-      const avgH = uniformH;
       const ROW_GAP = 6; // Fixed row gap
 
       // The total available "spread" from anchor determines cols + gap
       // For each possible col count, calculate the base width (items touching)
       // Then the remaining delta becomes gap
-      const minSpread = avgW; // 1 column = avgW
-      const currentSpread = baseCols * avgW + totalDeltaX;
+      const currentSpread = baseCols * avgW + deltaX;
 
       // Find which column count this spread corresponds to
       let bestCols = 1;
@@ -218,14 +229,21 @@
         }
       }
 
-      bestCols = clamp(bestCols, 1, totalCards);
+      cols = clamp(bestCols, 1, totalCards);
 
-      arrangeGrid(bestCols, e, bestGap, ROW_GAP);
+      arrangeGrid(cols, e, bestGap, ROW_GAP);
     }
+
+    // Update indicator
+    if (indicator) {
+      indicator.textContent = cols + '×' + Math.ceil(totalCards / cols);
+      indicator.style.display = 'block';
+    }
+    updateMiroSelFrame();
   }
 
   function arrangeGrid(cols, e, extraGapH, extraGapV) {
-    const page = cp();
+    const page = getZTargetPage(_miroSelected);
     const gapH = extraGapH !== undefined ? extraGapH : 6;
     const gapV = extraGapV !== undefined ? extraGapV : 6;
     const rows = Math.ceil(totalCards / cols);
@@ -296,13 +314,6 @@
         }
       });
     }
-
-    // Update indicator
-    if (indicator) {
-      indicator.textContent = cols + '×' + Math.ceil(totalCards / cols);
-      indicator.style.display = 'block';
-    }
-    updateMiroSelFrame();
   }
 
   function onAlignUp() {
@@ -344,26 +355,45 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
       const corner = handle.dataset.corner;
-      const page = cp();
-      const zoom = (page.zoom || 100) / 100;
-      const bbox = getSelectedCardsBBox();
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const startW = bbox.w;
-      const startH = bbox.h;
-      const isEdge = ['t', 'b', 'l', 'r'].includes(corner);
-      // For edges: anchor is the opposite edge center
-      const anchorX = (corner === 'r' || corner === 'tr' || corner === 'br') ? bbox.minX :
-                      (corner === 'l' || corner === 'tl' || corner === 'bl') ? bbox.maxX :
-                      bbox.minX; // t/b: keep X unchanged
-      const anchorY = (corner === 'b' || corner === 'bl' || corner === 'br') ? bbox.minY :
-                      (corner === 't' || corner === 'tl' || corner === 'tr') ? bbox.maxY :
-                      bbox.minY; // l/r: keep Y unchanged
+      const activePg = cp();
+      let page = activePg;
+      let zoom = (activePg.zoom || 100) / 100;
+      if (activePg.pageType === 'slicer') {
+        page = getZTargetPage(_miroSelected);
+        if (page && activePg.cellStates) {
+          const cellKey = typeof getCellKeyForPageId === 'function' ? getCellKeyForPageId(activePg, page.id) : null;
+          if (cellKey) {
+            const state = activePg.cellStates[cellKey] || { zoom: 100 };
+            zoom = (state.zoom || 100) / 100;
+          }
+        }
+      }
+
       const origCards = [];
       _miroSelected.forEach(cid => {
         const c = (page.miroCards || []).find(x => x.id === cid);
         if (c) origCards.push({ id: cid, x: c.x || 0, y: c.y || 0, w: c.w || 280, h: c.h || 240 });
       });
+      if (origCards.length === 0) return;
+
+      const minX = Math.min(...origCards.map(c => c.x));
+      const maxX = Math.max(...origCards.map(c => c.x + c.w));
+      const minY = Math.min(...origCards.map(c => c.y));
+      const maxY = Math.max(...origCards.map(c => c.y + c.h));
+      const startW = maxX - minX;
+      const startH = maxY - minY;
+
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const isEdge = ['t', 'b', 'l', 'r'].includes(corner);
+      // For edges: anchor is the opposite edge center
+      const anchorX = (corner === 'r' || corner === 'tr' || corner === 'br') ? minX :
+                      (corner === 'l' || corner === 'tl' || corner === 'bl') ? maxX :
+                      minX; // t/b: keep X unchanged
+      const anchorY = (corner === 'b' || corner === 'bl' || corner === 'br') ? minY :
+                      (corner === 't' || corner === 'tl' || corner === 'tr') ? maxY :
+                      minY; // l/r: keep Y unchanged
+
       pushUndo();
 
       function onMove(ev) {
@@ -411,6 +441,7 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
         });
         updateMiroSelFrame();
       }
+
       function onUp() {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
@@ -435,12 +466,12 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
     });
   });
 
-SM.miro.alignment = SM.miro.alignment || {};
-SM.miro.alignment.alignSelected = typeof alignSelected !== 'undefined' ? alignSelected : window.alignSelected;
-SM.miro.alignment.distributeSelected = typeof distributeSelected !== 'undefined' ? distributeSelected : window.distributeSelected;
-SM.miro.alignment.groupSelected = typeof groupSelected !== 'undefined' ? groupSelected : window.groupSelected;
+  SM.miro.alignment = SM.miro.alignment || {};
+  SM.miro.alignment.alignSelected = typeof alignSelected !== 'undefined' ? alignSelected : window.alignSelected;
+  SM.miro.alignment.distributeSelected = typeof distributeSelected !== 'undefined' ? distributeSelected : window.distributeSelected;
+  SM.miro.alignment.groupSelected = typeof groupSelected !== 'undefined' ? groupSelected : window.groupSelected;
 
-window.alignSelected = SM.miro.alignment.alignSelected;
-window.distributeSelected = SM.miro.alignment.distributeSelected;
-window.groupSelected = SM.miro.alignment.groupSelected;
+  window.alignSelected = SM.miro.alignment.alignSelected;
+  window.distributeSelected = SM.miro.alignment.distributeSelected;
+  window.groupSelected = SM.miro.alignment.groupSelected;
 })();

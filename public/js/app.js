@@ -4194,77 +4194,85 @@ function updateLayoutGuidesButtonState() {
   }
 }
 
-document.getElementById('mz-guides-btn').onclick = () => {
-  const page = cp();
-  if (!page || page.pageType !== 'miro') return;
-  
-  page._guidesMode = !page._guidesMode;
-  if (!page._guidesMode) {
-    // Hide/Remove rulers, but DO NOT delete guides or merge cells!
-    document.querySelectorAll('.miro-ruler').forEach(el => el.remove());
-    if (typeof window._exitCustomCellDrawMode === 'function') {
-      window._exitCustomCellDrawMode();
+if (document.getElementById('mz-guides-btn')) {
+  document.getElementById('mz-guides-btn').onclick = () => {
+    const page = cp();
+    if (!page || page.pageType !== 'miro') return;
+    
+    page._guidesMode = !page._guidesMode;
+    if (!page._guidesMode) {
+      // Hide/Remove rulers, but DO NOT delete guides or merge cells!
+      document.querySelectorAll('.miro-ruler').forEach(el => el.remove());
+      if (typeof window._exitCustomCellDrawMode === 'function') {
+        window._exitCustomCellDrawMode();
+      }
+    } else {
+      // Show/Initialize rulers
+      if (typeof window.initMiroSlices === 'function') {
+        window.initMiroSlices();
+      }
     }
-  } else {
-    // Show/Initialize rulers
-    if (typeof window.initMiroSlices === 'function') {
-      window.initMiroSlices();
-    }
-  }
-  sv();
-  if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
-  updateGuidesButtonState();
-};
-
-document.getElementById('mz-layout-guides-btn').onclick = () => {
-  const page = cp();
-  if (!page || page.pageType !== 'miro') return;
-  
-  page._layoutGuidesMode = !page._layoutGuidesMode;
-  if (!page._layoutGuidesMode) {
-    // Clean up rulers and drawing states
-    document.querySelectorAll('.miro-cell-ruler').forEach(el => el.remove());
-  }
-  sv();
-  if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
-  updateLayoutGuidesButtonState();
-};
-
-document.getElementById('mz-grid-btn').onclick = () => {
-  const page = cp();
-  if (!page || page.pageType !== 'miro') return;
-  
-  const colsVal = prompt("Enter number of columns (1-20):", "3");
-  if (colsVal === null) return;
-  const cols = parseInt(colsVal);
-  if (isNaN(cols) || cols < 1 || cols > 20) {
-    alert("Please enter a valid number of columns between 1 and 20.");
-    return;
-  }
-  
-  const rowsVal = prompt("Enter number of rows (1-20):", "3");
-  if (rowsVal === null) return;
-  const rows = parseInt(rowsVal);
-  if (isNaN(rows) || rows < 1 || rows > 20) {
-    alert("Please enter a valid number of rows between 1 and 20.");
-    return;
-  }
-  
-  if (typeof window.createMiroGrid === 'function') {
-    window.createMiroGrid(cols, rows);
+    sv();
+    if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
     updateGuidesButtonState();
-  }
-};
+  };
+}
 
-document.getElementById('mz-autofit-btn').onclick = () => {
-  const page = cp();
-  if (!page || (page.pageType !== 'miro' && page.pageType !== 'slicer')) return;
-  if (typeof window.zoomToFitSelection === 'function') {
-    window.zoomToFitSelection();
-  } else if (typeof window.autofitAllMiroSlices === 'function') {
-    window.autofitAllMiroSlices();
-  }
-};
+if (document.getElementById('mz-layout-guides-btn')) {
+  document.getElementById('mz-layout-guides-btn').onclick = () => {
+    const page = cp();
+    if (!page || page.pageType !== 'miro') return;
+    
+    page._layoutGuidesMode = !page._layoutGuidesMode;
+    if (!page._layoutGuidesMode) {
+      // Clean up rulers and drawing states
+      document.querySelectorAll('.miro-cell-ruler').forEach(el => el.remove());
+    }
+    sv();
+    if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+    updateLayoutGuidesButtonState();
+  };
+}
+
+if (document.getElementById('mz-grid-btn')) {
+  document.getElementById('mz-grid-btn').onclick = () => {
+    const page = cp();
+    if (!page || page.pageType !== 'miro') return;
+    
+    const colsVal = prompt("Enter number of columns (1-20):", "3");
+    if (colsVal === null) return;
+    const cols = parseInt(colsVal);
+    if (isNaN(cols) || cols < 1 || cols > 20) {
+      alert("Please enter a valid number of columns between 1 and 20.");
+      return;
+    }
+    
+    const rowsVal = prompt("Enter number of rows (1-20):", "3");
+    if (rowsVal === null) return;
+    const rows = parseInt(rowsVal);
+    if (isNaN(rows) || rows < 1 || rows > 20) {
+      alert("Please enter a valid number of rows between 1 and 20.");
+      return;
+    }
+    
+    if (typeof window.createMiroGrid === 'function') {
+      window.createMiroGrid(cols, rows);
+      updateGuidesButtonState();
+    }
+  };
+}
+
+if (document.getElementById('mz-autofit-btn')) {
+  document.getElementById('mz-autofit-btn').onclick = () => {
+    const page = cp();
+    if (!page || (page.pageType !== 'miro' && page.pageType !== 'slicer')) return;
+    if (typeof window.zoomToFitSelection === 'function') {
+      window.zoomToFitSelection();
+    } else if (typeof window.autofitAllMiroSlices === 'function') {
+      window.autofitAllMiroSlices();
+    }
+  };
+}
 
 function buildCols() {
   const page = cp();
@@ -6846,7 +6854,7 @@ function buildSlicerPage(page, wrap) {
           miroContainer.appendChild(gridOverlay);
           
           const anyCreateMode = window._stickyCreateMode || window._textCreateMode || window._gridCreateMode || window._mindmapCreateMode || window._widgetCreateMode || window._trelloCreateMode || window._embedCreateMode || window._overlayPageCreateMode || window._dyntitleCreateMode || window._penMode || window._shapeMode;
-          miroContainer.style.cursor = anyCreateMode ? 'crosshair' : 'grab';
+          miroContainer.style.cursor = anyCreateMode ? 'crosshair' : 'default';
           
           const miroBoard = document.createElement('div');
           miroBoard.className = 'slicer-miro-board';
@@ -6915,6 +6923,30 @@ function buildSlicerPage(page, wrap) {
                 miroContainer.style.cursor = 'grabbing';
                 e.preventDefault();
                 e.stopPropagation();
+
+                const onMidPanMove = (ev) => {
+                  if (!isPanning) return;
+                  const dx = ev.clientX - startX;
+                  const dy = ev.clientY - startY;
+                  state.panX = startPanX + dx;
+                  state.panY = startPanY + dy;
+                  miroBoard.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${(state.zoom || 100)/100})`;
+                  updateSlicerCellGrid(miroContainer, state, targetPage);
+                };
+
+                const onMidPanUp = () => {
+                  if (isPanning) {
+                    isPanning = false;
+                    const createMode = window._stickyCreateMode || window._textCreateMode || window._gridCreateMode || window._mindmapCreateMode || window._widgetCreateMode || window._trelloCreateMode || window._embedCreateMode || window._overlayPageCreateMode || window._dyntitleCreateMode || window._penMode || window._shapeMode;
+                    miroContainer.style.cursor = createMode ? 'crosshair' : 'default';
+                    sv();
+                  }
+                  window.removeEventListener('mousemove', onMidPanMove);
+                  window.removeEventListener('mouseup', onMidPanUp);
+                };
+
+                window.addEventListener('mousemove', onMidPanMove);
+                window.addEventListener('mouseup', onMidPanUp);
               }
               return;
             }
@@ -7178,38 +7210,111 @@ function buildSlicerPage(page, wrap) {
               return;
             }
             
-            isPanning = true;
-            startX = e.clientX;
-            startY = e.clientY;
-            startPanX = state.panX || 0;
-            startPanY = state.panY || 0;
-            miroContainer.style.cursor = 'grabbing';
             e.preventDefault();
             e.stopPropagation();
 
-            const onSlicerPanMove = (ev) => {
-              if (!isPanning) return;
-              const dx = ev.clientX - startX;
-              const dy = ev.clientY - startY;
-              state.panX = startPanX + dx;
-              state.panY = startPanY + dy;
-              miroBoard.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${(state.zoom || 100)/100})`;
-              updateSlicerCellGrid(miroContainer, state, targetPage);
-            };
+            if (e.altKey) {
+              // Alt+left-click → pan the cell view
+              isPanning = true;
+              startX = e.clientX;
+              startY = e.clientY;
+              startPanX = state.panX || 0;
+              startPanY = state.panY || 0;
+              miroContainer.style.cursor = 'grabbing';
 
-            const onSlicerPanUp = () => {
-              if (isPanning) {
-                isPanning = false;
-                const currentAnyCreate = window._stickyCreateMode || window._textCreateMode || window._gridCreateMode || window._mindmapCreateMode || window._widgetCreateMode || window._trelloCreateMode || window._embedCreateMode || window._overlayPageCreateMode || window._dyntitleCreateMode || window._penMode || window._shapeMode;
-                miroContainer.style.cursor = currentAnyCreate ? 'crosshair' : 'grab';
-                sv();
+              const onSlicerPanMove = (ev) => {
+                if (!isPanning) return;
+                const dx = ev.clientX - startX;
+                const dy = ev.clientY - startY;
+                state.panX = startPanX + dx;
+                state.panY = startPanY + dy;
+                miroBoard.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${(state.zoom || 100)/100})`;
+                updateSlicerCellGrid(miroContainer, state, targetPage);
+              };
+
+              const onSlicerPanUp = () => {
+                if (isPanning) {
+                  isPanning = false;
+                  const currentAnyCreate = window._stickyCreateMode || window._textCreateMode || window._gridCreateMode || window._mindmapCreateMode || window._widgetCreateMode || window._trelloCreateMode || window._embedCreateMode || window._overlayPageCreateMode || window._dyntitleCreateMode || window._penMode || window._shapeMode;
+                  miroContainer.style.cursor = currentAnyCreate ? 'crosshair' : 'default';
+                  sv();
+                }
+                window.removeEventListener('mousemove', onSlicerPanMove);
+                window.removeEventListener('mouseup', onSlicerPanUp);
+              };
+
+              window.addEventListener('mousemove', onSlicerPanMove);
+              window.addEventListener('mouseup', onSlicerPanUp);
+            } else {
+              // Normal left-click → clear selection + rubber-band select
+              if (typeof clearMiroSelection === 'function') clearMiroSelection();
+
+              const rbZoom = currentZoom;
+              const rbRect = miroContainer.getBoundingClientRect();
+              const rbSX = (e.clientX - rbRect.left - (state.panX || 0)) / rbZoom;
+              const rbSY = (e.clientY - rbRect.top - (state.panY || 0)) / rbZoom;
+
+              let rbBox = miroBoard.querySelector('.slicer-rb-box');
+              if (!rbBox) {
+                rbBox = document.createElement('div');
+                rbBox.className = 'slicer-rb-box';
+                rbBox.style.cssText = 'position:absolute;border:1px solid var(--ac, #6c8fff);background:rgba(108,143,255,.08);pointer-events:none;z-index:9999;display:none;';
+                miroBoard.appendChild(rbBox);
               }
-              window.removeEventListener('mousemove', onSlicerPanMove);
-              window.removeEventListener('mouseup', onSlicerPanUp);
-            };
+              rbBox.style.left = rbSX + 'px';
+              rbBox.style.top = rbSY + 'px';
+              rbBox.style.width = '0';
+              rbBox.style.height = '0';
+              rbBox.style.display = 'block';
 
-            window.addEventListener('mousemove', onSlicerPanMove);
-            window.addEventListener('mouseup', onSlicerPanUp);
+              const onRBMove = (ev) => {
+                const r = miroContainer.getBoundingClientRect();
+                const mx = (ev.clientX - r.left - (state.panX || 0)) / rbZoom;
+                const my = (ev.clientY - r.top - (state.panY || 0)) / rbZoom;
+                const x = Math.min(rbSX, mx);
+                const y = Math.min(rbSY, my);
+                const w = Math.abs(mx - rbSX);
+                const h = Math.abs(my - rbSY);
+                rbBox.style.left = x + 'px';
+                rbBox.style.top = y + 'px';
+                rbBox.style.width = w + 'px';
+                rbBox.style.height = h + 'px';
+              };
+
+              const onRBUp = (ev) => {
+                document.removeEventListener('mousemove', onRBMove);
+                document.removeEventListener('mouseup', onRBUp);
+
+                const r = miroContainer.getBoundingClientRect();
+                const mx = (ev.clientX - r.left - (state.panX || 0)) / rbZoom;
+                const my = (ev.clientY - r.top - (state.panY || 0)) / rbZoom;
+                const selX = Math.min(rbSX, mx);
+                const selY = Math.min(rbSY, my);
+                const selW = Math.abs(mx - rbSX);
+                const selH = Math.abs(my - rbSY);
+
+                rbBox.style.display = 'none';
+
+                // Select all cards within the rubber-band rectangle
+                if (selW > 5 || selH > 5) {
+                  const tPage = D.pages.find(p => p.id === targetPageId);
+                  if (tPage && tPage.miroCards) {
+                    tPage.miroCards.forEach(c => {
+                      if (c.pinned || c.type === 'dyntitle') return;
+                      const cx = c.x || 0, cy = c.y || 0;
+                      const cw = c.w || 200, ch = c.h || 200;
+                      if (cx + cw > selX && cx < selX + selW && cy + ch > selY && cy < selY + selH) {
+                        if (typeof addMiroSelect === 'function') addMiroSelect(c.id);
+                      }
+                    });
+                    if (typeof updateMiroSelFrame === 'function') updateMiroSelFrame();
+                  }
+                }
+              };
+
+              document.addEventListener('mousemove', onRBMove);
+              document.addEventListener('mouseup', onRBUp);
+            }
           });
           
           miroContainer.addEventListener('wheel', (e) => {
