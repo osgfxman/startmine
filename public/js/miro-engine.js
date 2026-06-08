@@ -242,7 +242,8 @@ function clearMiroSelection() {
     }
   });
   _miroSelected.clear();
-  document.getElementById('miro-sel-frame').style.display = 'none';
+  const selFrame = document.getElementById('miro-sel-frame');
+  if (selFrame) selFrame.style.display = 'none';
 }
 function getSelectedCardsBBox() {
   const activePg = cp();
@@ -299,6 +300,7 @@ function getSelectedCardsBBox() {
 }
 function updateMiroSelFrame() {
   const frame = document.getElementById('miro-sel-frame');
+  if (!frame) return;
   if (_miroSelected.size < 2) {
     frame.style.display = 'none';
     return;
@@ -329,7 +331,7 @@ function updateMiroSelFrame() {
         if (targetBoard && frame.parentNode !== targetBoard) {
           targetBoard.appendChild(frame);
         }
-        const state = activePg.cellStates[cellKey] || { zoom: 100 };
+        const state = (activePg.cellStates && activePg.cellStates[cellKey]) || { zoom: 100 };
         zoom = (state.zoom || 100) / 100;
       }
     }
@@ -3900,6 +3902,17 @@ window.explodeMiroWidget = function (widgetId) {
 };
 
 window.addEventListener('resize', () => {
+  // If the user is currently typing in an input, textarea, select, or contenteditable element,
+  // skip the redraw to avoid destroying the focused element and closing the virtual keyboard.
+  if (document.activeElement && (
+    document.activeElement.tagName === 'INPUT' ||
+    document.activeElement.tagName === 'TEXTAREA' ||
+    document.activeElement.tagName === 'SELECT' ||
+    document.activeElement.contentEditable === 'true' ||
+    document.activeElement.isContentEditable
+  )) {
+    return;
+  }
   const page = cp();
   if (page && page.pageType === 'miro') {
     buildMiroCanvas();

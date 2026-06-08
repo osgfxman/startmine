@@ -4354,6 +4354,15 @@ function buildCols() {
   }
   
   if (page.pageType === 'slicer') {
+    // Rescue #miro-sel-frame before clearing DOM — it may have been moved into a slicer cell
+    const _rescueFrame = document.getElementById('miro-sel-frame');
+    const _homeBoard = document.getElementById('miro-board');
+    if (_rescueFrame && _homeBoard && _rescueFrame.parentNode !== _homeBoard) {
+      _homeBoard.appendChild(_rescueFrame);
+    }
+    if (_rescueFrame) _rescueFrame.style.display = 'none';
+    _miroSelected.clear();
+    
     wrap.innerHTML = '';
     wrap.style.gridTemplateColumns = '';
     wrap.classList.add('cw-slicer');

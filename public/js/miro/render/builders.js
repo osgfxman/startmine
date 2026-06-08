@@ -16,6 +16,12 @@
     if (typeof window.buildSlicerPage === 'function') {
       const wrap = document.getElementById('cw');
       if (wrap) {
+        // Rescue #miro-sel-frame before clearing DOM
+        const _rf = document.getElementById('miro-sel-frame');
+        const _hb = document.getElementById('miro-board');
+        if (_rf && _hb && _rf.parentNode !== _hb) _hb.appendChild(_rf);
+        if (_rf) _rf.style.display = 'none';
+        _miroSelected.clear();
         wrap.innerHTML = '';
         wrap.style.gridTemplateColumns = '';
         window.buildSlicerPage(page, wrap);
@@ -55,7 +61,8 @@
     document.querySelectorAll('.mg-toolbar[data-grid-id]').forEach(t => t.remove());
     // Clear selection state
     _miroSelected.clear();
-    document.getElementById('miro-sel-frame').style.display = 'none';
+    const _selFrame = document.getElementById('miro-sel-frame');
+    if (_selFrame) _selFrame.style.display = 'none';
     document.getElementById('miro-sel-box').style.display = 'none';
     const zoom = (page.zoom || 100) / 100;
     const px = page.panX || 0,
