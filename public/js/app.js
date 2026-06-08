@@ -5259,6 +5259,42 @@ stopIds.forEach(id => {
   if (el) el.addEventListener('click', (e) => e.stopPropagation());
 });
 document.addEventListener('keydown', (e) => {
+  // Shortcut ` or ذ to toggle between split/slicer page and parent/slicer pages
+  if (e.code === 'Backquote' || e.key === '`' || e.key === 'ذ') {
+    if (
+      document.activeElement && (
+        document.activeElement.tagName === 'INPUT' ||
+        document.activeElement.tagName === 'TEXTAREA' ||
+        document.activeElement.tagName === 'SELECT' ||
+        document.activeElement.contentEditable === 'true' ||
+        document.activeElement.isContentEditable
+      )
+    ) {
+      return;
+    }
+    e.preventDefault();
+    const activePg = cp();
+    if (activePg) {
+      if (activePg.pageType === 'slicer') {
+        const cellKey = window._hoveredCellKey || window._activeCellKey;
+        const targetPageId = cellKey && activePg.cellPages ? activePg.cellPages[cellKey] : null;
+        if (targetPageId) {
+          switchActivePage(targetPageId);
+        } else {
+          if (typeof showToast === 'function') showToast('قف بالماوس فوق خلية تحتوي على صفحة');
+        }
+      } else {
+        const parentSlicer = D.pages.find(p => p && p.pageType === 'slicer' && p.cellPages && Object.values(p.cellPages).includes(activePg.id));
+        if (parentSlicer) {
+          switchActivePage(parentSlicer.id);
+        } else {
+          if (typeof showToast === 'function') showToast('هذه الصفحة غير مدمجة في أي صفحة مقسمة');
+        }
+      }
+    }
+    return;
+  }
+
   if (e.key === 'F2') {
     e.preventDefault();
     toggleOutline();
@@ -7722,6 +7758,25 @@ function showPageTabContextMenu(e, pg, nm, cd) {
 
   const menu = document.createElement('div');
   menu.className = 'custom-ctx-menu';
+
+  // Add Link back to parent slicer page(s) if this page is sharded inside them
+  const parentSlicers = D.pages.filter(p => p && p.pageType === 'slicer' && p.cellPages && Object.values(p.cellPages).includes(pg.id));
+  if (parentSlicers.length > 0) {
+    parentSlicers.forEach(slicer => {
+      const slicerItem = document.createElement('div');
+      slicerItem.className = 'custom-ctx-item';
+      slicerItem.style.color = '#38ef7d';
+      slicerItem.innerHTML = `<span>📐</span> <span>العودة لـ "${slicer.name}"</span>`;
+      slicerItem.onclick = () => {
+        menu.remove();
+        switchActivePage(slicer.id);
+      };
+      menu.appendChild(slicerItem);
+    });
+    const sep = document.createElement('div');
+    sep.className = 'custom-ctx-sep';
+    menu.appendChild(sep);
+  }
 
   // 1. Rename Page
   const renameItem = document.createElement('div');
