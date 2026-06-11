@@ -33,18 +33,47 @@
     inbox: D.inbox
   };
 
-  const pagesMeta = D.pages.filter(p => p).map(p => ({
-    id: p.id || '',
-    groupId: p.groupId || '',
-    name: p.name || 'Untitled Page',
-    pageType: p.pageType || 'miro',
-    zoom: p.zoom !== undefined ? p.zoom : 100,
-    panX: p.panX !== undefined ? p.panX : 0,
-    panY: p.panY !== undefined ? p.panY : 0,
-    bg: p.bg || '',
-    bgType: p.bgType || 'none',
-    tabColor: p.tabColor || ''
-  }));
+  const serverPagesMeta = [];
+  if (typeof _lastSyncedPagesMetaStr === 'string' && _lastSyncedPagesMetaStr) {
+    try {
+      const parsed = JSON.parse(_lastSyncedPagesMetaStr);
+      if (Array.isArray(parsed)) {
+        parsed.forEach(sm => { if (sm && sm.id) serverPagesMeta.push(sm); });
+      }
+    } catch(e) {}
+  }
+
+  const pagesMeta = D.pages.filter(p => p).map(p => {
+    let serverTs = 0;
+    const sMatch = serverPagesMeta.find(sm => sm.id === p.id);
+    if (sMatch && sMatch.ts) serverTs = sMatch.ts;
+
+    let localTs = 0;
+    if (p.id === D.cur) {
+      localTs = p.ts || Date.now();
+    } else {
+      const cached = getCachedPageData(p.id);
+      localTs = (cached && cached.ts) || p.ts || 0;
+    }
+
+    if (serverTs > localTs && sMatch) {
+      return sMatch;
+    }
+
+    return {
+      id: p.id || '',
+      groupId: p.groupId || '',
+      name: p.name || 'Untitled Page',
+      pageType: p.pageType || 'miro',
+      zoom: p.zoom !== undefined ? p.zoom : 100,
+      panX: p.panX !== undefined ? p.panX : 0,
+      panY: p.panY !== undefined ? p.panY : 0,
+      bg: p.bg || '',
+      bgType: p.bgType || 'none',
+      tabColor: p.tabColor || '',
+      ts: localTs || p.ts || Date.now()
+    };
+  });
 
   const updates = {};
   updates[metaRef] = meta;
@@ -52,11 +81,28 @@
 
   D.pages.forEach(p => {
     if (!p) return;
+
+    let serverTs = 0;
+    const sMatch = serverPagesMeta.find(sm => sm.id === p.id);
+    if (sMatch && sMatch.ts) serverTs = sMatch.ts;
+
+    let localTs = 0;
+    if (p.id === D.cur) {
+      localTs = p.ts || Date.now();
+    } else {
+      const cached = getCachedPageData(p.id);
+      localTs = (cached && cached.ts) || p.ts || 0;
+    }
+
+    if (serverTs > localTs) {
+      console.warn(`[SYNC OVERWRITE GUARD ⛔] Skipping upload for page "${p.name}" (${p.id}) — server has newer data.`);
+      return;
+    }
+
     let widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, customCells, ts, cellGuides, _layoutGuidesMode;
     let gridRows, gridCols, cellPages, slicerColSizes, slicerRowSizes;
     if (p.id === D.cur) {
-      p.ts = Date.now();
-      // Active page: use live in-memory data
+      p.ts = localTs;
       widgets = p.widgets || [];
       miroCards = p.miroCards || [];
       vGuides = p.vGuides || [];
@@ -474,8 +520,8 @@
   // Capture undo snapshot before saving (for Miro pages)
   if (typeof pushUndo === 'function') { try { pushUndo(); } catch(e) {} }
 
-  // ─── Offline Mode: save to localStorage only ───
-  if (_offlineMode) {
+  // ─── Local Save Mode (Offline or SaveUpload): save to local cache only ───
+  if (_offlineMode || (_syncMode === 'saveUpload' && !window._bypassingSaveUpload)) {
     const activePg = cp();
     if (activePg) {
       cachePageData(activePg.id, {
@@ -494,7 +540,8 @@
         gridCols: activePg.gridCols || null,
         cellPages: activePg.cellPages || null,
         slicerColSizes: activePg.slicerColSizes || null,
-        slicerRowSizes: activePg.slicerRowSizes || null
+        slicerRowSizes: activePg.slicerRowSizes || null,
+        ts: activePg.ts || Date.now()
       });
 
       // Cache all subpages of the slicer page
@@ -535,7 +582,18 @@
       zoom: p.zoom, panX: p.panX, panY: p.panY, bg: p.bg, bgType: p.bgType,
       tabColor: p.tabColor || ''
     })));
-    markDirtyOffline();
+
+    if (_syncMode === 'saveUpload') {
+      if (activePg) {
+        updateDirtyStatus(activePg.id, true);
+        const parentSlicer = D.pages.find(p => p && p.pageType === 'slicer' && p.cellPages && Object.values(p.cellPages).includes(activePg.id));
+        if (parentSlicer) {
+          updateDirtyStatus(parentSlicer.id, true);
+        }
+      }
+    } else {
+      markDirtyOffline();
+    }
     return;
   }
 
@@ -565,7 +623,8 @@
       panY: p.panY !== undefined ? p.panY : 0,
       bg: p.bg || '',
       bgType: p.bgType || 'none',
-      tabColor: p.tabColor || ''
+      tabColor: p.tabColor || '',
+      ts: p.ts || 0
     }));
 
     const updates = {};
@@ -1061,6 +1120,34 @@
   window.SM.data.forceLocalSave = window.forceLocalSave;
   window.SM.core.expose('forceLocalSave', window.forceLocalSave);
 
+  // Extracted triggerManualSave
+  window.triggerManualSave = function () {
+    if (window._syncMode === 'saveUpload') {
+      const activePg = typeof cp === 'function' ? cp() : null;
+      if (activePg) {
+        if (typeof showToast === 'function') showToast('☁️ Saving page to cloud...', 2000);
+        window._bypassingSaveUpload = true;
+        sv(false, true);
+        window._bypassingSaveUpload = false;
+
+        if (typeof updateDirtyStatus === 'function') {
+          updateDirtyStatus(activePg.id, false);
+          if (activePg.pageType === 'slicer' && activePg.cellPages) {
+            Object.values(activePg.cellPages).forEach(subPid => {
+              updateDirtyStatus(subPid, false);
+            });
+          }
+        }
+      }
+    } else if (window._syncMode === 'offline') {
+      if (typeof syncNow === 'function') syncNow();
+    } else {
+      if (typeof showToast === 'function') showToast('⚡ Realtime Mode — changes auto-saved to cloud');
+    }
+  };
+  window.SM.data.triggerManualSave = window.triggerManualSave;
+  window.SM.core.expose('triggerManualSave', window.triggerManualSave);
+
   // Extracted setOwnWrite
   window.setOwnWrite = function (val) {
   _ownWrite = val;
@@ -1086,12 +1173,14 @@
 
 SM.data.syncNow = typeof syncNow !== 'undefined' ? syncNow : window.syncNow;
 SM.data.sv = typeof sv !== 'undefined' ? sv : window.sv;
+SM.data.triggerManualSave = typeof triggerManualSave !== 'undefined' ? triggerManualSave : window.triggerManualSave;
 SM.data.setupShardedListeners = typeof setupShardedListeners !== 'undefined' ? setupShardedListeners : window.setupShardedListeners;
 SM.data.forceLocalSave = typeof forceLocalSave !== 'undefined' ? forceLocalSave : window.forceLocalSave;
 SM.data.detachAllListeners = typeof detachAllListeners !== 'undefined' ? detachAllListeners : window.detachAllListeners;
 
 window.syncNow = SM.data.syncNow;
 window.sv = SM.data.sv;
+window.triggerManualSave = SM.data.triggerManualSave;
 window.setupShardedListeners = SM.data.setupShardedListeners;
 window.forceLocalSave = SM.data.forceLocalSave;
 window.detachAllListeners = SM.data.detachAllListeners;

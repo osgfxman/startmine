@@ -2421,6 +2421,49 @@ body:not(.outline-open) #root {
   flex-shrink: 0;
 }
 
+#sync-mode-select {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e4e4e4;
+  font-size: 0.68rem;
+  border-radius: 5px;
+  padding: 2px 6px;
+  outline: none;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all 0.15s ease;
+  height: 20px;
+  box-sizing: border-box;
+}
+
+#sync-mode-select:hover {
+  border-color: var(--ac);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+#sync-mode-select option {
+  background: #121420;
+  color: #e4e4e4;
+  padding: 4px;
+}
+
+#miro-zoom.contrast-light #sync-mode-select {
+  background: rgba(0, 0, 0, 0.05) !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
+  color: #000000 !important;
+}
+
+#miro-zoom.contrast-light #sync-mode-select:hover {
+  background: rgba(0, 0, 0, 0.08) !important;
+  border-color: var(--ac) !important;
+}
+
+#miro-zoom.contrast-light #sync-mode-select option {
+  background: #ffffff;
+  color: #000000;
+}
+
 .offline-toggle {
   display: flex;
   align-items: center;

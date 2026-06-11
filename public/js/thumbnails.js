@@ -2479,7 +2479,12 @@ function buildMiroImage(card) {
     img.style.display = 'none';
     const ph = document.createElement('div');
     ph.className = 'mi-placeholder';
-    ph.textContent = '🖼️';
+    if (card.imageUrl && card.imageUrl.includes('miro.com/api')) {
+      ph.innerHTML = '<span style="font-size: 2rem; margin-bottom: 8px;">⚠️</span><span style="font-size: 0.8rem; font-weight: 600; text-align: center; padding: 0 10px; line-height: 1.4; direction: rtl;">صورة ميرو الأصلية (انسخ كصورة للموبايل)</span>';
+      ph.style.flexDirection = 'column';
+    } else {
+      ph.textContent = '🖼️';
+    }
     el.insertBefore(ph, img);
   };
 

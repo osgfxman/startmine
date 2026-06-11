@@ -1026,6 +1026,16 @@ function switchActivePage(pageId) {
     // to prevent writing data of pageId into the wrong active page object if we switched pages.
     const pg = D.pages.find(p => p && p.id === pageId);
     if (pg) {
+      // ⛔ DIRTY PAGE GUARD: If this page has unsaved changes, do NOT overwrite it!
+      const isDirty = window._dirtyPages && window._dirtyPages[pageId];
+      if (isDirty && window._syncMode === 'saveUpload') {
+        console.warn(`[FIREBASE GUARD ⛔] Server sent update for dirty page "${pg.name}" (${pg.id}) — ignoring update to protect unsaved local changes.`);
+        if (typeof showToast === 'function') {
+          showToast(`⚠️ تم إجراء تعديلات سحابية على صفحة "${pg.name}". يرجى الحفظ (Ctrl+S) لدمج تعديلاتك أو التحديث للإلغاء.`, 6000);
+        }
+        return;
+      }
+
       if (isPagePayloadEqual(pg, pData)) {
         pg.ts = pData.ts || 0;
         return;
@@ -3497,6 +3507,172 @@ document.getElementById('ok-settings').onclick = () => {
   buildCols();
 };
 
+window.triggerImageMigration = async function () {
+  if (typeof confirm === 'function') {
+    const ok = confirm('هذا الإجراء سيقوم بفحص جميع الصفحات ورفع كافة الصور المخزنة محلياً (Base64) إلى السحابة (ImgBB). هل تريد الاستمرار؟');
+    if (!ok) return;
+  }
+  
+  if (!USER_ID) {
+    if (typeof showToast === 'function') showToast('⚠️ يرجى تسجيل الدخول أولاً');
+    return;
+  }
+
+  const btn = document.getElementById('migrate-images-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Scanning database...';
+  }
+
+  try {
+    if (typeof showToast === 'function') showToast('⏳ جاري فحص قاعدة البيانات للمزامنة...', 4000);
+    
+    // Fetch all user pages from Firebase directly
+    const snap = await firebase.database().ref(`users/${USER_ID}/startmine_pages`).once('value');
+    const allPages = snap.val();
+    
+    if (!allPages) {
+      if (typeof showToast === 'function') showToast('✅ لا توجد صفحات للفحص');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '☁️ Migrate Local Images to ImgBB';
+      }
+      return;
+    }
+
+    let totalFound = 0;
+    let totalUploaded = 0;
+    let totalFailed = 0;
+    let totalSkippedBlob = 0;
+    const updates = {};
+
+    for (const [pageId, pageData] of Object.entries(allPages)) {
+      if (!pageData || !pageData.miroCards) continue;
+      const cardsRaw = pageData.miroCards;
+      
+      // Firebase stores arrays as objects with string keys when there are gaps
+      // So we must iterate using Object.entries, not for(i < length)
+      const cardEntries = Array.isArray(cardsRaw) 
+        ? cardsRaw.map((c, i) => [String(i), c]) 
+        : Object.entries(cardsRaw);
+
+      for (const [cardKey, card] of cardEntries) {
+        if (!card || !card.imageUrl) continue;
+        
+        // Check ALL card types that might have imageUrl (image, grid, etc.)
+        const isAlreadyHosted = /imgbb\.com|imgur\.com|i\.ibb\.co/i.test(card.imageUrl);
+        if (isAlreadyHosted) continue;
+        // Skip dead Miro API URLs (permanently CORS-blocked, irrecoverable)
+        if (/miro\.com\/api/i.test(card.imageUrl)) {
+          console.warn(`[Migration] ⚠️ Dead Miro URL (CORS): card ${card.id} — re-paste from Miro to fix`);
+          totalFailed++;
+          continue;
+        }
+        
+        const isBase64 = card.imageUrl.startsWith('data:image');
+        const isBlob = card.imageUrl.startsWith('blob:');
+        const isExternalUrl = card.imageUrl.startsWith('http://') || card.imageUrl.startsWith('https://');
+        const isLocalPath = !isBase64 && !isBlob && !isExternalUrl;
+        
+        if (isBlob) {
+          totalSkippedBlob++;
+          console.warn(`[Migration] ⚠️ Blob URL found (cannot upload, session-only): card ${card.id} on page ${pageId}`);
+          continue;
+        }
+        
+        // Handle base64, local paths, AND external URLs that aren't on ImgBB
+        if (isBase64 || isLocalPath || isExternalUrl) {
+          totalFound++;
+          if (btn) btn.textContent = `⏳ Uploading ${totalFound}...`;
+          if (typeof showToast === 'function') showToast(`⏳ جاري رفع الصورة ${totalFound}...`, 2000);
+          
+          try {
+            let uploadedUrl = null;
+            if (isBase64 && typeof uploadToImgBB === 'function') {
+              uploadedUrl = await uploadToImgBB(card.imageUrl);
+            } else if ((isExternalUrl || isLocalPath) && typeof fetchAndUploadToImgBB === 'function') {
+              // Download external image, convert via canvas, upload to ImgBB
+              uploadedUrl = await fetchAndUploadToImgBB(card.imageUrl);
+            }
+            
+            if (uploadedUrl) {
+              card.imageUrl = uploadedUrl;
+              updates[`users/${USER_ID}/startmine_pages/${pageId}/miroCards/${cardKey}/imageUrl`] = uploadedUrl;
+              totalUploaded++;
+              console.log(`[Migration] ✅ Uploaded card ${card.id} (key ${cardKey}) on page ${pageId}`);
+            } else {
+              totalFailed++;
+              console.warn(`[Migration] ❌ Upload failed for card ${card.id} (key ${cardKey}) on page ${pageId} — URL: ${card.imageUrl.substring(0, 80)}`);
+            }
+          } catch (uploadErr) {
+            totalFailed++;
+            console.error(`[Migration] ❌ Upload error for card ${card.id}:`, uploadErr);
+          }
+        }
+      }
+    }
+
+    console.log(`[Migration] Summary: Found=${totalFound}, Uploaded=${totalUploaded}, Failed=${totalFailed}, BlobSkipped=${totalSkippedBlob}`);
+
+    if (Object.keys(updates).length > 0) {
+      // Write updates in batches to avoid Firebase payload limits
+      const updateKeys = Object.keys(updates);
+      const BATCH_SIZE = 50;
+      for (let b = 0; b < updateKeys.length; b += BATCH_SIZE) {
+        const batch = {};
+        updateKeys.slice(b, b + BATCH_SIZE).forEach(k => { batch[k] = updates[k]; });
+        await firebase.database().ref().update(batch);
+        console.log(`[Migration] Batch ${Math.floor(b / BATCH_SIZE) + 1} saved (${Object.keys(batch).length} items)`);
+      }
+      
+      let msg = `✅ تم رفع ${totalUploaded} صورة بنجاح!`;
+      if (totalFailed > 0) msg += ` (${totalFailed} فشل)`;
+      if (totalSkippedBlob > 0) msg += ` (${totalSkippedBlob} blob تم تخطيها)`;
+      if (typeof showToast === 'function') showToast(msg, 6000);
+      
+      // Update in-memory pages and caches
+      for (const [pageId, pageData] of Object.entries(allPages)) {
+        const inMemoryPage = D.pages.find(p => p && p.id === pageId);
+        if (inMemoryPage && pageData.miroCards) {
+          // Convert Firebase object back to array for in-memory use
+          if (!Array.isArray(pageData.miroCards)) {
+            const maxIdx = Math.max(...Object.keys(pageData.miroCards).map(Number).filter(n => !isNaN(n)));
+            const arr = new Array(maxIdx + 1);
+            for (const [k, v] of Object.entries(pageData.miroCards)) {
+              arr[parseInt(k)] = v;
+            }
+            inMemoryPage.miroCards = arr.filter(Boolean);
+          } else {
+            inMemoryPage.miroCards = pageData.miroCards;
+          }
+        }
+        if (typeof cachePageData === 'function' && pageData) {
+          cachePageData(pageId, pageData);
+        }
+      }
+      
+      // Force redraw active page
+      const activePg = cp();
+      if (activePg) {
+        if (activePg.pageType === 'slicer') buildCols();
+        else buildMiroCanvas();
+      }
+    } else {
+      let msg = '✅ جميع الصور مرفوعة بالفعل على السحابة!';
+      if (totalSkippedBlob > 0) msg = `⚠️ ${totalSkippedBlob} صور blob لا يمكن رفعها (مرتبطة بالجلسة فقط)`;
+      if (typeof showToast === 'function') showToast(msg, 4000);
+    }
+  } catch (err) {
+    console.error('[Migration] Error during image migration:', err);
+    if (typeof showToast === 'function') showToast('⚠️ حدث خطأ أثناء المزامنة: ' + err.message, 5000);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '☁️ Migrate Local Images to ImgBB';
+    }
+  }
+};
+
 // Move/Copy Widget
 let _mvWid = null;
 function openMvModal(wid) {
@@ -3950,15 +4126,16 @@ function buildTabs() {
       ev.stopPropagation();
       openTcPop(ev, pg.id);
     };
+    const isDirty = window._dirtyPages && window._dirtyPages[pg.id];
     const nm = document.createElement('span');
     nm.className = 'ptnm';
-    nm.textContent = pg.name;
+    nm.textContent = pg.name + (isDirty ? ' *' : '');
     nm.contentEditable = 'false';
     nm.onblur = () => {
       nm.contentEditable = 'false';
-
-      pg.name = nm.textContent.trim() || 'Page';
+      pg.name = nm.textContent.replace(/\s*\*$/, '').trim() || 'Page';
       sv();
+      buildTabs();
     };
     nm.onkeydown = (e) => {
       if (e.key === 'Enter') {
@@ -3973,6 +4150,7 @@ function buildTabs() {
 
     tab.addEventListener('dblclick', (e) => {
       e.stopPropagation();
+      nm.textContent = pg.name;
       nm.contentEditable = 'true';
       nm.focus();
       const range = document.createRange();
@@ -5290,6 +5468,20 @@ document.addEventListener('keydown', (e) => {
         const parentSlicer = D.pages.find(p => p && p.pageType === 'slicer' && p.cellPages && Object.values(p.cellPages).includes(activePg.id));
         if (parentSlicer) {
           switchActivePage(parentSlicer.id);
+          setTimeout(() => {
+            const cellKey = Object.entries(parentSlicer.cellPages || {}).find(([key, val]) => val === activePg.id)?.[0];
+            if (cellKey) {
+              const cellEl = document.querySelector(`.slicer-cell[data-cell-key="${cellKey}"]`);
+              const bodyEl = cellEl ? cellEl.querySelector('.slicer-cell-body') : null;
+              const cellW = bodyEl ? bodyEl.clientWidth || 300 : 300;
+              const cellH = bodyEl ? bodyEl.clientHeight || 200 : 200;
+              if (typeof autofitSlicerCell === 'function') {
+                autofitSlicerCell(parentSlicer, cellKey, activePg, cellW, cellH);
+                sv();
+                buildCols();
+              }
+            }
+          }, 100);
         } else {
           if (typeof showToast === 'function') showToast('هذه الصفحة غير مدمجة في أي صفحة مقسمة');
         }
@@ -7776,6 +7968,20 @@ function showPageTabContextMenu(e, pg, nm, cd) {
       slicerItem.onclick = () => {
         menu.remove();
         switchActivePage(slicer.id);
+        setTimeout(() => {
+          const cellKey = Object.entries(slicer.cellPages || {}).find(([key, val]) => val === pg.id)?.[0];
+          if (cellKey) {
+            const cellEl = document.querySelector(`.slicer-cell[data-cell-key="${cellKey}"]`);
+            const bodyEl = cellEl ? cellEl.querySelector('.slicer-cell-body') : null;
+            const cellW = bodyEl ? bodyEl.clientWidth || 300 : 300;
+            const cellH = bodyEl ? bodyEl.clientHeight || 200 : 200;
+            if (typeof autofitSlicerCell === 'function') {
+              autofitSlicerCell(slicer, cellKey, pg, cellW, cellH);
+              sv();
+              buildCols();
+            }
+          }
+        }, 100);
       };
       menu.appendChild(slicerItem);
     });

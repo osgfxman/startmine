@@ -1769,11 +1769,11 @@ function compressBase64(base64, maxDim = 1000, quality = 0.75) {
       const isPNG = base64.includes('data:image/png') || base64.includes('data:image/webp');
       let hasAlpha = false;
       if (isPNG) {
-        // Quick alpha check: sample some pixels
+        // Scan the entire canvas to accurately detect any transparent pixels
         try {
-          const data = ctx.getImageData(0, 0, Math.min(w, 100), Math.min(h, 100)).data;
+          const data = ctx.getImageData(0, 0, w, h).data;
           for (let i = 3; i < data.length; i += 4) {
-            if (data[i] < 250) { hasAlpha = true; break; }
+            if (data[i] < 254) { hasAlpha = true; break; }
           }
         } catch(e) { hasAlpha = isPNG; }
       }
@@ -1807,6 +1807,48 @@ async function uploadToImgBB(base64) {
     return null;
   }
 }
+
+// Download an external image URL, convert to base64 via canvas, upload to ImgBB
+async function fetchAndUploadToImgBB(url) {
+  try {
+    return await new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      const timeout = setTimeout(() => { resolve(null); }, 15000); // 15s timeout
+      img.onload = async function() {
+        clearTimeout(timeout);
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth || img.width;
+          canvas.height = img.naturalHeight || img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          const base64 = canvas.toDataURL('image/png');
+          if (base64 && base64.length > 100) {
+            const uploaded = await uploadToImgBB(base64);
+            resolve(uploaded);
+          } else {
+            console.warn('[fetchAndUpload] Canvas conversion produced empty result for:', url);
+            resolve(null);
+          }
+        } catch (e) {
+          console.warn('[fetchAndUpload] Canvas error (CORS?):', url, e.message);
+          resolve(null);
+        }
+      };
+      img.onerror = function() {
+        clearTimeout(timeout);
+        console.warn('[fetchAndUpload] Failed to load image:', url);
+        resolve(null);
+      };
+      img.src = url;
+    });
+  } catch (e) {
+    console.warn('[fetchAndUpload] Error:', e);
+    return null;
+  }
+}
+window.fetchAndUploadToImgBB = fetchAndUploadToImgBB;
 
 (function initCanvasDragDrop() {
   const canvas = document.getElementById('miro-canvas');
@@ -1881,18 +1923,34 @@ async function _fixBase64ImagesOnPage() {
     if (typeof D === 'undefined' || !D.pages) return;
     if (typeof USER_ID === 'undefined' || !USER_ID) return;
     const page = cp();
-    if (!page || !page.miroCards || !page.miroCards.length) return;
+    if (!page || !page.miroCards) return;
+    
+    // Normalize miroCards to array if Firebase returned as object
+    let cards = page.miroCards;
+    if (!Array.isArray(cards)) {
+      const maxIdx = Math.max(...Object.keys(cards).map(Number).filter(n => !isNaN(n)));
+      const arr = new Array(maxIdx + 1);
+      for (const [k, v] of Object.entries(cards)) {
+        arr[parseInt(k)] = v;
+      }
+      cards = arr;
+      page.miroCards = cards;
+    }
+    if (!cards.length) return;
 
     // ── Step 1: Try to recover lost images from IndexedDB cache ──
     try {
       const cached = typeof getCachedPageDataAsync === 'function'
         ? await getCachedPageDataAsync(page.id) : null;
       if (cached && cached.miroCards) {
-        for (let i = 0; i < page.miroCards.length; i++) {
-          const card = page.miroCards[i];
-          if (card.type === 'image' && (!card.imageUrl || card.imageUrl === '')) {
-            // Find matching card in cache by ID
-            const cachedCard = cached.miroCards.find(c => c.id === card.id);
+        const cachedCards = Array.isArray(cached.miroCards) ? cached.miroCards : Object.values(cached.miroCards);
+        for (let i = 0; i < cards.length; i++) {
+          const card = cards[i];
+          if (!card) continue;
+          if (card.imageUrl && card.imageUrl !== '') continue; // has URL, skip
+          // Only try recovery for cards that should have an image
+          if (card.type === 'image' || card.type === 'grid') {
+            const cachedCard = cachedCards.find(c => c && c.id === card.id);
             if (cachedCard && cachedCard.imageUrl && cachedCard.imageUrl.startsWith('data:image')) {
               card.imageUrl = cachedCard.imageUrl;
               console.log('[ImgFix] 🔄 Recovered from cache:', card.id);
@@ -1902,32 +1960,41 @@ async function _fixBase64ImagesOnPage() {
       }
     } catch (e) { /* cache recovery failed, continue */ }
 
-    // ── Step 2: Upload base64 images to ImgBB one by one ──
+    // ── Step 2: Upload non-ImgBB images to ImgBB one by one ──
     let successCount = 0;
-    for (let i = 0; i < page.miroCards.length; i++) {
-      const card = page.miroCards[i];
-      if (card.type !== 'image' || !card.imageUrl) continue;
-      if (card.imageUrl.startsWith('http://') || card.imageUrl.startsWith('https://')) continue;
+    for (let i = 0; i < cards.length; i++) {
+      const card = cards[i];
+      if (!card || !card.imageUrl) continue;
+      // Skip blob URLs (session-only, can't upload)
+      if (card.imageUrl.startsWith('blob:')) continue;
+      // Skip already on ImgBB
+      if (/imgbb\.com|imgur\.com|i\.ibb\.co/i.test(card.imageUrl)) continue;
+      // Skip dead Miro API URLs (permanently CORS-blocked)
+      if (/miro\.com\/api/i.test(card.imageUrl)) continue;
+      
+      let url = null;
       if (card.imageUrl.startsWith('data:image')) {
-        console.log('[ImgFix] Uploading:', card.id, '(index', i, ')');
-        const url = await uploadToImgBB(card.imageUrl);
-        if (url) {
-          card.imageUrl = url;
-          successCount++;
-          console.log('[ImgFix] ✅ Done:', card.id);
-          // Update visible element
-          const imgEl = document.querySelector(`[data-cid="${card.id}"] .mi-img`);
-          if (imgEl) imgEl.src = url;
-          // Save ONLY this card's URL to Firebase (not the whole page!)
-          try {
-            const cardRef = `users/${USER_ID}/startmine_pages/${page.id}/miroCards/${i}/imageUrl`;
-            await firebase.database().ref(cardRef).set(url);
-            console.log('[ImgFix] ✅ Saved card', i, 'to Firebase');
-          } catch (e) { console.warn('[ImgFix] Card save error:', e); }
-        } else {
-          // Upload failed — DO NOT touch the card, leave base64 for local display
-          console.warn('[ImgFix] ⚠️ Upload failed for card:', card.id, '— keeping local data');
-        }
+        console.log('[ImgFix] Uploading base64:', card.id, '(index', i, ', type:', card.type, ')');
+        url = await uploadToImgBB(card.imageUrl);
+      } else if (card.imageUrl.startsWith('http://') || card.imageUrl.startsWith('https://')) {
+        console.log('[ImgFix] Uploading external URL:', card.id, '(index', i, ', type:', card.type, ')');
+        url = await fetchAndUploadToImgBB(card.imageUrl);
+      }
+      
+      if (url) {
+        card.imageUrl = url;
+        successCount++;
+        console.log('[ImgFix] ✅ Done:', card.id);
+        const imgEl = document.querySelector(`[data-cid="${card.id}"] .mi-img`) 
+                   || document.querySelector(`[data-cid="${card.id}"] img`);
+        if (imgEl) imgEl.src = url;
+        try {
+          const cardRef = `users/${USER_ID}/startmine_pages/${page.id}/miroCards/${i}/imageUrl`;
+          await firebase.database().ref(cardRef).set(url);
+          console.log('[ImgFix] ✅ Saved card', i, 'to Firebase');
+        } catch (e) { console.warn('[ImgFix] Card save error:', e); }
+      } else {
+        console.warn('[ImgFix] ⚠️ Upload failed for card:', card.id, '— keeping local data');
       }
     }
     if (successCount > 0) {
@@ -1939,15 +2006,37 @@ async function _fixBase64ImagesOnPage() {
 setTimeout(() => _fixBase64ImagesOnPage(), 3000);
 
 // ─── Localize Remote Image URL ───
-function localizeCardImageUrl(card) {
+async function localizeCardImageUrl(card) {
   if (!card || !card.imageUrl) return;
-  if (card.imageUrl.startsWith('data:image')) return;
   if (/imgbb\.com|imgur\.com|i\.ibb\.co/i.test(card.imageUrl)) return;
+
+  const page = D.pages.find(p => p && p.miroCards && p.miroCards.some(c => c.id === card.id)) || cp();
+  if (!page || !page.miroCards) return;
+  const idx = page.miroCards.findIndex(c => c.id === card.id);
+  if (idx === -1) return;
+
+  if (card.imageUrl.startsWith('data:image')) {
+    console.log('[ImgLocalize] Uploading base64 image to ImgBB:', card.id);
+    const url = await uploadToImgBB(card.imageUrl);
+    if (url) {
+      card.imageUrl = url;
+      if (typeof USER_ID !== 'undefined' && USER_ID) {
+        try {
+          const cardRef = `users/${USER_ID}/startmine_pages/${page.id}/miroCards/${idx}/imageUrl`;
+          await firebase.database().ref(cardRef).set(url);
+        } catch (e) { console.warn('[ImgLocalize] Firebase save error:', e); }
+      }
+      sv();
+      const imgEl = document.querySelector(`[data-cid="${card.id}"] .mi-img`);
+      if (imgEl) imgEl.src = url;
+    }
+    return;
+  }
 
   console.log('[ImgLocalize] Attempting to localize remote image URL:', card.imageUrl);
   const img = new Image();
   img.crossOrigin = 'anonymous';
-  img.onload = function() {
+  img.onload = async function() {
     try {
       const canvas = document.createElement('canvas');
       canvas.width = img.naturalWidth || img.width;
@@ -1956,15 +2045,19 @@ function localizeCardImageUrl(card) {
       ctx.drawImage(img, 0, 0);
       const base64 = canvas.toDataURL('image/png');
       if (base64 && base64.length > 100) {
-        card.imageUrl = base64;
-        console.log('[ImgLocalize] ✅ Converted remote image to base64:', card.id);
-        sv();
-        // Trigger _fixBase64ImagesOnPage to upload this new Base64 to ImgBB and update Firebase/DOM
-        setTimeout(() => {
-          if (typeof _fixBase64ImagesOnPage === 'function') {
-            _fixBase64ImagesOnPage();
+        const url = await uploadToImgBB(base64);
+        if (url) {
+          card.imageUrl = url;
+          if (typeof USER_ID !== 'undefined' && USER_ID) {
+            try {
+              const cardRef = `users/${USER_ID}/startmine_pages/${page.id}/miroCards/${idx}/imageUrl`;
+              await firebase.database().ref(cardRef).set(url);
+            } catch (e) { console.warn('[ImgLocalize] Firebase remote save error:', e); }
           }
-        }, 1000);
+          sv();
+          const imgEl = document.querySelector(`[data-cid="${card.id}"] .mi-img`);
+          if (imgEl) imgEl.src = url;
+        }
       }
     } catch (e) {
       console.warn('[ImgLocalize] ⚠️ Failed to canvas-convert remote image:', e);
@@ -2486,9 +2579,10 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Ctrl+S / Ctrl+س — Save Snapshot (works on ALL page types)
+  // Ctrl+S / Ctrl+س — Save Snapshot & Manual Sync (works on ALL page types)
   if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 's' || e.key === 'س')) {
     e.preventDefault();
+    if (typeof triggerManualSave === 'function') triggerManualSave();
     if (typeof saveSnapshot === 'function') saveSnapshot();
     return;
   }
@@ -3421,9 +3515,29 @@ document.addEventListener('paste', (e) => {
               delete card.text;
               delete card.color;
               const tmpImg = new Image();
-              tmpImg.onload = function () {
+              tmpImg.onload = async function () {
                 card.w = Math.min(tmpImg.width, 800);
                 card.h = Math.round(card.w * (tmpImg.height / tmpImg.width));
+                try {
+                  const canvas = document.createElement('canvas');
+                  canvas.width = tmpImg.naturalWidth || tmpImg.width;
+                  canvas.height = tmpImg.naturalHeight || tmpImg.height;
+                  const ctx = canvas.getContext('2d');
+                  ctx.drawImage(tmpImg, 0, 0);
+                  const base64 = canvas.toDataURL('image/png');
+                  if (base64 && base64.length > 100) {
+                    const imgbbUrl = await uploadToImgBB(base64);
+                    if (imgbbUrl) {
+                      card.imageUrl = imgbbUrl;
+                      console.log('[PASTE] Upgraded Miro image to ImgBB:', imgbbUrl);
+                    }
+                  }
+                } catch (e) {
+                  console.warn('[PASTE] CORS/SecurityError when saving upgraded Miro image, keeping original URL:', e.message);
+                  if (typeof showToast === 'function') {
+                    showToast('⚠️ حماية المتصفح (CORS) تمنع رفع الصورة. انسخ كصورة من ميرو أو خذ لقطة شاشة.', 6000);
+                  }
+                }
                 delete card._miroResourceId;
                 delete card._miroBoardId;
                 delete card._miroImgName;
@@ -3576,6 +3690,13 @@ document.addEventListener('paste', (e) => {
             _miroSelected.add(newId);
           });
           sv(); triggerRender();
+          // Upload any base64 images from Miro paste to ImgBB
+          extracted.forEach(item => {
+            if (item.imageUrl && item.imageUrl.startsWith('data:image')) {
+              const pushedCard = page.miroCards.find(c => c.imageUrl === item.imageUrl);
+              if (pushedCard) localizeCardImageUrl(pushedCard);
+            }
+          });
           console.log('[PASTE DEBUG] Generic HTML parsed cards rendered, returning!');
           return;
         }
@@ -3594,7 +3715,7 @@ document.addEventListener('paste', (e) => {
     if (dataUrl) {
       imagePasted = true;
       const img = new Image();
-      img.onload = function () {
+      img.onload = async function () {
         const coords = getPasteTargetCoords(page);
         const cx = coords.x;
         const cy = coords.y;
@@ -3605,7 +3726,39 @@ document.addEventListener('paste', (e) => {
         let h = Math.round(300 * (img.height / img.width));
         if (img.width > 800) { w = 800; h = Math.round(800 * (img.height / img.width)); }
 
-        const card = { id: uid(), type: 'image', w, h, x: cx - w / 2, y: cy - h / 2, imageUrl: dataUrl };
+        let finalUrl = dataUrl;
+        if (dataUrl.startsWith('data:image')) {
+          if (typeof showToast === 'function') showToast('📤 Uploading pasted image...', 3000);
+          const imgbbUrl = await uploadToImgBB(dataUrl);
+          if (imgbbUrl) {
+            finalUrl = imgbbUrl;
+            if (typeof showToast === 'function') showToast('✅ Image pasted!', 2000);
+          } else {
+            if (typeof showToast === 'function') showToast('⚠️ Image upload failed, saved locally', 3000);
+          }
+        } else if (dataUrl.startsWith('http://') || dataUrl.startsWith('https://')) {
+          // External URL — convert via canvas and upload to ImgBB for cross-device access
+          if (typeof showToast === 'function') showToast('📤 Uploading external image...', 3000);
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            const base64 = canvas.toDataURL('image/png');
+            if (base64 && base64.length > 100) {
+              const imgbbUrl = await uploadToImgBB(base64);
+              if (imgbbUrl) {
+                finalUrl = imgbbUrl;
+                if (typeof showToast === 'function') showToast('✅ Image pasted!', 2000);
+              }
+            }
+          } catch (corsErr) {
+            console.warn('[PASTE] CORS prevented canvas conversion, keeping original URL:', corsErr.message);
+          }
+        }
+
+        const card = { id: uid(), type: 'image', w, h, x: cx - w / 2, y: cy - h / 2, imageUrl: finalUrl };
         if (targetCellKey) {
           card.cell = targetCellKey;
         } else {
@@ -3613,7 +3766,9 @@ document.addEventListener('paste', (e) => {
         }
         page.miroCards.push(card);
         sv(); triggerRender();
-        localizeCardImageUrl(card);
+        if (finalUrl.startsWith('data:image')) {
+          localizeCardImageUrl(card);
+        }
       };
       img.src = dataUrl;
     }

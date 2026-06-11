@@ -8,69 +8,151 @@
  */
 // js/data/offline.js
 (function() {
-  /* ─── Offline Mode (default ON) ─── */
-  window._offlineMode = true;
+  /* ─── Synchronization Mode (default 'realtime') ─── */
+  window._syncMode = 'realtime'; // 'realtime', 'saveUpload', 'offline'
+  window._offlineMode = false;
   window._dirtyOffline = false;
   window._lastSvTs = 0; // Timestamp of last successful sv() for beacon dedup
+  window._dirtyPages = {};
+
   try {
-    const stored = localStorage.getItem('sm_offline_mode');
-    if (stored !== null) window._offlineMode = stored === '1';
-    else localStorage.setItem('sm_offline_mode', '1'); // First visit: default to offline
+    const dpStored = localStorage.getItem('sm_dirty_pages');
+    if (dpStored) window._dirtyPages = JSON.parse(dpStored);
   } catch(e) {}
 
+  try {
+    const stored = localStorage.getItem('sm_sync_mode');
+    if (stored !== null) {
+      window._syncMode = stored;
+    } else {
+      const oldOffline = localStorage.getItem('sm_offline_mode');
+      if (oldOffline === '1') {
+        window._syncMode = 'offline';
+      } else {
+        window._syncMode = 'realtime';
+      }
+    }
+  } catch(e) {}
+  window._offlineMode = (window._syncMode === 'offline');
+
   function setOfflineMode(val) {
-    window._offlineMode = val;
-    try { localStorage.setItem('sm_offline_mode', val ? '1' : '0'); } catch(e) {}
-    if (typeof updateOfflineUI === 'function') updateOfflineUI();
+    changeSyncMode(val ? 'offline' : 'realtime');
+  }
+
+  function changeSyncMode(newMode) {
+    const prevMode = window._syncMode;
+    window._syncMode = newMode;
+    window._offlineMode = (newMode === 'offline');
+    try { localStorage.setItem('sm_sync_mode', newMode); } catch(e) {}
+
+    const select = document.getElementById('sync-mode-select');
+    if (select && select.value !== newMode) select.value = newMode;
+
+    if (newMode === 'offline') {
+      detachAllListeners();
+      updateOfflineUI();
+      if (typeof showToast === 'function') showToast('✈️ Offline Mode — changes saved locally');
+    } else {
+      if (prevMode === 'offline' && window._dirtyOffline) {
+        if (typeof syncNow === 'function') {
+          syncNow().then(() => {
+            window._dirtyOffline = false;
+            if (typeof setupShardedListeners === 'function') setupShardedListeners();
+            if (window.D && window.D.cur && typeof switchActivePage === 'function') {
+              switchActivePage(window.D.cur);
+            }
+            updateOfflineUI();
+          }).catch(err => {
+            if (typeof showToast === 'function') showToast('❌ Sync failed: ' + (err.message || err));
+            changeSyncMode('offline');
+          });
+          return;
+        }
+      }
+      if (typeof setupShardedListeners === 'function') setupShardedListeners();
+      if (window.D && window.D.cur && typeof switchActivePage === 'function') {
+        switchActivePage(window.D.cur);
+      }
+      updateOfflineUI();
+    }
   }
 
   function updateOfflineUI() {
-    const cb = document.getElementById('offline-toggle-cb');
-    const lbl = document.getElementById('offline-label');
+    const select = document.getElementById('sync-mode-select');
     const syncBtn = document.getElementById('sync-now-btn');
-    if (cb) cb.checked = window._offlineMode;
-    if (lbl) lbl.textContent = window._offlineMode ? '✈️ Offline' : '⚡ Realtime';
-    if (syncBtn) syncBtn.disabled = !window._offlineMode;
-    // Update sync status display
-    if (window._offlineMode) {
-      if (typeof setSyncStatus === 'function') {
+    if (select) select.value = window._syncMode;
+    
+    if (syncBtn) {
+      if (window._syncMode === 'realtime') {
+        syncBtn.disabled = true;
+        syncBtn.title = 'Realtime Sync Active';
+        syncBtn.textContent = '🔄';
+      } else if (window._syncMode === 'saveUpload') {
+        const activePg = typeof cp === 'function' ? cp() : null;
+        const isDirty = activePg && window._dirtyPages && window._dirtyPages[activePg.id];
+        syncBtn.disabled = false;
+        syncBtn.title = isDirty ? 'Save changes to Cloud * (Ctrl+S)' : 'Save changes to Cloud (Ctrl+S)';
+        syncBtn.textContent = isDirty ? '💾' : '☁️';
+      } else if (window._syncMode === 'offline') {
+        syncBtn.disabled = false;
+        syncBtn.title = 'Sync to Cloud';
+        syncBtn.textContent = '🔄';
+      }
+    }
+
+    if (typeof setSyncStatus === 'function') {
+      if (window._syncMode === 'offline') {
         setSyncStatus('loading', window._dirtyOffline ? '✈️ Offline Mode *' : '✈️ Offline Mode');
+      } else if (window._syncMode === 'saveUpload') {
+        const activePg = typeof cp === 'function' ? cp() : null;
+        const isDirty = activePg && window._dirtyPages && window._dirtyPages[activePg.id];
+        setSyncStatus('ok', isDirty ? '☁️ SaveUpload (Unsaved *)' : '☁️ SaveUpload (Synced)');
+      } else {
+        setSyncStatus('ok', 'Realtime Sync Active ✓');
       }
     }
   }
 
+  function updateDirtyStatus(pageId, isDirty) {
+    if (!window._dirtyPages) window._dirtyPages = {};
+    window._dirtyPages[pageId] = !!isDirty;
+    try {
+      localStorage.setItem('sm_dirty_pages', JSON.stringify(window._dirtyPages));
+    } catch(e) {}
+
+    if (window.D && window.D.cur === pageId && typeof cp === 'function') {
+      const activePg = cp();
+      if (activePg) {
+        document.title = `${activePg.name}${isDirty ? ' *' : ''} - QuranGFX Backyard`;
+      }
+    }
+
+    const tabEl = document.querySelector(`.ptab[data-pid="${pageId}"]`);
+    if (tabEl) {
+      const nmEl = tabEl.querySelector('.ptnm');
+      if (nmEl && nmEl.contentEditable !== 'true') {
+        const pg = window.D && window.D.pages.find(p => p && p.id === pageId);
+        if (pg) {
+          nmEl.textContent = pg.name + (isDirty ? ' *' : '');
+        }
+      }
+    }
+    
+    updateOfflineUI();
+  }
+
   function markDirtyOffline() {
-    if (window._offlineMode && !window._dirtyOffline) {
+    if (window._syncMode === 'offline' && !window._dirtyOffline) {
       window._dirtyOffline = true;
       updateOfflineUI();
     }
   }
 
   function toggleOfflineMode() {
-    if (window._offlineMode) {
-      // Switching to Realtime: sync first if dirty, then re-attach listeners
-      if (window._dirtyOffline) {
-        if (typeof syncNow === 'function') {
-          syncNow().then(() => {
-            setOfflineMode(false);
-            window._dirtyOffline = false;
-            if (typeof setupShardedListeners === 'function') setupShardedListeners();
-            if (typeof setSyncStatus === 'function') setSyncStatus('ok', 'Realtime Sync Active ✓');
-          }).catch(err => {
-            if (typeof showToast === 'function') showToast('❌ Sync failed: ' + (err.message || err));
-          });
-        }
-      } else {
-        setOfflineMode(false);
-        if (typeof setupShardedListeners === 'function') setupShardedListeners();
-        if (typeof setSyncStatus === 'function') setSyncStatus('ok', 'Realtime Sync Active ✓');
-      }
+    if (window._syncMode === 'offline') {
+      changeSyncMode('realtime');
     } else {
-      // Switching to Offline: detach listeners
-      detachAllListeners();
-      setOfflineMode(true);
-      if (typeof setSyncStatus === 'function') setSyncStatus('loading', '✈️ Offline Mode');
-      if (typeof showToast === 'function') showToast('✈️ Offline Mode — changes saved locally');
+      changeSyncMode('offline');
     }
   }
 
@@ -196,7 +278,9 @@
 
   // Export to SM.data
   window.SM.data.setOfflineMode = setOfflineMode;
+  window.SM.data.changeSyncMode = changeSyncMode;
   window.SM.data.updateOfflineUI = updateOfflineUI;
+  window.SM.data.updateDirtyStatus = updateDirtyStatus;
   window.SM.data.markDirtyOffline = markDirtyOffline;
   window.SM.data.toggleOfflineMode = toggleOfflineMode;
   window.SM.data.detachAllListeners = detachAllListeners;
@@ -218,7 +302,9 @@
 
   // Expose to window directly for HTML handlers and existing code
   window.SM.core.expose('setOfflineMode', setOfflineMode);
+  window.SM.core.expose('changeSyncMode', changeSyncMode);
   window.SM.core.expose('updateOfflineUI', updateOfflineUI);
+  window.SM.core.expose('updateDirtyStatus', updateDirtyStatus);
   window.SM.core.expose('markDirtyOffline', markDirtyOffline);
   window.SM.core.expose('toggleOfflineMode', toggleOfflineMode);
   window.SM.core.expose('detachAllListeners', detachAllListeners);
@@ -238,13 +324,17 @@
   window.SM.core.expose('getLsUsage', getLsUsage);
   window.SM.core.expose('getLsCapacity', getLsCapacity);
 
-SM.data.toggleOfflineMode = typeof toggleOfflineMode !== 'undefined' ? toggleOfflineMode : window.toggleOfflineMode;
-SM.data.setOfflineMode = typeof setOfflineMode !== 'undefined' ? setOfflineMode : window.setOfflineMode;
-SM.data.updateOfflineUI = typeof updateOfflineUI !== 'undefined' ? updateOfflineUI : window.updateOfflineUI;
-SM.data.markDirtyOffline = typeof markDirtyOffline !== 'undefined' ? markDirtyOffline : window.markDirtyOffline;
+  SM.data.toggleOfflineMode = typeof toggleOfflineMode !== 'undefined' ? toggleOfflineMode : window.toggleOfflineMode;
+  SM.data.setOfflineMode = typeof setOfflineMode !== 'undefined' ? setOfflineMode : window.setOfflineMode;
+  SM.data.changeSyncMode = typeof changeSyncMode !== 'undefined' ? changeSyncMode : window.changeSyncMode;
+  SM.data.updateOfflineUI = typeof updateOfflineUI !== 'undefined' ? updateOfflineUI : window.updateOfflineUI;
+  SM.data.updateDirtyStatus = typeof updateDirtyStatus !== 'undefined' ? updateDirtyStatus : window.updateDirtyStatus;
+  SM.data.markDirtyOffline = typeof markDirtyOffline !== 'undefined' ? markDirtyOffline : window.markDirtyOffline;
 
-window.toggleOfflineMode = SM.data.toggleOfflineMode;
-window.setOfflineMode = SM.data.setOfflineMode;
-window.updateOfflineUI = SM.data.updateOfflineUI;
-window.markDirtyOffline = SM.data.markDirtyOffline;
+  window.toggleOfflineMode = SM.data.toggleOfflineMode;
+  window.setOfflineMode = SM.data.setOfflineMode;
+  window.changeSyncMode = SM.data.changeSyncMode;
+  window.updateOfflineUI = SM.data.updateOfflineUI;
+  window.updateDirtyStatus = SM.data.updateDirtyStatus;
+  window.markDirtyOffline = SM.data.markDirtyOffline;
 })();
