@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#6c8fff">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="manifest" href="/manifest.json?v=1781170793">
+  <link rel="manifest" href="/manifest.json?v=1781306324">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🍅%3C/text%3E%3C/svg%3E">
   <link rel="icon" type="image/png" sizes="192x192" href="/tomato-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="/tomato-512.png">
@@ -22,9 +22,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1781170793">
-  <link rel="stylesheet" href="css/miro.css?v=1781170793">
-  <link rel="stylesheet" href="css/life-widget-additions.css?v=1781170793">
+  <link rel="stylesheet" href="css/base.css?v=1781306324">
+  <link rel="stylesheet" href="css/miro.css?v=1781306324">
+  <link rel="stylesheet" href="css/life-widget-additions.css?v=1781306324">
 </head>
 
 <body>
@@ -752,6 +752,11 @@
         </div>
       </div>
       <div class="fg" style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+        <label>ImgBB API Key (Optional)</label>
+        <input type="text" class="fi" id="set-imgbb-key" placeholder="Enter your ImgBB API Key" style="font-size: 0.75rem; margin-top: 5px;">
+        <label style="font-size: 0.62rem; color: rgba(255,255,255,0.4); margin-top: 2px; display: block; direction: ltr; text-align: left;">Get a free key from <a href="https://api.imgbb.com/" target="_blank" style="color: #6c8fff; text-decoration: underline;">api.imgbb.com</a></label>
+      </div>
+      <div class="fg" style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
         <label>Image Utilities</label>
         <button class="btn bg-btn" id="migrate-images-btn" style="width: 100%; margin-top: 5px; justify-content: center;" onclick="triggerImageMigration()">☁️ Migrate Local Images to ImgBB</button>
       </div>
@@ -787,34 +792,34 @@
   </div>
 
     <!-- Core -->
-    <script src="js/core/namespace.js?v=1781170793"></script>
-    <script src="js/core/events.js?v=1781170793"></script>
-    <script src="js/core/utils.js?v=1781170793"></script>
+    <script src="js/core/namespace.js?v=1781306324"></script>
+    <script src="js/core/events.js?v=1781306324"></script>
+    <script src="js/core/utils.js?v=1781306324"></script>
 
     <!-- Data Layer -->
-    <script src="js/data/firebase.js?v=1781170793"></script>
-    <script src="js/data/offline.js?v=1781170793"></script>
-    <script src="js/data/sync.js?v=1781170793"></script>
+    <script src="js/data/firebase.js?v=1781306324"></script>
+    <script src="js/data/offline.js?v=1781306324"></script>
+    <script src="js/data/sync.js?v=1781306324"></script>
 
     <!-- UI Layer -->
-    <script src="js/ui/toasts.js?v=1781170793"></script>
-    <script src="js/ui/modals.js?v=1781170793"></script>
-    <script src="js/ui/toolbar.js?v=1781170793"></script>
-    <script src="js/ui/search.js?v=1781170793"></script>
-    <script src="js/ui/inbox-ui.js?v=1781170793"></script>
+    <script src="js/ui/toasts.js?v=1781306324"></script>
+    <script src="js/ui/modals.js?v=1781306324"></script>
+    <script src="js/ui/toolbar.js?v=1781306324"></script>
+    <script src="js/ui/search.js?v=1781306324"></script>
+    <script src="js/ui/inbox-ui.js?v=1781306324"></script>
 
     <!-- Miro Modules -->
-    <script src="js/miro/miro-state.js?v=1781170793"></script>
-    <script src="js/miro/render/builders.js?v=1781170793"></script>
-    <script src="js/miro/layout/grid.js?v=1781170793"></script>
-    <script src="js/miro/layout/slices.js?v=1781170793"></script>
+    <script src="js/miro/miro-state.js?v=1781306324"></script>
+    <script src="js/miro/render/builders.js?v=1781306324"></script>
+    <script src="js/miro/layout/grid.js?v=1781306324"></script>
+    <script src="js/miro/layout/slices.js?v=1781306324"></script>
 
     <!-- Original files (now wrappers) -->
-    <script src="js/miro-engine.js?v=1781170793"></script>
-    <script src="js/life-widget.js?v=1781170793"></script>
-    <script src="js/thumbnails.js?v=1781170793"></script>
-    <script src="js/core/health.js?v=1781170793"></script>
-    <script src="js/app.js?v=1781170793"></script>
+    <script src="js/miro-engine.js?v=1781306324"></script>
+    <script src="js/life-widget.js?v=1781306324"></script>
+    <script src="js/thumbnails.js?v=1781306324"></script>
+    <script src="js/core/health.js?v=1781306324"></script>
+    <script src="js/app.js?v=1781306324"></script>
     <script>
       // ─── Deferred secondary scripts: load after auth is ready ───
       var _mainAppLoaded=false;
@@ -822,7 +827,7 @@
         if(_mainAppLoaded)return;_mainAppLoaded=true;
         console.log('[DEFERRED] Loading outline.js + alignment.js');
         ['js/outline.js','js/alignment.js'].forEach(function(src){
-          var s=document.createElement('script');s.src=src+'?v=1781170793';document.body.appendChild(s);
+          var s=document.createElement('script');s.src=src+'?v=1781306324';document.body.appendChild(s);
         });
       }
       // Primary trigger: load deferred scripts after auth + first render

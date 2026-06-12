@@ -1747,7 +1747,9 @@ document.getElementById('ok-miro-image').onclick = () => {
 };
 
 // ─── Drag & Drop Images onto Canvas ───
-const IMGBB_KEY = '129f1b49da234235959ee4405ac9ebb1';
+function getImgBBKey() {
+  return (window.D && D.settings && D.settings.imgbbKey) || '129f1b49da234235959ee4405ac9ebb1';
+}
 
 // Compress base64 image using Canvas before upload
 // Preserves transparency (PNG) when detected, uses JPEG for opaque images
@@ -1797,7 +1799,7 @@ async function uploadToImgBB(base64) {
     console.log(`[uploadToImgBB] Compressed size: ${sizeKB}KB`);
     const fd = new FormData();
     fd.append('image', raw);
-    const resp = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: 'POST', body: fd });
+    const resp = await fetch(`https://api.imgbb.com/1/upload?key=${getImgBBKey()}`, { method: 'POST', body: fd });
     const data = await resp.json();
     if (data.success) return data.data.url;
     console.warn('[uploadToImgBB] API error:', JSON.stringify(data));
@@ -1808,12 +1810,50 @@ async function uploadToImgBB(base64) {
   }
 }
 
+function fetchMiroImageViaExtension(url) {
+  return new Promise((resolve, reject) => {
+    const handler = (event) => {
+      if (event.source !== window) return;
+      if (event.data && event.data.type === 'STARTMINE_FETCH_MIRO_RESPONSE' && event.data.url === url) {
+        window.removeEventListener('message', handler);
+        if (event.data.error) {
+          reject(new Error(event.data.error));
+        } else {
+          resolve(event.data.base64);
+        }
+      }
+    };
+    window.addEventListener('message', handler);
+    window.postMessage({ type: 'STARTMINE_FETCH_MIRO', url: url }, '*');
+    
+    // Timeout after 10 seconds
+    setTimeout(() => {
+      window.removeEventListener('message', handler);
+      reject(new Error('Extension fetch timeout'));
+    }, 10000);
+  });
+}
+
 // Download an external image URL, convert to base64 via canvas, upload to ImgBB
 async function fetchAndUploadToImgBB(url) {
   try {
+    if (url.includes('miro.com/api')) {
+      try {
+        console.log('[fetchAndUpload] Attempting to fetch Miro image via custom extension...');
+        const base64 = await fetchMiroImageViaExtension(url);
+        if (base64) {
+          console.log('[fetchAndUpload] Successfully fetched Miro image via extension!');
+          const uploaded = await uploadToImgBB(base64);
+          return uploaded;
+        }
+      } catch (extErr) {
+        console.warn('[fetchAndUpload] Extension fetch failed, falling back to canvas:', extErr.message);
+      }
+    }
+
     return await new Promise((resolve) => {
       const img = new Image();
-      img.crossOrigin = 'anonymous';
+      img.crossOrigin = url.includes('miro.com/api') ? 'use-credentials' : 'anonymous';
       const timeout = setTimeout(() => { resolve(null); }, 15000); // 15s timeout
       img.onload = async function() {
         clearTimeout(timeout);
@@ -2033,9 +2073,35 @@ async function localizeCardImageUrl(card) {
     return;
   }
 
+  if (card.imageUrl.includes('miro.com/api')) {
+    try {
+      console.log('[ImgLocalize] Fetching Miro image via custom extension...');
+      const base64 = await fetchMiroImageViaExtension(card.imageUrl);
+      if (base64) {
+        const url = await uploadToImgBB(base64);
+        if (url) {
+          card.imageUrl = url;
+          if (typeof USER_ID !== 'undefined' && USER_ID) {
+            try {
+              const cardRef = `users/${USER_ID}/startmine_pages/${page.id}/miroCards/${idx}/imageUrl`;
+              await firebase.database().ref(cardRef).set(url);
+            } catch (e) { console.warn('[ImgLocalize] Firebase remote save error:', e); }
+          }
+          sv();
+          const imgEl = document.querySelector(`[data-cid="${card.id}"] .mi-img`);
+          if (imgEl) imgEl.src = url;
+          console.log('[ImgLocalize] Miro image localized successfully via extension:', url);
+          return;
+        }
+      }
+    } catch (extErr) {
+      console.warn('[ImgLocalize] Extension fetch failed, falling back to canvas:', extErr.message);
+    }
+  }
+
   console.log('[ImgLocalize] Attempting to localize remote image URL:', card.imageUrl);
   const img = new Image();
-  img.crossOrigin = 'anonymous';
+  img.crossOrigin = card.imageUrl.includes('miro.com/api') ? 'use-credentials' : 'anonymous';
   img.onload = async function() {
     try {
       const canvas = document.createElement('canvas');
@@ -3515,16 +3581,28 @@ document.addEventListener('paste', (e) => {
               delete card.text;
               delete card.color;
               const tmpImg = new Image();
+              tmpImg.crossOrigin = 'use-credentials';
               tmpImg.onload = async function () {
                 card.w = Math.min(tmpImg.width, 800);
                 card.h = Math.round(card.w * (tmpImg.height / tmpImg.width));
                 try {
-                  const canvas = document.createElement('canvas');
-                  canvas.width = tmpImg.naturalWidth || tmpImg.width;
-                  canvas.height = tmpImg.naturalHeight || tmpImg.height;
-                  const ctx = canvas.getContext('2d');
-                  ctx.drawImage(tmpImg, 0, 0);
-                  const base64 = canvas.toDataURL('image/png');
+                  let base64 = null;
+                  try {
+                    console.log('[PASTE] Fetching placeholder Miro image via extension...');
+                    base64 = await fetchMiroImageViaExtension(apiUrl);
+                  } catch (extErr) {
+                    console.warn('[PASTE] Extension fetch failed, falling back to canvas:', extErr.message);
+                  }
+
+                  if (!base64) {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = tmpImg.naturalWidth || tmpImg.width;
+                    canvas.height = tmpImg.naturalHeight || tmpImg.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(tmpImg, 0, 0);
+                    base64 = canvas.toDataURL('image/png');
+                  }
+
                   if (base64 && base64.length > 100) {
                     const imgbbUrl = await uploadToImgBB(base64);
                     if (imgbbUrl) {
@@ -3715,6 +3793,9 @@ document.addEventListener('paste', (e) => {
     if (dataUrl) {
       imagePasted = true;
       const img = new Image();
+      if (dataUrl.startsWith('http://') || dataUrl.startsWith('https://')) {
+        img.crossOrigin = dataUrl.includes('miro.com/api') ? 'use-credentials' : 'anonymous';
+      }
       img.onload = async function () {
         const coords = getPasteTargetCoords(page);
         const cx = coords.x;

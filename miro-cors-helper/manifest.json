@@ -1,0 +1,26 @@
+{
+  "manifest_version": 2,
+  "name": "Startmine Miro CORS Helper",
+  "version": "2.2",
+  "description": "Bypasses CORS dynamically with credentials and programmatic fetching for Miro API image resources.",
+  "permissions": [
+    "webRequest",
+    "webRequestBlocking",
+    "https://miro.com/*",
+    "https://*.miro.com/*"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost/*",
+        "https://quran-gfx.web.app/*",
+        "https://quran-gfx.firebaseapp.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

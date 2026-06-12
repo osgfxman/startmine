@@ -3495,6 +3495,7 @@ document.getElementById('settings-btn').onclick = () => {
   grpSel.value = D.settings.defaultGroup || '__last__';
   pgSel.value = D.settings.defaultPage || '__last__';
   document.getElementById('set-slicer-headers-autohide').checked = !!D.settings.slicerHeadersAutoHide;
+  document.getElementById('set-imgbb-key').value = D.settings.imgbbKey || '';
   openM('m-settings');
 };
 document.getElementById('ok-settings').onclick = () => {
@@ -3502,6 +3503,7 @@ document.getElementById('ok-settings').onclick = () => {
   D.settings.defaultGroup = document.getElementById('set-def-grp').value;
   D.settings.defaultPage = document.getElementById('set-def-pg').value;
   D.settings.slicerHeadersAutoHide = document.getElementById('set-slicer-headers-autohide').checked;
+  D.settings.imgbbKey = document.getElementById('set-imgbb-key').value.trim();
   sv();
   closeM('m-settings');
   buildCols();
@@ -3562,13 +3564,6 @@ window.triggerImageMigration = async function () {
         // Check ALL card types that might have imageUrl (image, grid, etc.)
         const isAlreadyHosted = /imgbb\.com|imgur\.com|i\.ibb\.co/i.test(card.imageUrl);
         if (isAlreadyHosted) continue;
-        // Skip dead Miro API URLs (permanently CORS-blocked, irrecoverable)
-        if (/miro\.com\/api/i.test(card.imageUrl)) {
-          console.warn(`[Migration] ⚠️ Dead Miro URL (CORS): card ${card.id} — re-paste from Miro to fix`);
-          totalFailed++;
-          continue;
-        }
-        
         const isBase64 = card.imageUrl.startsWith('data:image');
         const isBlob = card.imageUrl.startsWith('blob:');
         const isExternalUrl = card.imageUrl.startsWith('http://') || card.imageUrl.startsWith('https://');
