@@ -1848,6 +1848,9 @@ async function fetchAndUploadToImgBB(url) {
         }
       } catch (extErr) {
         console.warn('[fetchAndUpload] Extension fetch failed, falling back to canvas:', extErr.message);
+        if (typeof showToast === 'function') {
+          showToast(`⚠️ خطأ الهجرة: ${extErr.message}`, 6000);
+        }
       }
     }
 
@@ -2096,6 +2099,9 @@ async function localizeCardImageUrl(card) {
       }
     } catch (extErr) {
       console.warn('[ImgLocalize] Extension fetch failed, falling back to canvas:', extErr.message);
+      if (typeof showToast === 'function') {
+        showToast(`⚠️ خطأ التوطين: ${extErr.message}`, 6000);
+      }
     }
   }
 
@@ -3580,55 +3586,67 @@ document.addEventListener('paste', (e) => {
               card.imageUrl = apiUrl;
               delete card.text;
               delete card.color;
-              const tmpImg = new Image();
-              tmpImg.crossOrigin = 'use-credentials';
-              tmpImg.onload = async function () {
-                card.w = Math.min(tmpImg.width, 800);
-                card.h = Math.round(card.w * (tmpImg.height / tmpImg.width));
-                try {
-                  let base64 = null;
-                  try {
-                    console.log('[PASTE] Fetching placeholder Miro image via extension...');
-                    base64 = await fetchMiroImageViaExtension(apiUrl);
-                  } catch (extErr) {
-                    console.warn('[PASTE] Extension fetch failed, falling back to canvas:', extErr.message);
-                  }
 
-                  if (!base64) {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = tmpImg.naturalWidth || tmpImg.width;
-                    canvas.height = tmpImg.naturalHeight || tmpImg.height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(tmpImg, 0, 0);
-                    base64 = canvas.toDataURL('image/png');
-                  }
-
-                  if (base64 && base64.length > 100) {
-                    const imgbbUrl = await uploadToImgBB(base64);
-                    if (imgbbUrl) {
-                      card.imageUrl = imgbbUrl;
-                      console.log('[PASTE] Upgraded Miro image to ImgBB:', imgbbUrl);
-                    }
-                  }
-                } catch (e) {
-                  console.warn('[PASTE] CORS/SecurityError when saving upgraded Miro image, keeping original URL:', e.message);
-                  if (typeof showToast === 'function') {
-                    showToast('⚠️ حماية المتصفح (CORS) تمنع رفع الصورة. انسخ كصورة من ميرو أو خذ لقطة شاشة.', 6000);
-                  }
+              const proceedWithUpgrade = async (resolvedUrl) => {
+                const tmpImg = new Image();
+                if (resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://')) {
+                  tmpImg.crossOrigin = 'use-credentials';
                 }
-                delete card._miroResourceId;
-                delete card._miroBoardId;
-                delete card._miroImgName;
-                sv(); triggerRender();
-                console.log('[PASTE] Miro image loaded!', card.w, 'x', card.h);
+                tmpImg.onload = async function () {
+                  card.w = Math.min(tmpImg.width, 800);
+                  card.h = Math.round(card.w * (tmpImg.height / tmpImg.width));
+                  try {
+                    let base64 = resolvedUrl.startsWith('data:image') ? resolvedUrl : null;
+                    if (!base64) {
+                      const canvas = document.createElement('canvas');
+                      canvas.width = tmpImg.naturalWidth || tmpImg.width;
+                      canvas.height = tmpImg.naturalHeight || tmpImg.height;
+                      const ctx = canvas.getContext('2d');
+                      ctx.drawImage(tmpImg, 0, 0);
+                      base64 = canvas.toDataURL('image/png');
+                    }
+
+                    if (base64 && base64.length > 100) {
+                      const imgbbUrl = await uploadToImgBB(base64);
+                      if (imgbbUrl) {
+                        card.imageUrl = imgbbUrl;
+                        console.log('[PASTE] Upgraded Miro image to ImgBB:', imgbbUrl);
+                      }
+                    }
+                  } catch (e) {
+                    console.warn('[PASTE] CORS/SecurityError when saving upgraded Miro image, keeping original URL:', e.message);
+                  }
+                  delete card._miroResourceId;
+                  delete card._miroBoardId;
+                  delete card._miroImgName;
+                  sv(); triggerRender();
+                  console.log('[PASTE] Miro image loaded!', card.w, 'x', card.h);
+                };
+                tmpImg.onerror = function () {
+                  console.warn('[PASTE] Miro image failed to load. Will show broken image.');
+                  delete card._miroResourceId;
+                  delete card._miroBoardId;
+                  delete card._miroImgName;
+                  sv(); triggerRender();
+                };
+                tmpImg.src = resolvedUrl;
               };
-              tmpImg.onerror = function () {
-                console.warn('[PASTE] Miro image failed to load via img tag. Will show broken image.');
-                delete card._miroResourceId;
-                delete card._miroBoardId;
-                sv(); triggerRender();
-              };
-              tmpImg.src = apiUrl;
+
+              console.log('[PASTE] Pre-fetching placeholder Miro URL via extension...');
+              fetchMiroImageViaExtension(apiUrl)
+                .then(base64 => {
+                  if (base64) {
+                    console.log('[PASTE] Placeholder pre-fetch succeeded!');
+                    proceedWithUpgrade(base64);
+                  } else {
+                    console.warn('[PASTE] Placeholder pre-fetch returned empty, falling back to raw URL');
+                    proceedWithUpgrade(apiUrl);
+                  }
+                })
+                .catch(err => {
+                  console.warn('[PASTE] Placeholder pre-fetch error:', err.message, 'falling back to raw URL');
+                  proceedWithUpgrade(apiUrl);
+                });
             }
           });
           sv(); triggerRender();
@@ -3768,9 +3786,9 @@ document.addEventListener('paste', (e) => {
             _miroSelected.add(newId);
           });
           sv(); triggerRender();
-          // Upload any base64 images from Miro paste to ImgBB
+          // Upload any base64 or Miro images from Miro paste to ImgBB
           extracted.forEach(item => {
-            if (item.imageUrl && item.imageUrl.startsWith('data:image')) {
+            if (item.imageUrl && (item.imageUrl.startsWith('data:image') || item.imageUrl.includes('miro.com/api'))) {
               const pushedCard = page.miroCards.find(c => c.imageUrl === item.imageUrl);
               if (pushedCard) localizeCardImageUrl(pushedCard);
             }
@@ -3792,66 +3810,92 @@ document.addEventListener('paste', (e) => {
     // 3. Check for images natively copied (Lower Priority than Widgets)
     if (dataUrl) {
       imagePasted = true;
-      const img = new Image();
-      if (dataUrl.startsWith('http://') || dataUrl.startsWith('https://')) {
-        img.crossOrigin = dataUrl.includes('miro.com/api') ? 'use-credentials' : 'anonymous';
-      }
-      img.onload = async function () {
-        const coords = getPasteTargetCoords(page);
-        const cx = coords.x;
-        const cy = coords.y;
-        const targetCellKey = coords.cell;
 
-        if (!page.miroCards) page.miroCards = [];
-        let w = 300;
-        let h = Math.round(300 * (img.height / img.width));
-        if (img.width > 800) { w = 800; h = Math.round(800 * (img.height / img.width)); }
+      const proceedWithPaste = async (resolvedUrl) => {
+        const img = new Image();
+        if (resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://')) {
+          img.crossOrigin = resolvedUrl.includes('miro.com/api') ? 'use-credentials' : 'anonymous';
+        }
+        img.onload = async function () {
+          const coords = getPasteTargetCoords(page);
+          const cx = coords.x;
+          const cy = coords.y;
+          const targetCellKey = coords.cell;
 
-        let finalUrl = dataUrl;
-        if (dataUrl.startsWith('data:image')) {
-          if (typeof showToast === 'function') showToast('📤 Uploading pasted image...', 3000);
-          const imgbbUrl = await uploadToImgBB(dataUrl);
-          if (imgbbUrl) {
-            finalUrl = imgbbUrl;
-            if (typeof showToast === 'function') showToast('✅ Image pasted!', 2000);
-          } else {
-            if (typeof showToast === 'function') showToast('⚠️ Image upload failed, saved locally', 3000);
-          }
-        } else if (dataUrl.startsWith('http://') || dataUrl.startsWith('https://')) {
-          // External URL — convert via canvas and upload to ImgBB for cross-device access
-          if (typeof showToast === 'function') showToast('📤 Uploading external image...', 3000);
-          try {
-            const canvas = document.createElement('canvas');
-            canvas.width = img.naturalWidth || img.width;
-            canvas.height = img.naturalHeight || img.height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-            const base64 = canvas.toDataURL('image/png');
-            if (base64 && base64.length > 100) {
-              const imgbbUrl = await uploadToImgBB(base64);
-              if (imgbbUrl) {
-                finalUrl = imgbbUrl;
-                if (typeof showToast === 'function') showToast('✅ Image pasted!', 2000);
-              }
+          if (!page.miroCards) page.miroCards = [];
+          let w = 300;
+          let h = Math.round(300 * (img.height / img.width));
+          if (img.width > 800) { w = 800; h = Math.round(800 * (img.height / img.width)); }
+
+          let finalUrl = resolvedUrl;
+          if (resolvedUrl.startsWith('data:image')) {
+            if (typeof showToast === 'function') showToast('📤 Uploading pasted image...', 3000);
+            const imgbbUrl = await uploadToImgBB(resolvedUrl);
+            if (imgbbUrl) {
+              finalUrl = imgbbUrl;
+              if (typeof showToast === 'function') showToast('✅ Image pasted!', 2000);
+            } else {
+              if (typeof showToast === 'function') showToast('⚠️ Image upload failed, saved locally', 3000);
             }
-          } catch (corsErr) {
-            console.warn('[PASTE] CORS prevented canvas conversion, keeping original URL:', corsErr.message);
+          } else if (resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://')) {
+            // External URL — convert via canvas and upload to ImgBB for cross-device access
+            if (typeof showToast === 'function') showToast('📤 Uploading external image...', 3000);
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = img.naturalWidth || img.width;
+              canvas.height = img.naturalHeight || img.height;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0);
+              const base64 = canvas.toDataURL('image/png');
+              if (base64 && base64.length > 100) {
+                const imgbbUrl = await uploadToImgBB(base64);
+                if (imgbbUrl) {
+                  finalUrl = imgbbUrl;
+                  if (typeof showToast === 'function') showToast('✅ Image pasted!', 2000);
+                }
+              }
+            } catch (corsErr) {
+              console.warn('[PASTE] CORS prevented canvas conversion, keeping original URL:', corsErr.message);
+            }
           }
-        }
 
-        const card = { id: uid(), type: 'image', w, h, x: cx - w / 2, y: cy - h / 2, imageUrl: finalUrl };
-        if (targetCellKey) {
-          card.cell = targetCellKey;
-        } else {
-          delete card.cell;
-        }
-        page.miroCards.push(card);
-        sv(); triggerRender();
-        if (finalUrl.startsWith('data:image')) {
-          localizeCardImageUrl(card);
-        }
+          const card = { id: uid(), type: 'image', w, h, x: cx - w / 2, y: cy - h / 2, imageUrl: finalUrl };
+          if (targetCellKey) {
+            card.cell = targetCellKey;
+          } else {
+            delete card.cell;
+          }
+          page.miroCards.push(card);
+          sv(); triggerRender();
+          if (finalUrl.startsWith('data:image')) {
+            localizeCardImageUrl(card);
+          }
+        };
+        img.src = resolvedUrl;
       };
-      img.src = dataUrl;
+
+      if (dataUrl.includes('miro.com/api')) {
+        console.log('[PASTE] Pre-fetching Miro URL via extension before loading Image element...');
+        fetchMiroImageViaExtension(dataUrl)
+          .then(base64 => {
+            if (base64) {
+              console.log('[PASTE] Pre-fetch succeeded!');
+              proceedWithPaste(base64);
+            } else {
+              console.warn('[PASTE] Pre-fetch returned empty data, falling back to raw URL');
+              proceedWithPaste(dataUrl);
+            }
+          })
+          .catch(err => {
+            console.warn('[PASTE] Pre-fetch error:', err.message, 'falling back to raw URL');
+            if (typeof showToast === 'function') {
+              showToast(`⚠️ خطأ اللصق: ${err.message}`, 6000);
+            }
+            proceedWithPaste(dataUrl);
+          });
+      } else {
+        proceedWithPaste(dataUrl);
+      }
     }
 
     if (imagePasted) { console.log('[PASTE DEBUG] Image handled, returning.'); return; }
