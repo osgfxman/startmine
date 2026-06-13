@@ -336,8 +336,17 @@
 })();
 
 // Click on empty canvas deselects (creation modes handled by miro-engine.js click handler)
+let _canvasMouseDownTarget = null;
+document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
+  _canvasMouseDownTarget = e.target;
+}, true);
+
 document.getElementById('miro-canvas').addEventListener('click', (e) => {
+  const startedOnCanvas = _canvasMouseDownTarget === document.getElementById('miro-canvas') || (_canvasMouseDownTarget && _canvasMouseDownTarget.id === 'miro-board');
+  _canvasMouseDownTarget = null; // reset
+
   if (
+    startedOnCanvas &&
     (e.target === document.getElementById('miro-canvas') || e.target.id === 'miro-board') &&
     !_alignDragging &&
     !_justRubberBanded
@@ -347,6 +356,7 @@ document.getElementById('miro-canvas').addEventListener('click', (e) => {
     clearMiroSelection();
   }
 });
+
 
 // ─── Group Resize via Selection Frame Corners ───
 (function () {

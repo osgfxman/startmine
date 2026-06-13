@@ -2687,6 +2687,7 @@ document.addEventListener('keydown', (e) => {
         setActiveTool('select');
         document.getElementById('miro-shape-panel').classList.remove('show');
         if (typeof window._exitCustomCellDrawMode === 'function') window._exitCustomCellDrawMode();
+        clearMiroSelection();
         break;
       default:
         processed = false;

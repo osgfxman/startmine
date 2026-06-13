@@ -12,6 +12,11 @@
   window.buildMiroCanvas = function buildMiroCanvas() {
   if (_buildingCanvas) { console.warn('[RECURSION BLOCKED]'); return; }
   const page = cp();
+  if (!page) return;
+
+  const pageChanged = window._lastBuildPageId !== page.id;
+  window._lastBuildPageId = page.id;
+
   if (page && page.pageType === 'slicer') {
     if (typeof window.buildSlicerPage === 'function') {
       const wrap = document.getElementById('cw');
@@ -21,7 +26,9 @@
         const _hb = document.getElementById('miro-board');
         if (_rf && _hb && _rf.parentNode !== _hb) _hb.appendChild(_rf);
         if (_rf) _rf.style.display = 'none';
-        _miroSelected.clear();
+        if (pageChanged) {
+          _miroSelected.clear();
+        }
         wrap.innerHTML = '';
         wrap.style.gridTemplateColumns = '';
         window.buildSlicerPage(page, wrap);
@@ -59,11 +66,14 @@
     }
     // Clean up grid toolbars that live in document.body
     document.querySelectorAll('.mg-toolbar[data-grid-id]').forEach(t => t.remove());
-    // Clear selection state
-    _miroSelected.clear();
-    const _selFrame = document.getElementById('miro-sel-frame');
-    if (_selFrame) _selFrame.style.display = 'none';
-    document.getElementById('miro-sel-box').style.display = 'none';
+    // Clear selection state only if page changed
+    if (pageChanged) {
+      _miroSelected.clear();
+      const _selFrame = document.getElementById('miro-sel-frame');
+      if (_selFrame) _selFrame.style.display = 'none';
+      const _selBox = document.getElementById('miro-sel-box');
+      if (_selBox) _selBox.style.display = 'none';
+    }
     const zoom = (page.zoom || 100) / 100;
     const px = page.panX || 0,
       py = page.panY || 0;
@@ -105,6 +115,17 @@
       });
       if (typeof window.updateMiroGrid === 'function') window.updateMiroGrid();
       if (typeof window.updateMiroScrollbars === 'function') window.updateMiroScrollbars();
+
+      // Re-apply selection styling to new DOM elements if same page
+      if (!pageChanged && _miroSelected.size > 0) {
+        _miroSelected.forEach(cid => {
+          const el = document.querySelector(`[data-cid="${cid}"]`);
+          if (el) el.classList.add('miro-selected');
+        });
+        if (typeof updateMiroSelFrame === 'function') {
+          updateMiroSelFrame();
+        }
+      }
     } catch (fatal) {
       console.error('[BUILD MIRO CANVAS FATAL]', fatal);
       if (typeof showToast === 'function') showToast('❌ Canvas render crashed: ' + fatal.message, 8000);
