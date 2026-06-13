@@ -1020,6 +1020,10 @@ function switchActivePage(pageId) {
 
   db.ref(pageDataRef).on('value', (snap) => {
     if (isOwnWrite()) return;
+    if (window._isActivelyUpgradingMiroImages) {
+      console.warn('[FIREBASE GUARD] Actively localizing Miro images, ignoring incoming update.');
+      return;
+    }
     const pData = snap.val() || { widgets: [], miroCards: [] };
     
     // ⛔ RACE CONDITION GUARD: Find the actual page by pageId instead of cp(),

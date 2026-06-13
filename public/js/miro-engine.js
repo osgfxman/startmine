@@ -3577,79 +3577,65 @@ document.addEventListener('paste', (e) => {
           });
           sv(); triggerRender();
 
-          // Upgrade Miro image placeholders that didn't have dataUrl
-          page.miroCards.forEach(card => {
-            if (card._miroResourceId && card._miroBoardId) {
-              const apiUrl = 'https://miro.com/api/v1/boards/' + card._miroBoardId + '/resources/' + card._miroResourceId + '/files/original';
-              console.log('[PASTE] Miro image URL:', apiUrl);
-              card.type = 'image';
-              card.imageUrl = apiUrl;
-              delete card.text;
-              delete card.color;
-
-              const proceedWithUpgrade = async (resolvedUrl) => {
-                const tmpImg = new Image();
-                if (resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://')) {
-                  tmpImg.crossOrigin = 'use-credentials';
-                }
-                tmpImg.onload = async function () {
-                  card.w = Math.min(tmpImg.width, 800);
-                  card.h = Math.round(card.w * (tmpImg.height / tmpImg.width));
-                  try {
-                    let base64 = resolvedUrl.startsWith('data:image') ? resolvedUrl : null;
-                    if (!base64) {
-                      const canvas = document.createElement('canvas');
-                      canvas.width = tmpImg.naturalWidth || tmpImg.width;
-                      canvas.height = tmpImg.naturalHeight || tmpImg.height;
-                      const ctx = canvas.getContext('2d');
-                      ctx.drawImage(tmpImg, 0, 0);
-                      base64 = canvas.toDataURL('image/png');
-                    }
-
-                    if (base64 && base64.length > 100) {
-                      const imgbbUrl = await uploadToImgBB(base64);
-                      if (imgbbUrl) {
-                        card.imageUrl = imgbbUrl;
-                        console.log('[PASTE] Upgraded Miro image to ImgBB:', imgbbUrl);
-                      }
-                    }
-                  } catch (e) {
-                    console.warn('[PASTE] CORS/SecurityError when saving upgraded Miro image, keeping original URL:', e.message);
-                  }
-                  delete card._miroResourceId;
-                  delete card._miroBoardId;
-                  delete card._miroImgName;
-                  sv(); triggerRender();
-                  console.log('[PASTE] Miro image loaded!', card.w, 'x', card.h);
-                };
-                tmpImg.onerror = function () {
-                  console.warn('[PASTE] Miro image failed to load. Will show broken image.');
-                  delete card._miroResourceId;
-                  delete card._miroBoardId;
-                  delete card._miroImgName;
-                  sv(); triggerRender();
-                };
-                tmpImg.src = resolvedUrl;
-              };
-
-              console.log('[PASTE] Pre-fetching placeholder Miro URL via extension...');
-              fetchMiroImageViaExtension(apiUrl)
-                .then(base64 => {
-                  if (base64) {
-                    console.log('[PASTE] Placeholder pre-fetch succeeded!');
-                    proceedWithUpgrade(base64);
-                  } else {
-                    console.warn('[PASTE] Placeholder pre-fetch returned empty, falling back to raw URL');
-                    proceedWithUpgrade(apiUrl);
-                  }
-                })
-                .catch(err => {
-                  console.warn('[PASTE] Placeholder pre-fetch error:', err.message, 'falling back to raw URL');
-                  proceedWithUpgrade(apiUrl);
-                });
+          // Upgrade Miro image placeholders that didn't have dataUrl sequentially
+          const placeholders = page.miroCards.filter(c => c && c._miroResourceId && c._miroBoardId);
+          if (placeholders.length > 0) {
+            console.log(`[PASTE] Found ${placeholders.length} placeholders to upgrade. Starting sequential queue...`);
+            if (typeof showToast === 'function') {
+              showToast(`📤 جاري رفع وتحويل ${placeholders.length} صورة من ميرو...`, 5000);
             }
-          });
-          sv(); triggerRender();
+            
+            window._isActivelyUpgradingMiroImages = true;
+            
+            (async () => {
+              let successCount = 0;
+              for (const card of placeholders) {
+                const apiUrl = 'https://miro.com/api/v1/boards/' + card._miroBoardId + '/resources/' + card._miroResourceId + '/files/original';
+                card.type = 'image';
+                card.imageUrl = apiUrl;
+                delete card.text;
+                delete card.color;
+                
+                try {
+                  console.log('[PASTE QUEUE] Fetching card:', card.id);
+                  const base64 = await fetchMiroImageViaExtension(apiUrl);
+                  if (base64) {
+                    const dimensions = await new Promise((resolve, reject) => {
+                      const img = new Image();
+                      img.onload = () => resolve({ w: img.width, h: img.height });
+                      img.onerror = () => reject(new Error('Img load error'));
+                      img.src = base64;
+                    });
+                    
+                    card.w = Math.min(dimensions.w, 800);
+                    card.h = Math.round(card.w * (dimensions.h / dimensions.w));
+                    
+                    const imgbbUrl = await uploadToImgBB(base64);
+                    if (imgbbUrl) {
+                      card.imageUrl = imgbbUrl;
+                      successCount++;
+                      console.log('[PASTE QUEUE] Upgraded card to ImgBB:', card.id, imgbbUrl);
+                    }
+                  }
+                } catch (err) {
+                  console.warn('[PASTE QUEUE] Failed to upgrade card:', card.id, err.message);
+                }
+                
+                delete card._miroResourceId;
+                delete card._miroBoardId;
+                delete card._miroImgName;
+                
+                // Save progress to database immediately for this card
+                sv(); triggerRender();
+              }
+              
+              window._isActivelyUpgradingMiroImages = false;
+              console.log('[PASTE QUEUE] Sequential upgrade complete!');
+              if (typeof showToast === 'function') {
+                showToast(`✅ تم رفع وتحويل ${successCount} صورة ميرو بنجاح!`, 4000);
+              }
+            })();
+          }
           return;
         }
 
@@ -3786,13 +3772,30 @@ document.addEventListener('paste', (e) => {
             _miroSelected.add(newId);
           });
           sv(); triggerRender();
-          // Upload any base64 or Miro images from Miro paste to ImgBB
+          // Upload any base64 or Miro images from Miro paste to ImgBB sequentially
+          const cardsToLocalize = [];
           extracted.forEach(item => {
             if (item.imageUrl && (item.imageUrl.startsWith('data:image') || item.imageUrl.includes('miro.com/api'))) {
               const pushedCard = page.miroCards.find(c => c.imageUrl === item.imageUrl);
-              if (pushedCard) localizeCardImageUrl(pushedCard);
+              if (pushedCard) cardsToLocalize.push(pushedCard);
             }
           });
+
+          if (cardsToLocalize.length > 0) {
+            window._isActivelyUpgradingMiroImages = true;
+            if (typeof showToast === 'function') {
+              showToast(`📤 جاري معالجة ورفع ${cardsToLocalize.length} صورة...`, 4000);
+            }
+            (async () => {
+              for (const card of cardsToLocalize) {
+                await localizeCardImageUrl(card);
+              }
+              window._isActivelyUpgradingMiroImages = false;
+              if (typeof showToast === 'function') {
+                showToast(`✅ تم رفع ومعالجة الصور بنجاح!`, 3000);
+              }
+            })();
+          }
           console.log('[PASTE DEBUG] Generic HTML parsed cards rendered, returning!');
           return;
         }
