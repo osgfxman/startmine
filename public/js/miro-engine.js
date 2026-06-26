@@ -5194,7 +5194,15 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
       var isSes=(fs%8===0&&fs>0),isFlt=(fs%4===0&&fs>0&&!isSes);
       var bdrL=isSes?'2px solid '+(isDark?'rgba(255,255,255,.2)':'rgba(0,0,0,.2)'):isFlt?'1px solid '+(isDark?'rgba(255,255,255,.1)':'rgba(0,0,0,.1)'):(fs>0?'1px solid '+(isDark?'rgba(255,255,255,.04)':'rgba(0,0,0,.05)'):'none');
       cb.style.cssText='flex:1;border-left:'+bdrL+';background:'+(isChk?'transparent':_uncBg)+';cursor:pointer;transition:background .12s;display:flex;align-items:center;justify-content:center;font-size:'+(fruitRH*0.7)+'px;line-height:1;overflow:hidden;';
-      if(isChk)cb.textContent='\uD83C\uDF4E';
+      if(isChk){
+        var fruitIndexBefore = 0;
+        for (var s = 0; s <= fs; s++) {
+          if ((frSlotMap[s] || []).length > 0) {
+            fruitIndexBefore++;
+          }
+        }
+        cb.textContent = (fruitIndexBefore <= 5) ? '\uD83C\uDF4E' : '\uD83C\uDF47';
+      }
       cb.title=(isChk?'\u2705':'\u2B1C')+' '+Math.floor(fs/2)+':'+(fs%2===0?'00':'30');
       _cbEls.push(cb);
       frTL.appendChild(cb);
@@ -5355,16 +5363,26 @@ window.renderZooperDayCard = function(container, dayDate, options) {
       var hFr=(frSlotMap[absSlot]||[]).length>0;var isBr=(lc.slot===3||lc.slot===4);
       var planCellEvts=planSlotMap[absSlot]||[];
       
+      var fruitIndexBefore = 0;
+      if (hFr) {
+        for (var s = 0; s <= absSlot; s++) {
+          if ((frSlotMap[s] || []).length > 0) {
+            fruitIndexBefore++;
+          }
+        }
+      }
+      var fruitEmoji = (fruitIndexBefore <= 5) ? '\uD83C\uDF4E' : '\uD83C\uDF47';
+
       var tipText=isSpec?sessTips[si]:(fmtTime(sMn)+'-'+fmtTime(eMn));
       if(sEvts.length>0)tipText=sEvts.map(function(e2){return(e2.summary||'')+' '+fmtTime(sMn)+'-'+fmtTime(eMn);}).join('\n');
-      if(hFr)tipText+=(' \uD83C\uDF4E');
+      if(hFr)tipText+=(' ' + fruitEmoji);
       if(planCellEvts.length>0)tipText+=('\n\u2705 '+planCellEvts.map(function(pe){return pe.summary||'';}).join(', '));
       
       var ec=document.createElement('div');ec.className='pomo-ev';
       ec.title=tipText;
       ec.style.cssText='width:'+cSize+'px;flex-shrink:0;position:relative;background:'+(cBg!=='transparent'?cBg:(isBr?'rgba(128,128,128,.06)':bg2))+';cursor:pointer;border-right:1px solid '+(isDk?'rgba(255,255,255,.06)':'rgba(0,0,0,.06)')+';display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;'+(isNow?'outline:2px solid #ff6b35;outline-offset:-1px;animation:pomoPulse 1.5s infinite;z-index:1;':'');
       
-      if(hFr){var frS=document.createElement('span');frS.style.cssText='font-size:'+(Math.max(5,cSize-6))+'px;pointer-events:none;line-height:1;';frS.textContent='\uD83C\uDF4E';ec.appendChild(frS);}
+      if(hFr){var frS=document.createElement('span');frS.style.cssText='font-size:'+(Math.max(5,cSize-6))+'px;pointer-events:none;line-height:1;';frS.textContent=fruitEmoji;ec.appendChild(frS);}
       
       if(planCellEvts.length>0){
         planCellEvts.forEach(function(pev){
@@ -6064,7 +6082,16 @@ window.renderZooperDayCard = function(container, dayDate, options) {
               var frc = document.createElement('div');
               frc.className = 'pomo-fr';
               frc.style.cssText = 'width:'+SZ+'px;height:'+SZ+'px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:'+(SZ-6)+'px;border-radius:3px;background:'+(hasFruit?'rgba(231,76,60,.1)':'transparent')+';box-sizing:border-box;user-select:none;';
-              frc.textContent = hasFruit ? '\uD83C\uDF4E' : '';
+              var fruitIndexBefore = 0;
+              if (hasFruit) {
+                for (var s = 0; s <= absSlotIdx; s++) {
+                  if ((frSlotMap[s] || []).length > 0) {
+                    fruitIndexBefore++;
+                  }
+                }
+              }
+              var fruitEmoji = (fruitIndexBefore <= 5) ? '\uD83C\uDF4E' : '\uD83C\uDF47';
+              frc.textContent = hasFruit ? fruitEmoji : '';
               frc.title = hasFruit ? '\u2714 Fruit' : 'Add fruit';
 
               (function(frc, absSlotIdx, hasFruit, frSlotMap, fruitCalId, slotStartDate, slotEndDate, pg2) {
@@ -7316,11 +7343,16 @@ window.renderZooperDayCard = function(container, dayDate, options) {
             var safeSummary = ev ? (typeof esc === 'function' ? esc(ev.summary) : ev.summary.replace(/"/g, '&quot;')) : '';
             var safeTitle = typeof esc === 'function' ? esc(titleStr) : titleStr.replace(/"/g, '&quot;');
             
+            var boxEmoji = '';
+            if (checked) {
+              boxEmoji = (i < 5) ? '\uD83C\uDF4E' : '\uD83C\uDF47';
+            }
+
             html += '<div class="fruit-tracker-box" data-date="' + dy.date + '" data-idx="' + i + '"' +
               (ev ? ' data-ev-id="' + ev.id + '" data-cal-id="' + ev.calendarId + '" data-summary="' + safeSummary + '"' : '') +
               ' title="' + safeTitle + '"' +
               ' style="width:12px;height:12px;cursor:pointer;border-radius:2px;border:1px solid '+(isDk?'rgba(255,255,255,.15)':'rgba(0,0,0,.12)')+';background:transparent;display:flex;align-items:center;justify-content:center;font-size:10px;line-height:1;transition:all .15s;">' +
-              (checked?'\uD83C\uDF4E':'') +
+              boxEmoji +
               '</div>';
           }
           html += '<span style="font-size:.4rem;margin-left:4px;opacity:.6;">'+dayEvts.length+'/16</span>';
@@ -7487,8 +7519,9 @@ window.renderZooperDayCard = function(container, dayDate, options) {
             dragMode = isBoxChecked ? 'uncheck' : 'check';
             draggedBoxes = [box];
 
+            var idx = parseInt(box.getAttribute('data-idx') || '0', 10);
             if (dragMode === 'check') {
-              box.innerHTML = '🍎';
+              box.innerHTML = (idx < 5) ? '\uD83C\uDF4E' : '\uD83C\uDF47';
             } else {
               box.innerHTML = '';
             }
@@ -7503,9 +7536,10 @@ window.renderZooperDayCard = function(container, dayDate, options) {
             if (draggedBoxes.indexOf(box) !== -1) return;
 
             var isBoxChecked = !!box.getAttribute('data-ev-id');
+            var idx = parseInt(box.getAttribute('data-idx') || '0', 10);
             if (dragMode === 'check' && !isBoxChecked) {
               draggedBoxes.push(box);
-              box.innerHTML = '🍎';
+              box.innerHTML = (idx < 5) ? '\uD83C\uDF4E' : '\uD83C\uDF47';
               box.style.opacity = '0.5';
             } else if (dragMode === 'uncheck' && isBoxChecked) {
               draggedBoxes.push(box);
@@ -7531,8 +7565,9 @@ window.renderZooperDayCard = function(container, dayDate, options) {
             var dyDate = box.getAttribute('data-date');
 
             // Restore visual state
+            var idx = parseInt(box.getAttribute('data-idx') || '0', 10);
             if (evId) {
-              box.innerHTML = '🍎';
+              box.innerHTML = (idx < 5) ? '\uD83C\uDF4E' : '\uD83C\uDF47';
             } else {
               box.innerHTML = '';
             }
