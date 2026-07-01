@@ -4858,6 +4858,17 @@ function buildMiroTrello(card) {
 
   el.style.background = card.bgColor;
 
+  // Prevent canvas events when clicking on Trello interactive controls
+  el.addEventListener('mousedown', (e) => {
+    const ignores = ['.mc-del', '.mc-lock', '.tl-title', '.tl-card', '.tl-text', '.tl-check', '.tl-add', '.tl-del', '.tl-color-bar', '.tl-card-actions', '.tl-task-toggle', '.tl-archive-toggle', '.tl-archive-body', '.tl-weight'];
+    for (const sel of ignores) {
+      if (e.target.closest(sel)) {
+        e.stopPropagation();
+        return;
+      }
+    }
+  });
+
   // ─── Color bar ───
   const colorBar = document.createElement('div');
   colorBar.className = 'tl-color-bar';
@@ -4954,10 +4965,12 @@ function buildMiroTrello(card) {
   // Drop zone
   body.addEventListener('dragover', (e) => {
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
     body.classList.add('drag-over');
   });
   body.addEventListener('dragleave', (ev) => {
+    ev.stopPropagation();
     if (!body.contains(ev.relatedTarget)) body.classList.remove('drag-over');
   });
   body.addEventListener('drop', (e) => {
@@ -4966,15 +4979,21 @@ function buildMiroTrello(card) {
     body.classList.remove('drag-over');
     if (!_trelloDragData) return;
     const { srcCardObj, srcListCards } = _trelloDragData;
+    
+    // Find drop position index before removing from source list
+    const afterEl = getTrelloDragAfter(body, e.clientY);
+    let afterIdx = afterEl ? [...body.querySelectorAll('.tl-card')].indexOf(afterEl) : -1;
+
     // Remove from source list
     const srcIdx = srcListCards.indexOf(srcCardObj);
     if (srcIdx >= 0) srcListCards.splice(srcIdx, 1);
+    
     // Insert at drop position
-    const afterEl = getTrelloDragAfter(body, e.clientY);
-    if (afterEl) {
-      const afterIdx = [...body.querySelectorAll('.tl-card')].indexOf(afterEl);
-      if (afterIdx >= 0) card.cards.splice(afterIdx, 0, srcCardObj);
-      else card.cards.push(srcCardObj);
+    if (afterIdx >= 0) {
+      if (srcListCards === card.cards && srcIdx >= 0 && srcIdx < afterIdx) {
+        afterIdx--;
+      }
+      card.cards.splice(afterIdx, 0, srcCardObj);
     } else {
       card.cards.push(srcCardObj);
     }
@@ -4983,7 +5002,12 @@ function buildMiroTrello(card) {
   });
 
   function linkify(text) {
-    return text.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    const parts = text.split(/(<[^>]+>)/g);
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i].startsWith('<')) continue;
+      parts[i] = parts[i].replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    }
+    return parts.join('');
   }
 
   function buildCardEl(c, ci, isArchived) {
@@ -4991,6 +5015,12 @@ function buildMiroTrello(card) {
     cardEl.className = 'tl-card' + (c.done ? ' done' : '');
     if (c.bgColor) cardEl.style.background = c.bgColor;
     if (c.textColor) { cardEl.style.color = c.textColor; }
+    
+    // Stop propagation of mousedown to prevent canvas dragging
+    cardEl.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+    });
+
     if (!isArchived) {
       cardEl.draggable = true;
       cardEl.addEventListener('dragstart', (e) => {
@@ -5020,7 +5050,7 @@ function buildMiroTrello(card) {
 
     const txt = document.createElement('div');
     txt.className = 'tl-text';
-    txt.contentEditable = !isArchived;
+    txt.contentEditable = 'false'; // Read-only by default to allow drag-and-drop
     txt.spellcheck = false;
     if (c.html) { txt.innerHTML = c.html; }
     else { txt.textContent = c.text || ''; }
@@ -5035,11 +5065,34 @@ function buildMiroTrello(card) {
             e.preventDefault();
             const file = item.getAsFile();
             const reader = new FileReader();
-            reader.onload = () => {
-              const img = document.createElement('img');
-              img.src = reader.result;
-              txt.appendChild(img);
-              c.html = txt.innerHTML; sv();
+            reader.onload = async () => {
+              const base64 = reader.result;
+              const tempId = 'img-temp-' + Math.random().toString(36).substr(2, 9);
+              const loader = document.createElement('div');
+              loader.id = tempId;
+              loader.textContent = '⏳ [Uploading image...]';
+              loader.style.color = '#888';
+              loader.style.fontSize = '0.55rem';
+              txt.appendChild(loader);
+
+              try {
+                const imgbbUrl = await window.uploadToImgBB(base64);
+                loader.remove();
+                if (imgbbUrl) {
+                  const img = document.createElement('img');
+                  img.src = imgbbUrl;
+                  txt.appendChild(img);
+                  c.html = txt.innerHTML;
+                  c.text = txt.textContent;
+                  sv();
+                } else {
+                  alert('❌ Image upload failed');
+                }
+              } catch (err) {
+                loader.remove();
+                console.error(err);
+                alert('❌ Image upload failed: ' + err.message);
+              }
             };
             reader.readAsDataURL(file);
             return;
@@ -5052,23 +5105,49 @@ function buildMiroTrello(card) {
         if (files && files.length > 0 && files[0].type.startsWith('image/')) {
           e.preventDefault(); e.stopPropagation();
           const reader = new FileReader();
-          reader.onload = () => {
-            const img = document.createElement('img');
-            img.src = reader.result;
-            txt.appendChild(img);
-            c.html = txt.innerHTML; sv();
+          reader.onload = async () => {
+            const base64 = reader.result;
+            const tempId = 'img-temp-' + Math.random().toString(36).substr(2, 9);
+            const loader = document.createElement('div');
+            loader.id = tempId;
+            loader.textContent = '⏳ [Uploading image...]';
+            loader.style.color = '#888';
+            loader.style.fontSize = '0.55rem';
+            txt.appendChild(loader);
+
+            try {
+              const imgbbUrl = await window.uploadToImgBB(base64);
+              loader.remove();
+              if (imgbbUrl) {
+                const img = document.createElement('img');
+                img.src = imgbbUrl;
+                txt.appendChild(img);
+                c.html = txt.innerHTML;
+                c.text = txt.textContent;
+                sv();
+              } else {
+                alert('❌ Image upload failed');
+              }
+            } catch (err) {
+              loader.remove();
+              console.error(err);
+              alert('❌ Image upload failed: ' + err.message);
+            }
           };
           reader.readAsDataURL(files[0]);
         }
       });
       txt.addEventListener('blur', () => {
+        txt.contentEditable = 'false'; // Revert to read-only on blur
         const hasContent = txt.textContent.trim() || txt.querySelector('img');
         if (!hasContent) {
           card.cards.splice(ci, 1);
           sv(); renderCards(); updateCount(); updateProgress();
           return;
         }
-        const html = txt.innerHTML;
+        const clone = txt.cloneNode(true);
+        clone.querySelectorAll('[id^="img-temp-"]').forEach(p => p.remove());
+        const html = clone.innerHTML;
         const linkified = linkify(html);
         txt.innerHTML = linkified;
         c.html = linkified;
@@ -5080,13 +5159,18 @@ function buildMiroTrello(card) {
           e.preventDefault();
           const hasContent = txt.textContent.trim() || txt.querySelector('img');
           if (hasContent) {
-            c.html = txt.innerHTML; c.text = txt.textContent;
+            const clone = txt.cloneNode(true);
+            clone.querySelectorAll('[id^="img-temp-"]').forEach(p => p.remove());
+            c.html = clone.innerHTML; c.text = txt.textContent;
             const newCard = { id: uid(), text: '', done: false };
             card.cards.splice(ci + 1, 0, newCard);
             sv(); renderCards(); updateCount(); updateProgress();
             setTimeout(() => {
               const allTexts = body.querySelectorAll('.tl-text');
-              if (allTexts[ci + 1]) allTexts[ci + 1].focus();
+              if (allTexts[ci + 1]) {
+                allTexts[ci + 1].contentEditable = 'true';
+                allTexts[ci + 1].focus();
+              }
             }, 30);
           } else { txt.blur(); }
         }
@@ -5094,7 +5178,10 @@ function buildMiroTrello(card) {
       });
       txt.addEventListener('mousedown', (e) => e.stopPropagation());
       txt.addEventListener('click', (e) => {
-        if (e.target.tagName === 'A') { e.preventDefault(); window.open(e.target.href, '_blank'); }
+        if (e.target.tagName === 'A') { e.preventDefault(); window.open(e.target.href, '_blank'); return; }
+        // Single click to start editing
+        txt.contentEditable = 'true';
+        txt.focus();
       });
     }
 
@@ -5253,7 +5340,10 @@ function buildMiroTrello(card) {
     setTimeout(() => {
       const allTexts = body.querySelectorAll('.tl-text');
       const last = allTexts[allTexts.length - 1];
-      if (last) last.focus();
+      if (last) {
+        last.contentEditable = 'true';
+        last.focus();
+      }
     }, 30);
   };
 

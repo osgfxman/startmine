@@ -1892,6 +1892,7 @@ async function fetchAndUploadToImgBB(url) {
   }
 }
 window.fetchAndUploadToImgBB = fetchAndUploadToImgBB;
+window.uploadToImgBB = uploadToImgBB;
 
 (function initCanvasDragDrop() {
   const canvas = document.getElementById('miro-canvas');
