@@ -5124,7 +5124,7 @@ function _drawGantt(body, el, card, events, startDate, days, now, rowH, theme) {
     lab.style.cssText='width:'+labW+'px;flex-shrink:0;display:flex;align-items:center;justify-content:center;flex-direction:column;font-size:.7rem;color:'+(isT?'#6c8fff':txt)+';font-weight:'+(isT?'700':'500')+';border-right:1px solid '+ln+';background:'+lBg+';gap:1px;';
     var _hij='';try{_hij=ds.toLocaleDateString('ar-SA-u-ca-islamic',{day:'numeric',month:'short'});}catch(e){}
     var _frDayCount=events.filter(function(ev){return (ev.calendarName||'').toLowerCase()==="!40's fruit"&&!ev.allDay&&new Date(ev.start).getTime()>=dMs&&new Date(ev.start).getTime()<de.getTime();}).length;
-    lab.innerHTML='<span style="font-size:.7rem">'+dn[ds.getDay()]+' '+ds.getDate()+' '+mn[ds.getMonth()]+'</span><span style="font-size:.55rem;color:#10b981;font-weight:700;direction:rtl">'+_hij+'</span><span style="font-size:.6rem;color:'+((_frDayCount>=16)?'#10b981':'#f59e0b')+';font-weight:700">\uD83C\uDF4E '+_frDayCount+'/16</span>';
+    lab.innerHTML='<span style="font-size:.7rem">'+dn[ds.getDay()]+' '+ds.getDate()+' '+mn[ds.getMonth()]+'</span><span style="font-size:.55rem;color:#10b981;font-weight:700;direction:rtl">'+_hij+'</span><span style="font-size:.6rem;color:'+((_frDayCount>=35)?'#10b981':'#f59e0b')+';font-weight:700">\uD83C\uDF4E '+_frDayCount+'/35</span>';
     row.appendChild(lab);
     var tc=document.createElement('div');
     tc.style.cssText='flex:1;position:relative;overflow:hidden;min-width:0;';
@@ -7300,7 +7300,7 @@ window.renderZooperDayCard = function(container, dayDate, options) {
         }
         days.reverse();
         
-        var totalSlots = days.length * 16;
+        var totalSlots = days.length * 35;
         var totalChecked = days.reduce(function(s,d){return s+d.count;},0);
         var pct = totalSlots>0 ? Math.round(totalChecked/totalSlots*100) : 0;
         var dn = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -7310,11 +7310,11 @@ window.renderZooperDayCard = function(container, dayDate, options) {
         html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">';
         html += '<h2 style="margin:0;font-size:1rem;">\uD83C\uDF4E !40s Fruit Tracker</h2>';
         html += '<span style="background:#10b981;color:#fff;padding:2px 8px;border-radius:4px;font-size:.55rem;font-weight:600;">'+pct+'% ('+totalChecked+'/'+totalSlots+')</span>';
-        html += '<span style="opacity:.5;font-size:.55rem;">5 min each \u2022 16/day \u2022 80 min target</span>';
+        html += '<span style="opacity:.5;font-size:.55rem;">5 min each \u2022 35/day \u2022 175 min target</span>';
         html += '</div>';
 
-        // Grid: each day = row with 16 boxes
-        html += '<div style="font-size:.5rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:0 16px;">';        var curMonth = '';
+        // Grid: each day = two rows (20 boxes + 15 boxes)
+        html += '<div style="font-size:.5rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:0 16px;">';        var curMonth = '';
         days.forEach(function(dy){
           var dt = new Date(dy.date+'T12:00:00');
           var mLabel = mn[dt.getMonth()]+' '+dt.getFullYear();
@@ -7324,7 +7324,10 @@ window.renderZooperDayCard = function(container, dayDate, options) {
           }
           var isToday = dy.date === todayStr;
           var isFri = dy.dow === 5;
-          html += '<div style="display:flex;align-items:center;gap:2px;margin-bottom:1px;padding:1px 2px;border-radius:3px;'+(isToday?'border:1px solid #4285f4;box-shadow:0 0 6px rgba(66,133,244,.4);':'border:1px solid transparent;')+(isFri?'opacity:.5;':'')+'">';
+          html += '<div style="display:flex;flex-direction:column;margin-bottom:6px;padding:3px;border-radius:6px;'+(isToday?'border:1px solid #4285f4;box-shadow:0 0 6px rgba(66,133,244,.4);background:rgba(66,133,244,0.03);':'border:1px solid transparent;')+(isFri?'opacity:.5;':'')+'">';
+          
+          // First row: 20 boxes (idx 0 to 19)
+          html += '<div style="display:flex;align-items:center;gap:2px;">';
           html += '<span style="width:24px;font-size:.4rem;opacity:.6;">'+dn[dy.dow].slice(0,2)+'</span>';
           html += '<span style="width:16px;font-size:.4rem;opacity:.5;">'+dt.getDate()+'</span>';
           
@@ -7336,7 +7339,7 @@ window.renderZooperDayCard = function(container, dayDate, options) {
             return new Date(a.start).getTime() - new Date(b.start).getTime();
           });
           
-          for(var i=0;i<16;i++){
+          for(var i=0;i<20;i++){
             var ev = dayEvts[i];
             var checked = !!ev;
             var timeStr = ev ? new Date(ev.start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
@@ -7356,8 +7359,42 @@ window.renderZooperDayCard = function(container, dayDate, options) {
               boxEmoji +
               '</div>';
           }
-          html += '<span style="font-size:.4rem;margin-left:4px;opacity:.6;">'+dayEvts.length+'/16</span>';
-          html += '</div>';
+          html += '<span style="font-size:.4rem;margin-left:6px;opacity:.6;">'+dayEvts.length+'/35</span>';
+          html += '</div>'; // End Row 1
+          
+          // Second row: 15 boxes grouped by 3 (idx 20 to 34)
+          html += '<div style="display:flex;align-items:center;gap:6px;padding-left:40px;margin-top:3px;">';
+          for(var g=0;g<5;g++){
+            var groupHtml = '<div style="display:flex;align-items:center;gap:2px;padding:1px 2px;border-radius:3px;';
+            if (g === 0) {
+              groupHtml += 'border:1px solid #10b981;background:rgba(16,185,129,0.08);';
+            } else {
+              groupHtml += 'border:1px solid ' + (isDk ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)') + ';';
+            }
+            groupHtml += '">';
+            for(var b=0;b<3;b++){
+              var idx = 20 + g*3 + b;
+              var ev = dayEvts[idx];
+              var checked = !!ev;
+              var timeStr = ev ? new Date(ev.start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+              var titleStr = ev ? (ev.summary + ' (' + timeStr + ')') : 'Add pineapple entry';
+              var safeSummary = ev ? (typeof esc === 'function' ? esc(ev.summary) : ev.summary.replace(/"/g, '&quot;')) : '';
+              var safeTitle = typeof esc === 'function' ? esc(titleStr) : titleStr.replace(/"/g, '&quot;');
+              
+              var boxEmoji = checked ? '\uD83C\uDF4D' : '';
+              
+              groupHtml += '<div class="fruit-tracker-box" data-date="' + dy.date + '" data-idx="' + idx + '"' +
+                (ev ? ' data-ev-id="' + ev.id + '" data-cal-id="' + ev.calendarId + '" data-summary="' + safeSummary + '"' : '') +
+                ' title="' + safeTitle + '"' +
+                ' style="width:12px;height:12px;cursor:pointer;border-radius:2px;border:1px solid '+(isDk?'rgba(255,255,255,.15)':'rgba(0,0,0,.12)')+';background:transparent;display:flex;align-items:center;justify-content:center;font-size:10px;line-height:1;transition:all .15s;">' +
+                boxEmoji +
+                '</div>';
+            }
+            groupHtml += '</div>';
+            html += groupHtml;
+          }
+          html += '</div>'; // End Row 2
+          html += '</div>'; // End Day Container
         });
         html += '</div></div>';
         body.innerHTML = html;
@@ -7369,6 +7406,40 @@ window.renderZooperDayCard = function(container, dayDate, options) {
         var clickTimeout = null;
         var pendingSaveFn = null;
         var pendingBox = null;
+
+        var onTouchMove = function(e) {
+          if (!isDragging) return;
+          var touch = e.touches[0];
+          var el = document.elementFromPoint(touch.clientX, touch.clientY);
+          if (!el) return;
+          var targetBox = el.closest('.fruit-tracker-box');
+          if (targetBox && draggedBoxes.indexOf(targetBox) === -1) {
+            var isBoxChecked = !!targetBox.getAttribute('data-ev-id');
+            var idx = parseInt(targetBox.getAttribute('data-idx') || '0', 10);
+            if (dragMode === 'check' && !isBoxChecked) {
+              draggedBoxes.push(targetBox);
+              if (idx < 5) {
+                targetBox.innerHTML = '\uD83C\uDF4E';
+              } else if (idx < 20) {
+                targetBox.innerHTML = '\uD83C\uDF47';
+              } else {
+                targetBox.innerHTML = '\uD83C\uDF4D';
+              }
+              targetBox.style.opacity = '0.5';
+            } else if (dragMode === 'uncheck' && isBoxChecked) {
+              draggedBoxes.push(targetBox);
+              targetBox.innerHTML = '';
+              targetBox.style.opacity = '0.5';
+            }
+          }
+          if (e.cancelable) e.preventDefault();
+        };
+
+        var onTouchEnd = function(e) {
+          document.removeEventListener('touchmove', onTouchMove);
+          document.removeEventListener('touchend', onTouchEnd);
+          onMouseUp();
+        };
 
         var onMouseUp = async function() {
           if (!isDragging) return;
@@ -7404,7 +7475,6 @@ window.renderZooperDayCard = function(container, dayDate, options) {
                   return;
                 }
 
-                var promises = [];
                 var dates = Object.keys(additionsByDate);
                 for (var i = 0; i < dates.length; i++) {
                   var dyDate = dates[i];
@@ -7458,22 +7528,23 @@ window.renderZooperDayCard = function(container, dayDate, options) {
                     var startD = new Date(slotStartMs);
                     var endD = new Date(slotEndMs);
 
-                    promises.push(createCalendarEvent(fruitCalId, "!40's Fruit", startD, endD, ''));
+                    await createCalendarEvent(fruitCalId, "!40's Fruit", startD, endD, '');
+                    // 150ms delay to prevent rate limits
+                    await new Promise(function(resolve) { setTimeout(resolve, 150); });
                   }
                 }
-                await Promise.all(promises);
               } else {
                 // Deletions
-                var promises = [];
                 for (var i = 0; i < draggedBoxes.length; i++) {
                   var box = draggedBoxes[i];
                   var evId = box.getAttribute('data-ev-id');
                   var calId = box.getAttribute('data-cal-id');
                   if (evId && calId) {
-                    promises.push(deleteCalendarEvent(calId, evId));
+                    await deleteCalendarEvent(calId, evId);
+                    // 150ms delay to prevent rate limits
+                    await new Promise(function(resolve) { setTimeout(resolve, 150); });
                   }
                 }
-                await Promise.all(promises);
               }
               showToast("✅ Changes saved!");
             } catch (e) {
@@ -7522,7 +7593,13 @@ window.renderZooperDayCard = function(container, dayDate, options) {
 
             var idx = parseInt(box.getAttribute('data-idx') || '0', 10);
             if (dragMode === 'check') {
-              box.innerHTML = (idx < 5) ? '\uD83C\uDF4E' : '\uD83C\uDF47';
+              if (idx < 5) {
+                box.innerHTML = '\uD83C\uDF4E';
+              } else if (idx < 20) {
+                box.innerHTML = '\uD83C\uDF47';
+              } else {
+                box.innerHTML = '\uD83C\uDF4D';
+              }
             } else {
               box.innerHTML = '';
             }
@@ -7530,6 +7607,41 @@ window.renderZooperDayCard = function(container, dayDate, options) {
 
             document.addEventListener('mouseup', onMouseUp);
             e.preventDefault();
+          });
+
+          box.addEventListener('touchstart', function(e) {
+            // Clear any active clickTimeout
+            if (clickTimeout) {
+              clearTimeout(clickTimeout);
+              clickTimeout = null;
+              if (pendingBox && pendingBox !== box && pendingSaveFn) {
+                pendingSaveFn();
+              }
+              pendingSaveFn = null;
+              pendingBox = null;
+            }
+
+            isDragging = true;
+            var isBoxChecked = !!box.getAttribute('data-ev-id');
+            dragMode = isBoxChecked ? 'uncheck' : 'check';
+            draggedBoxes = [box];
+
+            var idx = parseInt(box.getAttribute('data-idx') || '0', 10);
+            if (dragMode === 'check') {
+              if (idx < 5) {
+                box.innerHTML = '\uD83C\uDF4E';
+              } else if (idx < 20) {
+                box.innerHTML = '\uD83C\uDF47';
+              } else {
+                box.innerHTML = '\uD83C\uDF4D';
+              }
+            } else {
+              box.innerHTML = '';
+            }
+            box.style.opacity = '0.5';
+
+            document.addEventListener('touchmove', onTouchMove, { passive: false });
+            document.addEventListener('touchend', onTouchEnd);
           });
 
           box.addEventListener('mouseenter', function() {
@@ -7540,7 +7652,13 @@ window.renderZooperDayCard = function(container, dayDate, options) {
             var idx = parseInt(box.getAttribute('data-idx') || '0', 10);
             if (dragMode === 'check' && !isBoxChecked) {
               draggedBoxes.push(box);
-              box.innerHTML = (idx < 5) ? '\uD83C\uDF4E' : '\uD83C\uDF47';
+              if (idx < 5) {
+                box.innerHTML = '\uD83C\uDF4E';
+              } else if (idx < 20) {
+                box.innerHTML = '\uD83C\uDF47';
+              } else {
+                box.innerHTML = '\uD83C\uDF4D';
+              }
               box.style.opacity = '0.5';
             } else if (dragMode === 'uncheck' && isBoxChecked) {
               draggedBoxes.push(box);
@@ -7568,7 +7686,13 @@ window.renderZooperDayCard = function(container, dayDate, options) {
             // Restore visual state
             var idx = parseInt(box.getAttribute('data-idx') || '0', 10);
             if (evId) {
-              box.innerHTML = (idx < 5) ? '\uD83C\uDF4E' : '\uD83C\uDF47';
+              if (idx < 5) {
+                box.innerHTML = '\uD83C\uDF4E';
+              } else if (idx < 20) {
+                box.innerHTML = '\uD83C\uDF47';
+              } else {
+                box.innerHTML = '\uD83C\uDF4D';
+              }
             } else {
               box.innerHTML = '';
             }
