@@ -185,7 +185,8 @@
   const LS_META = 'sm_meta';
   const LS_PAGES_META = 'sm_pages_meta';
   const LS_CUR_PAGE = 'sm_cur_page';
-  const _memoryPageCache = new Map();
+  window._memoryPageCache = window._memoryPageCache || new Map();
+  const _memoryPageCache = window._memoryPageCache;
 
   function lsPageKey(pid) { return 'sm_page_' + pid; }
   function cacheMeta(meta) { try { localStorage.setItem(LS_META, JSON.stringify(meta)); } catch (e) { } }
@@ -231,6 +232,13 @@
   function cachePageDataSafe(pid, data) {
     if (pid && data) {
       _memoryPageCache.set(pid, data);
+      if (window.D && window.D.pages) {
+        const livePg = window.D.pages.find(p => p && p.id === pid);
+        if (livePg) {
+          if ((data.widgets || []).length > 0) livePg.widgets = data.widgets;
+          if ((data.miroCards || []).length > 0) livePg.miroCards = data.miroCards;
+        }
+      }
     }
     const itemCount = (data.widgets || []).length + (data.miroCards || []).length;
     let lsOk = false;
@@ -249,7 +257,6 @@
     });
     if (!lsOk && itemCount > 0) {
       console.warn(`[CACHE WARNING] Page ${pid} has ${itemCount} items but localStorage write FAILED. Data safely preserved in memory and IndexedDB.`);
-      if (typeof showToast === 'function') showToast('⚠️ Storage nearly full — data safe in backup cache', 4000);
     }
     return lsOk;
   }
@@ -259,16 +266,55 @@
   }
 
   async function getCachedPageDataAsync(pid) {
-    if (_memoryPageCache.has(pid)) return _memoryPageCache.get(pid);
+    // 1. Check in-memory sync first
+    const syncData = getCachedPageDataSync(pid);
+    if (syncData && (((syncData.widgets || []).length > 0) || ((syncData.miroCards || []).length > 0) || (syncData.pageType === 'slicer'))) {
+      return syncData;
+    }
+    // 2. Check IndexedDB (larger, persistent storage)
     const idbData = await idbGet('page_' + pid);
     if (idbData) {
       _memoryPageCache.set(pid, idbData);
+      if (window.D && window.D.pages) {
+        const livePg = window.D.pages.find(p => p && p.id === pid);
+        if (livePg) {
+          if (!livePg.widgets || livePg.widgets.length === 0) livePg.widgets = idbData.widgets || [];
+          if (!livePg.miroCards || livePg.miroCards.length === 0) livePg.miroCards = idbData.miroCards || [];
+        }
+      }
       return idbData;
     }
-    return getCachedPageDataSync(pid);
+    return syncData;
   }
   function getCachedPageDataSync(pid) {
+    // 1. Check active D.pages in RAM
+    if (window.D && window.D.pages) {
+      const livePg = window.D.pages.find(p => p && p.id === pid);
+      if (livePg && (((livePg.widgets || []).length > 0) || ((livePg.miroCards || []).length > 0) || (livePg.pageType === 'slicer'))) {
+        return {
+          widgets: livePg.widgets || [],
+          miroCards: livePg.miroCards || [],
+          vGuides: livePg.vGuides || [],
+          hGuides: livePg.hGuides || [],
+          _guidesMode: livePg._guidesMode || false,
+          lockedGuides: livePg.lockedGuides || [],
+          cellStates: livePg.cellStates || {},
+          mergedCells: livePg.mergedCells || [],
+          customCells: livePg.customCells || [],
+          cellGuides: livePg.cellGuides || {},
+          _layoutGuidesMode: livePg._layoutGuidesMode || false,
+          gridRows: livePg.gridRows || null,
+          gridCols: livePg.gridCols || null,
+          cellPages: livePg.cellPages || null,
+          slicerColSizes: livePg.slicerColSizes || null,
+          slicerRowSizes: livePg.slicerRowSizes || null,
+          ts: livePg.ts || Date.now()
+        };
+      }
+    }
+    // 2. Check memory map
     if (_memoryPageCache.has(pid)) return _memoryPageCache.get(pid);
+    // 3. Check localStorage
     try {
       const item = localStorage.getItem(lsPageKey(pid));
       if (!item) return null;

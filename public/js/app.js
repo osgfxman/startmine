@@ -211,15 +211,27 @@ async function idbGet(key) {
   } catch (e) { return null; }
 }
 
-// ─── Safe Page Data Cache (writes to BOTH IndexedDB + localStorage with verification) ───
+// ─── Safe Page Data Cache (writes to memory, IndexedDB, and localStorage) ───
+window._memoryPageCache = window._memoryPageCache || new Map();
+const _memoryPageCache = window._memoryPageCache;
+
 function cachePageDataSafe(pid, data) {
+  if (pid && data) {
+    _memoryPageCache.set(pid, data);
+    if (window.D && window.D.pages) {
+      const livePg = window.D.pages.find(p => p && p.id === pid);
+      if (livePg) {
+        if ((data.widgets || []).length > 0) livePg.widgets = data.widgets;
+        if ((data.miroCards || []).length > 0) livePg.miroCards = data.miroCards;
+      }
+    }
+  }
   const itemCount = (data.widgets || []).length + (data.miroCards || []).length;
   let lsOk = false;
   // 1. Try localStorage (fast, synchronous)
   try {
     const json = JSON.stringify(data);
     localStorage.setItem(lsPageKey(pid), json);
-    // Verify write
     const verify = localStorage.getItem(lsPageKey(pid));
     lsOk = (verify && verify.length === json.length);
     if (!lsOk) console.error(`[CACHE LS VERIFY FAIL] Page ${pid} — written ${json.length} chars, read back ${verify ? verify.length : 0}`);
@@ -232,8 +244,7 @@ function cachePageDataSafe(pid, data) {
     if (!ok) console.error(`[CACHE IDB FAIL] Page ${pid}`);
   });
   if (!lsOk && itemCount > 0) {
-    console.warn(`[CACHE WARNING] Page ${pid} has ${itemCount} items but localStorage write FAILED. IndexedDB is backup.`);
-    if (typeof showToast === 'function') showToast('⚠️ Storage nearly full — data safe in backup cache', 4000);
+    console.warn(`[CACHE WARNING] Page ${pid} has ${itemCount} items but localStorage write FAILED. Data safely preserved in memory and IndexedDB.`);
   }
   return lsOk;
 }
@@ -243,16 +254,64 @@ function cachePageData(pid, data) {
   cachePageDataSafe(pid, data);
 }
 
-// ─── Read from IndexedDB first, fallback to localStorage ───
+// ─── Read from RAM memory first, then IndexedDB, fallback to localStorage ───
 async function getCachedPageDataAsync(pid) {
-  // Try IndexedDB first (more reliable, larger)
+  // 1. In-memory & live D.pages lookup
+  const syncData = getCachedPageDataSync(pid);
+  if (syncData && (((syncData.widgets || []).length > 0) || ((syncData.miroCards || []).length > 0) || (syncData.pageType === 'slicer'))) {
+    return syncData;
+  }
+  // 2. Try IndexedDB (more reliable, larger quota)
   const idbData = await idbGet('page_' + pid);
-  if (idbData) return idbData;
-  // Fallback to localStorage
-  return getCachedPageDataSync(pid);
+  if (idbData) {
+    _memoryPageCache.set(pid, idbData);
+    if (window.D && window.D.pages) {
+      const livePg = window.D.pages.find(p => p && p.id === pid);
+      if (livePg) {
+        if (!livePg.widgets || livePg.widgets.length === 0) livePg.widgets = idbData.widgets || [];
+        if (!livePg.miroCards || livePg.miroCards.length === 0) livePg.miroCards = idbData.miroCards || [];
+      }
+    }
+    return idbData;
+  }
+  return syncData;
 }
 function getCachedPageDataSync(pid) {
-  try { return JSON.parse(localStorage.getItem(lsPageKey(pid))); } catch (e) { return null; }
+  // 1. Check live D.pages in RAM first!
+  if (window.D && window.D.pages) {
+    const livePg = window.D.pages.find(p => p && p.id === pid);
+    if (livePg && (((livePg.widgets || []).length > 0) || ((livePg.miroCards || []).length > 0) || (livePg.pageType === 'slicer'))) {
+      return {
+        widgets: livePg.widgets || [],
+        miroCards: livePg.miroCards || [],
+        vGuides: livePg.vGuides || [],
+        hGuides: livePg.hGuides || [],
+        _guidesMode: livePg._guidesMode || false,
+        lockedGuides: livePg.lockedGuides || [],
+        cellStates: livePg.cellStates || {},
+        mergedCells: livePg.mergedCells || [],
+        customCells: livePg.customCells || [],
+        cellGuides: livePg.cellGuides || {},
+        _layoutGuidesMode: livePg._layoutGuidesMode || false,
+        gridRows: livePg.gridRows || null,
+        gridCols: livePg.gridCols || null,
+        cellPages: livePg.cellPages || null,
+        slicerColSizes: livePg.slicerColSizes || null,
+        slicerRowSizes: livePg.slicerRowSizes || null,
+        ts: livePg.ts || Date.now()
+      };
+    }
+  }
+  // 2. Check in-memory cache
+  if (_memoryPageCache.has(pid)) return _memoryPageCache.get(pid);
+  // 3. Fallback to localStorage
+  try {
+    const item = localStorage.getItem(lsPageKey(pid));
+    if (!item) return null;
+    const parsed = JSON.parse(item);
+    if (parsed) _memoryPageCache.set(pid, parsed);
+    return parsed;
+  } catch (e) { return null; }
 }
 // Keep sync version as default for backward compat 
 function getCachedPageData(pid) { return getCachedPageDataSync(pid); }
@@ -872,8 +931,8 @@ function switchActivePage(pageId) {
 
     const prevItemCount = (prevPg.widgets || []).length + (prevPg.miroCards || []).length;
     if (prevItemCount > 0 || prevPg.pageType === 'slicer') {
-      // Save to cache and VERIFY before evicting from memory
-      const cacheOk = cachePageDataSafe(prevPg.id, {
+      // Always persist to IndexedDB + localStorage safely
+      cachePageDataSafe(prevPg.id, {
         widgets: prevPg.widgets || [],
         miroCards: prevPg.miroCards || [],
         vGuides: prevPg.vGuides || [],
@@ -892,19 +951,10 @@ function switchActivePage(pageId) {
         cellGuides: prevPg.cellGuides || {},
         _layoutGuidesMode: prevPg._layoutGuidesMode || false
       });
-      if (cacheOk) {
-        // Cache verified — safe to evict
-        prevPg.widgets = [];
-        prevPg.miroCards = [];
-      } else {
-        // Cache FAILED! Keep data in memory — DO NOT evict!
-        console.error(`[EVICTION BLOCKED] Page "${prevPg.name}" (${prevPg.id}) has ${prevItemCount} items but cache write failed. Keeping in memory!`);
-        if (typeof showToast === 'function') showToast('⚠️ Cache full — keeping page data in memory (safe)', 5000);
-      }
-    } else {
-      // Empty page — safe to evict (nothing to lose)
-      prevPg.widgets = [];
-      prevPg.miroCards = [];
+      // ⛔ NEVER EVICT FROM MEMORY:
+      // prevPg.widgets and prevPg.miroCards MUST REMAIN IN MEMORY!
+      // In-memory data for 9,000 bookmarks takes negligible RAM (<10MB).
+      // Evicting memory caused silent page drops during backups and exports.
     }
   }
   D.cur = pageId;
@@ -934,42 +984,56 @@ function switchActivePage(pageId) {
   const pageDataRef = `users/${USER_ID}/startmine_pages/${pageId}`;
   _activePageListener = pageDataRef;
 
-  // ─── Instant render from localStorage cache, IndexedDB fallback ───
-  // ─── Instant render from localStorage cache, IndexedDB fallback ───
-  const cachedPage = getCachedPageData(pageId);
-  if (cachedPage && ((cachedPage.widgets || []).length > 0 || (cachedPage.miroCards || []).length > 0 || (cachedPage.vGuides || []).length > 0 || (cachedPage.hGuides || []).length > 0 || (cachedPage.customCells || []).length > 0 || cachedPage.pageType === 'slicer' || cachedPage.gridRows)) {
-    const pg = cp();
-    if (pg) {
-      pg.widgets = cachedPage.widgets || [];
-      pg.miroCards = cachedPage.miroCards || [];
-      pg.vGuides = cachedPage.vGuides || [];
-      pg.hGuides = cachedPage.hGuides || [];
-      pg._guidesMode = cachedPage._guidesMode || false;
-      pg.lockedGuides = cachedPage.lockedGuides || [];
-      pg.cellStates = cachedPage.cellStates || {};
-      pg.mergedCells = cachedPage.mergedCells || [];
-      pg.customCells = cachedPage.customCells || [];
-      pg.ts = cachedPage.ts || 0;
-      pg.gridRows = cachedPage.gridRows || null;
-      pg.gridCols = cachedPage.gridCols || null;
-      pg.cellPages = cachedPage.cellPages || null;
-      pg.slicerColSizes = cachedPage.slicerColSizes || null;
-      pg.slicerRowSizes = cachedPage.slicerRowSizes || null;
-      const fakeD = { pages: [pg] };
-      sanitizeData(fakeD);
-      _lastSyncedPageData = {
-        widgets: JSON.stringify(pg.widgets),
-        miroCards: JSON.stringify(pg.miroCards)
-      };
-      pg._hasBeenLoaded = true;
-      if (pg.pageType === 'slicer') {
-        setupSlicerSubPageListeners(pg);
-      }
+  // ─── Instant render from in-memory / cache, IndexedDB fallback ───
+  const livePg = cp();
+  const hasLiveInMemory = livePg && (((livePg.widgets || []).length > 0) || ((livePg.miroCards || []).length > 0) || ((livePg.customCells || []).length > 0) || livePg.pageType === 'slicer');
+
+  if (hasLiveInMemory) {
+    // Page is already fully loaded in RAM — render immediately without risking overwrite from stale cache!
+    _lastSyncedPageData = {
+      widgets: JSON.stringify(livePg.widgets || []),
+      miroCards: JSON.stringify(livePg.miroCards || [])
+    };
+    livePg._hasBeenLoaded = true;
+    if (livePg.pageType === 'slicer') {
+      setupSlicerSubPageListeners(livePg);
     }
     buildCols();
   } else {
-    // Try IndexedDB async (larger, more reliable cache)
-    getCachedPageDataAsync(pageId).then(idbCached => {
+    const cachedPage = getCachedPageData(pageId);
+    if (cachedPage && ((cachedPage.widgets || []).length > 0 || (cachedPage.miroCards || []).length > 0 || (cachedPage.vGuides || []).length > 0 || (cachedPage.hGuides || []).length > 0 || (cachedPage.customCells || []).length > 0 || cachedPage.pageType === 'slicer' || cachedPage.gridRows)) {
+      const pg = cp();
+      if (pg) {
+        pg.widgets = cachedPage.widgets || [];
+        pg.miroCards = cachedPage.miroCards || [];
+        pg.vGuides = cachedPage.vGuides || [];
+        pg.hGuides = cachedPage.hGuides || [];
+        pg._guidesMode = cachedPage._guidesMode || false;
+        pg.lockedGuides = cachedPage.lockedGuides || [];
+        pg.cellStates = cachedPage.cellStates || {};
+        pg.mergedCells = cachedPage.mergedCells || [];
+        pg.customCells = cachedPage.customCells || [];
+        pg.ts = cachedPage.ts || 0;
+        pg.gridRows = cachedPage.gridRows || null;
+        pg.gridCols = cachedPage.gridCols || null;
+        pg.cellPages = cachedPage.cellPages || null;
+        pg.slicerColSizes = cachedPage.slicerColSizes || null;
+        pg.slicerRowSizes = cachedPage.slicerRowSizes || null;
+        const fakeD = { pages: [pg] };
+        sanitizeData(fakeD);
+        _lastSyncedPageData = {
+          widgets: JSON.stringify(pg.widgets),
+          miroCards: JSON.stringify(pg.miroCards)
+        };
+        pg._hasBeenLoaded = true;
+        if (pg.pageType === 'slicer') {
+          setupSlicerSubPageListeners(pg);
+        }
+      }
+      buildCols();
+    } else {
+      // Try IndexedDB async (larger, more reliable cache)
+      getCachedPageDataAsync(pageId).then(idbCached => {
       if (idbCached && ((idbCached.widgets || []).length > 0 || (idbCached.miroCards || []).length > 0 || (idbCached.vGuides || []).length > 0 || (idbCached.hGuides || []).length > 0 || (idbCached.customCells || []).length > 0 || idbCached.pageType === 'slicer' || idbCached.gridRows)) {
         const pg = cp();
         if (pg && pg.id === pageId) { // Make sure we're still on same page
@@ -1201,101 +1265,263 @@ var showToast = (typeof SM !== 'undefined' && SM.ui && SM.ui.showToast) ? SM.ui.
   }, duration);
 };
 
-// Full snapshot save to Firebase
-function saveSnapshot(silent = false) {
+// ═══════════════════════════════════════════════════════════════
+// ██  DATA INTEGRITY GUARD & ASYNC EXPORT ENGINE  ██
+// ═══════════════════════════════════════════════════════════════
+
+function checkDataIntegrity(exportData, operationName = 'Backup') {
+  if (!exportData || !exportData.pages) {
+    const msg = `🚨 CRITICAL BLOCKED: Empty data structure detected for ${operationName}`;
+    console.error(msg);
+    if (typeof showToast === 'function') showToast(msg, 6000);
+    return false;
+  }
+
+  let totalItems = 0;
+  let emptyPagesCount = 0;
+  exportData.pages.forEach(p => {
+    const count = (p.widgets || []).length + (p.miroCards || []).length;
+    totalItems += count;
+    if (count === 0 && p.pageType !== 'slicer') emptyPagesCount++;
+  });
+
+  const LS_HIGHEST = 'sm_highest_item_count';
+  let highestCount = parseInt(localStorage.getItem(LS_HIGHEST) || '0', 10);
+
+  console.log(`[INTEGRITY CHECK] ${operationName}: Total items = ${totalItems} (Highest recorded: ${highestCount}), Pages: ${exportData.pages.length}, Empty pages: ${emptyPagesCount}`);
+
+  // Guard 1: Absolute empty wipe prevention
+  if (totalItems === 0 && highestCount > 10) {
+    const errMsg = `🚨 تم حظر العملية لحماية بياناتك!\nتم رصد 0 عنصر في العملية "${operationName}" بينما سجل مكتبتك يحتوي على ${highestCount} عنصر سابقاً.\nتم إيقاف الحفظ فوراً لمنع تصفير البيانات!`;
+    console.error(`[DATA INTEGRITY GUARD] Blocked 0-item wipeout in ${operationName}`);
+    if (typeof showToast === 'function') showToast('🚨 تم حظر الحفظ لمنع مسح البيانات!', 8000);
+    alert(errMsg);
+    return false;
+  }
+
+  // Guard 2: Significant drop prevention (>15% drop when highestCount > 50)
+  if (highestCount > 50 && totalItems < Math.floor(highestCount * 0.85)) {
+    const drop = highestCount - totalItems;
+    const dropPct = Math.round((drop / highestCount) * 100);
+    const confirmMsg = `⚠️ تحذير أمان وسلامة البيانات (DATA INTEGRITY GUARD):\n\n` +
+      `سجل مكتبتك سابقاً يحتوي على (${highestCount}) عنصر محفوظ.\n` +
+      `النسخة الحالية للعملية "${operationName}" تحتوي فقط على (${totalItems}) عنصر (فقدان ${drop} عنصر بنسبة ${dropPct}%!).\n\n` +
+      `هل أنت متأكد تماماً أنك قمت بحذف هذه العناصر عن عمد وتريد استبدال النسخ الاحتياطية؟\n\n` +
+      `اضغط Cancel لإلغاء الحفظ وحماية بياناتك السابقة.`;
+    
+    if (!confirm(confirmMsg)) {
+      console.warn(`[DATA INTEGRITY GUARD] User aborted ${operationName} due to item drop (${totalItems} vs ${highestCount})`);
+      if (typeof showToast === 'function') showToast('🛡️ تم إيقاف الحفظ لحماية بياناتك من الفقدان', 5000);
+      return false;
+    }
+  }
+
+  // Update highest count if current is larger
+  if (totalItems > highestCount) {
+    try { localStorage.setItem(LS_HIGHEST, String(totalItems)); } catch(e) {}
+  }
+  try { localStorage.setItem('sm_last_item_count', String(totalItems)); } catch(e) {}
+
+  return true;
+}
+
+// ─── Build Full Export Data ASYNC (Guarantees all pages loaded from IndexedDB/Cache) ───
+async function buildFullExportDataAsync() {
+  const exportPages = [];
+  for (const p of D.pages) {
+    if (!p) continue;
+    let widgets = p.widgets || [];
+    let miroCards = p.miroCards || [];
+    let vGuides = p.vGuides || [];
+    let hGuides = p.hGuides || [];
+    let _guidesMode = p._guidesMode || false;
+    let lockedGuides = p.lockedGuides || [];
+    let cellStates = p.cellStates || {};
+    let mergedCells = p.mergedCells || [];
+    let customCells = p.customCells || [];
+    let cellGuides = p.cellGuides || {};
+    let _layoutGuidesMode = p._layoutGuidesMode || false;
+    let gridRows = p.gridRows || null;
+    let gridCols = p.gridCols || null;
+    let cellPages = p.cellPages || null;
+    let slicerColSizes = p.slicerColSizes || null;
+    let slicerRowSizes = p.slicerRowSizes || null;
+
+    // If page has no items in memory, load from IndexedDB/Cache
+    if (widgets.length === 0 && miroCards.length === 0 && (customCells || []).length === 0) {
+      const cached = await getCachedPageDataAsync(p.id);
+      if (cached && ((cached.widgets || []).length > 0 || (cached.miroCards || []).length > 0 || (cached.customCells || []).length > 0)) {
+        widgets = cached.widgets || [];
+        miroCards = cached.miroCards || [];
+        vGuides = cached.vGuides || vGuides;
+        hGuides = cached.hGuides || hGuides;
+        _guidesMode = cached._guidesMode || _guidesMode;
+        lockedGuides = cached.lockedGuides || lockedGuides;
+        cellStates = cached.cellStates || cellStates;
+        mergedCells = cached.mergedCells || mergedCells;
+        customCells = cached.customCells || customCells;
+        cellGuides = cached.cellGuides || cellGuides;
+        _layoutGuidesMode = cached._layoutGuidesMode || _layoutGuidesMode;
+        gridRows = cached.gridRows || gridRows;
+        gridCols = cached.gridCols || gridCols;
+        cellPages = cached.cellPages || cellPages;
+        slicerColSizes = cached.slicerColSizes || slicerColSizes;
+        slicerRowSizes = cached.slicerRowSizes || slicerRowSizes;
+        // Self-heal memory in D.pages
+        p.widgets = widgets;
+        p.miroCards = miroCards;
+      } else if (window.db && USER_ID) {
+        // Fallback: read once from Firebase if connected
+        try {
+          const snap = await db.ref(`users/${USER_ID}/startmine_pages/${p.id}`).once('value');
+          const fbData = snap.val();
+          if (fbData && ((fbData.widgets || []).length > 0 || (fbData.miroCards || []).length > 0)) {
+            widgets = fbData.widgets || [];
+            miroCards = fbData.miroCards || [];
+            p.widgets = widgets;
+            p.miroCards = miroCards;
+            cachePageDataSafe(p.id, fbData);
+          }
+        } catch(e) {}
+      }
+    }
+
+    exportPages.push({
+      id: p.id, groupId: p.groupId, name: p.name,
+      pageType: p.pageType, zoom: p.zoom, panX: p.panX, panY: p.panY,
+      bg: p.bg, bgType: p.bgType, tabColor: p.tabColor || '',
+      widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, customCells,
+      cellGuides, _layoutGuidesMode, gridRows, gridCols, cellPages, slicerColSizes, slicerRowSizes
+    });
+  }
+
+  return {
+    settings: D.settings,
+    curEnv: D.curEnv,
+    curGroup: D.curGroup,
+    cur: D.cur,
+    environments: D.environments,
+    groups: D.groups,
+    inbox: D.inbox,
+    pages: exportPages
+  };
+}
+
+// Full snapshot save to Firebase with Data Integrity Guard and Golden Snapshot Protection
+async function saveSnapshot(silent = false) {
   if (!USER_ID || _snapshotSaving) return Promise.resolve();
-  // Don't snapshot more than once per 10 seconds
   const now = Date.now();
   if (now - _lastSnapshotTs < 10000) return Promise.resolve();
   _snapshotSaving = true;
   _lastSnapshotTs = now;
 
-  const snapshot = {
-    ts: now,
-    meta: {
-      settings: D.settings,
-      curEnv: D.curEnv,
-      curGroup: D.curGroup,
-      environments: D.environments,
-      groups: D.groups,
-      inbox: D.inbox
-    },
-    pagesMeta: D.pages.map(p => ({
-      id: p.id || '',
-      groupId: p.groupId || '',
-      name: p.name || 'Untitled Page',
-      pageType: p.pageType || 'miro',
-      zoom: p.zoom !== undefined ? p.zoom : 100,
-      panX: p.panX !== undefined ? p.panX : 0,
-      panY: p.panY !== undefined ? p.panY : 0,
-      bg: p.bg || '',
-      bgType: p.bgType || 'none',
-      tabColor: p.tabColor || ''
-    })),
-    pages: {}
-  };
-  D.pages.forEach(p => {
-    let widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, customCells;
-    if (p.id === D.cur) {
-      widgets = p.widgets || [];
-      miroCards = p.miroCards || [];
-      vGuides = p.vGuides || [];
-      hGuides = p.hGuides || [];
-      _guidesMode = p._guidesMode || false;
-      lockedGuides = p.lockedGuides || [];
-      cellStates = p.cellStates || {};
-      mergedCells = p.mergedCells || [];
-      customCells = p.customCells || [];
-    } else {
-      const cached = getCachedPageData(p.id);
-      if (cached) {
-        widgets = cached.widgets || [];
-        miroCards = cached.miroCards || [];
-        vGuides = cached.vGuides || [];
-        hGuides = cached.hGuides || [];
-        _guidesMode = cached._guidesMode || false;
-        lockedGuides = cached.lockedGuides || [];
-        cellStates = cached.cellStates || {};
-        mergedCells = cached.mergedCells || [];
-        customCells = cached.customCells || [];
-      } else {
-        widgets = p.widgets || [];
-        miroCards = p.miroCards || [];
-        vGuides = p.vGuides || [];
-        hGuides = p.hGuides || [];
-        _guidesMode = p._guidesMode || false;
-        lockedGuides = p.lockedGuides || [];
-        cellStates = p.cellStates || {};
-        mergedCells = p.mergedCells || [];
-        customCells = p.customCells || [];
+  try {
+    const fullData = await buildFullExportDataAsync();
+    
+    // Check integrity before saving snapshot!
+    if (!checkDataIntegrity(fullData, 'Firebase Snapshot')) {
+      _snapshotSaving = false;
+      return;
+    }
+
+    let totalItems = 0;
+    fullData.pages.forEach(p => {
+      totalItems += (p.widgets || []).length + (p.miroCards || []).length;
+    });
+
+    const snapshot = {
+      ts: now,
+      itemCount: totalItems,
+      pageCount: fullData.pages.length,
+      meta: {
+        settings: fullData.settings,
+        curEnv: fullData.curEnv,
+        curGroup: fullData.curGroup,
+        environments: fullData.environments,
+        groups: fullData.groups,
+        inbox: fullData.inbox
+      },
+      pagesMeta: fullData.pages.map(p => ({
+        id: p.id || '',
+        groupId: p.groupId || '',
+        name: p.name || 'Untitled Page',
+        pageType: p.pageType || 'miro',
+        zoom: p.zoom !== undefined ? p.zoom : 100,
+        panX: p.panX !== undefined ? p.panX : 0,
+        panY: p.panY !== undefined ? p.panY : 0,
+        bg: p.bg || '',
+        bgType: p.bgType || 'none',
+        tabColor: p.tabColor || '',
+        itemCount: (p.widgets || []).length + (p.miroCards || []).length
+      })),
+      pages: {}
+    };
+
+    fullData.pages.forEach(p => {
+      snapshot.pages[p.id] = {
+        widgets: p.widgets || [],
+        miroCards: p.miroCards || [],
+        vGuides: p.vGuides || [],
+        hGuides: p.hGuides || [],
+        _guidesMode: p._guidesMode || false,
+        lockedGuides: p.lockedGuides || [],
+        cellStates: p.cellStates || {},
+        mergedCells: p.mergedCells || [],
+        customCells: p.customCells || [],
+        cellGuides: p.cellGuides || {},
+        _layoutGuidesMode: p._layoutGuidesMode || false,
+        gridRows: p.gridRows || null,
+        gridCols: p.gridCols || null,
+        cellPages: p.cellPages || null,
+        slicerColSizes: p.slicerColSizes || null,
+        slicerRowSizes: p.slicerRowSizes || null
+      };
+    });
+
+    const snapRef = `users/${USER_ID}/startmine_snapshots/${now}`;
+    await db.ref(snapRef).set(snapshot);
+    _snapshotSaving = false;
+    if (!silent) showToast(`✅ Snapshot saved (${totalItems} items, ${fullData.pages.length} pages)`);
+
+    // Smart Rotation: Top 5 snapshots with the highest item count are NEVER deleted (Golden Snapshots)
+    const snap = await db.ref(`users/${USER_ID}/startmine_snapshots`).orderByKey().once('value');
+    if (snap && snap.exists()) {
+      const allSnaps = [];
+      snap.forEach(child => {
+        const val = child.val() || {};
+        let items = val.itemCount;
+        if (items === undefined && val.pages) {
+          items = 0;
+          Object.values(val.pages).forEach(pg => {
+            items += ((pg && pg.widgets) || []).length + ((pg && pg.miroCards) || []).length;
+          });
+        }
+        allSnaps.push({ key: child.key, itemCount: items || 0, ts: val.ts || parseInt(child.key) });
+      });
+
+      if (allSnaps.length > SNAPSHOT_MAX) {
+        // Protect top 5 snapshots with highest item count forever
+        const sortedByItems = [...allSnaps].sort((a, b) => b.itemCount - a.itemCount);
+        const protectedKeys = new Set(sortedByItems.slice(0, 5).map(s => s.key));
+
+        // Delete from oldest non-protected snapshots
+        const deletable = allSnaps.filter(s => !protectedKeys.has(s.key)).sort((a, b) => a.ts - b.ts);
+        const excess = allSnaps.length - SNAPSHOT_MAX;
+        const toDelete = deletable.slice(0, excess);
+
+        if (toDelete.length > 0) {
+          const updates = {};
+          toDelete.forEach(s => { updates[`users/${USER_ID}/startmine_snapshots/${s.key}`] = null; });
+          await db.ref().update(updates);
+          console.log(`[SNAPSHOT ROTATION] Pruned ${toDelete.length} snapshots; top 5 golden snapshots preserved.`);
+        }
       }
     }
-    snapshot.pages[p.id] = { widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, customCells };
-  });
-
-  const snapRef = `users/${USER_ID}/startmine_snapshots/${now}`;
-  return db.ref(snapRef).set(snapshot)
-    .then(() => {
-      _snapshotSaving = false;
-      if (!silent) showToast('✅ Snapshot saved');
-      // Cleanup: remove oldest if over limit
-      return db.ref(`users/${USER_ID}/startmine_snapshots`).orderByKey().once('value');
-    })
-    .then(snap => {
-      if (!snap) return;
-      const keys = [];
-      snap.forEach(child => { keys.push(child.key); });
-      if (keys.length > SNAPSHOT_MAX) {
-        const toDelete = keys.slice(0, keys.length - SNAPSHOT_MAX);
-        const updates = {};
-        toDelete.forEach(k => { updates[`users/${USER_ID}/startmine_snapshots/${k}`] = null; });
-        return db.ref().update(updates);
-      }
-    })
-    .catch(err => {
-      _snapshotSaving = false;
-      console.error('[SNAPSHOT ERROR]', err);
-    });
+  } catch (err) {
+    _snapshotSaving = false;
+    console.error('[SNAPSHOT ERROR]', err);
+    if (!silent) showToast('❌ Snapshot failed: ' + (err.message || err));
+  }
 }
 
 // Beacon-based snapshot for beforeunload (fire-and-forget)
@@ -1352,7 +1578,7 @@ function saveSnapshotBeacon() {
   } catch (e) { console.error('[BEACON SNAPSHOT ERROR]', e); }
 }
 
-// Load all snapshots for restore UI
+// Load all snapshots for restore UI (with item counts)
 function loadSnapshots() {
   if (!USER_ID) return Promise.resolve([]);
   return db.ref(`users/${USER_ID}/startmine_snapshots`)
@@ -1360,11 +1586,19 @@ function loadSnapshots() {
     .then(snap => {
       const list = [];
       snap.forEach(child => {
-        const v = child.val();
+        const v = child.val() || {};
         const pageNames = (v.pagesMeta || []).map(p => p.name || 'Untitled');
+        let count = v.itemCount;
+        if (count === undefined && v.pages) {
+          count = 0;
+          Object.values(v.pages).forEach(pg => {
+            count += ((pg && pg.widgets) || []).length + ((pg && pg.miroCards) || []).length;
+          });
+        }
         list.push({
           key: child.key,
           ts: v.ts || parseInt(child.key),
+          itemCount: count !== undefined ? count : '—',
           pageCount: (v.pagesMeta || []).length,
           pageNames: pageNames
         });
@@ -1373,16 +1607,48 @@ function loadSnapshots() {
     });
 }
 
-// Restore a specific snapshot
-function restoreSnapshot(key) {
+// Restore a specific snapshot with integrity verification
+async function restoreSnapshot(key) {
   if (!USER_ID || !key) return;
-  // Safety: save current state first
-  showToast('💾 Saving current state before restore...');
-  saveSnapshot(true).then(() => {
-    return db.ref(`users/${USER_ID}/startmine_snapshots/${key}`).once('value');
-  }).then(snap => {
+
+  try {
+    const snap = await db.ref(`users/${USER_ID}/startmine_snapshots/${key}`).once('value');
     const data = snap.val();
     if (!data) { showToast('❌ Snapshot not found'); return; }
+
+    // Count items in the snapshot
+    let snapshotItemCount = data.itemCount;
+    if (snapshotItemCount === undefined && data.pages) {
+      snapshotItemCount = 0;
+      Object.values(data.pages).forEach(pg => {
+        snapshotItemCount += ((pg && pg.widgets) || []).length + ((pg && pg.miroCards) || []).length;
+      });
+    }
+
+    // Count current items in memory
+    let currentItemCount = 0;
+    if (D && D.pages) {
+      D.pages.forEach(p => {
+        currentItemCount += (p.widgets || []).length + (p.miroCards || []).length;
+      });
+    }
+
+    if (currentItemCount > 50 && snapshotItemCount < Math.floor(currentItemCount * 0.85)) {
+      const drop = currentItemCount - snapshotItemCount;
+      const confirmMsg = `⚠️ تنبيه استعادة نسخة احتياطية (RESTORE INTEGRITY GUARD):\n\n` +
+        `أنت على وشك استعادة نسخة تحتوي على (${snapshotItemCount}) عنصر فقط،\n` +
+        `بينما بياناتك الحالية تحتوي على (${currentItemCount}) عنصر!\n` +
+        `هذا الإجراء سيؤدي إلى فقدان (${drop}) عنصر.\n\n` +
+        `هل أنت متأكد تماماً من رغبتك في الاستعادة؟`;
+      if (!confirm(confirmMsg)) {
+        showToast('🛡️ تم إلغاء الاستعادة لحماية بياناتك الحالية', 4000);
+        return;
+      }
+    }
+
+    // Safety: save current state first
+    showToast('💾 Saving current state before restore...');
+    await saveSnapshot(true);
 
     // Restore meta
     if (data.meta) {
@@ -1398,11 +1664,29 @@ function restoreSnapshot(key) {
     if (data.pagesMeta && data.pages) {
       D.pages = data.pagesMeta.map(pm => {
         const pageData = data.pages[pm.id] || {};
-        return {
+        const pObj = {
           ...pm,
           widgets: pageData.widgets || [],
-          miroCards: pageData.miroCards || []
+          miroCards: pageData.miroCards || [],
+          vGuides: pageData.vGuides || [],
+          hGuides: pageData.hGuides || [],
+          _guidesMode: pageData._guidesMode || false,
+          lockedGuides: pageData.lockedGuides || [],
+          cellStates: pageData.cellStates || {},
+          mergedCells: pageData.mergedCells || [],
+          customCells: pageData.customCells || [],
+          cellGuides: pageData.cellGuides || {},
+          _layoutGuidesMode: pageData._layoutGuidesMode || false,
+          gridRows: pageData.gridRows || null,
+          gridCols: pageData.gridCols || null,
+          cellPages: pageData.cellPages || null,
+          slicerColSizes: pageData.slicerColSizes || null,
+          slicerRowSizes: pageData.slicerRowSizes || null,
+          ts: Date.now()
         };
+        // Immediately persist to memory cache and IndexedDB
+        cachePageDataSafe(pm.id, pObj);
+        return pObj;
       });
       // Ensure cur points to a valid page
       if (!D.pages.find(p => p.id === D.cur)) {
@@ -1418,12 +1702,12 @@ function restoreSnapshot(key) {
     if (typeof buildCols === 'function') buildCols();
     if (typeof buildTabs === 'function') buildTabs();
 
-    showToast('✅ Restored successfully!');
+    showToast(`✅ Restored successfully! (${snapshotItemCount} items)`);
     closeSnapshotModal();
-  }).catch(err => {
+  } catch (err) {
     console.error('[RESTORE ERROR]', err);
-    showToast('❌ Restore failed');
-  });
+    showToast('❌ Restore failed: ' + (err.message || err));
+  }
 }
 
 // Snapshot Modal UI
@@ -1464,7 +1748,7 @@ function openSnapshotModal() {
       row.className = 'snap-row';
       row.innerHTML = `
         <div class="snap-info">
-          <div class="snap-time">${timeStr}</div>
+          <div class="snap-time">${timeStr} <span style="margin-left:8px;background:rgba(108,143,255,0.2);color:#93b5ff;padding:2px 8px;border-radius:10px;font-size:0.75rem;font-weight:bold;">📦 ${s.itemCount} items</span></div>
           <div class="snap-pages">${s.pageCount} page${s.pageCount !== 1 ? 's' : ''}: ${s.pageNames.slice(0, 5).join(', ')}${s.pageNames.length > 5 ? '...' : ''}</div>
         </div>
         <button class="snap-restore-btn" title="Restore this version">Restore</button>`;
@@ -1528,9 +1812,62 @@ async function getOrCreateDriveFolder(token) {
   return folder.id;
 }
 
-// Build full export data including cached page data for non-active pages
+// Build full export data including cached page data for non-active pages (synchronous version)
 function buildFullExportData() {
-  const exportData = JSON.parse(JSON.stringify({
+  const exportPages = [];
+  D.pages.forEach(p => {
+    if (!p) return;
+    let widgets = p.widgets || [];
+    let miroCards = p.miroCards || [];
+    let vGuides = p.vGuides || [];
+    let hGuides = p.hGuides || [];
+    let _guidesMode = p._guidesMode || false;
+    let lockedGuides = p.lockedGuides || [];
+    let cellStates = p.cellStates || {};
+    let mergedCells = p.mergedCells || [];
+    let customCells = p.customCells || [];
+    let cellGuides = p.cellGuides || {};
+    let _layoutGuidesMode = p._layoutGuidesMode || false;
+    let gridRows = p.gridRows || null;
+    let gridCols = p.gridCols || null;
+    let cellPages = p.cellPages || null;
+    let slicerColSizes = p.slicerColSizes || null;
+    let slicerRowSizes = p.slicerRowSizes || null;
+
+    if (widgets.length === 0 && miroCards.length === 0 && (customCells || []).length === 0) {
+      const cached = getCachedPageDataSync(p.id);
+      if (cached) {
+        widgets = cached.widgets || [];
+        miroCards = cached.miroCards || [];
+        vGuides = cached.vGuides || vGuides;
+        hGuides = cached.hGuides || hGuides;
+        _guidesMode = cached._guidesMode || _guidesMode;
+        lockedGuides = cached.lockedGuides || lockedGuides;
+        cellStates = cached.cellStates || cellStates;
+        mergedCells = cached.mergedCells || mergedCells;
+        customCells = cached.customCells || customCells;
+        cellGuides = cached.cellGuides || cellGuides;
+        _layoutGuidesMode = cached._layoutGuidesMode || _layoutGuidesMode;
+        gridRows = cached.gridRows || gridRows;
+        gridCols = cached.gridCols || gridCols;
+        cellPages = cached.cellPages || cellPages;
+        slicerColSizes = cached.slicerColSizes || slicerColSizes;
+        slicerRowSizes = cached.slicerRowSizes || slicerRowSizes;
+        // Self heal in-memory
+        p.widgets = widgets;
+        p.miroCards = miroCards;
+      }
+    }
+    exportPages.push({
+      id: p.id, groupId: p.groupId, name: p.name,
+      pageType: p.pageType, zoom: p.zoom, panX: p.panX, panY: p.panY,
+      bg: p.bg, bgType: p.bgType, tabColor: p.tabColor || '',
+      widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, customCells,
+      cellGuides, _layoutGuidesMode, gridRows, gridCols, cellPages, slicerColSizes, slicerRowSizes
+    });
+  });
+
+  return {
     settings: D.settings,
     curEnv: D.curEnv,
     curGroup: D.curGroup,
@@ -1538,40 +1875,8 @@ function buildFullExportData() {
     environments: D.environments,
     groups: D.groups,
     inbox: D.inbox,
-    pages: D.pages.map(p => {
-      let widgets = p.widgets || [];
-      let miroCards = p.miroCards || [];
-      let vGuides = p.vGuides || [];
-      let hGuides = p.hGuides || [];
-      let _guidesMode = p._guidesMode || false;
-      let lockedGuides = p.lockedGuides || [];
-      let cellStates = p.cellStates || {};
-      let mergedCells = p.mergedCells || [];
-      let customCells = p.customCells || [];
-      // Use localStorage cache for pages without loaded data
-      if (widgets.length === 0 && miroCards.length === 0 && vGuides.length === 0 && hGuides.length === 0 && !_guidesMode && (p.customCells || []).length === 0) {
-        const cached = getCachedPageData(p.id);
-        if (cached) {
-          widgets = cached.widgets || [];
-          miroCards = cached.miroCards || [];
-          vGuides = cached.vGuides || [];
-          hGuides = cached.hGuides || [];
-          _guidesMode = cached._guidesMode || false;
-          lockedGuides = cached.lockedGuides || [];
-          cellStates = cached.cellStates || {};
-          mergedCells = cached.mergedCells || [];
-          customCells = cached.customCells || [];
-        }
-      }
-      return {
-        id: p.id, groupId: p.groupId, name: p.name,
-        pageType: p.pageType, zoom: p.zoom, panX: p.panX, panY: p.panY,
-        bg: p.bg, bgType: p.bgType, tabColor: p.tabColor || '',
-        widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, customCells
-      };
-    })
-  }));
-  return exportData;
+    pages: exportPages
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1714,56 +2019,90 @@ function getSelIOChecked() {
   return { envIds, groupIds, pageIds };
 }
 
-function doSelectiveExport() {
+async function doSelectiveExport() {
   const { envIds, groupIds, pageIds } = getSelIOChecked();
   if (pageIds.size === 0 && groupIds.size === 0 && envIds.size === 0) {
     showToast('⚠️ Nothing selected to export', 3000);
     return;
   }
   
+  const rawPages = D.pages.filter(p => pageIds.has(p.id));
+  const exportPages = [];
+
+  for (const p of rawPages) {
+    let widgets = p.widgets || [];
+    let miroCards = p.miroCards || [];
+    let vGuides = p.vGuides || [];
+    let hGuides = p.hGuides || [];
+    let _guidesMode = p._guidesMode || false;
+    let lockedGuides = p.lockedGuides || [];
+    let cellStates = p.cellStates || {};
+    let mergedCells = p.mergedCells || [];
+    let customCells = p.customCells || [];
+    let cellGuides = p.cellGuides || {};
+    let _layoutGuidesMode = p._layoutGuidesMode || false;
+    let gridRows = p.gridRows || null;
+    let gridCols = p.gridCols || null;
+    let cellPages = p.cellPages || null;
+    let slicerColSizes = p.slicerColSizes || null;
+    let slicerRowSizes = p.slicerRowSizes || null;
+
+    if (widgets.length === 0 && miroCards.length === 0 && (customCells || []).length === 0) {
+      const cached = await getCachedPageDataAsync(p.id);
+      if (cached) {
+        widgets = cached.widgets || [];
+        miroCards = cached.miroCards || [];
+        vGuides = cached.vGuides || vGuides;
+        hGuides = cached.hGuides || hGuides;
+        _guidesMode = cached._guidesMode || _guidesMode;
+        lockedGuides = cached.lockedGuides || lockedGuides;
+        cellStates = cached.cellStates || cellStates;
+        mergedCells = cached.mergedCells || mergedCells;
+        customCells = cached.customCells || customCells;
+        cellGuides = cached.cellGuides || cellGuides;
+        _layoutGuidesMode = cached._layoutGuidesMode || _layoutGuidesMode;
+        gridRows = cached.gridRows || gridRows;
+        gridCols = cached.gridCols || gridCols;
+        cellPages = cached.cellPages || cellPages;
+        slicerColSizes = cached.slicerColSizes || slicerColSizes;
+        slicerRowSizes = cached.slicerRowSizes || slicerRowSizes;
+        p.widgets = widgets;
+        p.miroCards = miroCards;
+      }
+    }
+    exportPages.push({
+      ...p,
+      widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, customCells,
+      cellGuides, _layoutGuidesMode, gridRows, gridCols, cellPages, slicerColSizes, slicerRowSizes
+    });
+  }
+
   const exportData = {
     _selectiveExport: true,
     exportDate: new Date().toISOString(),
     settings: D.settings,
     environments: D.environments.filter(e => envIds.has(e.id)),
     groups: D.groups.filter(g => groupIds.has(g.id)),
-    pages: D.pages.filter(p => pageIds.has(p.id)).map(p => {
-      let widgets = p.widgets || [];
-      let miroCards = p.miroCards || [];
-      let vGuides = p.vGuides || [];
-      let hGuides = p.hGuides || [];
-      let _guidesMode = p._guidesMode || false;
-      let lockedGuides = p.lockedGuides || [];
-      let cellStates = p.cellStates || {};
-      let mergedCells = p.mergedCells || [];
-      let customCells = p.customCells || [];
-      if (widgets.length === 0 && miroCards.length === 0 && vGuides.length === 0 && hGuides.length === 0 && !_guidesMode && (p.customCells || []).length === 0) {
-        const cached = getCachedPageData(p.id);
-        if (cached) {
-          widgets = cached.widgets || [];
-          miroCards = cached.miroCards || [];
-          vGuides = cached.vGuides || [];
-          hGuides = cached.hGuides || [];
-          _guidesMode = cached._guidesMode || false;
-          lockedGuides = cached.lockedGuides || [];
-          cellStates = cached.cellStates || {};
-          mergedCells = cached.mergedCells || [];
-          customCells = cached.customCells || [];
-        }
-      }
-      return { ...p, widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, customCells };
-    })
+    pages: exportPages
   };
+
+  // If exporting all or most pages, run integrity check
+  if (exportPages.length >= (D.pages.length * 0.7)) {
+    if (!checkDataIntegrity(exportData, 'Selective Export')) return;
+  }
+
+  let totalItems = 0;
+  exportPages.forEach(p => { totalItems += (p.widgets || []).length + (p.miroCards || []).length; });
   
   const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   const envNames = exportData.environments.map(e => e.name).join('_') || 'selected';
-  a.download = `startmine_${envNames}_${new Date().toISOString().slice(0,10)}.json`;
+  a.download = `startmine_${envNames}_${new Date().toISOString().slice(0,10)}_${totalItems}_items.json`;
   a.click();
   URL.revokeObjectURL(a.href);
   closeSelIO();
-  showToast(`📤 Exported ${exportData.pages.length} pages, ${exportData.groups.length} groups`, 3000);
+  showToast(`📤 Exported ${exportData.pages.length} pages (${totalItems} items), ${exportData.groups.length} groups`, 3500);
 }
 
 function handleSelIOImport(e) {
@@ -1915,14 +2254,24 @@ function doMergeImport() {
   showToast(`✅ Merged ${importedCount} pages, ${importEnvs.length} envs`, 3000);
 }
 
-// Export to Google Drive
+// Export to Google Drive (with Data Integrity Guard & Async Full Page Resolution)
 async function exportToGoogleDrive() {
   async function _doUpload(token) {
     const folderId = await getOrCreateDriveFolder(token);
-    const exportData = buildFullExportData();
+    const exportData = await buildFullExportDataAsync();
+    
+    if (!checkDataIntegrity(exportData, 'Google Drive')) {
+      throw new Error('Export aborted by Data Integrity Guard');
+    }
+
+    let totalItems = 0;
+    exportData.pages.forEach(p => {
+      totalItems += (p.widgets || []).length + (p.miroCards || []).length;
+    });
+
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 19).replace(/[T:]/g, '-');
-    const fileName = GDRIVE_BACKUP_PREFIX + dateStr + '.json';
+    const fileName = GDRIVE_BACKUP_PREFIX + dateStr + '_' + totalItems + '_items.json';
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const metadata = { name: fileName, parents: [folderId], mimeType: 'application/json' };
     const form = new FormData();
@@ -1931,7 +2280,7 @@ async function exportToGoogleDrive() {
     const uploadResp = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
       method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: form
     });
-    return { uploadResp, fileName };
+    return { uploadResp, fileName, totalItems, pagesCount: exportData.pages.length };
   }
   try {
     showToast('☁️ Exporting to Google Drive…');
@@ -1947,22 +2296,22 @@ async function exportToGoogleDrive() {
       }
     }
     if (!token) throw new Error('No Google token');
-    let { uploadResp, fileName } = await _doUpload(token);
+    let uploadResult = await _doUpload(token);
     // Auto-retry on 401 (expired token)
-    if (uploadResp.status === 401) {
+    if (uploadResult.uploadResp.status === 401) {
       showToast('🔄 Token expired — re-authenticating…');
       token = await ensureGoogleTokenFresh();
       if (!token) throw new Error('Re-authentication failed');
-      ({ uploadResp, fileName } = await _doUpload(token));
+      uploadResult = await _doUpload(token);
     }
-    if (!uploadResp.ok) {
-      const errText = await uploadResp.text();
+    if (!uploadResult.uploadResp.ok) {
+      const errText = await uploadResult.uploadResp.text();
       throw new Error('Upload failed: ' + errText);
     }
-    const uploadResult = await uploadResp.json();
-    showToast('✅ Saved to Google Drive: ' + fileName, 3000);
-    console.log('[GDRIVE] Backup uploaded:', uploadResult);
-    return uploadResult;
+    const uploadJson = await uploadResult.uploadResp.json();
+    showToast(`✅ Saved to Google Drive: ${uploadResult.totalItems} items (${uploadResult.pagesCount} pages)`, 4000);
+    console.log('[GDRIVE] Backup uploaded:', uploadJson);
+    return uploadJson;
   } catch (err) {
     console.error('[GDRIVE EXPORT ERROR]', err);
     let msg = err.message || String(err);
@@ -2046,15 +2395,9 @@ async function restoreFromGoogleDrive() {
     modal.querySelectorAll('.gdrive-restore-btn').forEach(btn => {
       btn.onclick = async () => {
         const fileId = btn.dataset.fid;
-        if (!confirm('Restore this backup from Google Drive?\
-Current state will be saved as a snapshot first.')) return;
+        if (!confirm('Restore this backup from Google Drive?\nCurrent state will be saved as a snapshot first.')) return;
         try {
-          console.log('[RESTORE] Starting restore...');
-          console.log('[RESTORE] Current D:', JSON.stringify(D).substring(0, 500));
-
-          // Save current state first
-          showToast('💾 Saving current state…');
-          await saveSnapshot(true);
+          console.log('[RESTORE] Starting Google Drive restore...');
 
           // Download the backup file
           showToast('☁️ Downloading backup…');
@@ -2071,12 +2414,38 @@ Current state will be saved as a snapshot first.')) return;
             return;
           }
 
+          // Integrity check before overwrite
+          let importedCount = 0;
+          (imported.pages || []).forEach(p => { importedCount += (p.widgets || []).length + (p.miroCards || []).length; });
+          let currentCount = 0;
+          (D.pages || []).forEach(p => { currentCount += (p.widgets || []).length + (p.miroCards || []).length; });
+
+          if (currentCount > 50 && importedCount < Math.floor(currentCount * 0.85)) {
+            const drop = currentCount - importedCount;
+            const confirmMsg = `⚠️ تنبيه استعادة نسخة احتياطية (RESTORE INTEGRITY GUARD):\n\n` +
+              `النسخة المحملة من Google Drive تحتوي على (${importedCount}) عنصر فقط،\n` +
+              `بينما بياناتك الحالية تحتوي على (${currentCount}) عنصر!\n` +
+              `هذا الإجراء سيؤدي إلى فقدان (${drop}) عنصر.\n\n` +
+              `هل أنت متأكد تماماً من رغبتك في الاستعادة؟`;
+            if (!confirm(confirmMsg)) {
+              showToast('🛡️ تم إلغاء الاستعادة لحماية بياناتك', 4000);
+              return;
+            }
+          }
+
+          // Save current state first
+          showToast('💾 Saving current state…');
+          await saveSnapshot(true);
+
           D = imported;
           sanitizeData(D);
+          if (D.pages) {
+            D.pages.forEach(p => { cachePageDataSafe(p.id, p); });
+          }
           sv(true, true);
           switchActivePage(D.cur);
           modal.style.display = 'none';
-          showToast('✅ Restored from Google Drive!', 3000);
+          showToast(`✅ Restored from Google Drive! (${importedCount} items)`, 3500);
         } catch (err) {
           console.error('[RESTORE FAILED]', err);
           if (typeof showToast === 'function') showToast('❌ Restore failed: ' + err.message, 8000);
@@ -2151,17 +2520,27 @@ async function ensureGitHubRepo() {
   }
 }
 
-// Export to GitHub (commit with version control)
+// Export to GitHub (commit with version control and data integrity check)
 async function exportToGitHub() {
   try {
     if (!getGitHubPAT()) { showToast('❌ GitHub token required', 3000); return; }
     showToast('🐙 Saving to GitHub…');
     await ensureGitHubRepo();
 
-    const exportData = buildFullExportData();
+    const exportData = await buildFullExportDataAsync();
+    
+    if (!checkDataIntegrity(exportData, 'GitHub Backup')) {
+      return;
+    }
+
+    let totalItems = 0;
+    exportData.pages.forEach(p => {
+      totalItems += (p.widgets || []).length + (p.miroCards || []).length;
+    });
+
     const content = btoa(unescape(encodeURIComponent(JSON.stringify(exportData, null, 2))));
     const now = new Date();
-    const commitMsg = 'Backup ' + now.toISOString().slice(0, 19).replace('T', ' ');
+    const commitMsg = `Backup ${now.toISOString().slice(0, 19).replace('T', ' ')} [${totalItems} items, ${exportData.pages.length} pages]`;
 
     // Get current file SHA (needed for updates)
     let sha = null;
@@ -2189,8 +2568,8 @@ async function exportToGitHub() {
     }
 
     const result = await putResp.json();
-    showToast('✅ Saved to GitHub: ' + commitMsg, 3000);
-    console.log('[GITHUB] Backup committed:', result.commit?.sha?.slice(0, 7));
+    showToast(`✅ Saved to GitHub: ${totalItems} items (${exportData.pages.length} pages)`, 4000);
+    console.log('[GITHUB] Backup committed:', result.commit?.sha?.slice(0, 7), commitMsg);
     return result;
   } catch (err) {
     console.error('[GITHUB EXPORT ERROR]', err);
@@ -2238,10 +2617,12 @@ async function restoreFromGitHub() {
       const timeStr = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' +
         date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       const shortSha = c.sha.slice(0, 7);
+      const itemMatch = c.commit.message.match(/\[(\d+)\s+items/);
+      const badgeHtml = itemMatch ? `<span style="margin-left:6px;background:rgba(52,211,153,0.2);color:#34d399;padding:1px 6px;border-radius:8px;font-size:0.7rem;font-weight:bold;">📦 ${itemMatch[1]} items</span>` : '';
       rowsHtml += `
         <div class="snap-row" data-sha="${c.sha}">
           <div class="snap-info">
-            <div class="snap-time">${timeStr}</div>
+            <div class="snap-time">${timeStr} ${badgeHtml}</div>
             <div class="snap-pages">${c.commit.message} <span style="opacity:.5;font-size:.7rem">${shortSha}</span></div>
           </div>
           <button class="snap-restore-btn github-restore-btn" data-sha="${c.sha}" title="Restore this version">Restore</button>
@@ -2262,9 +2643,6 @@ async function restoreFromGitHub() {
         const sha = btn.dataset.sha;
         if (!confirm('Restore this version from GitHub?\nCurrent state will be saved as a snapshot first.')) return;
         try {
-          showToast('💾 Saving current state…');
-          await saveSnapshot(true);
-
           showToast('🐙 Downloading version…');
           // Get file at specific commit
           const fileResp = await fetch(
@@ -2280,12 +2658,39 @@ async function restoreFromGitHub() {
             showToast('❌ Could not parse backup file', 3000);
             return;
           }
+
+          // Integrity check before overwrite
+          let importedCount = 0;
+          (imported.pages || []).forEach(p => { importedCount += (p.widgets || []).length + (p.miroCards || []).length; });
+          let currentCount = 0;
+          (D.pages || []).forEach(p => { currentCount += (p.widgets || []).length + (p.miroCards || []).length; });
+
+          if (currentCount > 50 && importedCount < Math.floor(currentCount * 0.85)) {
+            const drop = currentCount - importedCount;
+            const confirmMsg = `⚠️ تنبيه استعادة نسخة احتياطية (RESTORE INTEGRITY GUARD):\n\n` +
+              `النسخة المحملة من GitHub تحتوي على (${importedCount}) عنصر فقط،\n` +
+              `بينما بياناتك الحالية تحتوي على (${currentCount}) عنصر!\n` +
+              `هذا الإجراء سيؤدي إلى فقدان (${drop}) عنصر.\n\n` +
+              `هل أنت متأكد تماماً من رغبتك في الاستعادة؟`;
+            if (!confirm(confirmMsg)) {
+              showToast('🛡️ تم إلغاء الاستعادة لحماية بياناتك', 4000);
+              return;
+            }
+          }
+
+          // Save current state first
+          showToast('💾 Saving current state…');
+          await saveSnapshot(true);
+
           D = imported;
           sanitizeData(D);
+          if (D.pages) {
+            D.pages.forEach(p => { cachePageDataSafe(p.id, p); });
+          }
           sv(true, true);
           switchActivePage(D.cur);
           modal.style.display = 'none';
-          showToast('✅ Restored from GitHub!', 3000);
+          showToast(`✅ Restored from GitHub! (${importedCount} items)`, 3500);
         } catch (err) {
           console.error('[GITHUB RESTORE ERROR]', err);
           showToast('❌ Restore failed: ' + err.message, 4000);
