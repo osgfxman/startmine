@@ -22,5 +22,15 @@ Write-Host "  Updated sw.js" -ForegroundColor Green
 
 # ─── Deploy ───
 Write-Host "`nDeploying to Firebase..." -ForegroundColor Yellow
-firebase deploy
+
+$fbCmd = "firebase"
+if (-not (Get-Command firebase -ErrorAction SilentlyContinue)) {
+    $fbFallback = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\Google.FirebaseCLI_Microsoft.Winget.Source_8wekyb3d8bbwe\firebase.exe"
+    if (Test-Path $fbFallback) {
+        $fbCmd = $fbFallback
+    }
+}
+
+& $fbCmd deploy
 Write-Host "`nDone! Version: $ts" -ForegroundColor Green
+
