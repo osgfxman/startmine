@@ -16,7 +16,7 @@
   const SANITIZE_SV_COOLDOWN = 5000; // 5s cooldown between sanitize-triggered saves
 
   // Extracted syncNow
-  window.syncNow = function () {
+  window.syncNow = async function () {
   if (!USER_ID) return Promise.resolve();
   showToast('🔄 Syncing to cloud...');
   setOwnWrite(true);
@@ -43,6 +43,20 @@
     } catch(e) {}
   }
 
+  // Pre-fetch cached data for all non-active pages asynchronously from IndexedDB/Memory
+  const cachedPagesMap = new Map();
+  if (Array.isArray(D.pages)) {
+    for (const p of D.pages) {
+      if (!p || p.id === D.cur) continue;
+      try {
+        const cached = typeof getCachedPageDataAsync === 'function' ? await getCachedPageDataAsync(p.id) : getCachedPageData(p.id);
+        if (cached) cachedPagesMap.set(p.id, cached);
+      } catch (err) {
+        console.warn(`[SYNC PREFETCH] Failed to fetch cache for page ${p.id}:`, err);
+      }
+    }
+  }
+
   const pagesMeta = D.pages.filter(p => p).map(p => {
     let serverTs = 0;
     const sMatch = serverPagesMeta.find(sm => sm.id === p.id);
@@ -52,7 +66,7 @@
     if (p.id === D.cur) {
       localTs = p.ts || Date.now();
     } else {
-      const cached = getCachedPageData(p.id);
+      const cached = cachedPagesMap.get(p.id) || getCachedPageData(p.id);
       localTs = (cached && cached.ts) || p.ts || 0;
     }
 
@@ -90,7 +104,7 @@
     if (p.id === D.cur) {
       localTs = p.ts || Date.now();
     } else {
-      const cached = getCachedPageData(p.id);
+      const cached = cachedPagesMap.get(p.id) || getCachedPageData(p.id);
       localTs = (cached && cached.ts) || p.ts || 0;
     }
 
@@ -141,7 +155,7 @@
         slicerRowSizes = null;
         ts = p.ts || Date.now();
       } else {
-        const cached = getCachedPageData(p.id);
+        const cached = cachedPagesMap.get(p.id) || getCachedPageData(p.id);
         const hasCachedData = cached && (
           (cached.widgets && cached.widgets.length > 0) ||
           (cached.miroCards && cached.miroCards.length > 0) ||

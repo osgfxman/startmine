@@ -157,15 +157,13 @@ window._lastSyncedMetaStr = null;
 window._pendingDeletePageIds = [];
 
 /* ─── Offline Mode Stubs ─── */
-function setOfflineMode(val) { return window.SM.data.setOfflineMode(val); }
-function updateOfflineUI() { return window.SM.data.updateOfflineUI(); }
-function markDirtyOffline() { return window.SM.data.markDirtyOffline(); }
-function toggleOfflineMode() { return window.SM.data.toggleOfflineMode(); }
-function detachAllListeners() { return window.SM.data.detachAllListeners(); }
+var setOfflineMode = window.SM?.data?.setOfflineMode || window.setOfflineMode;
+var updateOfflineUI = window.SM?.data?.updateOfflineUI || window.updateOfflineUI;
+var markDirtyOffline = window.SM?.data?.markDirtyOffline || window.markDirtyOffline;
+var toggleOfflineMode = window.SM?.data?.toggleOfflineMode || window.toggleOfflineMode;
+var detachAllListeners = window.SM?.data?.detachAllListeners || window.detachAllListeners;
 
-function syncNow() {
-  return window.SM.data.syncNow();
-}
+var syncNow = window.SM?.data?.syncNow || window.syncNow;
 
 /* ─── LocalStorage + IndexedDB Cache ─── */
 const LS_META = 'sm_meta';
@@ -1156,14 +1154,10 @@ function switchActivePage(pageId) {
 }
 
 
-function sv(saveAll = false, immediate = false) {
-  return window.SM.data.sv(saveAll, immediate);
-}
+var sv = (saveAll = false, immediate = false) => (window.SM?.data?.sv ? window.SM.data.sv(saveAll, immediate) : window.sv(saveAll, immediate));
 
 // ─── Save Guards: force-save to localStorage on tab close ───
-function forceLocalSave() {
-  return window.SM.data.forceLocalSave();
-}
+var forceLocalSave = () => (window.SM?.data?.forceLocalSave ? window.SM.data.forceLocalSave() : window.forceLocalSave());
 
 window.addEventListener('beforeunload', (e) => {
   // Always force-save to localStorage first (guarantees no data loss)
@@ -1186,7 +1180,7 @@ let _snapshotSaving = false;
 let _lastSnapshotTs = 0;
 
 // Toast notification helper
-function showToast(msg, duration = 2000) {
+var showToast = (typeof SM !== 'undefined' && SM.ui && SM.ui.showToast) ? SM.ui.showToast : function(msg, duration = 2000) {
   let toast = document.getElementById('sm-toast');
   if (!toast) {
     toast = document.createElement('div');
@@ -1202,7 +1196,7 @@ function showToast(msg, duration = 2000) {
     toast.style.opacity = '0';
     toast.style.transform = 'translateX(-50%) translateY(-60px)';
   }, duration);
-}
+};
 
 // Full snapshot save to Firebase
 function saveSnapshot(silent = false) {
@@ -5400,25 +5394,12 @@ function cmyk2rgb(c, m, y, k) {
     b: Math.round(255 * (1 - y) * (1 - k)),
   };
 }
-function openM(id) {
-  document.getElementById(id).classList.add('open');
-}
-function closeM(id) {
-  document.getElementById(id).classList.remove('open');
-  if (id === 'm-aw') {
-    document.getElementById('nw-t').value = '';
-    document.getElementById('nw-e').value = '';
-    selType = 'bookmarks';
-    document
-      .querySelectorAll('.tc')
-      .forEach((x) => x.classList.toggle('sel', x.dataset.t === 'bookmarks'));
-  }
-  if (id === 'm-bm') {
-    document.getElementById('bm-u').value = '';
-    document.getElementById('bm-l').value = '';
-    document.getElementById('bm-e').value = '';
-  }
-}
+var openM = (typeof SM !== 'undefined' && SM.ui && SM.ui.openM) ? SM.ui.openM : function(id) {
+  document.getElementById(id)?.classList.add('open');
+};
+var closeM = (typeof SM !== 'undefined' && SM.ui && SM.ui.closeM) ? SM.ui.closeM : function(id) {
+  document.getElementById(id)?.classList.remove('open');
+};
 document.querySelectorAll('.mo').forEach((o) => {
   o.addEventListener('click', (e) => {
     if (e.target === o) o.classList.remove('open');

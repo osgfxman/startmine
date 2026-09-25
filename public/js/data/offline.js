@@ -178,10 +178,12 @@
     }
   }
 
-  /* ─── LocalStorage + IndexedDB Cache ─── */
+  /* ─── LocalStorage + IndexedDB + In-Memory Cache ─── */
   const LS_META = 'sm_meta';
   const LS_PAGES_META = 'sm_pages_meta';
   const LS_CUR_PAGE = 'sm_cur_page';
+  const _memoryPageCache = new Map();
+
   function lsPageKey(pid) { return 'sm_page_' + pid; }
   function cacheMeta(meta) { try { localStorage.setItem(LS_META, JSON.stringify(meta)); } catch (e) { } }
   function cachePagesMeta(pm) { try { localStorage.setItem(LS_PAGES_META, JSON.stringify(pm)); } catch (e) { } }
@@ -224,6 +226,9 @@
   }
 
   function cachePageDataSafe(pid, data) {
+    if (pid && data) {
+      _memoryPageCache.set(pid, data);
+    }
     const itemCount = (data.widgets || []).length + (data.miroCards || []).length;
     let lsOk = false;
     try {
@@ -240,7 +245,7 @@
       if (!ok) console.error(`[CACHE IDB FAIL] Page ${pid}`);
     });
     if (!lsOk && itemCount > 0) {
-      console.warn(`[CACHE WARNING] Page ${pid} has ${itemCount} items but localStorage write FAILED.`);
+      console.warn(`[CACHE WARNING] Page ${pid} has ${itemCount} items but localStorage write FAILED. Data safely preserved in memory and IndexedDB.`);
       if (typeof showToast === 'function') showToast('⚠️ Storage nearly full — data safe in backup cache', 4000);
     }
     return lsOk;
@@ -251,12 +256,23 @@
   }
 
   async function getCachedPageDataAsync(pid) {
+    if (_memoryPageCache.has(pid)) return _memoryPageCache.get(pid);
     const idbData = await idbGet('page_' + pid);
-    if (idbData) return idbData;
+    if (idbData) {
+      _memoryPageCache.set(pid, idbData);
+      return idbData;
+    }
     return getCachedPageDataSync(pid);
   }
   function getCachedPageDataSync(pid) {
-    try { return JSON.parse(localStorage.getItem(lsPageKey(pid))); } catch (e) { return null; }
+    if (_memoryPageCache.has(pid)) return _memoryPageCache.get(pid);
+    try {
+      const item = localStorage.getItem(lsPageKey(pid));
+      if (!item) return null;
+      const parsed = JSON.parse(item);
+      if (parsed) _memoryPageCache.set(pid, parsed);
+      return parsed;
+    } catch (e) { return null; }
   }
   function getCachedPageData(pid) { return getCachedPageDataSync(pid); }
 
