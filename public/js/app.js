@@ -3539,12 +3539,7 @@ async function executePagesMerge(importedPages, sourceLabel) {
 
   let addedCount = 0;
   importedPages.forEach(page => {
-    const baseName = (page.name || 'Imported Board').trim();
-    // If a page with the same name already exists in current data, mark clearly
-    if (existingNames.has(baseName.toLowerCase())) {
-      const tag = isStartMe ? ' (Start.me)' : ' (Imported)';
-      page.name = `${baseName}${tag}`;
-    }
+    page.name = (page.name || 'Imported Board').trim();
     page.groupId = targetGroup.id;
     page.id = uid();
 

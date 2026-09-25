@@ -1490,34 +1490,7 @@ document.getElementById('mz-reset').onclick = (e) => {
   }
 };
 document.getElementById('mz-fit').onclick = () => {
-  const page = cp();
-  if (!page.miroCards || !page.miroCards.length) return;
-  let minX = Infinity,
-    minY = Infinity,
-    maxX = -Infinity,
-    maxY = -Infinity;
-  page.miroCards.forEach((c) => {
-    minX = Math.min(minX, c.x || 0);
-    minY = Math.min(minY, c.y || 0);
-    maxX = Math.max(maxX, (c.x || 0) + (c.w || 280));
-    maxY = Math.max(maxY, (c.y || 0) + (c.h || 240));
-  });
-  const canvas = document.getElementById('miro-canvas');
-  const cw = canvas.clientWidth,
-    ch = canvas.clientHeight;
-  const contentW = maxX - minX + 60,
-    contentH = maxY - minY + 60;
-  const zoom = Math.min(cw / contentW, ch / contentH, 4) * 100;
-  page.zoom = Math.max(1, Math.min(400, Math.round(zoom)));
-  page.panX = cw / 2 - ((minX + maxX) / 2) * (page.zoom / 100);
-  page.panY = ch / 2 - ((minY + maxY) / 2) * (page.zoom / 100);
-  document.getElementById('mz-slider').value = page.zoom;
-  document.getElementById('mz-pct').textContent = page.zoom + '%';
-  const z = page.zoom / 100;
-  document.getElementById('miro-board').style.transform =
-    `translate(${page.panX}px,${page.panY}px) scale(${z})`;
-  updateMiroGrid();
-  sv();
+  zoomToFitSelection();
 };
 
 // Floating add button → menu toggle
@@ -2843,6 +2816,11 @@ document.addEventListener('keydown', (e) => {
 
   // Other Shortcuts requiring resolved page
   if (!isCmd) {
+    if (key === 'f' || key === 'ب' || key === 'z' || key === 'ئ' || e.code === 'KeyF' || e.code === 'KeyZ') {
+      e.preventDefault();
+      zoomToFitSelection();
+      return;
+    }
     switch (key) {
       case 'delete':
       case 'backspace':
@@ -2888,6 +2866,7 @@ document.addEventListener('keydown', (e) => {
         }
         break;
       case 'f': case 'ب':
+      case 'z': case 'ئ':
         e.preventDefault();
         zoomToFitSelection();
         break;
