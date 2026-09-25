@@ -3370,6 +3370,212 @@ function parseStartMeHTML(htmlText) {
   return pages;
 }
 
+// ─── Universal Pages Extractor from JSON (Startmine, Start.me, and Bookmarks JSON) ───
+function extractPagesFromJSON(raw) {
+  let pages = [];
+
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw); } catch (e) { throw new Error('الملف ليس بصيغة JSON صحيحة: ' + e.message); }
+  }
+
+  if (raw && !raw.pages && raw.data && raw.data.pages) {
+    raw = raw.data;
+  }
+
+  // 1. If it's a full Startmine export or contains raw.pages
+  if (raw && raw.pages && Array.isArray(raw.pages)) {
+    raw.pages.forEach((pg, pi) => {
+      const pageName = pg.name || pg.title || ('Page ' + (pi + 1));
+      let miroCards = Array.isArray(pg.miroCards) ? JSON.parse(JSON.stringify(pg.miroCards)) : [];
+      let widgets = Array.isArray(pg.widgets) ? JSON.parse(JSON.stringify(pg.widgets)) : [];
+
+      const sections = pg.sections || pg.tabs || [];
+      if (sections.length > 0 && miroCards.length === 0 && widgets.length === 0) {
+        // Convert Start.me JSON sections into miroCards
+        const startX = 100; const startY = 100; const gap = 40;
+        let cursX = startX; let cursY = startY; let rowMaxH = 0;
+        const colsPerRow = 4; let addedCount = 0;
+
+        sections.forEach((sec) => {
+          const bms = sec.bookmark_collection?.bookmarks || sec.items || sec.bookmarks || [];
+          if (bms.length > 0) {
+            const items = bms.map(bm => ({
+              id: uid(),
+              label: (bm.title || bm.name || bm.label || bm.url || '').slice(0, 80),
+              url: bm.url || '',
+              emoji: ''
+            })).filter(it => it.url && it.url.startsWith('http'));
+
+            if (items.length > 0) {
+              const wCols = 6; const itemPx = 94;
+              const reqRows = Math.ceil(items.length / wCols);
+              const cardW = 540; const cardH = Math.max(200, 70 + (reqRows * itemPx));
+
+              miroCards.push({
+                id: uid(),
+                type: 'bwidget',
+                wType: 'bookmarks',
+                title: sec.title || sec.name || sec.settings?.title || 'Bookmarks',
+                emoji: '📌',
+                content: '',
+                items: items,
+                color: { ...DEF_COLOR },
+                x: cursX,
+                y: cursY,
+                w: cardW,
+                h: cardH,
+                display: 'spark',
+                size: 'md'
+              });
+
+              cursX += cardW + gap;
+              rowMaxH = Math.max(rowMaxH, cardH);
+              addedCount++;
+              if (addedCount % colsPerRow === 0) {
+                cursX = startX;
+                cursY += rowMaxH + gap;
+                rowMaxH = 0;
+              }
+            }
+          }
+        });
+      }
+
+      pages.push({
+        ...pg,
+        id: uid(),
+        name: pageName,
+        pageType: pg.pageType || (miroCards.length > 0 ? 'miro' : 'bookmarks'),
+        miroCards: miroCards,
+        widgets: widgets,
+        zoom: pg.zoom || 100,
+        panX: pg.panX || 0,
+        panY: pg.panY || 0,
+        bg: pg.bg || '',
+        bgType: pg.bgType || 'none',
+        tabColor: pg.tabColor || ''
+      });
+    });
+  } else if (Array.isArray(raw)) {
+    // 2. If it's an array of pages or array of bookmarks
+    if (raw.length > 0 && (raw[0].widgets || raw[0].miroCards || raw[0].sections || raw[0].name || raw[0].title)) {
+      return extractPagesFromJSON({ pages: raw });
+    } else {
+      const items = raw.filter(b => b && b.url).map(b => ({
+        id: uid(),
+        label: (b.title || b.label || b.name || b.url).slice(0, 80),
+        url: b.url,
+        emoji: ''
+      }));
+      if (items.length > 0) {
+        pages.push({
+          id: uid(),
+          name: 'Imported Bookmarks',
+          pageType: 'miro',
+          miroCards: [{
+            id: uid(),
+            type: 'bwidget',
+            wType: 'bookmarks',
+            title: 'Bookmarks',
+            emoji: '📌',
+            content: '',
+            items: items,
+            color: { ...DEF_COLOR },
+            x: 100,
+            y: 100,
+            w: 540,
+            h: 350,
+            display: 'spark',
+            size: 'md'
+          }],
+          widgets: []
+        });
+      }
+    }
+  }
+
+  return pages;
+}
+
+// ─── Universal Pages Merge Engine (Adds pages without overwriting existing data) ───
+async function executePagesMerge(importedPages, sourceLabel) {
+  if (!importedPages || importedPages.length === 0) {
+    alert('لم يتم العثور على أي صفحات صالحة للدمج في هذا الملف.');
+    return;
+  }
+
+  let totalBm = 0;
+  importedPages.forEach(p => {
+    (p.miroCards || []).forEach(c => { totalBm += (c.items || []).length; });
+    (p.widgets || []).forEach(w => { totalBm += (w.items || []).length; });
+  });
+
+  const confirmMsg =
+    `➕ دمج صفحات ${sourceLabel} (Merge / Amend):\n\n` +
+    `تم استخراج ${importedPages.length} صفحة/لوحة بإجمالي ${totalBm} بوكمارك.\n\n` +
+    `• سيتم إضافة هذه اللوحات كصفحات جديدة بالكامل.\n` +
+    `• لن يتم حذف أي صفحة أو بوكمارك من بياناتك الحالية نهائياً.\n` +
+    `• ستتمكن من مراجعة كل صفحة وتقرير ما تريد إبقاءه أو حذفه بحرية.\n\n` +
+    `هل تريد المتابعة وإضافة الصفحات الآن؟`;
+
+  if (!confirm(confirmMsg)) return;
+
+  // 1. Safety snapshot of current state
+  if (typeof saveSnapshot === 'function') {
+    try { await saveSnapshot(true); } catch (e) { console.warn('[SNAPSHOT] Auto-save skipped:', e); }
+  }
+
+  // 2. Identify or create group for imported boards
+  let targetEnv = D.curEnv || (D.environments && D.environments[0] ? D.environments[0].id : 'e0');
+  const isStartMe = (sourceLabel || '').toLowerCase().includes('start.me');
+  const groupName = isStartMe ? 'Start.me (Imported)' : 'JSON (Imported)';
+  let targetGroup = D.groups.find(g => g.name === groupName && g.envId === targetEnv);
+  if (!targetGroup) {
+    targetGroup = { id: uid(), name: groupName, envId: targetEnv };
+    D.groups.push(targetGroup);
+  }
+
+  const existingNames = new Set((D.pages || []).map(p => (p.name || '').trim().toLowerCase()));
+
+  let addedCount = 0;
+  importedPages.forEach(page => {
+    const baseName = (page.name || 'Imported Board').trim();
+    // If a page with the same name already exists in current data, mark clearly
+    if (existingNames.has(baseName.toLowerCase())) {
+      const tag = isStartMe ? ' (Start.me)' : ' (Imported)';
+      page.name = `${baseName}${tag}`;
+    }
+    page.groupId = targetGroup.id;
+    page.id = uid();
+
+    // Enforce full persistence in RAM memory, IndexedDB, and localStorage
+    cachePageDataSafe(page.id, page);
+    D.pages.push(page);
+    existingNames.add(page.name.trim().toLowerCase());
+    addedCount++;
+  });
+
+  // 3. Switch to target group & first imported page so the user sees the imported content
+  D.curGroup = targetGroup.id;
+  if (importedPages.length > 0) {
+    D.cur = importedPages[0].id;
+  }
+
+  sanitizeData(D);
+  sv(true, true);
+  renderMeta();
+  switchActivePage(D.cur);
+
+  const ioPop = document.getElementById('io-pop');
+  if (ioPop) ioPop.classList.remove('open');
+
+  if (typeof showToast === 'function') {
+    showToast(`✅ تم دمج ${addedCount} صفحة (${totalBm} بوكمارك) في مجموعة "${groupName}"!`, 5000);
+  } else {
+    alert(`✅ تم دمج ${addedCount} صفحة (${totalBm} بوكمارك) بنجاح!`);
+  }
+}
+
 // ─── Import Start.me (Replace All) ───
 const impStartmeEl = document.getElementById('imp-startme');
 if (impStartmeEl) {
@@ -3379,7 +3585,14 @@ if (impStartmeEl) {
     const r = new FileReader();
     r.onload = (ev) => {
       try {
-        const pages = parseStartMeHTML(ev.target.result);
+        const text = ev.target.result;
+        let pages = [];
+        const isJson = file.name.toLowerCase().endsWith('.json') || text.trim().startsWith('{') || text.trim().startsWith('[');
+        if (isJson) {
+          pages = extractPagesFromJSON(text);
+        } else {
+          pages = parseStartMeHTML(text);
+        }
         if (!pages || pages.length === 0) {
           alert('No pages found in file.');
           return;
@@ -3431,7 +3644,7 @@ if (impStartmeEl) {
   };
 }
 
-// ─── Merge / Amend Start.me (Add pages without deleting existing data) ───
+// ─── Merge / Amend Start.me (HTML or JSON) ───
 const mergeStartmeEl = document.getElementById('merge-startme');
 if (mergeStartmeEl) {
   mergeStartmeEl.onchange = function (e) {
@@ -3440,81 +3653,41 @@ if (mergeStartmeEl) {
     const r = new FileReader();
     r.onload = async (ev) => {
       try {
-        const parsedPages = parseStartMeHTML(ev.target.result);
-        if (!parsedPages || parsedPages.length === 0) {
-          alert('لم يتم العثور على صفحات في ملف Start.me.');
-          return;
-        }
-
-        const totalBm = parsedPages.reduce(
-          (s, p) => s + (p.miroCards || []).reduce((ss, w) => ss + (w.items || []).length, 0),
-          0
-        );
-
-        const confirmMsg =
-          `➕ دمج صفحات Start.me (Merge / Amend):\n\n` +
-          `تم استخراج ${parsedPages.length} لوحة/صفحة بإجمالي ${totalBm} بوكمارك.\n\n` +
-          `• سيتم إضافة هذه اللوحات كصفحات جديدة بالكامل.\n` +
-          `• لن يتم حذف أي لوحة أو بوكمارك من بياناتك الحالية نهائياً.\n` +
-          `• ستتمكن من مراجعة كل لوحة وتقرير ما تريد إبقاءه أو حذفه بحرية.\n\n` +
-          `هل تريد المتابعة وإضافة الصفحات الآن؟`;
-
-        if (!confirm(confirmMsg)) return;
-
-        // 1. Safety snapshot of current state
-        if (typeof saveSnapshot === 'function') {
-          try { await saveSnapshot(true); } catch (e) { console.warn('[SNAPSHOT] Auto-save skipped:', e); }
-        }
-
-        // 2. Identify or create group for imported boards
-        let targetEnv = D.curEnv || (D.environments && D.environments[0] ? D.environments[0].id : 'e0');
-        let targetGroup = D.groups.find(g => g.name === 'Start.me (Imported)' && g.envId === targetEnv);
-        if (!targetGroup) {
-          targetGroup = { id: uid(), name: 'Start.me (Imported)', envId: targetEnv };
-          D.groups.push(targetGroup);
-        }
-
-        const existingNames = new Set((D.pages || []).map(p => (p.name || '').trim().toLowerCase()));
-
-        let addedCount = 0;
-        parsedPages.forEach(page => {
-          const baseName = (page.name || 'Imported Board').trim();
-          // If a page with the same name already exists in current data, mark clearly
-          if (existingNames.has(baseName.toLowerCase())) {
-            page.name = `${baseName} (Start.me)`;
-          }
-          page.groupId = targetGroup.id;
-          page.id = uid();
-
-          // Enforce full persistence in RAM memory, IndexedDB, and localStorage
-          cachePageDataSafe(page.id, page);
-          D.pages.push(page);
-          existingNames.add(page.name.trim().toLowerCase());
-          addedCount++;
-        });
-
-        // 3. Switch to target group & first imported page so the user sees the imported content
-        D.curGroup = targetGroup.id;
-        if (parsedPages.length > 0) {
-          D.cur = parsedPages[0].id;
-        }
-
-        sanitizeData(D);
-        sv(true, true);
-        renderMeta();
-        switchActivePage(D.cur);
-
-        const ioPop = document.getElementById('io-pop');
-        if (ioPop) ioPop.classList.remove('open');
-
-        if (typeof showToast === 'function') {
-          showToast(`✅ تم دمج ${addedCount} صفحة (${totalBm} بوكمارك) في مجموعة "Start.me (Imported)"!`, 5000);
+        const text = ev.target.result;
+        let pages = [];
+        const isJson = file.name.toLowerCase().endsWith('.json') || text.trim().startsWith('{') || text.trim().startsWith('[');
+        if (isJson) {
+          pages = extractPagesFromJSON(text);
+          await executePagesMerge(pages, 'Start.me (JSON)');
         } else {
-          alert(`✅ تم دمج ${addedCount} صفحة (${totalBm} بوكمارك) بنجاح!`);
+          pages = parseStartMeHTML(text);
+          await executePagesMerge(pages, 'Start.me (HTML)');
         }
       } catch (err) {
         console.error('[MERGE START.ME ERROR]', err);
         alert('خطأ أثناء الدمج: ' + err.message);
+      }
+    };
+    r.readAsText(file);
+    this.value = '';
+  };
+}
+
+// ─── Merge JSON (Add Pages without deleting existing data) ───
+const mergeJsonEl = document.getElementById('merge-json');
+if (mergeJsonEl) {
+  mergeJsonEl.onchange = function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = async (ev) => {
+      try {
+        const raw = JSON.parse(ev.target.result);
+        const pages = extractPagesFromJSON(raw);
+        await executePagesMerge(pages, 'JSON');
+      } catch (err) {
+        console.error('[MERGE JSON ERROR]', err);
+        alert('خطأ أثناء قراءة ملف JSON: ' + err.message);
       }
     };
     r.readAsText(file);
