@@ -414,7 +414,8 @@
                 gridCols: p.gridCols || null,
                 cellPages: p.cellPages || null,
                 slicerColSizes: p.slicerColSizes || null,
-                slicerRowSizes: p.slicerRowSizes || null
+                slicerRowSizes: p.slicerRowSizes || null,
+                ts: p.ts || 0
               };
             }
           }
@@ -441,6 +442,7 @@
             p.cellPages = heavyDataMap[p.id].cellPages;
             p.slicerColSizes = heavyDataMap[p.id].slicerColSizes;
             p.slicerRowSizes = heavyDataMap[p.id].slicerRowSizes;
+            if (heavyDataMap[p.id].ts) p.ts = heavyDataMap[p.id].ts;
           }
         });
 

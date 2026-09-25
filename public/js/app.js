@@ -216,6 +216,9 @@ window._memoryPageCache = window._memoryPageCache || new Map();
 const _memoryPageCache = window._memoryPageCache;
 
 function cachePageDataSafe(pid, data) {
+  if (window.SM?.data?.cachePageDataSafe) {
+    return window.SM.data.cachePageDataSafe(pid, data);
+  }
   if (pid && data) {
     _memoryPageCache.set(pid, data);
     if (window.D && window.D.pages) {
@@ -223,28 +226,35 @@ function cachePageDataSafe(pid, data) {
       if (livePg) {
         if ((data.widgets || []).length > 0) livePg.widgets = data.widgets;
         if ((data.miroCards || []).length > 0) livePg.miroCards = data.miroCards;
+        if (data.vGuides !== undefined) livePg.vGuides = data.vGuides;
+        if (data.hGuides !== undefined) livePg.hGuides = data.hGuides;
+        if (data.customCells !== undefined) livePg.customCells = data.customCells;
       }
     }
   }
-  const itemCount = (data.widgets || []).length + (data.miroCards || []).length;
+  idbSet('page_' + pid, data).catch(() => {});
   let lsOk = false;
-  // 1. Try localStorage (fast, synchronous)
   try {
     const json = JSON.stringify(data);
-    localStorage.setItem(lsPageKey(pid), json);
-    const verify = localStorage.getItem(lsPageKey(pid));
-    lsOk = (verify && verify.length === json.length);
-    if (!lsOk) console.error(`[CACHE LS VERIFY FAIL] Page ${pid} — written ${json.length} chars, read back ${verify ? verify.length : 0}`);
+    if (json.length < 120000) {
+      try {
+        localStorage.setItem(lsPageKey(pid), json);
+        lsOk = true;
+      } catch (quotaErr) {
+        if (typeof pruneLocalStorageCache === 'function') pruneLocalStorageCache(true);
+        try {
+          localStorage.setItem(lsPageKey(pid), json);
+          lsOk = true;
+        } catch(e2) {
+          lsOk = false;
+        }
+      }
+    } else {
+      try { localStorage.removeItem(lsPageKey(pid)); } catch(e) {}
+      lsOk = true;
+    }
   } catch (e) {
-    console.error(`[CACHE LS FAIL] Page ${pid} — ${e.message}`);
     lsOk = false;
-  }
-  // 2. Always write to IndexedDB (async, much larger limit)
-  idbSet('page_' + pid, data).then(ok => {
-    if (!ok) console.error(`[CACHE IDB FAIL] Page ${pid}`);
-  });
-  if (!lsOk && itemCount > 0) {
-    console.warn(`[CACHE WARNING] Page ${pid} has ${itemCount} items but localStorage write FAILED. Data safely preserved in memory and IndexedDB.`);
   }
   return lsOk;
 }
@@ -328,8 +338,15 @@ function getLsUsage() {
   return total;
 }
 function getLsCapacity() {
-  const used = getLsUsage();
+  if (window.SM?.data?.getLsCapacity) {
+    return window.SM.data.getLsCapacity();
+  }
+  let used = getLsUsage();
   const max = 5 * 1024 * 1024; // ~5MB typical
+  if (used > 3.2 * 1024 * 1024 && typeof pruneLocalStorageCache === 'function') {
+    pruneLocalStorageCache(false);
+    used = getLsUsage();
+  }
   return { used, max, pct: Math.round(used / max * 100) };
 }
 
@@ -524,8 +541,9 @@ function runIntegrityCheck() {
   // Storage capacity check
   const cap = getLsCapacity();
   if (cap.pct > 85) {
-    console.warn(`[STORAGE ⚠️] localStorage ${cap.pct}% full (${(cap.used/1024).toFixed(0)}KB / ${(cap.max/1024).toFixed(0)}KB)`);
-    if (cap.pct > 95 && typeof showToast === 'function') {
+    if (typeof pruneLocalStorageCache === 'function') pruneLocalStorageCache(true);
+    const refreshedCap = getLsCapacity();
+    if (refreshedCap.pct > 95 && typeof showToast === 'function') {
       showToast('⚠️ Browser storage 95%+ full — consider clearing old data', 6000);
     }
   }
@@ -1000,6 +1018,20 @@ function switchActivePage(pageId) {
     }
     buildCols();
   } else {
+    // Immediate canvas transition: prepare board coordinates and clear old cards
+    const isMiroPage = (activePg && activePg.pageType === 'miro') || (!activePg || !activePg.pageType);
+    const board = document.getElementById('miro-board');
+    if (board && activePg) {
+      const zoom = (activePg.zoom || 100) / 100;
+      const px = activePg.panX || 0, py = activePg.panY || 0;
+      board.style.transform = `translate(${px}px,${py}px) scale(${zoom})`;
+      board.style.setProperty('--inv-zoom', Math.min(3, Math.max(0.25, 1 / zoom)));
+      const mzSlider = document.getElementById('mz-slider');
+      if (mzSlider) mzSlider.value = activePg.zoom || 100;
+      const mzPct = document.getElementById('mz-pct');
+      if (mzPct) mzPct.textContent = (activePg.zoom || 100) + '%';
+    }
+
     const cachedPage = getCachedPageData(pageId);
     if (cachedPage && ((cachedPage.widgets || []).length > 0 || (cachedPage.miroCards || []).length > 0 || (cachedPage.vGuides || []).length > 0 || (cachedPage.hGuides || []).length > 0 || (cachedPage.customCells || []).length > 0 || cachedPage.pageType === 'slicer' || cachedPage.gridRows)) {
       const pg = cp();
@@ -1032,16 +1064,22 @@ function switchActivePage(pageId) {
       }
       buildCols();
     } else {
+      if (board && isMiroPage) {
+        const _pl = document.getElementById('miro-pinned-layer');
+        if (_pl) _pl.innerHTML = '';
+        board.querySelectorAll('.miro-card, .miro-sticky, .miro-widget, .miro-img, .miro-text, .miro-shape, .miro-pen, .miro-grid-card, .miro-mindmap, .miro-trello, .miro-array, .miro-gantt, .miro-embed, .miro-overlay-widget, .miro-life-widget, .miro-dyntitle').forEach(el => el.remove());
+      }
       // Try IndexedDB async (larger, more reliable cache)
       getCachedPageDataAsync(pageId).then(idbCached => {
       if (idbCached && ((idbCached.widgets || []).length > 0 || (idbCached.miroCards || []).length > 0 || (idbCached.vGuides || []).length > 0 || (idbCached.hGuides || []).length > 0 || (idbCached.customCells || []).length > 0 || idbCached.pageType === 'slicer' || idbCached.gridRows)) {
         const pg = cp();
         if (pg && pg.id === pageId) { // Make sure we're still on same page
-          // ⛔ RACE CONDITION GUARD: If Firebase or another edit has already loaded newer data, don't overwrite it!
+          // ⛔ RACE CONDITION GUARD: Only reject if local memory ACTUALLY has data AND newer timestamp!
+          const localHasData = (pg.widgets && pg.widgets.length > 0) || (pg.miroCards && pg.miroCards.length > 0) || (pg.customCells && pg.customCells.length > 0);
           const localTs = pg.ts || 0;
           const cachedTs = idbCached.ts || 0;
-          if (localTs > cachedTs) {
-            console.warn(`[IDB RESTORE GUARD ⛔] Page "${pg.name}" already has newer data (${localTs}) than IndexedDB cache (${cachedTs}) — skipping overwrite.`);
+          if (localHasData && localTs > cachedTs) {
+            console.warn(`[IDB RESTORE GUARD ⛔] Page "${pg.name}" already has newer local data (${localTs}) than IndexedDB cache (${cachedTs}) — skipping overwrite.`);
             return;
           }
           pg.widgets = idbCached.widgets || [];
@@ -1053,7 +1091,7 @@ function switchActivePage(pageId) {
           pg.cellStates = idbCached.cellStates || {};
           pg.mergedCells = idbCached.mergedCells || [];
           pg.customCells = idbCached.customCells || [];
-          pg.ts = cachedTs;
+          pg.ts = cachedTs || localTs || Date.now();
           pg.gridRows = idbCached.gridRows || null;
           pg.gridCols = idbCached.gridCols || null;
           pg.cellPages = idbCached.cellPages || null;
@@ -1074,7 +1112,9 @@ function switchActivePage(pageId) {
         }
       }
     });
-    document.getElementById('cw').innerHTML = '<div style="padding: 2rem; color: var(--mu); text-align: center;">Loading page data...</div>';
+    if (!isMiroPage) {
+      document.getElementById('cw').innerHTML = '<div style="padding: 2rem; color: var(--mu); text-align: center;">Loading page data...</div>';
+    }
     }
   }
 
@@ -1110,26 +1150,27 @@ function switchActivePage(pageId) {
         pg.ts = pData.ts || 0;
         return;
       }
-      // ⛔ TIMESTAMP GUARD: If local data is newer than incoming server data, ignore update
-      const incomingTs = pData.ts || 0;
-      const localTs = pg.ts || 0;
-      if (localTs > incomingTs) {
-        console.warn(`[FIREBASE GUARD ⛔] Local data for "${pg.name}" is newer (${localTs}) than incoming (${incomingTs}) — ignoring update.`);
-        // Upload our newer local data to server
-        sv(false, true);
-        return;
-      }
-
       const incomingW = (pData.widgets || []).length;
       const incomingC = (pData.miroCards || []).length;
       const incomingG = (pData.vGuides || []).length + (pData.hGuides || []).length + (pData.customCells || []).length;
       const localW = (pg.widgets || []).length;
       const localC = (pg.miroCards || []).length;
       const localG = (pg.vGuides || []).length + (pg.hGuides || []).length + (pg.customCells || []).length;
+      const localHasData = (localW > 0 || localC > 0 || localG > 0);
+
+      // ⛔ TIMESTAMP GUARD: If local data is newer than incoming server data AND local actually has content, ignore update
+      const incomingTs = pData.ts || 0;
+      const localTs = pg.ts || 0;
+      if (localHasData && localTs > incomingTs) {
+        console.warn(`[FIREBASE GUARD ⛔] Local data for "${pg.name}" is newer (${localTs}) than incoming (${incomingTs}) — ignoring update.`);
+        // Upload our newer local data to server
+        sv(false, true);
+        return;
+      }
+
       // ⛔ GUARD: If Firebase sends empty but we have local data, refuse the overwrite 
       // (Only do this if the server data is indeed older/equal, i.e., incomingTs <= localTs)
       const incomingEmpty = (incomingW === 0 && incomingC === 0 && incomingG === 0);
-      const localHasData = (localW > 0 || localC > 0 || localG > 0);
       if (incomingEmpty && localHasData && incomingTs <= localTs) {
         console.error(`[FIREBASE GUARD ⛔] Incoming data for "${pg.name}" is EMPTY but local has data/guides — IGNORING Firebase update!`);
         if (typeof showToast === 'function') showToast('⚠️ Empty data from server ignored — local data preserved', 4000);
@@ -3538,14 +3579,16 @@ async function executePagesMerge(importedPages, sourceLabel) {
   const existingNames = new Set((D.pages || []).map(p => (p.name || '').trim().toLowerCase()));
 
   let addedCount = 0;
+  const nowTs = Date.now();
   importedPages.forEach(page => {
     page.name = (page.name || 'Imported Board').trim();
     page.groupId = targetGroup.id;
     page.id = uid();
+    page.ts = nowTs;
 
     // Enforce full persistence in RAM memory, IndexedDB, and localStorage
-    cachePageDataSafe(page.id, page);
     D.pages.push(page);
+    cachePageDataSafe(page.id, page);
     existingNames.add(page.name.trim().toLowerCase());
     addedCount++;
   });
@@ -3622,7 +3665,11 @@ if (impStartmeEl) {
         }
 
         // Cache all imported pages
-        pages.forEach(p => cachePageDataSafe(p.id, p));
+        const nowTs = Date.now();
+        pages.forEach(p => {
+          p.ts = nowTs;
+          cachePageDataSafe(p.id, p);
+        });
 
         D = result;
         sv(true, true);

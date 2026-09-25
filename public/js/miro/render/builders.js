@@ -150,17 +150,19 @@
         if (_pl) _pl.innerHTML = '';
         board.querySelectorAll(CARD_SELECTORS).forEach((el) => el.remove());
 
+        const frag = document.createDocumentFragment();
         page.miroCards.forEach((card) => {
           try {
             const el = instantiateCard(card);
             if (el) {
               el.dataset.cardSig = getCardSig(card);
-              board.appendChild(el);
+              frag.appendChild(el);
             }
           } catch (err) {
             console.error('[RENDER ERROR]', card && card.type, card && card.id, err);
           }
         });
+        board.appendChild(frag);
       } else {
         // DOM Reconciliation: update existing, remove stale, insert new (No flicker / No state loss)
         const existingCardEls = board.querySelectorAll(CARD_SELECTORS);

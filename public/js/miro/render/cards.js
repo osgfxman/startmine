@@ -4287,7 +4287,8 @@ function buildMiroBookmarkWidget(card) {
   `;
 
   // Grid/List toggle behavior
-  hdr.querySelector('[data-grid]').onclick = (e) => {
+  const gridBtn = hdr.querySelector('[data-grid]');
+  if (gridBtn) gridBtn.onclick = (e) => {
     e.stopPropagation();
     card.display = 'spark';
     card.size = 'lg';
@@ -4300,7 +4301,8 @@ function buildMiroBookmarkWidget(card) {
     el.style.height = bestH + 'px';
     if (typeof sv === 'function') sv();
   };
-  hdr.querySelector('[data-list]').onclick = (e) => {
+  const listBtn = hdr.querySelector('[data-list]');
+  if (listBtn) listBtn.onclick = (e) => {
     e.stopPropagation();
     card.display = 'stream';
     body.style.overflowY = 'auto';

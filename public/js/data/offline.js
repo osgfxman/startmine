@@ -229,6 +229,28 @@
     } catch (e) { return null; }
   }
 
+  function pruneLocalStorageCache(force) {
+    try {
+      const usage = getLsUsage();
+      const threshold = force ? 1.5 * 1024 * 1024 : 3.2 * 1024 * 1024;
+      if (usage > threshold) {
+        const curPageId = (window.D && window.D.cur) || localStorage.getItem(LS_CUR_PAGE) || '';
+        const curPageKey = curPageId ? lsPageKey(curPageId) : '';
+        const pageKeys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('sm_page_') && k !== curPageKey) {
+            pageKeys.push(k);
+          }
+        }
+        for (const k of pageKeys) {
+          try { localStorage.removeItem(k); } catch(e) {}
+          if (getLsUsage() < 2.2 * 1024 * 1024) break;
+        }
+      }
+    } catch(e) {}
+  }
+
   function cachePageDataSafe(pid, data) {
     if (pid && data) {
       _memoryPageCache.set(pid, data);
@@ -237,26 +259,39 @@
         if (livePg) {
           if ((data.widgets || []).length > 0) livePg.widgets = data.widgets;
           if ((data.miroCards || []).length > 0) livePg.miroCards = data.miroCards;
+          if (data.vGuides !== undefined) livePg.vGuides = data.vGuides;
+          if (data.hGuides !== undefined) livePg.hGuides = data.hGuides;
+          if (data.customCells !== undefined) livePg.customCells = data.customCells;
         }
       }
     }
-    const itemCount = (data.widgets || []).length + (data.miroCards || []).length;
+    // Always persist to IndexedDB asynchronously (unlimited quota, non-blocking)
+    idbSet('page_' + pid, data).catch(() => {});
+
+    // Manage localStorage safely: only write small pages (< 120KB) to avoid quota errors
     let lsOk = false;
     try {
       const json = JSON.stringify(data);
-      localStorage.setItem(lsPageKey(pid), json);
-      const verify = localStorage.getItem(lsPageKey(pid));
-      lsOk = (verify && verify.length === json.length);
-      if (!lsOk) console.error(`[CACHE LS VERIFY FAIL] Page ${pid}`);
+      if (json.length < 120000) {
+        try {
+          localStorage.setItem(lsPageKey(pid), json);
+          lsOk = true;
+        } catch (quotaErr) {
+          pruneLocalStorageCache(true);
+          try {
+            localStorage.setItem(lsPageKey(pid), json);
+            lsOk = true;
+          } catch(e2) {
+            lsOk = false;
+          }
+        }
+      } else {
+        // Large page payload: intentionally delegate to IndexedDB + RAM
+        try { localStorage.removeItem(lsPageKey(pid)); } catch(e) {}
+        lsOk = true;
+      }
     } catch (e) {
-      console.error(`[CACHE LS FAIL] Page ${pid} — ${e.message}`);
       lsOk = false;
-    }
-    idbSet('page_' + pid, data).then(ok => {
-      if (!ok) console.error(`[CACHE IDB FAIL] Page ${pid}`);
-    });
-    if (!lsOk && itemCount > 0) {
-      console.warn(`[CACHE WARNING] Page ${pid} has ${itemCount} items but localStorage write FAILED. Data safely preserved in memory and IndexedDB.`);
     }
     return lsOk;
   }
@@ -336,12 +371,17 @@
     return total;
   }
   function getLsCapacity() {
-    const used = getLsUsage();
+    let used = getLsUsage();
     const max = 5 * 1024 * 1024;
+    if (used > 3.2 * 1024 * 1024) {
+      pruneLocalStorageCache(false);
+      used = getLsUsage();
+    }
     return { used, max, pct: Math.round(used / max * 100) };
   }
 
   // Export to SM.data
+  window.SM.data.pruneLocalStorageCache = pruneLocalStorageCache;
   window.SM.data.setOfflineMode = setOfflineMode;
   window.SM.data.changeSyncMode = changeSyncMode;
   window.SM.data.updateOfflineUI = updateOfflineUI;
@@ -388,6 +428,7 @@
   window.SM.core.expose('getCachedPageData', getCachedPageData);
   window.SM.core.expose('getLsUsage', getLsUsage);
   window.SM.core.expose('getLsCapacity', getLsCapacity);
+  window.SM.core.expose('pruneLocalStorageCache', pruneLocalStorageCache);
 
   SM.data.toggleOfflineMode = typeof toggleOfflineMode !== 'undefined' ? toggleOfflineMode : window.toggleOfflineMode;
   SM.data.setOfflineMode = typeof setOfflineMode !== 'undefined' ? setOfflineMode : window.setOfflineMode;
