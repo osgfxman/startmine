@@ -1388,6 +1388,146 @@ function fitCardsInViewport(targets, cw, ch, page, cellKey) {
   showToast('🔍 Zoom to fit');
 }
 
+function calculatePageFit(targets, cw, ch) {
+  if (!targets || targets.length === 0) return { zoom: 100, panX: 0, panY: 0, hasCards: false };
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  targets.forEach(c => {
+    const x = c.x || 0, y = c.y || 0;
+    const w = c.w || 200, h = c.h || 200;
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x + w > maxX) maxX = x + w;
+    if (y + h > maxY) maxY = y + h;
+  });
+  const bw = maxX - minX;
+  const bh = maxY - minY;
+  if (bw <= 0 || bh <= 0) return { zoom: 100, panX: 0, panY: 0, hasCards: false };
+
+  const padding = 0.1;
+  const availW = cw * (1 - padding * 2);
+  const availH = ch * (1 - padding * 2);
+  const fitZoom = Math.min(availW / bw, availH / bh);
+  const newZoomNum = Math.max(1, Math.min(400, Math.round(fitZoom * 100)));
+  const newZoom = newZoomNum / 100;
+
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  const panX = Math.round(cw / 2 - centerX * newZoom);
+  const panY = Math.round(ch / 2 - centerY * newZoom);
+  return { zoom: newZoomNum, panX, panY, hasCards: true };
+}
+
+let _fittingAllPages = false;
+async function fitAllPagesInGroup() {
+  if (_fittingAllPages) return;
+  if (typeof D === 'undefined' || !D.pages) return;
+
+  const curGroup = D.curGroup;
+  const groupPages = D.pages.filter(p => p && (curGroup === '__all__' || p.groupId === curGroup));
+  if (!groupPages || groupPages.length === 0) {
+    if (typeof showToast === 'function') showToast('ℹ️ لا توجد صفحات في هذه المجموعة');
+    return;
+  }
+
+  const canvas = document.getElementById('miro-canvas') || document.getElementById('cw');
+  const cw = (canvas && canvas.clientWidth) || window.innerWidth;
+  const ch = (canvas && canvas.clientHeight) || (window.innerHeight - 80);
+
+  _fittingAllPages = true;
+  const total = groupPages.length;
+  let fittedCount = 0;
+
+  if (typeof showToast === 'function') {
+    showToast(`📐 جارٍ ضبط ملاءمة الشاشة لـ ${total} صفحة في المجموعة...`, 3000);
+  }
+
+  try {
+    for (let i = 0; i < groupPages.length; i++) {
+      const pg = groupPages[i];
+      let cards = pg.miroCards || [];
+
+      // If cards are not in memory, try cache/IndexedDB
+      if (cards.length === 0) {
+        let cached = typeof getCachedPageDataSync === 'function' ? getCachedPageDataSync(pg.id) : null;
+        if (!cached || (cached.miroCards || []).length === 0) {
+          if (typeof getCachedPageDataAsync === 'function') {
+            cached = await getCachedPageDataAsync(pg.id);
+          }
+        }
+        if (cached && (cached.miroCards || []).length > 0) {
+          cards = cached.miroCards;
+        }
+      }
+
+      if (cards.length > 0) {
+        const fit = calculatePageFit(cards, cw, ch);
+        if (fit.hasCards) {
+          pg.zoom = fit.zoom;
+          pg.panX = fit.panX;
+          pg.panY = fit.panY;
+          fittedCount++;
+
+          // Keep in-memory cache updated with fitted coordinates
+          if (window._memoryPageCache && window._memoryPageCache.has(pg.id)) {
+            const memCached = window._memoryPageCache.get(pg.id);
+            if (memCached) {
+              memCached.zoom = fit.zoom;
+              memCached.panX = fit.panX;
+              memCached.panY = fit.panY;
+            }
+          }
+        }
+      }
+
+      // Progress reporting for smooth UX
+      if (total >= 5 && ((i + 1) % 5 === 0 || i === total - 1)) {
+        if (typeof showToast === 'function') {
+          showToast(`📐 ضبط الصفحات: ${i + 1} / ${total}...`, 1200);
+        }
+        await new Promise(r => setTimeout(r, 0));
+      }
+    }
+
+    // Apply live to active page if it is part of this group
+    const activePg = cp();
+    if (activePg && (curGroup === '__all__' || activePg.groupId === curGroup)) {
+      if (typeof applyZoomPan === 'function') {
+        applyZoomPan(activePg);
+      }
+      if (typeof updateMiroScrollbars === 'function') {
+        updateMiroScrollbars();
+      }
+      const mzSlider = document.getElementById('mz-slider');
+      if (mzSlider) mzSlider.value = activePg.zoom || 100;
+      const mzPct = document.getElementById('mz-pct');
+      if (mzPct) mzPct.textContent = (activePg.zoom || 100) + '%';
+    }
+
+    // Save metadata changes (zoom and pan for all pages)
+    if (typeof sv === 'function') {
+      sv(true, true);
+    }
+
+    if (typeof showToast === 'function') {
+      showToast(`✅ تم ضبط ملاءمة الشاشة لـ ${fittedCount} صفحة في المجموعة بنجاح!`, 4000);
+    }
+  } catch(err) {
+    console.error('[FIT ALL PAGES ERROR]', err);
+    if (typeof showToast === 'function') {
+      showToast('❌ حدث خطأ أثناء ضبط الصفحات: ' + err.message, 5000);
+    }
+  } finally {
+    _fittingAllPages = false;
+  }
+}
+
+window.calculatePageFit = calculatePageFit;
+window.fitAllPagesInGroup = fitAllPagesInGroup;
+if (window.SM && window.SM.miro) {
+  window.SM.miro.calculatePageFit = calculatePageFit;
+  window.SM.miro.fitAllPagesInGroup = fitAllPagesInGroup;
+}
+
 window._ctrlPressed = false;
 window._altPressed = false;
 window.addEventListener('keydown', (e) => {
@@ -1492,6 +1632,12 @@ document.getElementById('mz-reset').onclick = (e) => {
 document.getElementById('mz-fit').onclick = () => {
   zoomToFitSelection();
 };
+const mzFitGroupBtn = document.getElementById('mz-fit-group');
+if (mzFitGroupBtn) {
+  mzFitGroupBtn.onclick = () => {
+    fitAllPagesInGroup();
+  };
+}
 
 // Floating add button → menu toggle
 document.getElementById('miro-add-float').onclick = () => {
@@ -2656,7 +2802,6 @@ document.addEventListener('keydown', (e) => {
       case 'i': case 'ه': e.preventDefault(); document.getElementById('mtb-image').click(); break;
       case 'b': case 'لا': e.preventDefault(); document.getElementById('mtb-card').click(); break;
       case 'e': case 'ث': e.preventDefault(); document.getElementById('mtb-embed').click(); break;
-      case 'y': case 'ئ': e.preventDefault(); document.getElementById('mtb-dyn-title').click(); break;
       case 'escape':
         setActiveTool('select');
         document.getElementById('miro-shape-panel').classList.remove('show');
@@ -2668,6 +2813,23 @@ document.addEventListener('keydown', (e) => {
         break;
     }
     if (processed) return;
+  }
+
+  // Dynamic Title: Alt+D / Alt+ي
+  if (e.altKey && !isCmd && (key === 'd' || key === 'ي' || e.code === 'KeyD')) {
+    e.preventDefault();
+    const dynBtn = document.getElementById('mtb-dyn-title');
+    if (dynBtn) dynBtn.click();
+    return;
+  }
+
+  // Fit All in Group: Ctrl+Shift+Z / Ctrl+Shift+ئ
+  if (isCmd && e.shiftKey && (key === 'z' || key === 'ئ' || e.code === 'KeyZ')) {
+    e.preventDefault();
+    if (typeof fitAllPagesInGroup === 'function') {
+      fitAllPagesInGroup();
+    }
+    return;
   }
 
   let page = null;
@@ -2684,7 +2846,7 @@ document.addEventListener('keydown', (e) => {
     }
   }
   // Undo: Ctrl+Z (works with any keyboard layout via e.code)
-  if (isCmd && (key === 'z' || e.code === 'KeyZ')) {
+  if (isCmd && !e.shiftKey && (key === 'z' || key === 'ئ' || e.code === 'KeyZ')) {
     e.preventDefault();
     performUndo();
     return;
@@ -2815,7 +2977,7 @@ document.addEventListener('keydown', (e) => {
   }
 
   // Other Shortcuts requiring resolved page
-  if (!isCmd) {
+  if (!isCmd && !e.altKey) {
     if (key === 'f' || key === 'ب' || key === 'z' || key === 'ئ' || e.code === 'KeyF' || e.code === 'KeyZ') {
       e.preventDefault();
       zoomToFitSelection();
