@@ -9,7 +9,36 @@
 // js/miro/render/builders.js
 (function() {
   let _buildingCanvas = false;
-  window.buildMiroCanvas = function buildMiroCanvas() {
+
+  const CARD_SELECTORS = '.miro-card, .miro-life, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed, .miro-overlay-widget';
+
+  function getCardSig(card) {
+    if (!card) return '';
+    const complex = (card.items || card.columns || card.nodes || card.gridData || card.tasks || card.events)
+      ? JSON.stringify(card.items || card.columns || card.nodes || card.gridData || card.tasks || card.events)
+      : '';
+    const colorStr = card.color ? (typeof card.color === 'object' ? JSON.stringify(card.color) : String(card.color)) : '';
+    const bgStr = card.bg ? (typeof card.bg === 'object' ? JSON.stringify(card.bg) : String(card.bg)) : '';
+    const cropStr = card.cropRect ? JSON.stringify(card.cropRect) : '';
+
+    return (card.type || '') + '||' +
+      (card.locked ? '1' : '0') + '||' +
+      (card.pinned ? '1' : '0') + '||' +
+      (card.content || '') + '||' +
+      (card.label || '') + '||' +
+      (card.desc || '') + '||' +
+      (card.url || '') + '||' +
+      (card.thumbUrl || '') + '||' +
+      (card.shape || card.shapeType || '') + '||' +
+      (card.fontSize || '') + '||' +
+      colorStr + '||' +
+      bgStr + '||' +
+      cropStr + '||' +
+      complex + '||' +
+      (card._sig || card._forceRender || '');
+  }
+
+  window.buildMiroCanvas = function buildMiroCanvas(forceFullRebuild) {
   if (_buildingCanvas) { console.warn('[RECURSION BLOCKED]'); return; }
   const page = cp();
   if (!page) return;
@@ -44,9 +73,7 @@
       board.style.width = '';
       board.style.height = '';
     }
-    // Clear pinned layer (elements from previous page)
     const _pl = document.getElementById('miro-pinned-layer');
-    if (_pl) _pl.innerHTML = '';
 
     // Remove cell viewports and guides from canvas, and preserve selection overlays
     const canvas = document.getElementById('miro-canvas');
@@ -54,18 +81,21 @@
       canvas.querySelectorAll('.miro-cell-viewport, .miro-guide-v, .miro-guide-h').forEach((el) => el.remove());
     }
 
-    // Remove card elements from board
-    board.querySelectorAll('.miro-card, .miro-life, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed, .miro-overlay-widget').forEach((el) => el.remove());
-
     // Slices Mode rendering delegation
     const hasGuides = page && (page._guidesMode || (page.vGuides && page.vGuides.length > 0) || (page.hGuides && page.hGuides.length > 0) || (page.customCells && page.customCells.length > 0));
     if (hasGuides && typeof window.renderMiroSlices === 'function') {
+      if (board) board.querySelectorAll(CARD_SELECTORS).forEach((el) => el.remove());
+      if (_pl) _pl.innerHTML = '';
       window.renderMiroSlices(page);
       if (typeof window.updateMiroScrollbars === 'function') window.updateMiroScrollbars();
+      if (window.SM && window.SM.events) {
+        window.SM.events.emit('canvas:rendered', { pageId: page.id, mode: 'slices' });
+      }
       return;
     }
     // Clean up grid toolbars that live in document.body
     document.querySelectorAll('.mg-toolbar[data-grid-id]').forEach(t => t.remove());
+
     // Clear selection state only if page changed
     if (pageChanged) {
       _miroSelected.clear();
@@ -101,30 +131,120 @@
       life: 'buildMiroLifeWidget',
       dyntitle: 'buildMiroDynamicTitleCard',
     };
+
+    function instantiateCard(card) {
+      const fnName = buildersMap[card.type];
+      const fn = fnName ? window[fnName] : null;
+      const fallback = window.buildMiroCard;
+      let el = null;
+      if (typeof fn === 'function') el = fn(card);
+      else if (typeof fallback === 'function') el = fallback(card);
+      return el;
+    }
+
     try {
-      page.miroCards.forEach((card) => {
-        try {
-          const fnName = buildersMap[card.type];
-          const fn = fnName ? window[fnName] : null;
-          const fallback = window.buildMiroCard;
-          if (typeof fn === 'function') board.appendChild(fn(card));
-          else if (typeof fallback === 'function') board.appendChild(fallback(card));
-        } catch (err) {
-          console.error('[RENDER ERROR]', card && card.type, card && card.id, err);
-        }
-      });
+      const isReconciling = !pageChanged && !forceFullRebuild;
+
+      if (!isReconciling) {
+        // Full initial render (page changed or forced rebuild)
+        if (_pl) _pl.innerHTML = '';
+        board.querySelectorAll(CARD_SELECTORS).forEach((el) => el.remove());
+
+        page.miroCards.forEach((card) => {
+          try {
+            const el = instantiateCard(card);
+            if (el) {
+              el.dataset.cardSig = getCardSig(card);
+              board.appendChild(el);
+            }
+          } catch (err) {
+            console.error('[RENDER ERROR]', card && card.type, card && card.id, err);
+          }
+        });
+      } else {
+        // DOM Reconciliation: update existing, remove stale, insert new (No flicker / No state loss)
+        const existingCardEls = board.querySelectorAll(CARD_SELECTORS);
+        const existingMap = new Map();
+        existingCardEls.forEach(el => {
+          if (el.dataset.cid) existingMap.set(el.dataset.cid, el);
+        });
+
+        const activeCids = new Set(page.miroCards.map(c => c.id));
+
+        // 1. Remove deleted cards
+        existingMap.forEach((el, cid) => {
+          if (!activeCids.has(cid)) {
+            el.remove();
+            existingMap.delete(cid);
+          }
+        });
+
+        // 2. Reconcile remaining or append new
+        page.miroCards.forEach(card => {
+          const existingEl = existingMap.get(card.id);
+          const sig = getCardSig(card);
+
+          if (existingEl) {
+            const isEditing = existingEl.contains(document.activeElement);
+            if (existingEl.dataset.cardSig !== sig && !isEditing) {
+              try {
+                const newEl = instantiateCard(card);
+                if (newEl) {
+                  newEl.dataset.cardSig = sig;
+                  if (existingEl.classList.contains('miro-selected')) {
+                    newEl.classList.add('miro-selected');
+                  }
+                  board.replaceChild(newEl, existingEl);
+                  existingMap.set(card.id, newEl);
+                }
+              } catch (err) {
+                console.error('[RECONCILE ERROR]', card && card.type, card && card.id, err);
+              }
+            } else {
+              // Internal content unchanged: update geometric styles smoothly
+              if (card.x !== undefined && existingEl.style.left !== (card.x + 'px')) existingEl.style.left = card.x + 'px';
+              if (card.y !== undefined && existingEl.style.top !== (card.y + 'px')) existingEl.style.top = card.y + 'px';
+              if (card.w !== undefined && existingEl.style.width !== (card.w + 'px')) existingEl.style.width = card.w + 'px';
+              if (card.h !== undefined && existingEl.style.height !== (card.h + 'px')) existingEl.style.height = card.h + 'px';
+              if (card.z !== undefined && existingEl.style.zIndex !== String(card.z)) existingEl.style.zIndex = card.z;
+            }
+          } else {
+            // New card added
+            try {
+              const newEl = instantiateCard(card);
+              if (newEl) {
+                newEl.dataset.cardSig = sig;
+                board.appendChild(newEl);
+                existingMap.set(card.id, newEl);
+              }
+            } catch (err) {
+              console.error('[RENDER NEW ERROR]', card && card.type, card && card.id, err);
+            }
+          }
+        });
+      }
+
       if (typeof window.updateMiroGrid === 'function') window.updateMiroGrid();
       if (typeof window.updateMiroScrollbars === 'function') window.updateMiroScrollbars();
 
-      // Re-apply selection styling to new DOM elements if same page
+      // Re-apply selection styling to DOM elements if same page
       if (!pageChanged && _miroSelected.size > 0) {
         _miroSelected.forEach(cid => {
           const el = document.querySelector(`[data-cid="${cid}"]`);
-          if (el) el.classList.add('miro-selected');
+          if (el && !el.classList.contains('miro-selected')) el.classList.add('miro-selected');
         });
         if (typeof updateMiroSelFrame === 'function') {
           updateMiroSelFrame();
         }
+      }
+
+      // Notify central event bus
+      if (window.SM && window.SM.events) {
+        window.SM.events.emit('canvas:rendered', {
+          pageId: page.id,
+          cardCount: page.miroCards.length,
+          reconciled: isReconciling
+        });
       }
     } catch (fatal) {
       console.error('[BUILD MIRO CANVAS FATAL]', fatal);
@@ -591,7 +711,19 @@
       buildMiroCanvas();
     }
     if (typeof buildOutline === 'function') buildOutline();
+    if (window.SM && window.SM.events) {
+      window.SM.events.emit('card:deleted', { cid, pageId: page.id });
+    }
   };
+
+  if (window.SM && window.SM.events) {
+    window.SM.events.on('card:deleted', function(data) {
+      if (data && data.cid && typeof _miroSelected !== 'undefined') {
+        _miroSelected.delete(data.cid);
+        if (typeof updateMiroSelFrame === 'function') updateMiroSelFrame();
+      }
+    });
+  }
 
 SM.miro.render = SM.miro.render || {};
 SM.miro.render.buildMiroCanvas = typeof buildMiroCanvas !== 'undefined' ? buildMiroCanvas : window.buildMiroCanvas;
@@ -600,6 +732,8 @@ SM.miro.render.buildMiroImage = typeof buildMiroImage !== 'undefined' ? buildMir
 SM.miro.render.buildMiroText = typeof buildMiroText !== 'undefined' ? buildMiroText : window.buildMiroText;
 SM.miro.render.buildMiroShape = typeof buildMiroShape !== 'undefined' ? buildMiroShape : window.buildMiroShape;
 SM.miro.render.buildMiroPen = typeof buildMiroPen !== 'undefined' ? buildMiroPen : window.buildMiroPen;
+SM.miro.render.deleteMiroCard = deleteMiroCard;
+SM.miro.render.getCardSig = getCardSig;
 
 window.buildMiroCanvas = SM.miro.render.buildMiroCanvas;
 window.buildMiroSticky = SM.miro.render.buildMiroSticky;
@@ -607,4 +741,6 @@ window.buildMiroImage = SM.miro.render.buildMiroImage;
 window.buildMiroText = SM.miro.render.buildMiroText;
 window.buildMiroShape = SM.miro.render.buildMiroShape;
 window.buildMiroPen = SM.miro.render.buildMiroPen;
+window.deleteMiroCard = deleteMiroCard;
+window.getCardSig = getCardSig;
 })();

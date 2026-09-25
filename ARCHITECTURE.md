@@ -212,7 +212,18 @@ The infinite canvas rendering is optimized using lightweight DOM manipulation:
 
 ---
 
-## 9. Global Functions Mapping
+## 9. Central Event Bus (`SM.events`)
+For decoupled module communication without direct inter-file dependencies, `SM.events` (`events.js`) provides standard pub/sub channels:
+- **`canvas:rendered`** (`{ pageId, cardCount, reconciled }`): Dispatched after canvas DOM reconciliation or full draw cycle completes.
+- **`card:deleted`** (`{ cid, pageId }`): Dispatched when any card is deleted; cleans up selection state and notifies dependent views.
+- **`page:changed`** (`{ pageId, page, prevPageId }`): Dispatched when the active page payload is switched.
+- **`data:saved`** (`{ ts, saveAll, immediate }`): Dispatched when state is committed to storage.
+- **`sync:complete`** / **`sync:error`**: Dispatched on cloud synchronization resolution.
+- **`sync:mode`** (`{ mode, offline, prevMode }`): Dispatched when switching between offline, saveUpload, and realtime sync modes.
+
+---
+
+## 10. Global Functions Mapping
 Startmine registers crucial global callbacks and triggers inline HTML event handlers:
 
 | Function | Defined in | Called from (Context / Element) | Purpose |

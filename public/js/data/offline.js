@@ -44,6 +44,9 @@
     window._syncMode = newMode;
     window._offlineMode = (newMode === 'offline');
     try { localStorage.setItem('sm_sync_mode', newMode); } catch(e) {}
+    if (window.SM && window.SM.events) {
+      window.SM.events.emit('sync:mode', { mode: newMode, offline: window._offlineMode, prevMode });
+    }
 
     const select = document.getElementById('sync-mode-select');
     if (select && select.value !== newMode) select.value = newMode;

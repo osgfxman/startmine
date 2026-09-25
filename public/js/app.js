@@ -923,6 +923,9 @@ function switchActivePage(pageId) {
     document.title = 'QuranGFX Backyard';
   }
   renderMeta();
+  if (window.SM && window.SM.events) {
+    window.SM.events.emit('page:changed', { pageId, page: activePg, prevPageId: prevPg ? prevPg.id : null });
+  }
 
   if (_activePageListener) {
     db.ref(_activePageListener).off();

@@ -250,6 +250,9 @@
       });
       updateOfflineUI();
       showToast('✅ Synced successfully!');
+      if (window.SM && window.SM.events) {
+        window.SM.events.emit('sync:complete', { success: true, ts: Date.now() });
+      }
     })
     .catch(err => {
       setOwnWrite(false);
@@ -533,6 +536,9 @@
 
   // Capture undo snapshot before saving (for Miro pages)
   if (typeof pushUndo === 'function') { try { pushUndo(); } catch(e) {} }
+  if (window.SM && window.SM.events) {
+    window.SM.events.emit('data:saved', { ts: Date.now(), saveAll, immediate });
+  }
 
   // ─── Local Save Mode (Offline or SaveUpload): save to local cache only ───
   if (_offlineMode || (_syncMode === 'saveUpload' && !window._bypassingSaveUpload)) {
