@@ -2,7 +2,7 @@
  * @module Builders
  * @description DOM builders and rendering loops for Miro canvas cards
  * @namespace SM.miro.render
- * @depends namespace.js, miro-state.js, utils.js
+ * @depends namespace.js, miro-state.js, utils.js, cards.js
  * @provides window.buildMiroCanvas, window.buildMiroSticky, window.buildMiroImage, window.buildMiroText, etc.
  * @safety Must use buildersMap with fallbacks. Recursion guard (_buildingCanvas) must wrap execution.
  */

@@ -31,6 +31,7 @@ const STATIC_ASSETS = [
   '/js/ui/search.js?v=1783384814',
   '/js/ui/inbox-ui.js?v=1783384814',
   '/js/miro/miro-state.js?v=1783384814',
+  '/js/miro/render/cards.js?v=1783384814',
   '/js/miro/render/builders.js?v=1783384814',
   '/js/miro/layout/grid.js?v=1783384814',
   '/js/miro/layout/slices.js?v=1783384814',

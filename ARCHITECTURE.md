@@ -57,11 +57,13 @@ c:\Users\NTRA\OneDrive - NTRA-EG\17May_Startmine\
         ├── miro/
         │   ├── miro-state.js  # Miro canvas state variables and coordinate definitions.
         │   ├── render/
-        │   │   └── builders.js# Rendering loop and individual Miro card DOM builders.
+        │   │   ├── cards.js   # Individual Miro card DOM builders (sticky, image, text, shapes, grid, etc.).
+        │   │   └── builders.js# Rendering loop and canvas builder delegation engine.
         │   └── layout/
-        │       └── grid.js    # Smart snapping alignment, grids, and collision handlers.
+        │       ├── grid.js    # Smart snapping alignment, grids, and collision handlers.
+        │       └── slices.js  # Slice-based viewport virtualization and partition layouts.
         ├── miro-engine.js     # Miro canvas event loop, drag/zoom gestures, and connectors.
-        ├── thumbnails.js      # Thumbnail generator, image loaders, and URL previews.
+        ├── thumbnails.js      # Thumbnail IDB cache engine, image loaders, and URL previews.
         ├── outline.js         # Interactive canvas outlines and structure explorer.
         ├── alignment.js       # Group alignment tools and alignment panel overlays.
         └── app.js             # Main application setup, event listeners, and DB initialization.
@@ -76,22 +78,27 @@ The following is the exact script loading order defined in `public/index.html`.
 > **Dependencies must load before dependents**. The `app.js` file relies on all other namespaces being fully initialized, and therefore **must always load last**.
 
 1. `js/core/namespace.js` — Declares the `window.SM` namespaces.
-2. `js/core/utils.js` — Exposes core helper functions to the global scope.
-3. `js/data/firebase.js` — Initializes the Firebase app and auth variables.
-4. `js/data/offline.js` — Establishes LocalStorage and IndexedDB caching wrappers.
-5. `js/data/sync.js` — Sets up sharded Realtime Database synchronization logic.
-6. `js/ui/toasts.js` — Connects toast message triggers.
-7. `js/ui/modals.js` — Registers open/close modals handlers.
-8. `js/ui/toolbar.js` — Initializes navigation bar controls.
-9. `js/ui/search.js` — Installs search index listeners.
-10. `js/ui/inbox-ui.js` — Powers the quick inbox lists.
-11. `js/miro/miro-state.js` — Pre-seeds canvas states.
-12. `js/miro/render/builders.js` — Prepares individual card builder loops.
-13. `js/miro/layout/grid.js` — Prepares snap-to-grid grid coordinates.
-14. `js/miro-engine.js` — Powers canvas inputs, selection boxes, and zoom logic.
-15. `js/thumbnails.js` — Installs URL screenshot tools.
-16. `js/app.js` — **Main Entry Point**. Binds authentication and triggers `initDB()`.
-17. `js/outline.js` & `js/alignment.js` (Deferred) — Loaded dynamically after first auth paint inside `_loadMainApp()` to optimize page load speeds.
+2. `js/core/events.js` — Decoupled event bus for cross-module notifications.
+3. `js/core/utils.js` — Exposes core helper functions to the global scope.
+4. `js/data/firebase.js` — Initializes the Firebase app and auth variables.
+5. `js/data/offline.js` — Establishes LocalStorage and IndexedDB caching wrappers.
+6. `js/data/sync.js` — Sets up sharded Realtime Database synchronization logic.
+7. `js/ui/toasts.js` — Connects toast message triggers.
+8. `js/ui/modals.js` — Registers open/close modals handlers.
+9. `js/ui/toolbar.js` — Initializes navigation bar controls.
+10. `js/ui/search.js` — Installs search index listeners.
+11. `js/ui/inbox-ui.js` — Powers the quick inbox lists.
+12. `js/thumbnails.js` — Installs thumbnail IDB cache and URL preview tools.
+13. `js/miro/miro-state.js` — Pre-seeds canvas states.
+14. `js/miro/render/cards.js` — Prepares individual card builder definitions and interaction helpers.
+15. `js/miro/render/builders.js` — Prepares canvas rendering and card builder loops.
+16. `js/miro/layout/grid.js` — Prepares snap-to-grid grid coordinates.
+17. `js/miro/layout/slices.js` — Virtualized layout and slicing render engine.
+18. `js/miro-engine.js` — Powers canvas inputs, selection boxes, and zoom logic.
+19. `js/life-widget.js` — Life grid overlay widget renderer.
+20. `js/core/health.js` — Runtime architectural health verification self-check.
+21. `js/app.js` — **Main Entry Point**. Binds authentication and triggers `initDB()`.
+22. `js/outline.js` & `js/alignment.js` (Deferred) — Loaded dynamically after first auth paint inside `_loadMainApp()` to optimize page load speeds.
 
 ---
 
