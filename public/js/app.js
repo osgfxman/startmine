@@ -3245,178 +3245,282 @@ function _importCSV(text) {
   } else alert('No valid bookmarks found.');
 }
 
-document.getElementById('imp-startme').onchange = function (e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const r = new FileReader();
-  r.onload = (ev) => {
-    try {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(ev.target.result, 'text/html');
-      const result = {
-        settings: { ...D.settings },
-        cur: '',
-        curEnv: 'e0',
-        curGroup: 'g0',
-        environments: [{ id: 'e0', name: 'Main Env' }],
-        groups: [{ id: 'g0', name: 'Start.me Import', envId: 'e0' }],
-        inbox: [],
-        pages: [],
-      };
-      const topDL = doc.querySelector('body > DL') || doc.querySelector('DL');
-      if (!topDL) {
-        alert('Invalid Start.me file');
-        return;
-      }
+// ─── Start.me HTML Parser Engine ───
+function parseStartMeHTML(htmlText) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlText, 'text/html');
+  const topDL = doc.querySelector('body > DL') || doc.querySelector('DL');
+  if (!topDL) {
+    throw new Error('الملف غير صالح أو لا يحتوي على بنية بوكمارك Start.me (<DL>).');
+  }
 
-      // Find all PAGE H3s (top-level pages)
-      const topItems = topDL.children;
-      for (let i = 0; i < topItems.length; i++) {
-        const dt = topItems[i];
-        if (dt.tagName !== 'DT') continue;
-        const h3 = dt.querySelector(':scope > H3');
-        if (!h3) continue;
-        const isPage = h3.getAttribute('PAGE') === 'true';
-        if (!isPage) continue;
+  const pages = [];
+  const topItems = topDL.children;
+  for (let i = 0; i < topItems.length; i++) {
+    const dt = topItems[i];
+    if (dt.tagName !== 'DT') continue;
+    const h3 = dt.querySelector(':scope > H3');
+    if (!h3) continue;
+    const isPage = h3.getAttribute('PAGE') === 'true' || h3.getAttribute('page') === 'true' || h3.hasAttribute('PAGE') || dt.querySelector(':scope > DL');
+    if (!isPage) continue;
 
-        const pageName = h3.textContent.trim();
-        const page = {
-          id: uid(),
-          groupId: 'g0',
-          name: pageName,
-          pageType: 'miro',
-          miroCards: [],
-          zoom: 100,
-          panX: 0,
-          panY: 0,
-          bg: '',
-          bgType: 'none',
-          tabColor: '',
-          widgets: [],
-        };
+    const pageName = h3.textContent.trim() || 'Imported Board';
+    const page = {
+      id: uid(),
+      groupId: 'g0',
+      name: pageName,
+      pageType: 'miro',
+      miroCards: [],
+      zoom: 100,
+      panX: 0,
+      panY: 0,
+      bg: '',
+      bgType: 'none',
+      tabColor: '',
+      widgets: []
+    };
 
-        // Find the DL sibling that contains widgets
-        const pageDL = dt.querySelector(':scope > DL');
-        if (pageDL) {
-          const startX = 100;
-          const startY = 100;
-          const gap = 40;
-          let cursX = startX;
-          let cursY = startY;
-          let rowMaxH = 0;
-          const colsPerRow = 4;
-          let addedCount = 0;
+    const pageDL = dt.querySelector(':scope > DL');
+    if (pageDL) {
+      const startX = 100;
+      const startY = 100;
+      const gap = 40;
+      let cursX = startX;
+      let cursY = startY;
+      let rowMaxH = 0;
+      const colsPerRow = 4;
+      let addedCount = 0;
 
-          const pageDTs = pageDL.children;
-          for (let j = 0; j < pageDTs.length; j++) {
-            const wdt = pageDTs[j];
-            if (wdt.tagName !== 'DT') continue;
-            const wh3 = wdt.querySelector(':scope > H3');
-            if (!wh3) continue;
+      const pageDTs = pageDL.children;
+      for (let j = 0; j < pageDTs.length; j++) {
+        const wdt = pageDTs[j];
+        if (wdt.tagName !== 'DT') continue;
+        const wh3 = wdt.querySelector(':scope > H3');
+        if (!wh3) continue;
 
-            const widgetName = wh3.textContent.trim();
-            const widgetItems = [];
+        const widgetName = wh3.textContent.trim();
+        const widgetItems = [];
 
-            // Parse bookmarks inside widget into temporary array
-            const wDL = wdt.querySelector(':scope > DL');
-            if (wDL) {
-              const itemsList = wDL.children;
-              for (let k = 0; k < itemsList.length; k++) {
-                const bdt = itemsList[k];
-                if (bdt.tagName !== 'DT') continue;
-                const a = bdt.querySelector(':scope > A');
-                if (a) {
-                  const href = a.getAttribute('HREF') || '';
-                  if (href && href.startsWith('http')) {
-                    widgetItems.push({
-                      id: uid(),
-                      label: a.textContent.trim().slice(0, 80),
-                      url: href,
-                      emoji: '',
-                    });
-                  }
-                }
-                const subH3 = bdt.querySelector(':scope > H3');
-                if (subH3) {
-                  const subDL = bdt.querySelector(':scope > DL');
-                  if (subDL) {
-                    const tempWidget = { items: widgetItems };
-                    parseBookmarks(subDL, tempWidget);
-                  }
-                }
+        const wDL = wdt.querySelector(':scope > DL');
+        if (wDL) {
+          const itemsList = wDL.children;
+          for (let k = 0; k < itemsList.length; k++) {
+            const bdt = itemsList[k];
+            if (bdt.tagName !== 'DT') continue;
+            const a = bdt.querySelector(':scope > A');
+            if (a) {
+              const href = a.getAttribute('HREF') || '';
+              if (href && href.startsWith('http')) {
+                widgetItems.push({
+                  id: uid(),
+                  label: a.textContent.trim().slice(0, 80),
+                  url: href,
+                  emoji: ''
+                });
               }
             }
-
-            if (widgetItems.length > 0) {
-              let cardW = 320; let cardH = 400;
-              const wCols = 6; const itemPx = 94;
-              const reqRows = Math.ceil(widgetItems.length / wCols);
-              cardW = 540; cardH = Math.max(200, 70 + (reqRows * itemPx));
-
-              page.miroCards.push({
-                id: uid(),
-                type: 'bwidget',
-                wType: 'bookmarks',
-                title: widgetName,
-                emoji: '📌',
-                content: '',
-                items: widgetItems,
-                color: { ...DEF_COLOR },
-                x: cursX,
-                y: cursY,
-                w: cardW,
-                h: cardH,
-                display: 'spark',
-                size: 'md'
-              });
-
-              cursX += cardW + gap;
-              rowMaxH = Math.max(rowMaxH, cardH);
-              addedCount++;
-              if (addedCount % colsPerRow === 0) {
-                cursX = startX;
-                cursY += rowMaxH + gap;
-                rowMaxH = 0;
+            const subH3 = bdt.querySelector(':scope > H3');
+            if (subH3) {
+              const subDL = bdt.querySelector(':scope > DL');
+              if (subDL) {
+                const tempWidget = { items: widgetItems };
+                parseBookmarks(subDL, tempWidget);
               }
             }
           }
         }
-        result.pages.push(page);
+
+        if (widgetItems.length > 0) {
+          const wCols = 6;
+          const itemPx = 94;
+          const reqRows = Math.ceil(widgetItems.length / wCols);
+          const cardW = 540;
+          const cardH = Math.max(200, 70 + (reqRows * itemPx));
+
+          page.miroCards.push({
+            id: uid(),
+            type: 'bwidget',
+            wType: 'bookmarks',
+            title: widgetName,
+            emoji: '📌',
+            content: '',
+            items: widgetItems,
+            color: { ...DEF_COLOR },
+            x: cursX,
+            y: cursY,
+            w: cardW,
+            h: cardH,
+            display: 'spark',
+            size: 'md'
+          });
+
+          cursX += cardW + gap;
+          rowMaxH = Math.max(rowMaxH, cardH);
+          addedCount++;
+          if (addedCount % colsPerRow === 0) {
+            cursX = startX;
+            cursY += rowMaxH + gap;
+            rowMaxH = 0;
+          }
+        }
       }
-
-      if (result.pages.length === 0) {
-        alert('No pages found in file.');
-        return;
-      }
-      result.cur = result.pages[0].id;
-
-      if (
-        !confirm(
-          'Import ' +
-          result.pages.length +
-          ' folders containing ' +
-          result.pages.reduce((s, p) => s + (p.miroCards || []).length, 0) +
-          ' clusters?\nThis will REPLACE all current data.',
-        )
-      )
-        return;
-
-      D = result;
-      sv(true, true);
-      switchActivePage(D.cur);
-      document.getElementById('io-pop').classList.remove('open');
-      const totalBm = result.pages.reduce(
-        (s, p) => s + (p.miroCards || []).reduce((ss, w) => ss + (w.items || []).length, 0),
-        0,
-      );
-      alert('✅ Imported successfully! ' + result.pages.length + ' boards created with ' + totalBm + ' bookmarks.');
-    } catch (err) {
-      alert('Import error: ' + err.message);
     }
+    pages.push(page);
+  }
+  return pages;
+}
+
+// ─── Import Start.me (Replace All) ───
+const impStartmeEl = document.getElementById('imp-startme');
+if (impStartmeEl) {
+  impStartmeEl.onchange = function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = (ev) => {
+      try {
+        const pages = parseStartMeHTML(ev.target.result);
+        if (!pages || pages.length === 0) {
+          alert('No pages found in file.');
+          return;
+        }
+
+        const result = {
+          settings: { ...D.settings },
+          cur: pages[0].id,
+          curEnv: 'e0',
+          curGroup: 'g0',
+          environments: [{ id: 'e0', name: 'Main Env' }],
+          groups: [{ id: 'g0', name: 'Start.me Import', envId: 'e0' }],
+          inbox: [],
+          pages: pages
+        };
+
+        const totalBm = pages.reduce(
+          (s, p) => s + (p.miroCards || []).reduce((ss, w) => ss + (w.items || []).length, 0),
+          0
+        );
+
+        if (
+          !confirm(
+            'Import ' +
+            pages.length +
+            ' folders containing ' +
+            pages.reduce((s, p) => s + (p.miroCards || []).length, 0) +
+            ' clusters (' + totalBm + ' bookmarks)?\n⚠️ WARNING: This will REPLACE all current data.'
+          )
+        ) {
+          return;
+        }
+
+        // Cache all imported pages
+        pages.forEach(p => cachePageDataSafe(p.id, p));
+
+        D = result;
+        sv(true, true);
+        switchActivePage(D.cur);
+        const ioPop = document.getElementById('io-pop');
+        if (ioPop) ioPop.classList.remove('open');
+        alert('✅ Imported successfully! ' + pages.length + ' boards created with ' + totalBm + ' bookmarks.');
+      } catch (err) {
+        alert('Import error: ' + err.message);
+      }
+    };
+    r.readAsText(file);
+    this.value = '';
   };
-  r.readAsText(file);
-  this.value = '';
-};
+}
+
+// ─── Merge / Amend Start.me (Add pages without deleting existing data) ───
+const mergeStartmeEl = document.getElementById('merge-startme');
+if (mergeStartmeEl) {
+  mergeStartmeEl.onchange = function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = async (ev) => {
+      try {
+        const parsedPages = parseStartMeHTML(ev.target.result);
+        if (!parsedPages || parsedPages.length === 0) {
+          alert('لم يتم العثور على صفحات في ملف Start.me.');
+          return;
+        }
+
+        const totalBm = parsedPages.reduce(
+          (s, p) => s + (p.miroCards || []).reduce((ss, w) => ss + (w.items || []).length, 0),
+          0
+        );
+
+        const confirmMsg =
+          `➕ دمج صفحات Start.me (Merge / Amend):\n\n` +
+          `تم استخراج ${parsedPages.length} لوحة/صفحة بإجمالي ${totalBm} بوكمارك.\n\n` +
+          `• سيتم إضافة هذه اللوحات كصفحات جديدة بالكامل.\n` +
+          `• لن يتم حذف أي لوحة أو بوكمارك من بياناتك الحالية نهائياً.\n` +
+          `• ستتمكن من مراجعة كل لوحة وتقرير ما تريد إبقاءه أو حذفه بحرية.\n\n` +
+          `هل تريد المتابعة وإضافة الصفحات الآن؟`;
+
+        if (!confirm(confirmMsg)) return;
+
+        // 1. Safety snapshot of current state
+        if (typeof saveSnapshot === 'function') {
+          try { await saveSnapshot(true); } catch (e) { console.warn('[SNAPSHOT] Auto-save skipped:', e); }
+        }
+
+        // 2. Identify or create group for imported boards
+        let targetEnv = D.curEnv || (D.environments && D.environments[0] ? D.environments[0].id : 'e0');
+        let targetGroup = D.groups.find(g => g.name === 'Start.me (Imported)' && g.envId === targetEnv);
+        if (!targetGroup) {
+          targetGroup = { id: uid(), name: 'Start.me (Imported)', envId: targetEnv };
+          D.groups.push(targetGroup);
+        }
+
+        const existingNames = new Set((D.pages || []).map(p => (p.name || '').trim().toLowerCase()));
+
+        let addedCount = 0;
+        parsedPages.forEach(page => {
+          const baseName = (page.name || 'Imported Board').trim();
+          // If a page with the same name already exists in current data, mark clearly
+          if (existingNames.has(baseName.toLowerCase())) {
+            page.name = `${baseName} (Start.me)`;
+          }
+          page.groupId = targetGroup.id;
+          page.id = uid();
+
+          // Enforce full persistence in RAM memory, IndexedDB, and localStorage
+          cachePageDataSafe(page.id, page);
+          D.pages.push(page);
+          existingNames.add(page.name.trim().toLowerCase());
+          addedCount++;
+        });
+
+        // 3. Switch to target group & first imported page so the user sees the imported content
+        D.curGroup = targetGroup.id;
+        if (parsedPages.length > 0) {
+          D.cur = parsedPages[0].id;
+        }
+
+        sanitizeData(D);
+        sv(true, true);
+        renderMeta();
+        switchActivePage(D.cur);
+
+        const ioPop = document.getElementById('io-pop');
+        if (ioPop) ioPop.classList.remove('open');
+
+        if (typeof showToast === 'function') {
+          showToast(`✅ تم دمج ${addedCount} صفحة (${totalBm} بوكمارك) في مجموعة "Start.me (Imported)"!`, 5000);
+        } else {
+          alert(`✅ تم دمج ${addedCount} صفحة (${totalBm} بوكمارك) بنجاح!`);
+        }
+      } catch (err) {
+        console.error('[MERGE START.ME ERROR]', err);
+        alert('خطأ أثناء الدمج: ' + err.message);
+      }
+    };
+    r.readAsText(file);
+    this.value = '';
+  };
+}
 
 function parseBookmarks(dl, widget) {
   const items = dl.children;
