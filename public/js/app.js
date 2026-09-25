@@ -6163,33 +6163,6 @@ document.addEventListener('keydown', (e) => {
     );
     $sr().classList.remove('show');
   }
-  if (
-    e.key.length === 1 &&
-    !e.ctrlKey &&
-    !e.metaKey &&
-    !e.altKey &&
-    !document.querySelector('.mo.open') &&
-    document.activeElement.tagName !== 'INPUT' &&
-    document.activeElement.tagName !== 'TEXTAREA' &&
-    !document.activeElement.getAttribute('contenteditable')
-  ) {
-    const pageObj = cp();
-    if (pageObj && (pageObj.pageType === 'miro' || pageObj.pageType === 'slicer')) {
-      const miroKeys = new Set([
-        'v', 'ر', 'n', 'ى', 't', 'ف', 's', 'س', 'p', 'ح',
-        'g', 'ل', 'm', 'ة', 'w', 'ص', 'k', 'ن', 'i', 'ه',
-        'b', 'e', 'ث', 'y', 'ئ', 'f', 'ب'
-      ]);
-      if (miroKeys.has(e.key.toLowerCase())) {
-        return;
-      }
-    }
-    var pageMap = {'1':0, '2':1, '3':2, '4':3, '5':4, '6':5};
-    var isShortcutKey = (pageMap[e.key] !== undefined || e.key === 'h' || e.key === 'H' || e.key === '\u0623' || e.key === '\u0627');
-    if (!isShortcutKey) {
-      $si().focus();
-    }
-  }
 });
 function renderAll() {
   console.log('[DATA CHECK] Total pages:', D.pages ? D.pages.length : 0);
