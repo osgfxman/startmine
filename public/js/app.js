@@ -3333,11 +3333,26 @@ function parseStartMeHTML(htmlText) {
       let addedCount = 0;
 
       const pageDTs = pageDL.children;
+      const looseItems = [];
       for (let j = 0; j < pageDTs.length; j++) {
         const wdt = pageDTs[j];
         if (wdt.tagName !== 'DT') continue;
         const wh3 = wdt.querySelector(':scope > H3');
-        if (!wh3) continue;
+        if (!wh3) {
+          const directA = wdt.querySelector(':scope > A');
+          if (directA) {
+            const href = directA.getAttribute('HREF') || '';
+            if (href && href.startsWith('http')) {
+              looseItems.push({
+                id: uid(),
+                label: directA.textContent.trim().slice(0, 80),
+                url: href,
+                emoji: ''
+              });
+            }
+          }
+          continue;
+        }
 
         const widgetName = wh3.textContent.trim();
         const widgetItems = [];
@@ -3404,6 +3419,31 @@ function parseStartMeHTML(htmlText) {
             rowMaxH = 0;
           }
         }
+      }
+
+      if (looseItems.length > 0) {
+        const wCols = 6;
+        const itemPx = 94;
+        const reqRows = Math.ceil(looseItems.length / wCols);
+        const cardW = 540;
+        const cardH = Math.max(200, 70 + (reqRows * itemPx));
+
+        page.miroCards.push({
+          id: uid(),
+          type: 'bwidget',
+          wType: 'bookmarks',
+          title: 'Bookmarks',
+          emoji: '📌',
+          content: '',
+          items: looseItems,
+          color: { ...DEF_COLOR },
+          x: cursX,
+          y: cursY,
+          w: cardW,
+          h: cardH,
+          display: 'spark',
+          size: 'md'
+        });
       }
     }
     pages.push(page);
@@ -3735,6 +3775,508 @@ if (mergeJsonEl) {
     r.readAsText(file);
     this.value = '';
   };
+}
+
+// ─── Smart Compare & Sync Start.me (HTML) ───
+function normalizeCompareUrl(u) {
+  if (!u || typeof u !== 'string') return '';
+  try {
+    let s = u.trim();
+    if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+    const parsed = new URL(s);
+    let pathname = parsed.pathname.replace(/\/+$/, '');
+    let host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+    let search = parsed.search || '';
+    return (host + pathname + search).toLowerCase();
+  } catch (e) {
+    return u.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
+  }
+}
+
+function openSmartCompareModal() {
+  const ioPop = document.getElementById('io-pop');
+  if (ioPop) ioPop.classList.remove('open');
+
+  const modal = document.getElementById('m-smart-compare');
+  if (!modal) return;
+
+  const cfgView = document.getElementById('sc-config-view');
+  const repView = document.getElementById('sc-report-view');
+  const progWrap = document.getElementById('sc-progress-wrap');
+  const progBar = document.getElementById('sc-progress-bar');
+  const progPct = document.getElementById('sc-progress-pct');
+  const progLbl = document.getElementById('sc-progress-label');
+  const fileInp = document.getElementById('sc-file-input');
+  const envSel = document.getElementById('sc-env-sel');
+  const grpSel = document.getElementById('sc-group-sel');
+  const actBtn = document.getElementById('sc-action-btn');
+  const closeBtn = document.getElementById('sc-close-btn');
+
+  if (cfgView) cfgView.style.display = 'flex';
+  if (repView) repView.style.display = 'none';
+  if (progWrap) progWrap.style.display = 'none';
+  if (progBar) progBar.style.width = '0%';
+  if (progPct) progPct.textContent = '0%';
+  if (progLbl) progLbl.textContent = 'جاري المعالجة...';
+
+  if (fileInp) {
+    fileInp.value = '';
+    fileInp.disabled = false;
+  }
+  if (envSel) envSel.disabled = false;
+  if (grpSel) grpSel.disabled = false;
+
+  if (actBtn) {
+    actBtn.style.display = '';
+    actBtn.disabled = false;
+    actBtn.textContent = '⚡ بدء المقارنة والاستيراد';
+    actBtn.style.background = '#f59e0b';
+    actBtn.style.color = '#000';
+    actBtn.onclick = runSmartCompare;
+  }
+  if (closeBtn) {
+    closeBtn.textContent = 'إلغاء';
+    closeBtn.onclick = () => closeM('m-smart-compare');
+  }
+
+  // Populate Environment & Group dropdowns
+  if (envSel && grpSel) {
+    envSel.innerHTML = '';
+    const envs = (D.environments && D.environments.length > 0) ? D.environments : [{ id: 'e0', name: 'Main Environment' }];
+    envs.forEach(env => {
+      const opt = document.createElement('option');
+      opt.value = env.id;
+      opt.textContent = env.name || env.id;
+      if (env.id === D.curEnv) opt.selected = true;
+      envSel.appendChild(opt);
+    });
+
+    function populateCompareGroups(envId, preferredGroupId) {
+      grpSel.innerHTML = '';
+      const matching = (D.groups || []).filter(g => g.envId === envId);
+      if (matching.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '(لا توجد مجموعات في هذه البيئة)';
+        grpSel.appendChild(opt);
+        return;
+      }
+      matching.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g.id;
+        opt.textContent = g.name || ('Group ' + g.id);
+        if (g.id === preferredGroupId) opt.selected = true;
+        grpSel.appendChild(opt);
+      });
+    }
+
+    populateCompareGroups(envSel.value || D.curEnv, D.curGroup);
+    envSel.onchange = () => {
+      populateCompareGroups(envSel.value, null);
+    };
+  }
+
+  openM('m-smart-compare');
+}
+
+async function runSmartCompare() {
+  const fileInp = document.getElementById('sc-file-input');
+  const envSel = document.getElementById('sc-env-sel');
+  const grpSel = document.getElementById('sc-group-sel');
+  const actBtn = document.getElementById('sc-action-btn');
+  const progWrap = document.getElementById('sc-progress-wrap');
+  const progBar = document.getElementById('sc-progress-bar');
+  const progPct = document.getElementById('sc-progress-pct');
+  const progLbl = document.getElementById('sc-progress-label');
+
+  const file = fileInp && fileInp.files ? fileInp.files[0] : null;
+  if (!file) {
+    alert('يرجى اختيار ملف Start.me HTML أولاً.');
+    return;
+  }
+
+  const targetEnvId = envSel ? envSel.value : (D.curEnv || 'e0');
+  const targetGroupId = grpSel ? grpSel.value : D.curGroup;
+  if (!targetGroupId) {
+    alert('يرجى اختيار مجموعة التبويبات (Tab Group) المستهدفة أولاً.');
+    return;
+  }
+
+  const targetGroup = (D.groups || []).find(g => g.id === targetGroupId);
+  const targetGroupName = targetGroup ? targetGroup.name : 'Unknown Group';
+  const targetEnv = (D.environments || []).find(e => e.id === targetEnvId);
+  const targetEnvName = targetEnv ? targetEnv.name : 'Unknown Env';
+
+  if (actBtn) actBtn.disabled = true;
+  if (fileInp) fileInp.disabled = true;
+  if (envSel) envSel.disabled = true;
+  if (grpSel) grpSel.disabled = true;
+  if (progWrap) progWrap.style.display = 'block';
+
+  const reader = new FileReader();
+  reader.onload = async (ev) => {
+    try {
+      const text = ev.target.result;
+      if (progBar) progBar.style.width = '10%';
+      if (progPct) progPct.textContent = '10%';
+      if (progLbl) progLbl.textContent = 'جاري تحليل بنية ملف Start.me HTML...';
+      await new Promise(r => setTimeout(r, 20));
+
+      const importedPages = parseStartMeHTML(text);
+      if (!importedPages || importedPages.length === 0) {
+        throw new Error('لم يتم العثور على أي لوحات/صفحات صالحة في ملف Start.me HTML.');
+      }
+
+      // Existing pages in the selected group only
+      const groupPages = (D.pages || []).filter(p => p.groupId === targetGroupId);
+      const existingPageMap = new Map();
+      groupPages.forEach(p => {
+        const norm = (p.name || '').trim().toLowerCase();
+        if (!existingPageMap.has(norm)) {
+          existingPageMap.set(norm, p);
+        }
+      });
+
+      const report = {
+        envId: targetEnvId,
+        envName: targetEnvName,
+        groupId: targetGroupId,
+        groupName: targetGroupName,
+        totalHtmlPages: importedPages.length,
+        pagesCreated: [],
+        pagesUpdated: [],
+        pagesUnchanged: [],
+        totalMissedAdded: 0,
+        totalSkipped: 0,
+        totalBookmarksImported: 0
+      };
+
+      for (let i = 0; i < importedPages.length; i++) {
+        const imp = importedPages[i];
+        const pageIdx = i + 1;
+        const pct = Math.round(10 + ((pageIdx / importedPages.length) * 80));
+        if (progBar) progBar.style.width = pct + '%';
+        if (progPct) progPct.textContent = pct + '%';
+        if (progLbl) progLbl.textContent = `فحص صفحة (${pageIdx}/${importedPages.length}): "${imp.name}"...`;
+        await new Promise(r => setTimeout(r, 10));
+
+        const normName = (imp.name || '').trim().toLowerCase();
+        const existingPage = existingPageMap.get(normName);
+
+        if (!existingPage) {
+          // Page DOES NOT EXIST in this group -> Create it as a new page!
+          imp.id = uid();
+          imp.groupId = targetGroupId;
+          imp.ts = Date.now();
+          let bmCount = 0;
+          (imp.miroCards || []).forEach(c => { bmCount += (c.items || []).length; });
+
+          D.pages.push(imp);
+          cachePageDataSafe(imp.id, imp);
+          existingPageMap.set(normName, imp);
+
+          report.pagesCreated.push({ id: imp.id, name: imp.name, bookmarkCount: bmCount });
+          report.totalBookmarksImported += bmCount;
+        } else {
+          // Page ALREADY EXISTS in this group -> Compare URLs & add missed only!
+          const fullData = await getCachedPageDataAsync(existingPage.id);
+          if (fullData) {
+            if (!existingPage.miroCards || existingPage.miroCards.length === 0) existingPage.miroCards = fullData.miroCards || [];
+            if (!existingPage.widgets || existingPage.widgets.length === 0) existingPage.widgets = fullData.widgets || [];
+          }
+          if (!existingPage.miroCards) existingPage.miroCards = [];
+          if (!existingPage.widgets) existingPage.widgets = [];
+
+          // Collect all existing URLs in this page
+          const existingUrls = new Set();
+          function registerUrl(rawUrl) {
+            const n = normalizeCompareUrl(rawUrl);
+            if (n) existingUrls.add(n);
+          }
+
+          existingPage.miroCards.forEach(c => {
+            if (c.url) registerUrl(c.url);
+            if (Array.isArray(c.items)) {
+              c.items.forEach(it => { if (it && it.url) registerUrl(it.url); });
+            }
+          });
+          existingPage.widgets.forEach(w => {
+            if (w.url) registerUrl(w.url);
+            if (Array.isArray(w.items)) {
+              w.items.forEach(it => { if (it && it.url) registerUrl(it.url); });
+            }
+          });
+
+          let pageMissed = 0;
+          let pageSkipped = 0;
+          let pageCardsAdded = 0;
+
+          // Find board bounds for placing any new cards neatly
+          let maxX = 100;
+          let maxY = 100;
+          existingPage.miroCards.forEach(c => {
+            const r = (c.x || 0) + (c.w || 300);
+            const b = (c.y || 0) + (c.h || 200);
+            if (r > maxX) maxX = r;
+            if (b > maxY) maxY = b;
+          });
+
+          (imp.miroCards || []).forEach(impCard => {
+            const impItems = impCard.items || [];
+            const missedList = [];
+
+            impItems.forEach(it => {
+              const uNorm = normalizeCompareUrl(it.url);
+              if (!uNorm) return;
+              if (existingUrls.has(uNorm)) {
+                pageSkipped++;
+              } else {
+                missedList.push({
+                  id: uid(),
+                  label: (it.label || it.url).slice(0, 80),
+                  url: it.url,
+                  emoji: it.emoji || ''
+                });
+                existingUrls.add(uNorm); // Prevent duplicate insertion if listed repeatedly in HTML
+              }
+            });
+
+            if (missedList.length > 0) {
+              pageMissed += missedList.length;
+
+              // Check if matching bookmark widget exists by title
+              const cardTitle = (impCard.title || '').trim().toLowerCase();
+              const matchCard = existingPage.miroCards.find(c =>
+                c.type === 'bwidget' && (c.title || '').trim().toLowerCase() === cardTitle
+              );
+
+              if (matchCard) {
+                if (!Array.isArray(matchCard.items)) matchCard.items = [];
+                matchCard.items.push(...missedList);
+                const wCols = 6;
+                const itemPx = 94;
+                const reqRows = Math.ceil(matchCard.items.length / wCols);
+                matchCard.h = Math.max(matchCard.h || 200, 70 + (reqRows * itemPx));
+              } else {
+                // Also check classic widgets if non-miro
+                if (existingPage.pageType !== 'miro' && Array.isArray(existingPage.widgets) && existingPage.widgets.length > 0) {
+                  const matchWidget = existingPage.widgets.find(w => (w.title || '').trim().toLowerCase() === cardTitle);
+                  if (matchWidget) {
+                    if (!Array.isArray(matchWidget.items)) matchWidget.items = [];
+                    matchWidget.items.push(...missedList);
+                  } else {
+                    existingPage.widgets.push({
+                      id: uid(),
+                      type: 'bookmarks',
+                      title: impCard.title || 'Missed Bookmarks',
+                      emoji: '📌',
+                      items: missedList
+                    });
+                  }
+                } else {
+                  // Create a clean new card on the canvas
+                  const wCols = 6;
+                  const itemPx = 94;
+                  const reqRows = Math.ceil(missedList.length / wCols);
+                  const cardW = 540;
+                  const cardH = Math.max(200, 70 + (reqRows * itemPx));
+                  const newCard = {
+                    id: uid(),
+                    type: 'bwidget',
+                    wType: 'bookmarks',
+                    title: impCard.title ? (impCard.title + ' (Missed)') : 'Missed Bookmarks',
+                    emoji: '📌',
+                    content: '',
+                    items: missedList,
+                    color: { ...DEF_COLOR },
+                    x: maxX + 40,
+                    y: 100,
+                    w: cardW,
+                    h: cardH,
+                    display: 'spark',
+                    size: 'md'
+                  };
+                  existingPage.miroCards.push(newCard);
+                  maxX += cardW + 40;
+                  pageCardsAdded++;
+                }
+              }
+            }
+          });
+
+          if (pageMissed > 0) {
+            existingPage.ts = Date.now();
+            cachePageDataSafe(existingPage.id, existingPage);
+            report.pagesUpdated.push({
+              id: existingPage.id,
+              name: existingPage.name,
+              missedCount: pageMissed,
+              skippedCount: pageSkipped,
+              cardsAdded: pageCardsAdded
+            });
+            report.totalMissedAdded += pageMissed;
+          } else {
+            report.pagesUnchanged.push({
+              id: existingPage.id,
+              name: existingPage.name,
+              skippedCount: pageSkipped
+            });
+          }
+          report.totalSkipped += pageSkipped;
+        }
+      }
+
+      if (progBar) progBar.style.width = '100%';
+      if (progPct) progPct.textContent = '100%';
+      if (progLbl) progLbl.textContent = 'اكتملت المقارنة! جاري حفظ البيانات...';
+      await new Promise(r => setTimeout(r, 50));
+
+      sanitizeData(D);
+      sv(true, true);
+      renderMeta();
+
+      // If user is currently looking at this group, re-render
+      if (D.curGroup === targetGroupId) {
+        switchActivePage(D.cur);
+      }
+
+      displaySmartCompareReport(report);
+
+    } catch (err) {
+      console.error('[SMART COMPARE ERROR]', err);
+      alert('خطأ أثناء المقارنة والاستيراد: ' + err.message);
+      if (progWrap) progWrap.style.display = 'none';
+      if (actBtn) actBtn.disabled = false;
+      if (fileInp) fileInp.disabled = false;
+      if (envSel) envSel.disabled = false;
+      if (grpSel) grpSel.disabled = false;
+    }
+  };
+  reader.readAsText(file);
+}
+
+function displaySmartCompareReport(report) {
+  const cfgView = document.getElementById('sc-config-view');
+  const repView = document.getElementById('sc-report-view');
+  const statsGrid = document.getElementById('sc-stats-grid');
+  const repList = document.getElementById('sc-report-list');
+  const actBtn = document.getElementById('sc-action-btn');
+  const closeBtn = document.getElementById('sc-close-btn');
+
+  if (cfgView) cfgView.style.display = 'none';
+  if (repView) repView.style.display = 'flex';
+
+  if (statsGrid) {
+    statsGrid.innerHTML = `
+      <div style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.25);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:1.5rem;font-weight:800;color:#34d399">${report.pagesCreated.length}</div>
+        <div style="font-size:0.75rem;color:var(--mu);margin-top:2px">صفحات جديدة أنشئت</div>
+        <div style="font-size:0.7rem;color:#34d399;margin-top:2px">(${report.totalBookmarksImported} بوكمارك)</div>
+      </div>
+      <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:1.5rem;font-weight:800;color:#f59e0b">${report.totalMissedAdded}</div>
+        <div style="font-size:0.75rem;color:var(--mu);margin-top:2px">روابط مفقودة أضيفت</div>
+        <div style="font-size:0.7rem;color:#f59e0b;margin-top:2px">(في ${report.pagesUpdated.length} صفحة)</div>
+      </div>
+      <div style="background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.25);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:1.5rem;font-weight:800;color:#60a5fa">${report.totalSkipped}</div>
+        <div style="font-size:0.75rem;color:var(--mu);margin-top:2px">روابط كانت موجودة</div>
+        <div style="font-size:0.7rem;color:#60a5fa;margin-top:2px">(تم الحفاظ عليها)</div>
+      </div>
+    `;
+  }
+
+  if (repList) {
+    repList.innerHTML = '';
+
+    function makePageRow(badgeText, badgeBg, badgeCol, borderColor, pageObj, metaText, metaCol) {
+      const item = document.createElement('div');
+      item.style.cssText = `display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:6px;background:rgba(255,255,255,0.03);border-right:3px solid ${borderColor};font-size:0.82rem;cursor:pointer;transition:background 0.15s;`;
+      item.title = 'اضغط للانتقال إلى هذه الصفحة';
+      item.onmouseover = () => { item.style.background = 'rgba(255,255,255,0.08)'; };
+      item.onmouseout = () => { item.style.background = 'rgba(255,255,255,0.03)'; };
+      item.onclick = () => {
+        D.curEnv = report.envId || D.curEnv;
+        D.curGroup = report.groupId;
+        D.cur = pageObj.id;
+        renderMeta();
+        switchActivePage(D.cur);
+        closeM('m-smart-compare');
+      };
+
+      const left = document.createElement('div');
+      left.style.cssText = 'display:flex;align-items:center;gap:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+
+      const badge = document.createElement('span');
+      badge.style.cssText = `background:${badgeBg};color:${badgeCol};font-size:0.68rem;padding:2px 6px;border-radius:4px;font-weight:bold;flex-shrink:0;`;
+      badge.textContent = badgeText;
+
+      const title = document.createElement('span');
+      title.style.fontWeight = '600';
+      title.textContent = pageObj.name;
+
+      left.appendChild(badge);
+      left.appendChild(title);
+
+      const meta = document.createElement('span');
+      meta.style.cssText = `color:${metaCol};font-size:0.75rem;flex-shrink:0;margin-left:8px;`;
+      meta.textContent = metaText;
+
+      item.appendChild(left);
+      item.appendChild(meta);
+      return item;
+    }
+
+    // 1. Created pages
+    report.pagesCreated.forEach(p => {
+      repList.appendChild(makePageRow('صفحة جديدة', 'rgba(52,211,153,0.2)', '#34d399', '#34d399', p, `${p.bookmarkCount} بوكمارك`, '#34d399'));
+    });
+
+    // 2. Updated pages
+    report.pagesUpdated.forEach(p => {
+      repList.appendChild(makePageRow('مفقود أضيف', 'rgba(245,158,11,0.2)', '#f59e0b', '#f59e0b', p, `+${p.missedCount} مفقود (${p.skippedCount} موجود)`, '#f59e0b'));
+    });
+
+    // 3. Unchanged pages
+    report.pagesUnchanged.forEach(p => {
+      repList.appendChild(makePageRow('متطابقة 100%', 'rgba(96,165,250,0.18)', '#60a5fa', '#60a5fa', p, `كل الروابط (${p.skippedCount}) موجودة`, '#60a5fa'));
+    });
+
+    if (report.pagesCreated.length === 0 && report.pagesUpdated.length === 0 && report.pagesUnchanged.length === 0) {
+      repList.innerHTML = '<div style="text-align:center;padding:12px;color:var(--mu);font-size:0.8rem">لم يتم العثور على صفحات في الملف.</div>';
+    }
+  }
+
+  if (closeBtn) {
+    closeBtn.textContent = 'إغلاق';
+    closeBtn.onclick = () => closeM('m-smart-compare');
+  }
+
+  if (actBtn) {
+    actBtn.style.display = '';
+    actBtn.disabled = false;
+    actBtn.textContent = `🎯 الذهاب لمجموعة "${report.groupName}"`;
+    actBtn.style.background = '#34d399';
+    actBtn.style.color = '#000';
+    actBtn.onclick = () => {
+      D.curEnv = report.envId || D.curEnv;
+      D.curGroup = report.groupId;
+      const firstPg = (D.pages || []).find(p => p.groupId === report.groupId);
+      if (firstPg) D.cur = firstPg.id;
+      renderMeta();
+      switchActivePage(D.cur);
+      closeM('m-smart-compare');
+    };
+  }
+}
+
+window.openSmartCompareModal = openSmartCompareModal;
+window.runSmartCompare = runSmartCompare;
+window.displaySmartCompareReport = displaySmartCompareReport;
+window.normalizeCompareUrl = normalizeCompareUrl;
+
+if (window.SM && window.SM.ui) {
+  window.SM.ui.openSmartCompareModal = openSmartCompareModal;
 }
 
 function parseBookmarks(dl, widget) {

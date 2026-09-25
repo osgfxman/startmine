@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#6c8fff">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="manifest" href="/manifest.json?v=1790369177">
+  <link rel="manifest" href="/manifest.json?v=1790369935">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🍅%3C/text%3E%3C/svg%3E">
   <link rel="icon" type="image/png" sizes="192x192" href="/tomato-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="/tomato-512.png">
@@ -22,9 +22,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1790369177">
-  <link rel="stylesheet" href="css/miro.css?v=1790369177">
-  <link rel="stylesheet" href="css/life-widget-additions.css?v=1790369177">
+  <link rel="stylesheet" href="css/base.css?v=1790369935">
+  <link rel="stylesheet" href="css/miro.css?v=1790369935">
+  <link rel="stylesheet" href="css/life-widget-additions.css?v=1790369935">
 </head>
 
 <body>
@@ -151,6 +151,66 @@
       <div class="ma">
         <button class="btn bg-btn" onclick="closeM('m-dup')">Close</button>
         <button class="btn ba" id="dup-del-all" style="background:#ff4444">🗑️ Remove All Duplicates</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mo" id="m-smart-compare" dir="rtl">
+    <div class="mc" style="max-width: 640px; width: 95%; max-height: 90vh; display: flex; flex-direction: column; direction: rtl; text-align: right;">
+      <h3 style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:1.15rem">
+        <span>⚖️ مقارنة واستيراد المفقود من Start.me (HTML)</span>
+      </h3>
+
+      <!-- Configuration Form -->
+      <div id="sc-config-view" style="display:flex;flex-direction:column;gap:14px;overflow-y:auto;padding-left:4px;">
+        <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.28);border-radius:8px;padding:12px 14px;font-size:0.83rem;line-height:1.6;color:var(--tx)">
+          <div style="font-weight:700;margin-bottom:6px;color:#f59e0b">💡 كيف تعمل المقارنة الذكية بدقة:</div>
+          <div>• <b>لو الصفحة غير موجودة:</b> سيتم إنشاؤها بالكامل في مجموعة التبويبات المحددة.</div>
+          <div>• <b>لو الصفحة موجودة بالفعل:</b> سيتم فحص روابطها وإضافة <b>الروابط المفقودة (Missed URLs) فقط</b> بدون استبدال أو حذف أو تكرار أي شيء موجود.</div>
+        </div>
+
+        <div class="fg">
+          <label style="font-weight:600;font-size:0.85rem">📁 1. اختر ملف Start.me HTML:</label>
+          <input type="file" id="sc-file-input" accept=".html,.htm" class="fi" style="cursor:pointer;padding:8px">
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="fg">
+            <label style="font-weight:600;font-size:0.85rem">🌍 2. البيئة (Environment):</label>
+            <select class="fi" id="sc-env-sel" style="padding:6px 8px;cursor:pointer"></select>
+          </div>
+          <div class="fg">
+            <label style="font-weight:600;font-size:0.85rem">📑 3. مجموعة التبويبات (Tab Group):</label>
+            <select class="fi" id="sc-group-sel" style="padding:6px 8px;cursor:pointer"></select>
+          </div>
+        </div>
+
+        <div id="sc-progress-wrap" style="display:none;background:rgba(0,0,0,0.25);padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.08)">
+          <div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:6px">
+            <span id="sc-progress-label" style="font-weight:600">جاري المعالجة...</span>
+            <span id="sc-progress-pct" style="font-weight:bold;color:#f59e0b">0%</span>
+          </div>
+          <div style="width:100%;height:8px;background:rgba(255,255,255,0.1);border-radius:4px;overflow:hidden">
+            <div id="sc-progress-bar" style="width:0%;height:100%;background:#f59e0b;transition:width 0.15s ease"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Report View (Shown after comparison) -->
+      <div id="sc-report-view" style="display:none;flex-direction:column;gap:12px;overflow-y:auto;max-height:60vh;padding-left:4px;">
+        <div style="background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);border-radius:8px;padding:10px 14px;color:#34d399;font-weight:600;font-size:0.88rem;display:flex;align-items:center;gap:8px">
+          <span>✅ اكتملت المقارنة والاستيراد الذكي بنجاح!</span>
+        </div>
+
+        <div id="sc-stats-grid" style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px"></div>
+
+        <div style="font-weight:600;font-size:0.85rem;margin-top:4px">تفاصيل الصفحات (اضغط على أي صفحة للانتقال إليها):</div>
+        <div id="sc-report-list" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px;background:rgba(0,0,0,0.18)"></div>
+      </div>
+
+      <div class="ma" style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn bg-btn" id="sc-close-btn" onclick="closeM('m-smart-compare')">إلغاء</button>
+        <button class="btn ba" id="sc-action-btn" style="background:#f59e0b;color:#000;font-weight:700">⚡ بدء المقارنة والاستيراد</button>
       </div>
     </div>
   </div>
@@ -499,6 +559,7 @@
         <div class="io-it"><label style="cursor:pointer;display:flex;align-items:center;gap:8px;width:100%">📊 Import CSV<input type="file" id="imp-csv" accept=".csv,.xlsx,.xls,.txt" style="display:none"></label></div>
         <div class="io-it"><label style="cursor:pointer;display:flex;align-items:center;gap:8px;width:100%">🌐 Import Start.me (Replace)<input type="file" id="imp-startme" accept=".html,.htm,.json" style="display:none"></label></div>
         <div class="io-it"><label style="cursor:pointer;display:flex;align-items:center;gap:8px;width:100%;color:#34d399;font-weight:600">➕ Merge Start.me (HTML/JSON)<input type="file" id="merge-startme" accept=".html,.htm,.json" style="display:none"></label></div>
+        <div class="io-it" id="btn-smart-compare-startme" onclick="openSmartCompareModal()" style="cursor:pointer;display:flex;align-items:center;gap:8px;width:100%;color:#f59e0b;font-weight:600">⚖️ Smart Compare Start.me (HTML)</div>
         <div class="io-sep"></div>
         <div class="io-it" id="gdrive-export" style="color:#4dd0e1">☁️ Export to Google Drive <span style="font-size:.65rem;opacity:.6;margin-left:auto">Ctrl+Alt+S</span></div>
         <div class="io-it" id="gdrive-restore" style="color:#7ed4a4">☁️ Restore from Google Drive</div>
@@ -797,35 +858,35 @@
   </div>
 
     <!-- Core -->
-    <script src="js/core/namespace.js?v=1790369177"></script>
-    <script src="js/core/events.js?v=1790369177"></script>
-    <script src="js/core/utils.js?v=1790369177"></script>
+    <script src="js/core/namespace.js?v=1790369935"></script>
+    <script src="js/core/events.js?v=1790369935"></script>
+    <script src="js/core/utils.js?v=1790369935"></script>
 
     <!-- Data Layer -->
-    <script src="js/data/firebase.js?v=1790369177"></script>
-    <script src="js/data/offline.js?v=1790369177"></script>
-    <script src="js/data/sync.js?v=1790369177"></script>
+    <script src="js/data/firebase.js?v=1790369935"></script>
+    <script src="js/data/offline.js?v=1790369935"></script>
+    <script src="js/data/sync.js?v=1790369935"></script>
 
     <!-- UI Layer -->
-    <script src="js/ui/toasts.js?v=1790369177"></script>
-    <script src="js/ui/modals.js?v=1790369177"></script>
-    <script src="js/ui/toolbar.js?v=1790369177"></script>
-    <script src="js/ui/search.js?v=1790369177"></script>
-    <script src="js/ui/inbox-ui.js?v=1790369177"></script>
-    <script src="js/thumbnails.js?v=1790369177"></script>
+    <script src="js/ui/toasts.js?v=1790369935"></script>
+    <script src="js/ui/modals.js?v=1790369935"></script>
+    <script src="js/ui/toolbar.js?v=1790369935"></script>
+    <script src="js/ui/search.js?v=1790369935"></script>
+    <script src="js/ui/inbox-ui.js?v=1790369935"></script>
+    <script src="js/thumbnails.js?v=1790369935"></script>
 
     <!-- Miro Modules -->
-    <script src="js/miro/miro-state.js?v=1790369177"></script>
-    <script src="js/miro/render/cards.js?v=1790369177"></script>
-    <script src="js/miro/render/builders.js?v=1790369177"></script>
-    <script src="js/miro/layout/grid.js?v=1790369177"></script>
-    <script src="js/miro/layout/slices.js?v=1790369177"></script>
+    <script src="js/miro/miro-state.js?v=1790369935"></script>
+    <script src="js/miro/render/cards.js?v=1790369935"></script>
+    <script src="js/miro/render/builders.js?v=1790369935"></script>
+    <script src="js/miro/layout/grid.js?v=1790369935"></script>
+    <script src="js/miro/layout/slices.js?v=1790369935"></script>
 
     <!-- Original files (now wrappers) -->
-    <script src="js/miro-engine.js?v=1790369177"></script>
-    <script src="js/life-widget.js?v=1790369177"></script>
-    <script src="js/core/health.js?v=1790369177"></script>
-    <script src="js/app.js?v=1790369177"></script>
+    <script src="js/miro-engine.js?v=1790369935"></script>
+    <script src="js/life-widget.js?v=1790369935"></script>
+    <script src="js/core/health.js?v=1790369935"></script>
+    <script src="js/app.js?v=1790369935"></script>
     <script>
       // ─── Deferred secondary scripts: load after auth is ready ───
       var _mainAppLoaded=false;
@@ -833,7 +894,7 @@
         if(_mainAppLoaded)return;_mainAppLoaded=true;
         console.log('[DEFERRED] Loading outline.js + alignment.js');
         ['js/outline.js','js/alignment.js'].forEach(function(src){
-          var s=document.createElement('script');s.src=src+'?v=1790369177';document.body.appendChild(s);
+          var s=document.createElement('script');s.src=src+'?v=1790369935';document.body.appendChild(s);
         });
       }
       // Primary trigger: load deferred scripts after auth + first render
