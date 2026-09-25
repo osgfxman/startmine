@@ -1075,6 +1075,7 @@ function switchActivePage(pageId) {
       }
     });
     document.getElementById('cw').innerHTML = '<div style="padding: 2rem; color: var(--mu); text-align: center;">Loading page data...</div>';
+    }
   }
 
   // In offline mode, just load from cache, don't attach Firebase listener
