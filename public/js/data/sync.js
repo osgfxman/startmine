@@ -563,6 +563,7 @@
         cellPages: activePg.cellPages || null,
         slicerColSizes: activePg.slicerColSizes || null,
         slicerRowSizes: activePg.slicerRowSizes || null,
+        cols: activePg.cols !== undefined ? activePg.cols : 3,
         ts: activePg.ts || Date.now()
       });
 
@@ -588,6 +589,7 @@
               cellPages: subPg.cellPages || null,
               slicerColSizes: subPg.slicerColSizes || null,
               slicerRowSizes: subPg.slicerRowSizes || null,
+              cols: subPg.cols !== undefined ? subPg.cols : 3,
               ts: subPg.ts || Date.now()
             });
           }
@@ -602,7 +604,8 @@
     cachePagesMeta(D.pages.filter(p => p).map(p => ({
       id: p.id, groupId: p.groupId, name: p.name, pageType: p.pageType,
       zoom: p.zoom, panX: p.panX, panY: p.panY, bg: p.bg, bgType: p.bgType,
-      tabColor: p.tabColor || ''
+      tabColor: p.tabColor || '',
+      cols: p.cols !== undefined ? p.cols : 3
     })));
 
     if (_syncMode === 'saveUpload') {
@@ -646,6 +649,7 @@
       bg: p.bg || '',
       bgType: p.bgType || 'none',
       tabColor: p.tabColor || '',
+      cols: p.cols !== undefined ? p.cols : 3,
       ts: p.ts || 0
     }));
 
@@ -673,7 +677,8 @@
               const o = oldPM[i], n = pagesMeta[i];
               if (o.id === n.id && o.groupId === n.groupId && o.name === n.name &&
                 o.pageType === n.pageType && o.bg === n.bg && o.bgType === n.bgType &&
-                (o.tabColor || '') === (n.tabColor || '')) {
+                (o.tabColor || '') === (n.tabColor || '') &&
+                (o.cols || 3) === (n.cols || 3)) {
                 if (o.zoom !== n.zoom || o.panX !== n.panX || o.panY !== n.panY) {
                   if (diffIdx >= 0) { multiDiff = true; break; }
                   diffIdx = i;
@@ -826,6 +831,7 @@
           cellPages,
           slicerColSizes,
           slicerRowSizes,
+          cols: p.cols !== undefined ? p.cols : 3,
           ts
         };
         _savedCount++;
@@ -868,6 +874,7 @@
             }
             trackPageVersion(activePg.id, activePg.widgets, activePg.miroCards);
             activePg.ts = Date.now(); // Update timestamp on every save
+            updates[`users/${USER_ID}/startmine_pages/${activePg.id}/cols`] = activePg.cols !== undefined ? activePg.cols : 3;
             if (_lastSyncedPageData) {
               updates[`users/${USER_ID}/startmine_pages/${activePg.id}/ts`] = activePg.ts;
 
@@ -952,6 +959,7 @@
                 cellPages: activePg.cellPages || null,
                 slicerColSizes: activePg.slicerColSizes || null,
                 slicerRowSizes: activePg.slicerRowSizes || null,
+                cols: activePg.cols !== undefined ? activePg.cols : 3,
                 ts: activePg.ts
               };
             }

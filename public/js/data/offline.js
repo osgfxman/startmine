@@ -252,6 +252,10 @@
   }
 
   function cachePageDataSafe(pid, data) {
+    if (typeof pid === 'object' && pid !== null && !data) {
+      data = pid;
+      pid = data.id;
+    }
     if (pid && data) {
       _memoryPageCache.set(pid, data);
       if (window.D && window.D.pages) {
@@ -262,11 +266,15 @@
           if (data.vGuides !== undefined) livePg.vGuides = data.vGuides;
           if (data.hGuides !== undefined) livePg.hGuides = data.hGuides;
           if (data.customCells !== undefined) livePg.customCells = data.customCells;
+          if (data.cols !== undefined) livePg.cols = data.cols;
+          if (data.pageType !== undefined) livePg.pageType = data.pageType;
         }
       }
+      // Always persist to IndexedDB asynchronously (unlimited quota, non-blocking)
+      idbSet('page_' + pid, data).catch(() => {});
     }
-    // Always persist to IndexedDB asynchronously (unlimited quota, non-blocking)
-    idbSet('page_' + pid, data).catch(() => {});
+
+    if (!pid || !data) return false;
 
     // Manage localStorage safely: only write small pages (< 120KB) to avoid quota errors
     let lsOk = false;
@@ -315,6 +323,7 @@
         if (livePg) {
           if (!livePg.widgets || livePg.widgets.length === 0) livePg.widgets = idbData.widgets || [];
           if (!livePg.miroCards || livePg.miroCards.length === 0) livePg.miroCards = idbData.miroCards || [];
+          if (idbData.cols !== undefined) livePg.cols = idbData.cols;
         }
       }
       return idbData;
@@ -343,6 +352,7 @@
           cellPages: livePg.cellPages || null,
           slicerColSizes: livePg.slicerColSizes || null,
           slicerRowSizes: livePg.slicerRowSizes || null,
+          cols: livePg.cols !== undefined ? livePg.cols : 3,
           ts: livePg.ts || Date.now()
         };
       }

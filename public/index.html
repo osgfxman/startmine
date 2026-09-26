@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#6c8fff">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="manifest" href="/manifest.json?v=1790417186">
+  <link rel="manifest" href="/manifest.json?v=1790418413">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🍅%3C/text%3E%3C/svg%3E">
   <link rel="icon" type="image/png" sizes="192x192" href="/tomato-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="/tomato-512.png">
@@ -22,9 +22,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1790417186">
-  <link rel="stylesheet" href="css/miro.css?v=1790417186">
-  <link rel="stylesheet" href="css/life-widget-additions.css?v=1790417186">
+  <link rel="stylesheet" href="css/base.css?v=1790418413">
+  <link rel="stylesheet" href="css/miro.css?v=1790418413">
+  <link rel="stylesheet" href="css/life-widget-additions.css?v=1790418413">
 </head>
 
 <body>
@@ -553,45 +553,63 @@
       <div id="startme-cols-pop" class="startme-cols-pop">
         <div class="sm-cols-pop-header">
           <div style="display:flex;align-items:center;gap:6px;">
-            <span style="font-size:1rem;">📊</span>
-            <span style="font-weight:700;font-size:0.82rem;color:#fff;">أعمدة الصفحة (StartMe)</span>
+            <span style="font-size:1rem;">⚙️</span>
+            <span style="font-weight:700;font-size:0.84rem;color:#fff;">إعدادات وتخطيط StartMe</span>
           </div>
           <span id="startme-cols-current-badge" class="sm-cols-badge">3 أعمدة</span>
         </div>
-        <div class="sm-cols-pop-desc">اختر عدد الأعمدة لتنظيم الودجات (من 1 إلى 7):</div>
-        <div class="sm-cols-btn-group" id="startme-cols-btn-group"></div>
-        <div class="sm-cols-pop-divider"></div>
-        <button type="button" id="startme-distribute-btn" class="sm-distribute-action-btn" title="توزيع الودجات بالتساوي على الأعمدة">
-          <span style="font-size:0.95rem;">⚖️</span>
-          <span>توزيع متوازن للودجات</span>
-        </button>
-        <div class="sm-cols-pop-divider"></div>
-        <div class="sm-display-section">
-          <div class="sm-cols-pop-header">
-            <div style="display:flex;align-items:center;gap:6px;">
-              <span style="font-size:1rem;">🖥️</span>
-              <span style="font-weight:700;font-size:0.82rem;color:#fff;">طريقة العرض (Display)</span>
-            </div>
-            <span id="startme-display-current-badge" class="sm-cols-badge">Icons Grid</span>
-          </div>
-          <div class="sm-cols-pop-desc">عرض الروابط لودجات StartMe (مستقل تماماً عن Miro):</div>
-          <div class="sm-display-mode-group" id="startme-display-mode-group">
-            <button type="button" class="sm-display-btn active" data-sm-mode="spark" title="شبكة أيقونات (Icons Grid)">
-              <span>🔲</span> <span>Icons Grid</span>
-            </button>
-            <button type="button" class="sm-display-btn" data-sm-mode="stream" title="قائمة روابط (List)">
-              <span>📋</span> <span>List</span>
-            </button>
-          </div>
-          <div style="display: flex; gap: 6px; margin-top: 8px;">
-            <button type="button" id="startme-apply-page-display" class="sm-display-action-btn" title="تطبيق هذا العرض على ودجات الصفحة الحالية فقط">
-              <span>📄</span> <span>الصفحة الحالية</span>
-            </button>
-            <button type="button" id="startme-apply-all-display" class="sm-display-action-btn primary" title="تطبيق هذا العرض على جميع صفحات StartMe">
-              <span>✦</span> <span>كل الصفحات</span>
-            </button>
-          </div>
+        <div class="sm-cols-pop-desc" style="margin-bottom:8px;font-size:0.7rem;color:#94a3b8;line-height:1.3;">
+          خاص بفيو StartMe فقط (كنفاس ومواقع كروت Miro تظل محفوظة كما هي)
         </div>
+
+        <!-- 1. نطاق التطبيق (Scope) -->
+        <div class="sm-field-label">🎯 نطاق التطبيق (Target Scope):</div>
+        <div class="sm-scope-row" style="display:flex;flex-direction:column;gap:5px;margin-bottom:9px;">
+          <div style="display:flex;gap:5px;">
+            <button type="button" class="sm-scope-btn active" id="startme-scope-single-btn" data-scope="single" title="تطبيق الإعدادات على صفحة معينة">
+              <span>📄</span> <span>صفحة بعينها</span>
+            </button>
+            <button type="button" class="sm-scope-btn" id="startme-scope-all-btn" data-scope="group" title="تطبيق الإعدادات على كل صفحات المجموعة الحالية">
+              <span>📑</span> <span>كل صفحات الـ Tab Group</span>
+            </button>
+          </div>
+          <select id="startme-scope-page-select" class="sm-page-select" title="اختر الصفحة المستهدفة">
+            <!-- Populated dynamically with current group pages -->
+          </select>
+        </div>
+
+        <!-- 2. عدد الأعمدة (Columns) -->
+        <div class="sm-field-label">📊 عدد الأعمدة (Columns):</div>
+        <div class="sm-cols-btn-group" id="startme-cols-btn-group"></div>
+
+        <!-- 3. توزيع متوازن (Balance) -->
+        <div class="sm-balance-row">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;margin:0;width:100%;">
+            <input type="checkbox" id="startme-balance-checkbox" checked style="accent-color:#34d399;cursor:pointer;width:16px;height:16px;" />
+            <div style="flex:1;">
+              <div style="font-size:0.76rem;font-weight:600;color:#e2e8f0;">⚖️ توزيع متوازن للودجات</div>
+              <div style="font-size:0.67rem;color:#94a3b8;">إعادة توزيع الودجات بالتساوي على الأعمدة</div>
+            </div>
+          </label>
+        </div>
+
+        <!-- 4. طريقة العرض (Display Mode) -->
+        <div class="sm-field-label" style="margin-top:7px;">🖥️ طريقة عرض الروابط (Display):</div>
+        <div class="sm-display-mode-group" id="startme-display-mode-group" style="margin-bottom:10px;">
+          <button type="button" class="sm-display-btn active" data-sm-mode="spark" title="شبكة أيقونات (Icons Grid)">
+            <span>🔲</span> <span>Icons Grid</span>
+          </button>
+          <button type="button" class="sm-display-btn" data-sm-mode="stream" title="قائمة روابط (List)">
+            <span>📋</span> <span>List</span>
+          </button>
+        </div>
+
+        <!-- زر التطبيق الموحد -->
+        <div class="sm-cols-pop-divider" style="margin:8px 0 10px 0;"></div>
+        <button type="button" id="startme-apply-unified-btn" class="sm-apply-main-btn" title="تطبيق الإعدادات المحددة">
+          <span style="font-size:1rem;">🚀</span>
+          <span id="startme-apply-btn-text">تطبيق الإعدادات على الصفحة</span>
+        </button>
       </div>
     </div>
     <div style="position:relative">
@@ -911,35 +929,35 @@
   </div>
 
     <!-- Core -->
-    <script src="js/core/namespace.js?v=1790417186"></script>
-    <script src="js/core/events.js?v=1790417186"></script>
-    <script src="js/core/utils.js?v=1790417186"></script>
+    <script src="js/core/namespace.js?v=1790418413"></script>
+    <script src="js/core/events.js?v=1790418413"></script>
+    <script src="js/core/utils.js?v=1790418413"></script>
 
     <!-- Data Layer -->
-    <script src="js/data/firebase.js?v=1790417186"></script>
-    <script src="js/data/offline.js?v=1790417186"></script>
-    <script src="js/data/sync.js?v=1790417186"></script>
+    <script src="js/data/firebase.js?v=1790418413"></script>
+    <script src="js/data/offline.js?v=1790418413"></script>
+    <script src="js/data/sync.js?v=1790418413"></script>
 
     <!-- UI Layer -->
-    <script src="js/ui/toasts.js?v=1790417186"></script>
-    <script src="js/ui/modals.js?v=1790417186"></script>
-    <script src="js/ui/toolbar.js?v=1790417186"></script>
-    <script src="js/ui/search.js?v=1790417186"></script>
-    <script src="js/ui/inbox-ui.js?v=1790417186"></script>
-    <script src="js/thumbnails.js?v=1790417186"></script>
+    <script src="js/ui/toasts.js?v=1790418413"></script>
+    <script src="js/ui/modals.js?v=1790418413"></script>
+    <script src="js/ui/toolbar.js?v=1790418413"></script>
+    <script src="js/ui/search.js?v=1790418413"></script>
+    <script src="js/ui/inbox-ui.js?v=1790418413"></script>
+    <script src="js/thumbnails.js?v=1790418413"></script>
 
     <!-- Miro Modules -->
-    <script src="js/miro/miro-state.js?v=1790417186"></script>
-    <script src="js/miro/render/cards.js?v=1790417186"></script>
-    <script src="js/miro/render/builders.js?v=1790417186"></script>
-    <script src="js/miro/layout/grid.js?v=1790417186"></script>
-    <script src="js/miro/layout/slices.js?v=1790417186"></script>
+    <script src="js/miro/miro-state.js?v=1790418413"></script>
+    <script src="js/miro/render/cards.js?v=1790418413"></script>
+    <script src="js/miro/render/builders.js?v=1790418413"></script>
+    <script src="js/miro/layout/grid.js?v=1790418413"></script>
+    <script src="js/miro/layout/slices.js?v=1790418413"></script>
 
     <!-- Original files (now wrappers) -->
-    <script src="js/miro-engine.js?v=1790417186"></script>
-    <script src="js/life-widget.js?v=1790417186"></script>
-    <script src="js/core/health.js?v=1790417186"></script>
-    <script src="js/app.js?v=1790417186"></script>
+    <script src="js/miro-engine.js?v=1790418413"></script>
+    <script src="js/life-widget.js?v=1790418413"></script>
+    <script src="js/core/health.js?v=1790418413"></script>
+    <script src="js/app.js?v=1790418413"></script>
     <script>
       // ─── Deferred secondary scripts: load after auth is ready ───
       var _mainAppLoaded=false;
@@ -947,7 +965,7 @@
         if(_mainAppLoaded)return;_mainAppLoaded=true;
         console.log('[DEFERRED] Loading outline.js + alignment.js');
         ['js/outline.js','js/alignment.js'].forEach(function(src){
-          var s=document.createElement('script');s.src=src+'?v=1790417186';document.body.appendChild(s);
+          var s=document.createElement('script');s.src=src+'?v=1790418413';document.body.appendChild(s);
         });
       }
       // Primary trigger: load deferred scripts after auth + first render

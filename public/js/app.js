@@ -216,6 +216,10 @@ window._memoryPageCache = window._memoryPageCache || new Map();
 const _memoryPageCache = window._memoryPageCache;
 
 function cachePageDataSafe(pid, data) {
+  if (typeof pid === 'object' && pid !== null && !data) {
+    data = pid;
+    pid = data.id;
+  }
   if (window.SM?.data?.cachePageDataSafe) {
     return window.SM.data.cachePageDataSafe(pid, data);
   }
@@ -229,10 +233,13 @@ function cachePageDataSafe(pid, data) {
         if (data.vGuides !== undefined) livePg.vGuides = data.vGuides;
         if (data.hGuides !== undefined) livePg.hGuides = data.hGuides;
         if (data.customCells !== undefined) livePg.customCells = data.customCells;
+        if (data.cols !== undefined) livePg.cols = data.cols;
+        if (data.pageType !== undefined) livePg.pageType = data.pageType;
       }
     }
+    idbSet('page_' + pid, data).catch(() => {});
   }
-  idbSet('page_' + pid, data).catch(() => {});
+  if (!pid || !data) return false;
   let lsOk = false;
   try {
     const json = JSON.stringify(data);
@@ -1051,6 +1058,7 @@ function switchActivePage(pageId) {
         pg.cellPages = cachedPage.cellPages || null;
         pg.slicerColSizes = cachedPage.slicerColSizes || null;
         pg.slicerRowSizes = cachedPage.slicerRowSizes || null;
+        if (cachedPage.cols !== undefined) pg.cols = cachedPage.cols;
         const fakeD = { pages: [pg] };
         sanitizeData(fakeD);
         _lastSyncedPageData = {
@@ -1097,6 +1105,7 @@ function switchActivePage(pageId) {
           pg.cellPages = idbCached.cellPages || null;
           pg.slicerColSizes = idbCached.slicerColSizes || null;
           pg.slicerRowSizes = idbCached.slicerRowSizes || null;
+          if (idbCached.cols !== undefined) pg.cols = idbCached.cols;
           const fakeD = { pages: [pg] };
           sanitizeData(fakeD);
           _lastSyncedPageData = {
@@ -6190,18 +6199,85 @@ function buildCols() {
   if (typeof buildOutline === 'function') buildOutline();
 }
 
+let _smSelectedScope = 'single'; // 'single' or 'group'
+let _smSelectedCols = null; // number from 1 to 7
+
 function renderStartMeColsToolbar(page) {
   if (!page) page = cp();
   if (!page) return;
-  const currentCols = Math.max(1, Math.min(7, page.cols || 3));
+  const currentCols = _smSelectedCols !== null ? _smSelectedCols : Math.max(1, Math.min(7, page.cols || 3));
 
   // Update mini badge on toolbar button
   const miniBadge = document.getElementById('startme-cols-mini-badge');
-  if (miniBadge) miniBadge.textContent = currentCols;
+  if (miniBadge) miniBadge.textContent = Math.max(1, Math.min(7, page.cols || 3));
 
   // Update current badge inside popover
   const currentBadge = document.getElementById('startme-cols-current-badge');
   if (currentBadge) currentBadge.textContent = `${currentCols} أعمدة`;
+
+  // Scope handling
+  const curGid = page.groupId || (cp() ? cp().groupId : D.curGroup);
+  const groupPages = (D.pages || []).filter(p => p && p.groupId === curGid && p.pageType !== 'slicer');
+
+  const scopeSingleBtn = document.getElementById('startme-scope-single-btn');
+  const scopeAllBtn = document.getElementById('startme-scope-all-btn');
+  const pageSelect = document.getElementById('startme-scope-page-select');
+  const applyBtnText = document.getElementById('startme-apply-btn-text');
+  const applyBtn = document.getElementById('startme-apply-unified-btn');
+
+  if (pageSelect) {
+    const prevVal = pageSelect.value;
+    pageSelect.innerHTML = '';
+    groupPages.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name + (p.id === page.id ? ' (الحالية)' : '');
+      if (p.id === (prevVal || page.id)) opt.selected = true;
+      pageSelect.appendChild(opt);
+    });
+  }
+
+  function updateScopeUI() {
+    if (scopeSingleBtn) scopeSingleBtn.classList.toggle('active', _smSelectedScope === 'single');
+    if (scopeAllBtn) scopeAllBtn.classList.toggle('active', _smSelectedScope === 'group');
+    if (pageSelect) {
+      pageSelect.style.display = _smSelectedScope === 'single' ? 'block' : 'none';
+    }
+    if (applyBtnText) {
+      if (_smSelectedScope === 'group') {
+        applyBtnText.textContent = `تطبيق الإعدادات (كل صفحات الـ Tab Group: ${groupPages.length} صفحة)`;
+      } else {
+        const selPid = pageSelect ? pageSelect.value : page.id;
+        const selP = groupPages.find(p => p.id === selPid) || page;
+        applyBtnText.textContent = `تطبيق الإعدادات (صفحة: "${selP.name}")`;
+      }
+    }
+  }
+
+  if (scopeSingleBtn && !scopeSingleBtn._bound) {
+    scopeSingleBtn._bound = true;
+    scopeSingleBtn.onclick = (ev) => {
+      ev.stopPropagation();
+      _smSelectedScope = 'single';
+      updateScopeUI();
+    };
+  }
+  if (scopeAllBtn && !scopeAllBtn._bound) {
+    scopeAllBtn._bound = true;
+    scopeAllBtn.onclick = (ev) => {
+      ev.stopPropagation();
+      _smSelectedScope = 'group';
+      updateScopeUI();
+    };
+  }
+  if (pageSelect && !pageSelect._bound) {
+    pageSelect._bound = true;
+    pageSelect.onchange = (ev) => {
+      ev.stopPropagation();
+      updateScopeUI();
+    };
+  }
+  updateScopeUI();
 
   // Render 1 to 7 buttons
   const container = document.getElementById('startme-cols-btn-group');
@@ -6215,34 +6291,23 @@ function renderStartMeColsToolbar(page) {
       btn.title = `${i} أعمدة`;
       btn.onclick = (ev) => {
         ev.stopPropagation();
-        setPageColumns(page, i);
+        _smSelectedCols = i;
+        document.querySelectorAll('.startme-col-btn').forEach((b, idx) => {
+          b.classList.toggle('active', idx + 1 === i);
+        });
+        if (currentBadge) currentBadge.textContent = `${i} أعمدة`;
       };
       container.appendChild(btn);
     }
   }
 
-  // Hook distribute button
-  const distBtn = document.getElementById('startme-distribute-btn');
-  if (distBtn) {
-    distBtn.onclick = (ev) => {
-      ev.stopPropagation();
-      balancePageWidgetsAcrossCols(page);
-    };
-  }
-
-  // Determine current display mode of widgets on this page
+  // Display mode buttons
   let curDisplayMode = 'spark';
   const firstBw = (page.widgets || []).find(w => w.type !== 'note' && w.type !== 'todo');
   if (firstBw && firstBw.display) {
     curDisplayMode = firstBw.display === 'stream' ? 'stream' : 'spark';
   }
 
-  const dispBadge = document.getElementById('startme-display-current-badge');
-  if (dispBadge) {
-    dispBadge.textContent = curDisplayMode === 'stream' ? 'List' : 'Icons Grid';
-  }
-
-  // Display mode buttons
   const dispBtns = document.querySelectorAll('.sm-display-btn');
   dispBtns.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.smMode === curDisplayMode);
@@ -6250,57 +6315,37 @@ function renderStartMeColsToolbar(page) {
       ev.stopPropagation();
       dispBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      if (dispBadge) {
-        dispBadge.textContent = btn.dataset.smMode === 'stream' ? 'List' : 'Icons Grid';
-      }
     };
   });
 
-  // Apply to Current Page button
-  const applyPageBtn = document.getElementById('startme-apply-page-display');
-  if (applyPageBtn) {
-    applyPageBtn.onclick = (ev) => {
+  // Main Unified Apply Button
+  if (applyBtn && !applyBtn._bound) {
+    applyBtn._bound = true;
+    applyBtn.onclick = async (ev) => {
       ev.stopPropagation();
-      const activeBtn = document.querySelector('.sm-display-btn.active');
-      const mode = activeBtn ? activeBtn.dataset.smMode : 'spark';
-      (page.widgets || []).forEach(w => {
-        if (w.type !== 'note' && w.type !== 'todo') {
-          w.display = mode;
-        }
-      });
-      if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page);
-      sv();
-      buildCols();
-      renderStartMeColsToolbar(page);
-      const label = mode === 'stream' ? 'قائمة (List)' : 'شبكة أيقونات (Icons Grid)';
-      if (typeof showToast === 'function') {
-        showToast(`🖥️ تم تحويل ودجات صفحة "${page.name}" إلى ${label}!`, 2500);
-      }
-    };
-  }
+      applyBtn.disabled = true;
+      applyBtn.style.opacity = '0.7';
 
-  // Apply to All Pages button
-  const applyAllBtn = document.getElementById('startme-apply-all-display');
-  if (applyAllBtn) {
-    applyAllBtn.onclick = (ev) => {
-      ev.stopPropagation();
-      const activeBtn = document.querySelector('.sm-display-btn.active');
-      const mode = activeBtn ? activeBtn.dataset.smMode : 'spark';
-      (D.pages || []).forEach(p => {
-        if (!p) return;
-        (p.widgets || []).forEach(w => {
-          if (w.type !== 'note' && w.type !== 'todo') {
-            w.display = mode;
-          }
-        });
-        if (typeof cachePageDataSafe === 'function') cachePageDataSafe(p);
-      });
-      sv();
-      buildCols();
-      renderStartMeColsToolbar(page);
-      const label = mode === 'stream' ? 'قائمة (List)' : 'شبكة أيقونات (Icons Grid)';
-      if (typeof showToast === 'function') {
-        showToast(`🌐 تم تحويل ودجات جميع صفحات StartMe إلى ${label}! (كنفاس Miro محفوظ كما هو)`, 3500);
+      try {
+        let targetPages = [];
+        if (_smSelectedScope === 'group') {
+          targetPages = (D.pages || []).filter(p => p && p.groupId === curGid && p.pageType !== 'slicer');
+        } else {
+          const selPid = pageSelect ? pageSelect.value : (cp() ? cp().id : null);
+          const targetP = (D.pages || []).find(p => p && p.id === selPid) || cp();
+          if (targetP) targetPages = [targetP];
+        }
+
+        const activeColBtn = document.querySelector('.startme-col-btn.active');
+        const cols = activeColBtn ? parseInt(activeColBtn.textContent, 10) : (_smSelectedCols || page.cols || 3);
+        const balance = document.getElementById('startme-balance-checkbox')?.checked || false;
+        const activeDispBtn = document.querySelector('.sm-display-btn.active');
+        const display = activeDispBtn ? activeDispBtn.dataset.smMode : 'spark';
+
+        await applyStartMePageSettings(targetPages, { cols, balance, display });
+      } finally {
+        applyBtn.disabled = false;
+        applyBtn.style.opacity = '1';
       }
     };
   }
@@ -6315,10 +6360,112 @@ function renderStartMeColsToolbar(page) {
       const ioPop = document.getElementById('io-pop');
       if (ioPop) ioPop.classList.remove('open');
       colsPop.classList.toggle('open');
+      if (colsPop.classList.contains('open')) {
+        renderStartMeColsToolbar(cp());
+      }
     };
     colsPop.onclick = (ev) => {
       ev.stopPropagation();
     };
+  }
+}
+
+async function applyStartMePageSettings(targetPages, options) {
+  if (!Array.isArray(targetPages) || targetPages.length === 0) return;
+  const cols = Math.max(1, Math.min(7, parseInt(options.cols, 10) || 3));
+  const doBalance = !!options.balance;
+  const displayMode = options.display === 'stream' ? 'stream' : 'spark';
+
+  let updatedCount = 0;
+
+  for (const p of targetPages) {
+    if (!p || (p.id && p.id.startsWith('time_'))) continue;
+
+    // 1. Ensure page data is hydrated from memory / IndexedDB if not in RAM
+    if ((!p.widgets || p.widgets.length === 0) && (!p.miroCards || p.miroCards.length === 0)) {
+      if (typeof getCachedPageDataAsync === 'function') {
+        try {
+          const cached = await getCachedPageDataAsync(p.id);
+          if (cached) {
+            if (cached.widgets && cached.widgets.length > 0) p.widgets = cached.widgets;
+            if (cached.miroCards && cached.miroCards.length > 0) p.miroCards = cached.miroCards;
+            if (cached.cols !== undefined) p.cols = cached.cols;
+          }
+        } catch(e) {
+          console.error('[applyStartMePageSettings] Hydration failed for page:', p.id, e);
+        }
+      }
+    }
+
+    if (!p.widgets) p.widgets = [];
+    if (!p.miroCards) p.miroCards = [];
+
+    // 2. If widgets is empty but miroCards exists, derive widgets (NEVER touch miroCards!)
+    if (p.widgets.length === 0 && p.miroCards.length > 0) {
+      if (typeof convertMiroCardsToWidgets === 'function') {
+        p.widgets = convertMiroCardsToWidgets(p.miroCards, cols);
+      }
+    } else if (p.widgets.length > 0 && p.miroCards.length > 0) {
+      if (typeof syncMiroBookmarksToWidgets === 'function') {
+        syncMiroBookmarksToWidgets(p.miroCards, p.widgets, cols);
+      }
+    }
+
+    // 3. Set columns count
+    p.cols = cols;
+
+    // 4. Apply balance or column clamping
+    if (doBalance) {
+      p.widgets.forEach((w, idx) => {
+        w.col = idx % cols;
+      });
+    } else {
+      p.widgets.forEach(w => {
+        if (typeof w.col !== 'number' || isNaN(w.col) || w.col < 0) w.col = 0;
+        if (w.col >= cols) w.col = cols - 1;
+      });
+    }
+
+    // 5. Apply display mode to bookmark widgets
+    p.widgets.forEach(w => {
+      if (w.type !== 'note' && w.type !== 'todo') {
+        w.display = displayMode;
+      }
+    });
+
+    // 6. Update timestamp
+    p.ts = Date.now();
+
+    // 7. Persist to cache safely
+    if (typeof cachePageDataSafe === 'function') {
+      cachePageDataSafe(p.id, p);
+    }
+
+    updatedCount++;
+  }
+
+  // 8. Sanitize & Save ALL pages to Firebase and local storage
+  if (typeof sanitizeData === 'function') sanitizeData(D);
+  if (typeof sv === 'function') sv(true, true);
+
+  // 9. Re-render UI if on current page
+  const activePage = cp();
+  if (activePage && activePage.pageType !== 'miro') {
+    if (typeof buildCols === 'function') buildCols();
+  }
+  if (typeof renderStartMeColsToolbar === 'function') {
+    renderStartMeColsToolbar(activePage);
+  }
+
+  // 10. User toast feedback
+  const modeLabel = displayMode === 'stream' ? 'قائمة (List)' : 'شبكة أيقونات (Icons Grid)';
+  const balLabel = doBalance ? ' + توزيع متوازن' : '';
+  if (typeof showToast === 'function') {
+    if (targetPages.length > 1) {
+      showToast(`🌐 تم تطبيق (${cols} أعمدة${balLabel} + ${modeLabel}) على جميع صفحات الـ Tab Group (${updatedCount} صفحة) بنجاح وبدون المساس بـ Miro!`, 4000);
+    } else {
+      showToast(`🖥️ تم تطبيق (${cols} أعمدة${balLabel} + ${modeLabel}) على صفحة "${targetPages[0].name}" بنجاح وبدون المساس بـ Miro!`, 3000);
+    }
   }
 }
 
@@ -6331,9 +6478,10 @@ function setPageColumns(page, newCols) {
     if (typeof w.col !== 'number' || isNaN(w.col) || w.col < 0) w.col = 0;
     if (w.col >= num) w.col = num - 1;
   });
-  if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page);
+  if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page.id, page);
   sv();
   buildCols();
+  if (typeof renderStartMeColsToolbar === 'function') renderStartMeColsToolbar(page);
   if (typeof showToast === 'function') {
     showToast(`📊 تم ضبط عدد أعمدة الصفحة إلى ${num}`, 2000);
   }
@@ -6346,13 +6494,19 @@ function balancePageWidgetsAcrossCols(page) {
   page.widgets.forEach((w, idx) => {
     w.col = idx % cols;
   });
-  if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page);
+  if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page.id, page);
   sv();
   buildCols();
+  if (typeof renderStartMeColsToolbar === 'function') renderStartMeColsToolbar(page);
   if (typeof showToast === 'function') {
     showToast(`⚖️ تم توزيع الودجات بالتساوي على ${cols} أعمدة!`, 2500);
   }
 }
+
+window.applyStartMePageSettings = applyStartMePageSettings;
+window.renderStartMeColsToolbar = renderStartMeColsToolbar;
+window.setPageColumns = setPageColumns;
+window.balancePageWidgetsAcrossCols = balancePageWidgetsAcrossCols;
 
 function reorderStartMeWidget(page, draggedWid, targetWid, dropPosition, targetCol) {
   if (!page) page = cp();
@@ -7175,7 +7329,7 @@ document.getElementById('ok-dp').onclick = () => {
   item.size = document.getElementById('dm-sz').value;
   item.vis = document.getElementById('dm-vi').value;
 
-  if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page);
+  if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page.id, page);
   sv();
 
   if (isMiro) {
@@ -7218,7 +7372,8 @@ if (dpPageBtn) {
       renderStartMeColsToolbar(page);
     }
 
-    if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page);
+    page.ts = Date.now();
+    if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page.id, page);
     sv();
     if (typeof showToast === 'function') {
       showToast(`🖥️ تم تطبيق العرض على صفحة "${page.name}"!`, 2500);
@@ -7253,10 +7408,12 @@ document.getElementById('dp-all').onclick = () => {
         }
       });
     }
-    if (typeof cachePageDataSafe === 'function') cachePageDataSafe(p);
+    p.ts = Date.now();
+    if (typeof cachePageDataSafe === 'function') cachePageDataSafe(p.id, p);
   });
 
-  sv();
+  if (typeof sanitizeData === 'function') sanitizeData(D);
+  sv(true, true);
   if (isMiro) {
     if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
     if (typeof showToast === 'function') {
