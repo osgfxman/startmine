@@ -5334,69 +5334,306 @@ window.triggerImageMigration = async function () {
   }
 };
 
-// Move/Copy Widget
+// ─── Move/Copy Widget (Atomic & Safe with Persistence Guarantee) ───
 let _mvWid = null;
+const STORAGE_LAST_MV_GRP = 'sm_last_mv_grp';
+const STORAGE_LAST_MV_PG = 'sm_last_mv_pg';
+
+function _findWidgetAndPage(wid) {
+  if (!wid) return null;
+  // 1. Search in-memory D.pages
+  for (const p of D.pages) {
+    if (p && p.widgets) {
+      const idx = p.widgets.findIndex((x) => x && x.id === wid);
+      if (idx !== -1) {
+        return { page: p, widget: p.widgets[idx], index: idx };
+      }
+    }
+  }
+  // 2. Search local cache if page was evicted or unloaded
+  for (const p of D.pages) {
+    if (!p) continue;
+    const cached = typeof getCachedPageData === 'function' ? getCachedPageData(p.id) : null;
+    if (cached && cached.widgets) {
+      const idx = cached.widgets.findIndex((x) => x && x.id === wid);
+      if (idx !== -1) {
+        p.widgets = cached.widgets;
+        if (cached.miroCards) p.miroCards = cached.miroCards;
+        return { page: p, widget: cached.widgets[idx], index: idx };
+      }
+    }
+  }
+  return null;
+}
+
+function _ensurePageWidgetsLoaded(page) {
+  if (!page) return;
+  if (!page.widgets || page.widgets.length === 0) {
+    const cached = typeof getCachedPageData === 'function' ? getCachedPageData(page.id) : null;
+    if (cached && cached.widgets && cached.widgets.length > 0) {
+      page.widgets = cached.widgets;
+      if (cached.miroCards) page.miroCards = cached.miroCards;
+    }
+  }
+  if (!page.widgets) page.widgets = [];
+}
+
+function _safePersistPagePayload(page) {
+  if (!page) return;
+  page.ts = Date.now();
+  const payload = {
+    widgets: page.widgets || [],
+    miroCards: page.miroCards || [],
+    vGuides: page.vGuides || [],
+    hGuides: page.hGuides || [],
+    _guidesMode: page._guidesMode || false,
+    lockedGuides: page.lockedGuides || [],
+    cellStates: page.cellStates || {},
+    mergedCells: page.mergedCells || [],
+    customCells: page.customCells || [],
+    gridRows: page.gridRows || null,
+    gridCols: page.gridCols || null,
+    cellPages: page.cellPages || null,
+    slicerColSizes: page.slicerColSizes || null,
+    slicerRowSizes: page.slicerRowSizes || null,
+    cellGuides: page.cellGuides || {},
+    _layoutGuidesMode: page._layoutGuidesMode || false,
+    cols: page.cols !== undefined ? page.cols : 3,
+    ts: page.ts
+  };
+
+  // 1. Save to local cache (localStorage + IndexedDB)
+  if (typeof cachePageDataSafe === 'function') {
+    cachePageDataSafe(page.id, payload);
+  } else if (typeof cachePageData === 'function') {
+    cachePageData(page.id, payload);
+  }
+
+  // 2. Direct write to Firebase Realtime Database shard
+  if (typeof USER_ID !== 'undefined' && USER_ID && typeof db !== 'undefined') {
+    const updates = {};
+    updates[`users/${USER_ID}/startmine_pages/${page.id}`] = payload;
+    db.ref().update(updates).catch((e) => console.warn('[PAGE SYNC DB]', page.id, e));
+  }
+}
+
 function openMvModal(wid) {
   _mvWid = wid;
+  const found = _findWidgetAndPage(wid);
+  const wNameEl = document.getElementById('mv-widget-name');
+  if (wNameEl) {
+    wNameEl.textContent = (found && found.widget && (found.widget.title || found.widget.name)) || 'ويدجيت';
+  }
+
   const gs = document.getElementById('mv-grp');
   gs.innerHTML = '';
   D.groups.forEach((g) => {
     const o = document.createElement('option');
     o.value = g.id;
-    o.textContent = g.name;
+    const env = D.environments ? D.environments.find((e) => e.id === g.envId) : null;
+    const envLabel = env && D.environments.length > 1 ? ` (${env.name})` : '';
+    o.textContent = `📁 ${g.name}${envLabel}`;
     gs.appendChild(o);
   });
-  gs.value = D.curGroup === '__all__' ? D.groups[0].id : D.curGroup;
+
+  // Restore last selected group or default to current group
+  let lastGid = localStorage.getItem(STORAGE_LAST_MV_GRP);
+  if (!lastGid || !D.groups.some((g) => g && g.id === lastGid)) {
+    lastGid = D.curGroup === '__all__' ? (D.groups[0] ? D.groups[0].id : '') : D.curGroup;
+  }
+  gs.value = lastGid;
+
   updateMvPages();
-  gs.onchange = updateMvPages;
+
+  gs.onchange = () => {
+    localStorage.setItem(STORAGE_LAST_MV_GRP, gs.value);
+    updateMvPages();
+    const ps = document.getElementById('mv-pg');
+    if (ps && ps.value) {
+      localStorage.setItem(STORAGE_LAST_MV_PG, ps.value);
+    }
+  };
+
+  const ps = document.getElementById('mv-pg');
+  if (ps) {
+    ps.onchange = () => {
+      localStorage.setItem(STORAGE_LAST_MV_PG, ps.value);
+    };
+  }
+
   openM('m-mv');
 }
+
 function updateMvPages() {
   const gid = document.getElementById('mv-grp').value;
   const ps = document.getElementById('mv-pg');
   ps.innerHTML = '';
-  D.pages
-    .filter((p) => p.groupId === gid)
-    .forEach((p) => {
-      const o = document.createElement('option');
-      o.value = p.id;
-      o.textContent = p.name;
-      ps.appendChild(o);
-    });
-}
-document.getElementById('mv-move').onclick = () => {
-  const w = fw(_mvWid);
-  if (!w) return;
-  const tgtPid = document.getElementById('mv-pg').value;
-  const tgtPage = D.pages.find((p) => p.id === tgtPid);
-  if (!tgtPage) return;
-  // Remove from current page
-  D.pages.forEach((p) => {
-    p.widgets = (p.widgets || []).filter((x) => x.id !== _mvWid);
+  const pagesInGroup = D.pages.filter((p) => p && p.groupId === gid);
+
+  if (pagesInGroup.length === 0) {
+    const o = document.createElement('option');
+    o.value = '';
+    o.textContent = '(لا توجد صفحات في هذه المجموعة)';
+    ps.appendChild(o);
+    return;
+  }
+
+  pagesInGroup.forEach((p) => {
+    const o = document.createElement('option');
+    o.value = p.id;
+    const icon = p.pageType === 'miro' ? '🎨' : '📄';
+    o.textContent = `${icon} ${p.name || 'Untitled Page'}`;
+    ps.appendChild(o);
   });
-  // Add to target at position 0
-  w.col = 0;
-  if (!tgtPage.widgets) tgtPage.widgets = [];
-  tgtPage.widgets.unshift(w);
-  sv();
-  buildCols();
-  closeM('m-mv');
-};
-document.getElementById('mv-copy').onclick = () => {
-  const w = fw(_mvWid);
-  if (!w) return;
+
+  // Restore last selected page if it belongs to this group
+  const lastPid = localStorage.getItem(STORAGE_LAST_MV_PG);
+  if (lastPid && pagesInGroup.some((p) => p.id === lastPid)) {
+    ps.value = lastPid;
+  } else {
+    // Default to current page if in group, or first page
+    if (D.cur && pagesInGroup.some((p) => p.id === D.cur)) {
+      ps.value = D.cur;
+    } else {
+      ps.value = pagesInGroup[0].id;
+    }
+  }
+}
+
+document.getElementById('mv-move').onclick = async () => {
+  const wid = _mvWid;
+  if (!wid) {
+    if (typeof showToast === 'function') showToast('⚠️ لا يوجد ويدجيت محدد');
+    return;
+  }
+
+  // 1. Locate source page and widget safely
+  const found = _findWidgetAndPage(wid);
+  if (!found || !found.page || !found.widget) {
+    if (typeof showToast === 'function') {
+      showToast('⚠️ تعذر العثور على الويدجيت! تم إلغاء العملية بأمان بدون فقد بيانات.', 4000);
+    }
+    return;
+  }
+
+  const srcPage = found.page;
+  const widgetIdx = found.index;
+  const widgetData = found.widget;
+
+  // 2. Locate target page
   const tgtPid = document.getElementById('mv-pg').value;
-  const tgtPage = D.pages.find((p) => p.id === tgtPid);
-  if (!tgtPage) return;
-  const clone = JSON.parse(JSON.stringify(w));
+  if (!tgtPid) {
+    if (typeof showToast === 'function') showToast('⚠️ يرجى اختيار الصفحة الهدف');
+    return;
+  }
+  const tgtPage = D.pages.find((p) => p && p.id === tgtPid);
+  if (!tgtPage) {
+    if (typeof showToast === 'function') showToast('⚠️ الصفحة الهدف غير موجودة');
+    return;
+  }
+
+  // Save user preference
+  localStorage.setItem(STORAGE_LAST_MV_GRP, document.getElementById('mv-grp').value);
+  localStorage.setItem(STORAGE_LAST_MV_PG, tgtPid);
+
+  // 3. Ensure target page's existing widgets are loaded from cache/IDB if not in memory
+  _ensurePageWidgetsLoaded(tgtPage);
+
+  // 4. Prepare cloned widget for target
+  const movedWidget = JSON.parse(JSON.stringify(widgetData));
+  movedWidget.col = 0;
+
+  if (srcPage.id === tgtPage.id) {
+    // Same page move: relocate to top
+    srcPage.widgets.splice(widgetIdx, 1);
+    srcPage.widgets.unshift(movedWidget);
+  } else {
+    // Inter-page move: Add to target FIRST, verify, then remove from source!
+    tgtPage.widgets.unshift(movedWidget);
+
+    const verified = tgtPage.widgets.some((w) => w && w.id === movedWidget.id);
+    if (!verified) {
+      if (typeof showToast === 'function') showToast('⚠️ فشل نقل الويدجيت للصفحة الهدف. تم إلغاء النقل بأمان!');
+      return;
+    }
+
+    // Only remove from source after verification
+    srcPage.widgets.splice(widgetIdx, 1);
+  }
+
+  // 5. Persist BOTH target and source pages to cache and database immediately!
+  _safePersistPagePayload(tgtPage);
+  if (srcPage.id !== tgtPage.id) {
+    _safePersistPagePayload(srcPage);
+  }
+
+  // 6. Global sync to update pagesMeta, timestamps and metadata
+  if (typeof sv === 'function') {
+    sv(true, true);
+  }
+
+  // 7. Update UI
+  if (typeof buildCols === 'function') {
+    buildCols();
+  }
+
+  closeM('m-mv');
+  if (typeof showToast === 'function') {
+    showToast(`📦 تم نقل "${movedWidget.title || 'الويدجيت'}" إلى "${tgtPage.name}" بنجاح!`, 3500);
+  }
+};
+
+document.getElementById('mv-copy').onclick = async () => {
+  const wid = _mvWid;
+  if (!wid) {
+    if (typeof showToast === 'function') showToast('⚠️ لا يوجد ويدجيت محدد');
+    return;
+  }
+
+  const found = _findWidgetAndPage(wid);
+  if (!found || !found.page || !found.widget) {
+    if (typeof showToast === 'function') showToast('⚠️ تعذر العثور على الويدجيت لنسخه!', 4000);
+    return;
+  }
+
+  const tgtPid = document.getElementById('mv-pg').value;
+  if (!tgtPid) {
+    if (typeof showToast === 'function') showToast('⚠️ يرجى اختيار الصفحة الهدف');
+    return;
+  }
+  const tgtPage = D.pages.find((p) => p && p.id === tgtPid);
+  if (!tgtPage) {
+    if (typeof showToast === 'function') showToast('⚠️ الصفحة الهدف غير موجودة');
+    return;
+  }
+
+  localStorage.setItem(STORAGE_LAST_MV_GRP, document.getElementById('mv-grp').value);
+  localStorage.setItem(STORAGE_LAST_MV_PG, tgtPid);
+
+  _ensurePageWidgetsLoaded(tgtPage);
+
+  const clone = JSON.parse(JSON.stringify(found.widget));
   clone.id = uid();
   clone.col = 0;
-  if (clone.items) clone.items.forEach((it) => (it.id = uid()));
-  if (!tgtPage.widgets) tgtPage.widgets = [];
+  if (clone.items) {
+    clone.items.forEach((it) => (it.id = uid()));
+  }
+
   tgtPage.widgets.unshift(clone);
-  sv();
-  buildCols();
+
+  _safePersistPagePayload(tgtPage);
+
+  if (typeof sv === 'function') {
+    sv(true, true);
+  }
+  if (typeof buildCols === 'function') {
+    buildCols();
+  }
+
   closeM('m-mv');
+  if (typeof showToast === 'function') {
+    showToast(`📋 تم نسخ "${clone.title || 'الويدجيت'}" إلى "${tgtPage.name}" بنجاح!`, 3500);
+  }
 };
 
 // INBOX sidebar

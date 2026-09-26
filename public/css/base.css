@@ -1823,7 +1823,84 @@ body {
 }
 
 .fi option {
-  background: #1a1c2a;
+  background-color: #1a1c2a;
+  color: #f8fafc;
+}
+
+select.fi {
+  background-color: #1e293b;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+}
+
+select.fi option {
+  background-color: #0f172a;
+  color: #f8fafc;
+  padding: 8px 10px;
+}
+
+/* ─── Move / Copy Modal High-Contrast Dark-Mode Styling ─── */
+#m-mv .mc {
+  background: #141c2e !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75) !important;
+  border-radius: 16px !important;
+}
+
+#m-mv h3 {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  margin-bottom: 0.9rem !important;
+}
+
+#m-mv .fg label {
+  color: #94a3b8 !important;
+  font-weight: 700 !important;
+  font-size: 0.72rem !important;
+  letter-spacing: 0.05em !important;
+  margin-bottom: 6px !important;
+}
+
+#m-mv select.fi {
+  width: 100% !important;
+  background-color: #1e293b !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  border-radius: 10px !important;
+  padding: 0.62rem 0.85rem !important;
+  font-size: 0.88rem !important;
+  outline: none !important;
+}
+
+#m-mv select.fi:focus {
+  border-color: #818cf8 !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
+}
+
+#m-mv select.fi option {
+  background-color: #0f172a !important;
+  color: #ffffff !important;
+  padding: 8px 12px !important;
+}
+
+#m-mv #mv-move {
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  padding: 0.5rem 1.1rem !important;
+  border-radius: 8px !important;
+  border: none !important;
+}
+
+#m-mv #mv-copy {
+  background: linear-gradient(135deg, #6366f1, #4f46e5) !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  padding: 0.5rem 1.1rem !important;
+  border-radius: 8px !important;
+  border: none !important;
 }
 
 .ma {
