@@ -91,7 +91,7 @@
   const gid = uid();
   D.groups.push({ id: gid, name: 'Group 1', envId: id });
   const pid = uid();
-  const defType = D.settings.defaultPageType || 'miro';
+  const defType = (typeof getEnvPageType === 'function') ? getEnvPageType(id) : (D.settings.defaultPageType || 'miro');
   const isStartMe = defType === 'web' || defType === 'startme';
   const pageType = isStartMe ? 'web' : 'miro';
   const name = isStartMe ? 'StartMe 1' : 'Miro 1';
@@ -119,7 +119,7 @@
   const envGroups = D.groups.filter((g) => g.envId === targetEnv);
   D.groups.push({ id, name: 'Group ' + (envGroups.length + 1), envId: targetEnv });
   const pid = uid();
-  const defType = D.settings.defaultPageType || 'miro';
+  const defType = (typeof getEnvPageType === 'function') ? getEnvPageType(targetEnv) : (D.settings.defaultPageType || 'miro');
   const isStartMe = defType === 'web' || defType === 'startme';
   const pageType = isStartMe ? 'web' : 'miro';
   const name = isStartMe ? 'StartMe 1' : 'Miro 1';
@@ -144,7 +144,9 @@
   const id = uid();
   const targetGroup = D.curGroup === '__all__' ? D.groups[0].id : D.curGroup;
   const groupPages = D.pages.filter((p) => p.groupId === targetGroup);
-  const defType = D.settings.defaultPageType || 'miro';
+  const targetGroupObj = D.groups.find((g) => g.id === targetGroup);
+  const targetEnv = targetGroupObj ? targetGroupObj.envId : D.curEnv;
+  const defType = (typeof getEnvPageType === 'function') ? getEnvPageType(targetEnv) : (D.settings.defaultPageType || 'miro');
   const isStartMe = defType === 'web' || defType === 'startme';
   const pageType = isStartMe ? 'web' : 'miro';
   const name = (isStartMe ? 'StartMe ' : 'Miro ') + (groupPages.length + 1);

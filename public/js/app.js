@@ -900,12 +900,16 @@ function renderMeta() {
   document.documentElement.style.setProperty('--ac', D.settings.accent || '#6c8fff');
   document.getElementById('ac-dot').style.background = D.settings.accent || '#6c8fff';
 
-  const cb = document.getElementById('page-type-toggle-cb');
-  const lbl = document.getElementById('page-type-label');
-  if (cb && lbl) {
-    const isStartMe = (D.settings.defaultPageType === 'web' || D.settings.defaultPageType === 'startme');
-    cb.checked = isStartMe;
-    lbl.textContent = isStartMe ? 'StartMe' : 'Miro';
+  if (typeof updatePageTypeToggleUI === 'function') {
+    updatePageTypeToggleUI(D.curEnv);
+  } else {
+    const cb = document.getElementById('page-type-toggle-cb');
+    const lbl = document.getElementById('page-type-label');
+    if (cb && lbl) {
+      const isStartMe = (D.settings.defaultPageType === 'web' || D.settings.defaultPageType === 'startme');
+      cb.checked = isStartMe;
+      lbl.textContent = isStartMe ? 'StartMe' : 'Miro';
+    }
   }
 }
 
@@ -990,6 +994,10 @@ function switchActivePage(pageId) {
     if (activeGrp && activeGrp.envId) {
       D.curEnv = activeGrp.envId;
     }
+  }
+  const envMode = typeof getEnvPageType === 'function' ? getEnvPageType(D.curEnv) : null;
+  if (envMode && activePg && activePg.pageType && activePg.pageType !== envMode && activePg.pageType !== 'slicer' && !activePg.id.startsWith('time_')) {
+    activePg.pageType = envMode;
   }
   try { localStorage.setItem(LS_CUR_PAGE, pageId); } catch(e) {}
   if (activePg) {
@@ -3074,18 +3082,61 @@ function syncWidgetsBookmarksToMiro(widgets, miroCards) {
   });
 }
 
-async function setGlobalPageView(targetMode) {
-  const isStartMe = (targetMode === 'web' || targetMode === 'startme');
-  const newType = isStartMe ? 'web' : 'miro';
-  D.settings.defaultPageType = newType;
+function getEnvPageType(envId) {
+  if (!envId) envId = D.curEnv;
+  const env = (D.environments || []).find(e => e && e.id === envId);
+  if (env && env.pageType) return env.pageType;
+  if (D.settings && D.settings.envPageTypes && D.settings.envPageTypes[envId]) {
+    return D.settings.envPageTypes[envId];
+  }
+  // Check pages belonging to this environment
+  const envGroups = (D.groups || []).filter(g => g && g.envId === envId);
+  const envGroupIds = new Set(envGroups.map(g => g.id));
+  const firstPg = (D.pages || []).find(p => p && envGroupIds.has(p.groupId) && p.pageType !== 'slicer' && !p.id.startsWith('time_'));
+  if (firstPg && firstPg.pageType) {
+    return firstPg.pageType;
+  }
+  return D.settings?.defaultPageType || 'miro';
+}
 
+function setEnvPageType(envId, pageType) {
+  if (!envId) envId = D.curEnv;
+  const env = (D.environments || []).find(e => e && e.id === envId);
+  if (env) env.pageType = pageType;
+  if (!D.settings) D.settings = {};
+  if (!D.settings.envPageTypes) D.settings.envPageTypes = {};
+  D.settings.envPageTypes[envId] = pageType;
+  D.settings.defaultPageType = pageType;
+}
+
+function updatePageTypeToggleUI(envId) {
+  if (!envId) envId = D.curEnv;
+  const curType = getEnvPageType(envId);
+  const isStartMe = (curType === 'web' || curType === 'startme');
   const cb = document.getElementById('page-type-toggle-cb');
   const lbl = document.getElementById('page-type-label');
   if (cb) cb.checked = isStartMe;
   if (lbl) lbl.textContent = isStartMe ? 'StartMe' : 'Miro';
+}
+
+async function setEnvironmentPageView(targetMode, targetEnvId) {
+  if (!targetEnvId) targetEnvId = D.curEnv;
+  const isStartMe = (targetMode === 'web' || targetMode === 'startme');
+  const newType = isStartMe ? 'web' : 'miro';
+
+  setEnvPageType(targetEnvId, newType);
+  updatePageTypeToggleUI(targetEnvId);
+
+  const curEnvObj = (D.environments || []).find(e => e && e.id === targetEnvId);
+  const envName = curEnvObj ? curEnvObj.name : 'البيئة الحالية';
+
+  // Find all pages belonging to this environment
+  const envGroups = (D.groups || []).filter(g => g && g.envId === targetEnvId);
+  const envGroupIds = new Set(envGroups.map(g => g.id));
+  const targetPages = (D.pages || []).filter(p => p && envGroupIds.has(p.groupId) && p.pageType !== 'slicer');
 
   let convertedCount = 0;
-  for (const p of (D.pages || [])) {
+  for (const p of targetPages) {
     if (!p || (p.id && p.id.startsWith('time_'))) continue;
 
     // Ensure page data is retrieved from memory/IndexedDB
@@ -3096,6 +3147,7 @@ async function setGlobalPageView(targetMode) {
           if (cached) {
             if (cached.widgets && cached.widgets.length > 0) p.widgets = cached.widgets;
             if (cached.miroCards && cached.miroCards.length > 0) p.miroCards = cached.miroCards;
+            if (cached.cols !== undefined) p.cols = cached.cols;
           }
         } catch (e) {}
       }
@@ -3109,10 +3161,8 @@ async function setGlobalPageView(targetMode) {
       p.pageType = 'web';
 
       if (p.widgets.length === 0 && p.miroCards.length > 0) {
-        // First-time conversion to StartMe: derive widgets from miroCards
         p.widgets = convertMiroCardsToWidgets(p.miroCards, p.cols || 3);
       } else if (p.widgets.length > 0 && p.miroCards.length > 0) {
-        // Dual-View Sync: Preserve existing widget layout & columns, sync any newly added bookmarks
         syncMiroBookmarksToWidgets(p.miroCards, p.widgets, p.cols || 3);
       }
     } else {
@@ -3120,10 +3170,8 @@ async function setGlobalPageView(targetMode) {
       p.pageType = 'miro';
 
       if (p.miroCards.length === 0 && p.widgets.length > 0) {
-        // First-time conversion to Miro: derive miroCards from widgets
         p.miroCards = convertWidgetsToMiroCards(p.widgets);
       } else if (p.miroCards.length > 0 && p.widgets.length > 0) {
-        // Dual-View Sync: Preserve existing Miro coordinates & zoom, sync any newly added bookmarks
         syncWidgetsBookmarksToMiro(p.widgets, p.miroCards);
       }
     }
@@ -3142,13 +3190,21 @@ async function setGlobalPageView(targetMode) {
 
   if (typeof showToast === 'function') {
     if (isStartMe) {
-      showToast(`📑 تم تحويل عرض ${convertedCount} صفحة إلى ستايل Start.me مع حفظ إحداثيات Miro بالكامل!`, 4000);
+      showToast(`📑 بيئة "${envName}": تم ضبط العرض على وضع Start.me (${convertedCount} صفحة، محفوظ للبيئة)!`, 4000);
     } else {
-      showToast(`🎨 تم تحويل عرض ${convertedCount} صفحة إلى كنفاس Miro واسترجاع مواقع البطاقات والزووم بدقة!`, 4000);
+      showToast(`🎨 بيئة "${envName}": تم ضبط العرض على كنفاس Miro (${convertedCount} صفحة، واسترجاع مواقع الكروت بدقة)!`, 4000);
     }
   }
 }
 
+function setGlobalPageView(targetMode, targetEnvId) {
+  return setEnvironmentPageView(targetMode, targetEnvId);
+}
+
+window.getEnvPageType = getEnvPageType;
+window.setEnvPageType = setEnvPageType;
+window.updatePageTypeToggleUI = updatePageTypeToggleUI;
+window.setEnvironmentPageView = setEnvironmentPageView;
 window.setGlobalPageView = setGlobalPageView;
 window.convertMiroCardsToWidgets = convertMiroCardsToWidgets;
 window.convertWidgetsToMiroCards = convertWidgetsToMiroCards;
@@ -3157,7 +3213,7 @@ const pageTypeToggleCb = document.getElementById('page-type-toggle-cb');
 if (pageTypeToggleCb) {
   pageTypeToggleCb.onchange = () => {
     const isStartMe = pageTypeToggleCb.checked;
-    setGlobalPageView(isStartMe ? 'web' : 'miro');
+    setEnvironmentPageView(isStartMe ? 'web' : 'miro', D.curEnv);
   };
 }
 
@@ -4768,6 +4824,9 @@ function buildEnvs() {
       if (nm.contentEditable === 'true') return;
       if (D.curEnv === env.id) return;
       D.curEnv = env.id;
+      if (typeof updatePageTypeToggleUI === 'function') {
+        updatePageTypeToggleUI(env.id);
+      }
       let selectedGroup = D.groups.find((g) => g.envId === env.id && D.pages.some((p) => p.groupId === g.id));
       if (!selectedGroup) {
         selectedGroup = D.groups.find((g) => g.envId === env.id);
