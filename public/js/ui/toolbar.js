@@ -30,14 +30,22 @@
   ev.stopPropagation();
   document.getElementById('io-pop').classList.toggle('open');
 }
-  document.getElementById('exp-json').onclick = () => {
-  const b = new Blob([JSON.stringify(D, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(b);
-  a.download = 'startmine.json';
-  a.click();
-  document.getElementById('io-pop').classList.remove('open');
-}
+  document.getElementById('exp-json').onclick = async () => {
+    let exportData = D;
+    if (typeof buildFullExportDataAsync === 'function') {
+      try {
+        exportData = await buildFullExportDataAsync();
+      } catch (e) {
+        console.warn('[EXPORT JSON] buildFullExportDataAsync fallback to D:', e);
+      }
+    }
+    const b = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = 'startmine.json';
+    a.click();
+    document.getElementById('io-pop').classList.remove('open');
+  };
   document.getElementById('exp-csv').onclick = () => {
   let csv = 'Title,URL,Widget,Page\n';
   for (const pg of D.pages)
@@ -83,8 +91,10 @@
   const gid = uid();
   D.groups.push({ id: gid, name: 'Group 1', envId: id });
   const pid = uid();
-  const pageType = D.settings.defaultPageType || 'miro';
-  const name = pageType === 'web' ? 'Web 1' : 'Miro 1';
+  const defType = D.settings.defaultPageType || 'miro';
+  const isStartMe = defType === 'web' || defType === 'startme';
+  const pageType = isStartMe ? 'web' : 'miro';
+  const name = isStartMe ? 'StartMe 1' : 'Miro 1';
   D.pages.push({
     id: pid,
     groupId: gid,
@@ -109,8 +119,10 @@
   const envGroups = D.groups.filter((g) => g.envId === targetEnv);
   D.groups.push({ id, name: 'Group ' + (envGroups.length + 1), envId: targetEnv });
   const pid = uid();
-  const pageType = D.settings.defaultPageType || 'miro';
-  const name = pageType === 'web' ? 'Web 1' : 'Miro 1';
+  const defType = D.settings.defaultPageType || 'miro';
+  const isStartMe = defType === 'web' || defType === 'startme';
+  const pageType = isStartMe ? 'web' : 'miro';
+  const name = isStartMe ? 'StartMe 1' : 'Miro 1';
   D.pages.push({
     id: pid,
     groupId: id,
@@ -132,8 +144,10 @@
   const id = uid();
   const targetGroup = D.curGroup === '__all__' ? D.groups[0].id : D.curGroup;
   const groupPages = D.pages.filter((p) => p.groupId === targetGroup);
-  const pageType = D.settings.defaultPageType || 'miro';
-  const name = (pageType === 'web' ? 'Web ' : 'Miro ') + (groupPages.length + 1);
+  const defType = D.settings.defaultPageType || 'miro';
+  const isStartMe = defType === 'web' || defType === 'startme';
+  const pageType = isStartMe ? 'web' : 'miro';
+  const name = (isStartMe ? 'StartMe ' : 'Miro ') + (groupPages.length + 1);
   D.pages.push({
     id,
     groupId: targetGroup,

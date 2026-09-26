@@ -2589,8 +2589,13 @@ body:not(.outline-open) #root {
 }
 .page-type-label {
   color: var(--tx);
-  min-width: 24px;
+  min-width: 44px;
   text-align: center;
+  transition: color 0.2s ease;
+}
+.page-type-toggle input:checked ~ .page-type-label {
+  color: #34d399;
+  font-weight: 600;
 }
 
 #cw.embedded-overlay {

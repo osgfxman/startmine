@@ -896,9 +896,9 @@ function renderMeta() {
   const cb = document.getElementById('page-type-toggle-cb');
   const lbl = document.getElementById('page-type-label');
   if (cb && lbl) {
-    const isWeb = (D.settings.defaultPageType === 'web');
-    cb.checked = isWeb;
-    lbl.textContent = isWeb ? 'Web' : 'Miro';
+    const isStartMe = (D.settings.defaultPageType === 'web' || D.settings.defaultPageType === 'startme');
+    cb.checked = isStartMe;
+    lbl.textContent = isStartMe ? 'StartMe' : 'Miro';
   }
 }
 
@@ -2811,14 +2811,344 @@ document.getElementById('bg-btn').onclick = () => {
   openM('m-bg');
 };
 
+// ─── Dual-View Engine: Miro Canvas ⟷ Start.me Multi-Column Dashboard ───
+function convertMiroCardsToWidgets(miroCards, numCols) {
+  numCols = Math.max(1, numCols || 3);
+  // Sort cards spatially: top to bottom, then left to right
+  const sorted = [...(miroCards || [])].sort((a, b) => {
+    const yDiff = (a.y || 0) - (b.y || 0);
+    if (Math.abs(yDiff) > 80) return yDiff;
+    return (a.x || 0) - (b.x || 0);
+  });
+
+  const widgets = [];
+  let colIdx = 0;
+  sorted.forEach(c => {
+    if (!c) return;
+    if (c.type === 'bwidget') {
+      widgets.push({
+        id: c.id || uid(),
+        type: 'bookmarks',
+        title: c.title || 'Bookmarks',
+        emoji: c.emoji || '📌',
+        color: c.color ? { ...c.color } : { ...DEF_COLOR },
+        col: colIdx % numCols,
+        display: c.display || 'spark',
+        size: c.size || 'md',
+        items: Array.isArray(c.items) ? JSON.parse(JSON.stringify(c.items)) : []
+      });
+      colIdx++;
+    } else if (c.type === 'sticky') {
+      widgets.push({
+        id: c.id || uid(),
+        type: 'note',
+        title: c.title || 'Note',
+        emoji: '📝',
+        color: c.color ? { ...c.color } : { ...DEF_COLOR },
+        col: colIdx % numCols,
+        content: c.content || c.text || ''
+      });
+      colIdx++;
+    } else if (c.type === 'text') {
+      widgets.push({
+        id: c.id || uid(),
+        type: 'note',
+        title: c.title || 'Text Note',
+        emoji: '📄',
+        color: c.color ? { ...c.color } : { ...DEF_COLOR },
+        col: colIdx % numCols,
+        content: c.content || ''
+      });
+      colIdx++;
+    } else if (c.type === 'todo') {
+      widgets.push({
+        id: c.id || uid(),
+        type: 'todo',
+        title: c.title || 'To-Do',
+        emoji: '✅',
+        color: c.color ? { ...c.color } : { ...DEF_COLOR },
+        col: colIdx % numCols,
+        items: Array.isArray(c.items) ? JSON.parse(JSON.stringify(c.items)) : []
+      });
+      colIdx++;
+    }
+  });
+  return widgets;
+}
+
+function convertWidgetsToMiroCards(widgets) {
+  const miroCards = [];
+  const startX = 100;
+  const startY = 100;
+  const gap = 40;
+  let cursX = startX;
+  let cursY = startY;
+  let rowMaxH = 0;
+  const colsPerRow = 4;
+  let added = 0;
+
+  // Sort widgets by column, then natural order
+  const sorted = [...(widgets || [])].sort((a, b) => (a.col || 0) - (b.col || 0));
+
+  sorted.forEach(w => {
+    if (!w) return;
+    if (w.type === 'bookmarks' || w.type === 'list' || (!w.type && w.items)) {
+      const items = Array.isArray(w.items) ? JSON.parse(JSON.stringify(w.items)) : [];
+      const wCols = 6;
+      const itemPx = 94;
+      const reqRows = Math.ceil(items.length / wCols);
+      const cardW = 540;
+      const cardH = Math.max(200, 70 + (reqRows * itemPx));
+
+      miroCards.push({
+        id: w.id || uid(),
+        type: 'bwidget',
+        wType: 'bookmarks',
+        title: w.title || 'Bookmarks',
+        emoji: w.emoji || '📌',
+        content: '',
+        items: items,
+        color: w.color ? { ...w.color } : { ...DEF_COLOR },
+        x: cursX,
+        y: cursY,
+        w: cardW,
+        h: cardH,
+        display: w.display || 'spark',
+        size: w.size || 'md'
+      });
+      cursX += cardW + gap;
+      rowMaxH = Math.max(rowMaxH, cardH);
+      added++;
+      if (added % colsPerRow === 0) {
+        cursX = startX;
+        cursY += rowMaxH + gap;
+        rowMaxH = 0;
+      }
+    } else if (w.type === 'note') {
+      const cardW = 320;
+      const cardH = 260;
+      miroCards.push({
+        id: w.id || uid(),
+        type: 'sticky',
+        title: w.title || 'Note',
+        emoji: '📝',
+        content: w.content || '',
+        text: w.content || '',
+        color: w.color ? { ...w.color } : { ...DEF_COLOR },
+        x: cursX,
+        y: cursY,
+        w: cardW,
+        h: cardH
+      });
+      cursX += cardW + gap;
+      rowMaxH = Math.max(rowMaxH, cardH);
+      added++;
+      if (added % colsPerRow === 0) {
+        cursX = startX;
+        cursY += rowMaxH + gap;
+        rowMaxH = 0;
+      }
+    } else if (w.type === 'todo') {
+      const items = Array.isArray(w.items) ? JSON.parse(JSON.stringify(w.items)) : [];
+      const cardW = 340;
+      const cardH = Math.max(240, 60 + items.length * 36);
+      miroCards.push({
+        id: w.id || uid(),
+        type: 'todo',
+        title: w.title || 'To-Do',
+        emoji: '✅',
+        items: items,
+        color: w.color ? { ...w.color } : { ...DEF_COLOR },
+        x: cursX,
+        y: cursY,
+        w: cardW,
+        h: cardH
+      });
+      cursX += cardW + gap;
+      rowMaxH = Math.max(rowMaxH, cardH);
+      added++;
+      if (added % colsPerRow === 0) {
+        cursX = startX;
+        cursY += rowMaxH + gap;
+        rowMaxH = 0;
+      }
+    }
+  });
+
+  return miroCards;
+}
+
+function syncMiroBookmarksToWidgets(miroCards, widgets, numCols) {
+  numCols = Math.max(1, numCols || 3);
+  (miroCards || []).forEach(c => {
+    if (!c || c.type !== 'bwidget') return;
+    let matchW = widgets.find(w => w.id === c.id || (w.title && c.title && w.title.trim().toLowerCase() === c.title.trim().toLowerCase()));
+    if (matchW) {
+      if (!Array.isArray(matchW.items)) matchW.items = [];
+      const existingUrls = new Set(matchW.items.map(it => (it.url || '').trim().toLowerCase()));
+      (c.items || []).forEach(it => {
+        const u = (it.url || '').trim().toLowerCase();
+        if (u && !existingUrls.has(u)) {
+          matchW.items.push({ ...it });
+          existingUrls.add(u);
+        }
+      });
+    } else {
+      // Entirely new bwidget created on Miro canvas -> add as widget to StartMe!
+      widgets.push({
+        id: c.id || uid(),
+        type: 'bookmarks',
+        title: c.title || 'Bookmarks',
+        emoji: c.emoji || '📌',
+        color: c.color ? { ...c.color } : { ...DEF_COLOR },
+        col: widgets.length % numCols,
+        display: c.display || 'spark',
+        size: c.size || 'md',
+        items: Array.isArray(c.items) ? JSON.parse(JSON.stringify(c.items)) : []
+      });
+    }
+  });
+}
+
+function syncWidgetsBookmarksToMiro(widgets, miroCards) {
+  (widgets || []).forEach(w => {
+    if (!w || w.type !== 'bookmarks') return;
+    let matchC = miroCards.find(c => c.id === w.id || (c.title && w.title && c.title.trim().toLowerCase() === w.title.trim().toLowerCase()));
+    if (matchC) {
+      if (!Array.isArray(matchC.items)) matchC.items = [];
+      const existingUrls = new Set(matchC.items.map(it => (it.url || '').trim().toLowerCase()));
+      let addedToCard = false;
+      (w.items || []).forEach(it => {
+        const u = (it.url || '').trim().toLowerCase();
+        if (u && !existingUrls.has(u)) {
+          matchC.items.push({ ...it });
+          existingUrls.add(u);
+          addedToCard = true;
+        }
+      });
+      if (addedToCard) {
+        const wCols = 6;
+        const itemPx = 94;
+        const reqRows = Math.ceil(matchC.items.length / wCols);
+        matchC.h = Math.max(matchC.h || 200, 70 + (reqRows * itemPx));
+      }
+    } else {
+      // New widget created in StartMe -> place neatly on Miro canvas!
+      let maxX = 100;
+      miroCards.forEach(c => {
+        const r = (c.x || 0) + (c.w || 300);
+        if (r > maxX) maxX = r;
+      });
+      const items = Array.isArray(w.items) ? JSON.parse(JSON.stringify(w.items)) : [];
+      const wCols = 6;
+      const itemPx = 94;
+      const reqRows = Math.ceil(items.length / wCols);
+      const cardW = 540;
+      const cardH = Math.max(200, 70 + (reqRows * itemPx));
+      miroCards.push({
+        id: w.id || uid(),
+        type: 'bwidget',
+        wType: 'bookmarks',
+        title: w.title || 'Bookmarks',
+        emoji: w.emoji || '📌',
+        content: '',
+        items: items,
+        color: w.color ? { ...w.color } : { ...DEF_COLOR },
+        x: maxX + 40,
+        y: 100,
+        w: cardW,
+        h: cardH,
+        display: w.display || 'spark',
+        size: w.size || 'md'
+      });
+    }
+  });
+}
+
+async function setGlobalPageView(targetMode) {
+  const isStartMe = (targetMode === 'web' || targetMode === 'startme');
+  const newType = isStartMe ? 'web' : 'miro';
+  D.settings.defaultPageType = newType;
+
+  const cb = document.getElementById('page-type-toggle-cb');
+  const lbl = document.getElementById('page-type-label');
+  if (cb) cb.checked = isStartMe;
+  if (lbl) lbl.textContent = isStartMe ? 'StartMe' : 'Miro';
+
+  let convertedCount = 0;
+  for (const p of (D.pages || [])) {
+    if (!p || (p.id && p.id.startsWith('time_'))) continue;
+
+    // Ensure page data is retrieved from memory/IndexedDB
+    if ((!p.widgets || p.widgets.length === 0) && (!p.miroCards || p.miroCards.length === 0)) {
+      if (typeof getCachedPageDataAsync === 'function') {
+        try {
+          const cached = await getCachedPageDataAsync(p.id);
+          if (cached) {
+            if (cached.widgets && cached.widgets.length > 0) p.widgets = cached.widgets;
+            if (cached.miroCards && cached.miroCards.length > 0) p.miroCards = cached.miroCards;
+          }
+        } catch (e) {}
+      }
+    }
+
+    if (!p.widgets) p.widgets = [];
+    if (!p.miroCards) p.miroCards = [];
+
+    if (isStartMe) {
+      // ─── Switching to StartMe View ───
+      p.pageType = 'web';
+
+      if (p.widgets.length === 0 && p.miroCards.length > 0) {
+        // First-time conversion to StartMe: derive widgets from miroCards
+        p.widgets = convertMiroCardsToWidgets(p.miroCards, p.cols || 3);
+      } else if (p.widgets.length > 0 && p.miroCards.length > 0) {
+        // Dual-View Sync: Preserve existing widget layout & columns, sync any newly added bookmarks
+        syncMiroBookmarksToWidgets(p.miroCards, p.widgets, p.cols || 3);
+      }
+    } else {
+      // ─── Switching to Miro View ───
+      p.pageType = 'miro';
+
+      if (p.miroCards.length === 0 && p.widgets.length > 0) {
+        // First-time conversion to Miro: derive miroCards from widgets
+        p.miroCards = convertWidgetsToMiroCards(p.widgets);
+      } else if (p.miroCards.length > 0 && p.widgets.length > 0) {
+        // Dual-View Sync: Preserve existing Miro coordinates & zoom, sync any newly added bookmarks
+        syncWidgetsBookmarksToMiro(p.widgets, p.miroCards);
+      }
+    }
+
+    p.ts = Date.now();
+    if (typeof cachePageDataSafe === 'function') {
+      cachePageDataSafe(p.id, p);
+    }
+    convertedCount++;
+  }
+
+  sanitizeData(D);
+  sv(true, true);
+  renderMeta();
+  switchActivePage(D.cur);
+
+  if (typeof showToast === 'function') {
+    if (isStartMe) {
+      showToast(`📑 تم تحويل عرض ${convertedCount} صفحة إلى ستايل Start.me مع حفظ إحداثيات Miro بالكامل!`, 4000);
+    } else {
+      showToast(`🎨 تم تحويل عرض ${convertedCount} صفحة إلى كنفاس Miro واسترجاع مواقع البطاقات والزووم بدقة!`, 4000);
+    }
+  }
+}
+
+window.setGlobalPageView = setGlobalPageView;
+window.convertMiroCardsToWidgets = convertMiroCardsToWidgets;
+window.convertWidgetsToMiroCards = convertWidgetsToMiroCards;
+
 const pageTypeToggleCb = document.getElementById('page-type-toggle-cb');
 if (pageTypeToggleCb) {
   pageTypeToggleCb.onchange = () => {
-    const isWeb = pageTypeToggleCb.checked;
-    D.settings.defaultPageType = isWeb ? 'web' : 'miro';
-    const lbl = document.getElementById('page-type-label');
-    if (lbl) lbl.textContent = isWeb ? 'Web' : 'Miro';
-    sv();
+    const isStartMe = pageTypeToggleCb.checked;
+    setGlobalPageView(isStartMe ? 'web' : 'miro');
   };
 }
 
@@ -6411,8 +6741,32 @@ function rmItem(wid, itemId) {
   const w = fw(wid);
   if (!w || !w.items) return;
   w.items = w.items.filter((i) => i.id !== itemId);
+
+  // Sync removal across dual-view if present in counterpart
+  const page = cp();
+  if (page) {
+    if (page.widgets) {
+      const matchW = page.widgets.find(x => x.id === wid || (x.items && x.items.some(i => i.id === itemId)));
+      if (matchW && matchW.items) matchW.items = matchW.items.filter(i => i.id !== itemId);
+    }
+    if (page.miroCards) {
+      const matchC = page.miroCards.find(x => x.id === wid || (x.items && x.items.some(i => i.id === itemId)));
+      if (matchC && matchC.items) {
+        matchC.items = matchC.items.filter(i => i.id !== itemId);
+        const wCols = 6;
+        const itemPx = 94;
+        const reqRows = Math.ceil(matchC.items.length / wCols);
+        matchC.h = Math.max(matchC.h || 200, 70 + (reqRows * itemPx));
+      }
+    }
+  }
+
   sv();
-  buildCols();
+  if (cp().pageType === 'miro') {
+    if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+  } else {
+    buildCols();
+  }
 }
 function openRen(wid) {
   const w = fw(wid);
@@ -6485,7 +6839,32 @@ document.getElementById('ok-bm').onclick = () => {
   const w = fw(pWidId);
   if (!w) return;
   if (!w.items) w.items = [];
-  w.items.push({ id: uid(), label, url, emoji });
+  const newItem = { id: uid(), label, url, emoji };
+  w.items.push(newItem);
+
+  // Sync to counterpart card/widget in dual view
+  const curPage = cp();
+  if (curPage) {
+    const isWidget = (curPage.widgets || []).some(x => x.id === w.id);
+    if (isWidget && curPage.miroCards) {
+      const matchCard = curPage.miroCards.find(c => c.id === w.id || (c.title && w.title && c.title.trim().toLowerCase() === w.title.trim().toLowerCase()));
+      if (matchCard) {
+        if (!Array.isArray(matchCard.items)) matchCard.items = [];
+        matchCard.items.push({ ...newItem, id: uid() });
+        const wCols = 6;
+        const itemPx = 94;
+        const reqRows = Math.ceil(matchCard.items.length / wCols);
+        matchCard.h = Math.max(matchCard.h || 200, 70 + (reqRows * itemPx));
+      }
+    } else if (!isWidget && curPage.widgets) {
+      const matchWidget = curPage.widgets.find(x => x.id === w.id || (x.title && w.title && x.title.trim().toLowerCase() === w.title.trim().toLowerCase()));
+      if (matchWidget) {
+        if (!Array.isArray(matchWidget.items)) matchWidget.items = [];
+        matchWidget.items.push({ ...newItem, id: uid() });
+      }
+    }
+  }
+
   sv();
   if (cp().pageType === 'miro') {
     if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
