@@ -6099,6 +6099,14 @@ function buildCols() {
   if (mzMiro) mzMiro.style.display = isMiro ? '' : 'none';
   const mzSlicer = document.getElementById('mz-controls-slicer');
   if (mzSlicer) mzSlicer.style.display = (page.pageType === 'slicer') ? 'flex' : 'none';
+  const mzStartMe = document.getElementById('mz-controls-startme');
+  if (mzStartMe) {
+    const isStartMe = !isMiro && page.pageType !== 'slicer';
+    mzStartMe.style.display = isStartMe ? 'flex' : 'none';
+    if (isStartMe) {
+      renderStartMeColsToolbar(page);
+    }
+  }
   
   const maf = document.getElementById('miro-add-float');
   if (maf) maf.classList.toggle('show', isMiro);
@@ -6143,31 +6151,33 @@ function buildCols() {
   }
 
   wrap.innerHTML = '';
-  wrap.style.gridTemplateColumns = `repeat(${page.cols || 3},minmax(0,1fr))`;
-  for (let ci = 0; ci < (page.cols || 3); ci++) {
+  const numCols = Math.max(1, Math.min(7, page.cols || 3));
+  wrap.style.gridTemplateColumns = `repeat(${numCols},minmax(0,1fr))`;
+  for (let ci = 0; ci < numCols; ci++) {
     const col = document.createElement('div');
     col.className = 'col';
     col.dataset.ci = ci;
     col.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      col.classList.add('dragover');
+      if (dragWid) {
+        e.preventDefault();
+        col.classList.add('dragover');
+      }
     });
-    col.addEventListener('dragleave', () => col.classList.remove('dragover'));
+    col.addEventListener('dragleave', (e) => {
+      if (!col.contains(e.relatedTarget)) {
+        col.classList.remove('dragover');
+      }
+    });
     col.addEventListener('drop', (e) => {
+      if (!dragWid) return;
       e.preventDefault();
       col.classList.remove('dragover');
-      if (!dragWid) return;
-      const w = (page.widgets || []).find((x) => x.id === dragWid);
-      if (w) {
-        w.col = ci;
-        sv();
-        buildCols();
-      }
+      reorderStartMeWidget(page, dragWid, null, null, ci);
       dragWid = null;
     });
     const colWidgets = (page.widgets || []).filter((w) => w.col === ci);
-    if (ci === (page.cols || 3) - 1) {
-      (page.widgets || []).filter((w) => w.col >= (page.cols || 3)).forEach((w) => colWidgets.push(w));
+    if (ci === numCols - 1) {
+      (page.widgets || []).filter((w) => w.col >= numCols).forEach((w) => colWidgets.push(w));
     }
     colWidgets.forEach((w) => col.appendChild(buildWidget(w)));
     const ab = document.createElement('button');
@@ -6181,6 +6191,109 @@ function buildCols() {
     wrap.appendChild(col);
   }
   if (typeof buildOutline === 'function') buildOutline();
+}
+
+function renderStartMeColsToolbar(page) {
+  const container = document.getElementById('startme-cols-btn-group');
+  if (!container) return;
+  container.innerHTML = '';
+  const currentCols = Math.max(1, Math.min(7, (page && page.cols) ? page.cols : 3));
+
+  for (let i = 1; i <= 7; i++) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'startme-col-btn' + (currentCols === i ? ' active' : '');
+    btn.textContent = i;
+    btn.title = `${i} أعمدة`;
+    btn.onclick = () => {
+      setPageColumns(page, i);
+    };
+    container.appendChild(btn);
+  }
+
+  const distBtn = document.getElementById('startme-distribute-btn');
+  if (distBtn) {
+    distBtn.onclick = () => {
+      balancePageWidgetsAcrossCols(page);
+    };
+  }
+}
+
+function setPageColumns(page, newCols) {
+  if (!page) page = cp();
+  if (!page) return;
+  const num = Math.max(1, Math.min(7, parseInt(newCols, 10) || 3));
+  page.cols = num;
+  (page.widgets || []).forEach(w => {
+    if (typeof w.col !== 'number' || isNaN(w.col) || w.col < 0) w.col = 0;
+    if (w.col >= num) w.col = num - 1;
+  });
+  if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page);
+  sv();
+  buildCols();
+  if (typeof showToast === 'function') {
+    showToast(`📊 تم ضبط عدد أعمدة الصفحة إلى ${num}`, 2000);
+  }
+}
+
+function balancePageWidgetsAcrossCols(page) {
+  if (!page) page = cp();
+  if (!page || !page.widgets || page.widgets.length === 0) return;
+  const cols = Math.max(1, Math.min(7, page.cols || 3));
+  page.widgets.forEach((w, idx) => {
+    w.col = idx % cols;
+  });
+  if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page);
+  sv();
+  buildCols();
+  if (typeof showToast === 'function') {
+    showToast(`⚖️ تم توزيع الودجات بالتساوي على ${cols} أعمدة!`, 2500);
+  }
+}
+
+function reorderStartMeWidget(page, draggedWid, targetWid, dropPosition, targetCol) {
+  if (!page) page = cp();
+  if (!page || !page.widgets || !draggedWid) return;
+
+  const draggedIdx = page.widgets.findIndex(w => w.id === draggedWid);
+  if (draggedIdx === -1) return;
+  const draggedW = page.widgets[draggedIdx];
+
+  // Remove dragged widget from page.widgets
+  page.widgets.splice(draggedIdx, 1);
+
+  if (targetWid && targetWid !== draggedWid) {
+    const targetIdx = page.widgets.findIndex(w => w.id === targetWid);
+    if (targetIdx !== -1) {
+      const targetW = page.widgets[targetIdx];
+      draggedW.col = targetW.col;
+      const insertIdx = (dropPosition === 'before') ? targetIdx : targetIdx + 1;
+      page.widgets.splice(insertIdx, 0, draggedW);
+    } else {
+      draggedW.col = (typeof targetCol === 'number') ? targetCol : 0;
+      page.widgets.push(draggedW);
+    }
+  } else {
+    // Dropped into empty space of column targetCol
+    const colIdx = (typeof targetCol === 'number') ? targetCol : 0;
+    draggedW.col = colIdx;
+    let lastInColIdx = -1;
+    for (let i = page.widgets.length - 1; i >= 0; i--) {
+      if (page.widgets[i].col === colIdx) {
+        lastInColIdx = i;
+        break;
+      }
+    }
+    if (lastInColIdx !== -1) {
+      page.widgets.splice(lastInColIdx + 1, 0, draggedW);
+    } else {
+      page.widgets.push(draggedW);
+    }
+  }
+
+  if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page);
+  sv();
+  buildCols();
 }
 function luma(c) {
   return (c.r * 299 + c.g * 587 + c.b * 114) / 1000;
@@ -6196,24 +6309,63 @@ function buildWidget(w) {
   const muCol = light ? '#666' : 'rgba(255,255,255,.42)';
   const bdCol = light ? 'rgba(0,0,0,.1)' : `rgba(255,255,255,${Math.min(c.a * 0.13, 0.09)})`;
   el.style.cssText = `background:${rgba(c)};border:1px solid ${bdCol};color:${txtCol};--w-tx:${txtCol};--w-mu:${muCol}`;
-  el.addEventListener('dragstart', () => {
+  el.addEventListener('dragstart', (e) => {
     dragWid = w.id;
+    if (e.dataTransfer) {
+      e.dataTransfer.setData('text/plain', w.id);
+      e.dataTransfer.effectAllowed = 'move';
+    }
     setTimeout(() => el.classList.add('dragging'), 0);
   });
   el.addEventListener('dragend', () => {
     el.classList.remove('dragging');
+    document.querySelectorAll('.widget.drag-over-top, .widget.drag-over-bottom, .col.dragover').forEach((x) => {
+      x.classList.remove('drag-over-top', 'drag-over-bottom', 'dragover');
+    });
     dragWid = null;
   });
   el.addEventListener('dragover', (e) => {
+    if (dragWid) {
+      if (dragWid === w.id) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = el.getBoundingClientRect();
+      const isUpper = (e.clientY - rect.top) < (rect.height / 2);
+      if (isUpper) {
+        el.classList.add('drag-over-top');
+        el.classList.remove('drag-over-bottom');
+      } else {
+        el.classList.add('drag-over-bottom');
+        el.classList.remove('drag-over-top');
+      }
+      return;
+    }
     if (_dragInboxId || (_dragBmId && w.type !== 'note' && w.type !== 'todo')) {
       e.preventDefault();
       el.style.outline = '2px solid var(--ac)';
     }
   });
-  el.addEventListener('dragleave', () => {
-    el.style.outline = '';
+  el.addEventListener('dragleave', (e) => {
+    if (!el.contains(e.relatedTarget)) {
+      el.classList.remove('drag-over-top', 'drag-over-bottom');
+    }
+    if (_dragInboxId || _dragBmId) {
+      el.style.outline = '';
+    }
   });
   el.addEventListener('drop', (e) => {
+    if (dragWid) {
+      if (dragWid === w.id) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = el.getBoundingClientRect();
+      const isUpper = (e.clientY - rect.top) < (rect.height / 2);
+      el.classList.remove('drag-over-top', 'drag-over-bottom');
+      const page = cp();
+      reorderStartMeWidget(page, dragWid, w.id, isUpper ? 'before' : 'after', w.col);
+      dragWid = null;
+      return;
+    }
     if (_dragInboxId) {
       e.preventDefault();
       el.style.outline = '';
@@ -9657,6 +9809,36 @@ function showPageTabContextMenu(e, pg, nm, cd) {
     menu.appendChild(typeItem);
   });
 
+  // 3b. StartMe Column Settings (1-7)
+  const colsItem = document.createElement('div');
+  colsItem.className = 'custom-ctx-item';
+  colsItem.style.flexDirection = 'column';
+  colsItem.style.alignItems = 'stretch';
+  colsItem.style.gap = '6px';
+  colsItem.style.cursor = 'default';
+  colsItem.innerHTML = `
+    <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+      <span style="display: flex; align-items: center; gap: 8px;">
+        <span>📊</span> <span>أعمدة الصفحة (StartMe):</span>
+      </span>
+      <span style="font-weight: 700; color: #34d399; font-size: 0.82rem;">${pg.cols || 3}</span>
+    </div>
+    <div style="display: flex; gap: 3px; width: 100%; justify-content: center; margin-top: 2px;">
+      ${[1, 2, 3, 4, 5, 6, 7].map(n => `
+        <button type="button" class="startme-col-btn ${ (pg.cols || 3) === n ? 'active' : '' }" data-ctx-col="${n}" style="flex: 1; height: 24px; font-size: 0.72rem;">${n}</button>
+      `).join('')}
+    </div>
+  `;
+  colsItem.querySelectorAll('[data-ctx-col]').forEach(btn => {
+    btn.onclick = (ev) => {
+      ev.stopPropagation();
+      const n = parseInt(btn.getAttribute('data-ctx-col'), 10);
+      menu.remove();
+      setPageColumns(pg, n);
+    };
+  });
+  menu.appendChild(colsItem);
+
   // Separator
   const sep2 = document.createElement('div');
   sep2.className = 'custom-ctx-sep';
@@ -9932,12 +10114,20 @@ window.getSlicerActiveCells = getSlicerActiveCells;
 window.applyCellBackground = applyCellBackground;
 window.updateSlicerCellGrid = updateSlicerCellGrid;
 window.getGridColorForPage = getGridColorForPage;
+window.renderStartMeColsToolbar = renderStartMeColsToolbar;
+window.setPageColumns = setPageColumns;
+window.balancePageWidgetsAcrossCols = balancePageWidgetsAcrossCols;
+window.reorderStartMeWidget = reorderStartMeWidget;
 
 // Window aliases for backward compatibility
 SM.renderAll = typeof renderAll !== 'undefined' ? renderAll : window.renderAll;
 SM.buildCols = typeof buildCols !== 'undefined' ? buildCols : window.buildCols;
 SM.saveAllBackups = typeof saveAllBackups !== 'undefined' ? saveAllBackups : window.saveAllBackups;
 SM.openSnapshotModal = typeof openSnapshotModal !== 'undefined' ? openSnapshotModal : window.openSnapshotModal;
+SM.renderStartMeColsToolbar = renderStartMeColsToolbar;
+SM.setPageColumns = setPageColumns;
+SM.balancePageWidgetsAcrossCols = balancePageWidgetsAcrossCols;
+SM.reorderStartMeWidget = reorderStartMeWidget;
 
 window.renderAll = SM.renderAll;
 window.buildCols = SM.buildCols;
