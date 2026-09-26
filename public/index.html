@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#6c8fff">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="manifest" href="/manifest.json?v=1790399200">
+  <link rel="manifest" href="/manifest.json?v=1790399674">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🍅%3C/text%3E%3C/svg%3E">
   <link rel="icon" type="image/png" sizes="192x192" href="/tomato-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="/tomato-512.png">
@@ -22,9 +22,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1790399200">
-  <link rel="stylesheet" href="css/miro.css?v=1790399200">
-  <link rel="stylesheet" href="css/life-widget-additions.css?v=1790399200">
+  <link rel="stylesheet" href="css/base.css?v=1790399674">
+  <link rel="stylesheet" href="css/miro.css?v=1790399674">
+  <link rel="stylesheet" href="css/life-widget-additions.css?v=1790399674">
 </head>
 
 <body>
@@ -388,16 +388,6 @@
       <button id="slicer-tb-revert" title="Revert to standard page" style="background: rgba(255, 94, 94, 0.15); color: #ff5e5e; border: 1px solid rgba(255, 94, 94, 0.25); padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 500; cursor: pointer; transition: background 0.2s;">Revert Page</button>
     </div>
 
-    <!-- Middle: StartMe-specific controls -->
-    <div id="mz-controls-startme" style="display: none; align-items: center; gap: 8px;">
-      <div class="mz-sep"></div>
-      <span style="font-weight: 600; color: #34d399; font-size: 0.73rem; white-space: nowrap; display: flex; align-items: center; gap: 4px;">
-        <span>📊</span> <span>الأعمدة:</span>
-      </span>
-      <div id="startme-cols-btn-group" style="display: flex; align-items: center; gap: 3px;"></div>
-      <button id="startme-distribute-btn" title="توزيع الودجات بالتساوي على الأعمدة" style="border: 1px solid rgba(52,211,153,0.35); background: rgba(52,211,153,0.12); color: #34d399; font-weight: 600; font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; cursor: pointer; white-space: nowrap; transition: all 0.15s;">⚖️ توزيع متوازن</button>
-    </div>
-
     <!-- Right: Generic controls -->
     <div id="mz-right" style="display: flex; align-items: center; gap: 8px; margin-left: auto;">
       <input id="qi" type="text" placeholder="✉ Quick Inbox…" autocomplete="off" spellcheck="false"
@@ -555,6 +545,28 @@
     <button class="mtb-btn" id="all-btn" title="Show All Pages">ALL</button>
     <button class="mtb-btn" id="dup-btn" title="Find Duplicate Links">🔎</button>
     <div style="width:30px;height:1px;background:rgba(0,0,0,.08);margin:4px auto;"></div>
+    <div style="position:relative" id="startme-cols-wrap">
+      <button class="mtb-btn" id="startme-cols-btn" title="أعمدة الصفحة والتوزيع المتوازن (StartMe)" style="position: relative;">
+        <span style="font-size: 0.95rem; line-height: 1;">📊</span>
+        <span id="startme-cols-mini-badge" style="position: absolute; bottom: 1px; right: 1px; font-size: 0.55rem; font-weight: 700; background: #34d399; color: #062b1a; border-radius: 3px; padding: 0 2px; min-width: 9px; height: 11px; line-height: 11px; text-align: center; pointer-events: none;">3</span>
+      </button>
+      <div id="startme-cols-pop" class="startme-cols-pop">
+        <div class="sm-cols-pop-header">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:1rem;">📊</span>
+            <span style="font-weight:700;font-size:0.82rem;color:#fff;">أعمدة الصفحة (StartMe)</span>
+          </div>
+          <span id="startme-cols-current-badge" class="sm-cols-badge">3 أعمدة</span>
+        </div>
+        <div class="sm-cols-pop-desc">اختر عدد الأعمدة لتنظيم الودجات (من 1 إلى 7):</div>
+        <div class="sm-cols-btn-group" id="startme-cols-btn-group"></div>
+        <div class="sm-cols-pop-divider"></div>
+        <button type="button" id="startme-distribute-btn" class="sm-distribute-action-btn" title="توزيع الودجات بالتساوي على الأعمدة">
+          <span style="font-size:0.95rem;">⚖️</span>
+          <span>توزيع متوازن للودجات</span>
+        </button>
+      </div>
+    </div>
     <div style="position:relative">
       <button class="mtb-btn" id="bg-btn" title="Page Background">🖼️</button>
     </div>
@@ -868,35 +880,35 @@
   </div>
 
     <!-- Core -->
-    <script src="js/core/namespace.js?v=1790399200"></script>
-    <script src="js/core/events.js?v=1790399200"></script>
-    <script src="js/core/utils.js?v=1790399200"></script>
+    <script src="js/core/namespace.js?v=1790399674"></script>
+    <script src="js/core/events.js?v=1790399674"></script>
+    <script src="js/core/utils.js?v=1790399674"></script>
 
     <!-- Data Layer -->
-    <script src="js/data/firebase.js?v=1790399200"></script>
-    <script src="js/data/offline.js?v=1790399200"></script>
-    <script src="js/data/sync.js?v=1790399200"></script>
+    <script src="js/data/firebase.js?v=1790399674"></script>
+    <script src="js/data/offline.js?v=1790399674"></script>
+    <script src="js/data/sync.js?v=1790399674"></script>
 
     <!-- UI Layer -->
-    <script src="js/ui/toasts.js?v=1790399200"></script>
-    <script src="js/ui/modals.js?v=1790399200"></script>
-    <script src="js/ui/toolbar.js?v=1790399200"></script>
-    <script src="js/ui/search.js?v=1790399200"></script>
-    <script src="js/ui/inbox-ui.js?v=1790399200"></script>
-    <script src="js/thumbnails.js?v=1790399200"></script>
+    <script src="js/ui/toasts.js?v=1790399674"></script>
+    <script src="js/ui/modals.js?v=1790399674"></script>
+    <script src="js/ui/toolbar.js?v=1790399674"></script>
+    <script src="js/ui/search.js?v=1790399674"></script>
+    <script src="js/ui/inbox-ui.js?v=1790399674"></script>
+    <script src="js/thumbnails.js?v=1790399674"></script>
 
     <!-- Miro Modules -->
-    <script src="js/miro/miro-state.js?v=1790399200"></script>
-    <script src="js/miro/render/cards.js?v=1790399200"></script>
-    <script src="js/miro/render/builders.js?v=1790399200"></script>
-    <script src="js/miro/layout/grid.js?v=1790399200"></script>
-    <script src="js/miro/layout/slices.js?v=1790399200"></script>
+    <script src="js/miro/miro-state.js?v=1790399674"></script>
+    <script src="js/miro/render/cards.js?v=1790399674"></script>
+    <script src="js/miro/render/builders.js?v=1790399674"></script>
+    <script src="js/miro/layout/grid.js?v=1790399674"></script>
+    <script src="js/miro/layout/slices.js?v=1790399674"></script>
 
     <!-- Original files (now wrappers) -->
-    <script src="js/miro-engine.js?v=1790399200"></script>
-    <script src="js/life-widget.js?v=1790399200"></script>
-    <script src="js/core/health.js?v=1790399200"></script>
-    <script src="js/app.js?v=1790399200"></script>
+    <script src="js/miro-engine.js?v=1790399674"></script>
+    <script src="js/life-widget.js?v=1790399674"></script>
+    <script src="js/core/health.js?v=1790399674"></script>
+    <script src="js/app.js?v=1790399674"></script>
     <script>
       // ─── Deferred secondary scripts: load after auth is ready ───
       var _mainAppLoaded=false;
@@ -904,7 +916,7 @@
         if(_mainAppLoaded)return;_mainAppLoaded=true;
         console.log('[DEFERRED] Loading outline.js + alignment.js');
         ['js/outline.js','js/alignment.js'].forEach(function(src){
-          var s=document.createElement('script');s.src=src+'?v=1790399200';document.body.appendChild(s);
+          var s=document.createElement('script');s.src=src+'?v=1790399674';document.body.appendChild(s);
         });
       }
       // Primary trigger: load deferred scripts after auth + first render

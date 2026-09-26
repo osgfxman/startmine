@@ -6099,14 +6099,11 @@ function buildCols() {
   if (mzMiro) mzMiro.style.display = isMiro ? '' : 'none';
   const mzSlicer = document.getElementById('mz-controls-slicer');
   if (mzSlicer) mzSlicer.style.display = (page.pageType === 'slicer') ? 'flex' : 'none';
-  const mzStartMe = document.getElementById('mz-controls-startme');
-  if (mzStartMe) {
-    const isStartMe = !isMiro && page.pageType !== 'slicer';
-    mzStartMe.style.display = isStartMe ? 'flex' : 'none';
-    if (isStartMe) {
-      renderStartMeColsToolbar(page);
-    }
+  const startMeWrap = document.getElementById('startme-cols-wrap');
+  if (startMeWrap) {
+    startMeWrap.style.display = (!isMiro && page.pageType !== 'slicer') ? 'block' : 'none';
   }
+  renderStartMeColsToolbar(page);
   
   const maf = document.getElementById('miro-add-float');
   if (maf) maf.classList.toggle('show', isMiro);
@@ -6194,27 +6191,58 @@ function buildCols() {
 }
 
 function renderStartMeColsToolbar(page) {
-  const container = document.getElementById('startme-cols-btn-group');
-  if (!container) return;
-  container.innerHTML = '';
-  const currentCols = Math.max(1, Math.min(7, (page && page.cols) ? page.cols : 3));
+  if (!page) page = cp();
+  if (!page) return;
+  const currentCols = Math.max(1, Math.min(7, page.cols || 3));
 
-  for (let i = 1; i <= 7; i++) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'startme-col-btn' + (currentCols === i ? ' active' : '');
-    btn.textContent = i;
-    btn.title = `${i} أعمدة`;
-    btn.onclick = () => {
-      setPageColumns(page, i);
-    };
-    container.appendChild(btn);
+  // Update mini badge on toolbar button
+  const miniBadge = document.getElementById('startme-cols-mini-badge');
+  if (miniBadge) miniBadge.textContent = currentCols;
+
+  // Update current badge inside popover
+  const currentBadge = document.getElementById('startme-cols-current-badge');
+  if (currentBadge) currentBadge.textContent = `${currentCols} أعمدة`;
+
+  // Render 1 to 7 buttons
+  const container = document.getElementById('startme-cols-btn-group');
+  if (container) {
+    container.innerHTML = '';
+    for (let i = 1; i <= 7; i++) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'startme-col-btn' + (currentCols === i ? ' active' : '');
+      btn.textContent = i;
+      btn.title = `${i} أعمدة`;
+      btn.onclick = (ev) => {
+        ev.stopPropagation();
+        setPageColumns(page, i);
+      };
+      container.appendChild(btn);
+    }
   }
 
+  // Hook distribute button
   const distBtn = document.getElementById('startme-distribute-btn');
   if (distBtn) {
-    distBtn.onclick = () => {
+    distBtn.onclick = (ev) => {
+      ev.stopPropagation();
       balancePageWidgetsAcrossCols(page);
+    };
+  }
+
+  // Hook toggle button
+  const colsBtn = document.getElementById('startme-cols-btn');
+  const colsPop = document.getElementById('startme-cols-pop');
+  if (colsBtn && colsPop && !colsBtn._boundClick) {
+    colsBtn._boundClick = true;
+    colsBtn.onclick = (ev) => {
+      ev.stopPropagation();
+      const ioPop = document.getElementById('io-pop');
+      if (ioPop) ioPop.classList.remove('open');
+      colsPop.classList.toggle('open');
+    };
+    colsPop.onclick = (ev) => {
+      ev.stopPropagation();
     };
   }
 }
@@ -7206,16 +7234,26 @@ document.querySelectorAll('.mo').forEach((o) => {
     if (e.target === o) o.classList.remove('open');
   });
 });
-document.addEventListener('click', () => {
+document.addEventListener('click', (e) => {
   document.getElementById('ep').classList.remove('open');
   document.getElementById('io-pop').classList.remove('open');
   document.getElementById('tc-pop').classList.remove('open');
+  const scp = document.getElementById('startme-cols-pop');
+  if (scp && !e.target.closest('#startme-cols-wrap')) {
+    scp.classList.remove('open');
+  }
   $sr().classList.remove('show');
 });
 const stopIds = ['tb', 'ribbon', 'miro-toolbar', 'miro-toolbar-right', 'miro-zoom'];
 stopIds.forEach(id => {
   const el = document.getElementById(id);
-  if (el) el.addEventListener('click', (e) => e.stopPropagation());
+  if (el) el.addEventListener('click', (e) => {
+    if (id === 'miro-toolbar-right' && !e.target.closest('#startme-cols-wrap')) {
+      const scp = document.getElementById('startme-cols-pop');
+      if (scp) scp.classList.remove('open');
+    }
+    e.stopPropagation();
+  });
 });
 document.addEventListener('keydown', (e) => {
   // Shortcut ` or ذ to toggle between split/slicer page and parent/slicer pages
@@ -7278,9 +7316,10 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key === 'Escape') {
     document.querySelectorAll('.mo.open').forEach((m) => m.classList.remove('open'));
-    ['ep', 'io-pop', 'tc-pop'].forEach((id) =>
-      document.getElementById(id).classList.remove('open'),
-    );
+    ['ep', 'io-pop', 'tc-pop', 'startme-cols-pop'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('open');
+    });
     $sr().classList.remove('show');
   }
 });
