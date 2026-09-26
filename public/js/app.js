@@ -6230,6 +6230,81 @@ function renderStartMeColsToolbar(page) {
     };
   }
 
+  // Determine current display mode of widgets on this page
+  let curDisplayMode = 'spark';
+  const firstBw = (page.widgets || []).find(w => w.type !== 'note' && w.type !== 'todo');
+  if (firstBw && firstBw.display) {
+    curDisplayMode = firstBw.display === 'stream' ? 'stream' : 'spark';
+  }
+
+  const dispBadge = document.getElementById('startme-display-current-badge');
+  if (dispBadge) {
+    dispBadge.textContent = curDisplayMode === 'stream' ? 'List' : 'Icons Grid';
+  }
+
+  // Display mode buttons
+  const dispBtns = document.querySelectorAll('.sm-display-btn');
+  dispBtns.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.smMode === curDisplayMode);
+    btn.onclick = (ev) => {
+      ev.stopPropagation();
+      dispBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (dispBadge) {
+        dispBadge.textContent = btn.dataset.smMode === 'stream' ? 'List' : 'Icons Grid';
+      }
+    };
+  });
+
+  // Apply to Current Page button
+  const applyPageBtn = document.getElementById('startme-apply-page-display');
+  if (applyPageBtn) {
+    applyPageBtn.onclick = (ev) => {
+      ev.stopPropagation();
+      const activeBtn = document.querySelector('.sm-display-btn.active');
+      const mode = activeBtn ? activeBtn.dataset.smMode : 'spark';
+      (page.widgets || []).forEach(w => {
+        if (w.type !== 'note' && w.type !== 'todo') {
+          w.display = mode;
+        }
+      });
+      if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page);
+      sv();
+      buildCols();
+      renderStartMeColsToolbar(page);
+      const label = mode === 'stream' ? 'قائمة (List)' : 'شبكة أيقونات (Icons Grid)';
+      if (typeof showToast === 'function') {
+        showToast(`🖥️ تم تحويل ودجات صفحة "${page.name}" إلى ${label}!`, 2500);
+      }
+    };
+  }
+
+  // Apply to All Pages button
+  const applyAllBtn = document.getElementById('startme-apply-all-display');
+  if (applyAllBtn) {
+    applyAllBtn.onclick = (ev) => {
+      ev.stopPropagation();
+      const activeBtn = document.querySelector('.sm-display-btn.active');
+      const mode = activeBtn ? activeBtn.dataset.smMode : 'spark';
+      (D.pages || []).forEach(p => {
+        if (!p) return;
+        (p.widgets || []).forEach(w => {
+          if (w.type !== 'note' && w.type !== 'todo') {
+            w.display = mode;
+          }
+        });
+        if (typeof cachePageDataSafe === 'function') cachePageDataSafe(p);
+      });
+      sv();
+      buildCols();
+      renderStartMeColsToolbar(page);
+      const label = mode === 'stream' ? 'قائمة (List)' : 'شبكة أيقونات (Icons Grid)';
+      if (typeof showToast === 'function') {
+        showToast(`🌐 تم تحويل ودجات جميع صفحات StartMe إلى ${label}! (كنفاس Miro محفوظ كما هو)`, 3500);
+      }
+    };
+  }
+
   // Hook toggle button
   const colsBtn = document.getElementById('startme-cols-btn');
   const colsPop = document.getElementById('startme-cols-pop');
@@ -7053,8 +7128,23 @@ document.getElementById('ok-bm').onclick = () => {
   }
   closeM('m-bm');
 };
+function getActiveViewItem(id) {
+  const page = cp();
+  if (!page) return (typeof fw === 'function' ? fw(id) : null);
+  const isMiro = (page.pageType === 'miro');
+  if (isMiro) {
+    const card = (page.miroCards || []).find((c) => c.id === id);
+    if (card) return card;
+    return (page.widgets || []).find((w) => w.id === id) || (typeof fw === 'function' ? fw(id) : null);
+  } else {
+    const widget = (page.widgets || []).find((w) => w.id === id);
+    if (widget) return widget;
+    return (page.miroCards || []).find((c) => c.id === id) || (typeof fw === 'function' ? fw(id) : null);
+  }
+}
+
 function openDisp(wid) {
-  const w = fw(wid);
+  const w = getActiveViewItem(wid);
   if (!w) return;
   dispWid = wid;
   document.querySelectorAll('#dm-g .dr').forEach((r) => {
@@ -7075,42 +7165,109 @@ document.querySelectorAll('#dm-g .dr').forEach((r) => {
   };
 });
 document.getElementById('ok-dp').onclick = () => {
-  const w = fw(dispWid);
-  if (!w) return;
-  w.display = document.querySelector('#dm-g input:checked').value;
-  w.size = document.getElementById('dm-sz').value;
-  w.vis = document.getElementById('dm-vi').value;
+  const page = cp();
+  const isMiro = page && page.pageType === 'miro';
+  const item = getActiveViewItem(dispWid);
+  if (!item) return;
+
+  const mode = document.querySelector('#dm-g input:checked').value;
+  item.display = mode;
+  item.size = document.getElementById('dm-sz').value;
+  item.vis = document.getElementById('dm-vi').value;
+
+  if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page);
   sv();
-  if (cp().pageType === 'miro') {
+
+  if (isMiro) {
     if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
   } else {
     buildCols();
+    renderStartMeColsToolbar(page);
   }
   closeM('m-dp');
 };
+
+const dpPageBtn = document.getElementById('dp-page');
+if (dpPageBtn) {
+  dpPageBtn.onclick = () => {
+    const page = cp();
+    if (!page) return;
+    const isMiro = page.pageType === 'miro';
+    const mode = document.querySelector('#dm-g input:checked').value;
+    const sz = document.getElementById('dm-sz').value;
+    const vis = document.getElementById('dm-vi').value;
+
+    if (isMiro) {
+      (page.miroCards || []).forEach((c) => {
+        if (c.type === 'bwidget') {
+          c.display = mode;
+          c.size = sz;
+          c.vis = vis;
+        }
+      });
+      if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+    } else {
+      (page.widgets || []).forEach((w) => {
+        if (w.type !== 'note' && w.type !== 'todo') {
+          w.display = mode;
+          w.size = sz;
+          w.vis = vis;
+        }
+      });
+      buildCols();
+      renderStartMeColsToolbar(page);
+    }
+
+    if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page);
+    sv();
+    if (typeof showToast === 'function') {
+      showToast(`🖥️ تم تطبيق العرض على صفحة "${page.name}"!`, 2500);
+    }
+    closeM('m-dp');
+  };
+}
+
 document.getElementById('dp-all').onclick = () => {
+  const page = cp();
+  const isMiro = page && page.pageType === 'miro';
   const mode = document.querySelector('#dm-g input:checked').value;
-  const sz = document.getElementById('dm-sz').value,
-    vis = document.getElementById('dm-vi').value;
-  (cp().widgets || []).forEach((w) => {
-    if (w.type !== 'note' && w.type !== 'todo') {
-      w.display = mode;
-      w.size = sz;
-      w.vis = vis;
+  const sz = document.getElementById('dm-sz').value;
+  const vis = document.getElementById('dm-vi').value;
+
+  (D.pages || []).forEach((p) => {
+    if (!p) return;
+    if (isMiro) {
+      (p.miroCards || []).forEach((c) => {
+        if (c.type === 'bwidget') {
+          c.display = mode;
+          c.size = sz;
+          c.vis = vis;
+        }
+      });
+    } else {
+      (p.widgets || []).forEach((w) => {
+        if (w.type !== 'note' && w.type !== 'todo') {
+          w.display = mode;
+          w.size = sz;
+          w.vis = vis;
+        }
+      });
     }
+    if (typeof cachePageDataSafe === 'function') cachePageDataSafe(p);
   });
-  (cp().miroCards || []).forEach((w) => {
-    if (w.type === 'bwidget') {
-      w.display = mode;
-      w.size = sz;
-      w.vis = vis;
-    }
-  });
+
   sv();
-  if (cp().pageType === 'miro') {
+  if (isMiro) {
     if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+    if (typeof showToast === 'function') {
+      showToast(`🎨 تم تطبيق العرض على جميع كروت Miro!`, 3000);
+    }
   } else {
     buildCols();
+    renderStartMeColsToolbar(page);
+    if (typeof showToast === 'function') {
+      showToast(`🌐 تم تطبيق العرض على جميع صفحات StartMe! (كنفاس Miro محفوظ كما هو)`, 3500);
+    }
   }
   closeM('m-dp');
 };
@@ -10157,6 +10314,7 @@ window.renderStartMeColsToolbar = renderStartMeColsToolbar;
 window.setPageColumns = setPageColumns;
 window.balancePageWidgetsAcrossCols = balancePageWidgetsAcrossCols;
 window.reorderStartMeWidget = reorderStartMeWidget;
+window.getActiveViewItem = getActiveViewItem;
 
 // Window aliases for backward compatibility
 SM.renderAll = typeof renderAll !== 'undefined' ? renderAll : window.renderAll;
@@ -10167,6 +10325,7 @@ SM.renderStartMeColsToolbar = renderStartMeColsToolbar;
 SM.setPageColumns = setPageColumns;
 SM.balancePageWidgetsAcrossCols = balancePageWidgetsAcrossCols;
 SM.reorderStartMeWidget = reorderStartMeWidget;
+SM.getActiveViewItem = getActiveViewItem;
 
 window.renderAll = SM.renderAll;
 window.buildCols = SM.buildCols;
