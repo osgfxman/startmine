@@ -7688,6 +7688,7 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'Escape') {
+    if (typeof closeTasbeehPane === 'function') closeTasbeehPane();
     document.querySelectorAll('.mo.open').forEach((m) => m.classList.remove('open'));
     ['ep', 'io-pop', 'tc-pop', 'startme-cols-pop'].forEach((id) => {
       const el = document.getElementById(id);

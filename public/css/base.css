@@ -3151,4 +3151,195 @@ body.left-toolbar-active #miro-canvas {
   justify-content: center !important;
   align-items: flex-end !important;
   padding-bottom: 2px !important; /* subtle padding to sit nicely at the bottom */
-}
+}
+
+/* ─── Tasbeeh Side Pane (Left) ─── */
+.tasbeeh-sidepane {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 395px;
+  min-width: 280px;
+  max-width: min(90vw, 850px);
+  height: 100vh;
+  background: #0b0f19;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 10px 0 35px rgba(0, 0, 0, 0.5);
+  z-index: 1005;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(-100%);
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.tasbeeh-sidepane.open {
+  transform: translateX(0);
+}
+
+.tasbeeh-resize-handle {
+  position: absolute;
+  right: -5px;
+  top: 0;
+  width: 10px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 20;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.tasbeeh-resize-handle:hover,
+body.tasbeeh-resizing .tasbeeh-resize-handle {
+  background: rgba(99, 102, 241, 0.5);
+}
+
+body.tasbeeh-resizing {
+  user-select: none !important;
+  cursor: ew-resize !important;
+}
+
+body.tasbeeh-resizing iframe {
+  pointer-events: none !important;
+}
+
+.tasbeeh-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #141c2e;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: #f1f5f9;
+  flex-shrink: 0;
+  user-select: none;
+  height: 42px;
+  box-sizing: border-box;
+}
+
+.tasbeeh-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.tasbeeh-title-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.tasbeeh-title-text {
+  letter-spacing: 0.02em;
+}
+
+.tasbeeh-kbd {
+  font-size: 0.65rem;
+  font-family: inherit;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.tasbeeh-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tasbeeh-act-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #94a3b8;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+
+.tasbeeh-act-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.tasbeeh-close-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.tasbeeh-body {
+  flex: 1;
+  position: relative;
+  background: #090d16;
+  overflow: hidden;
+  display: flex;
+}
+
+.tasbeeh-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  flex: 1;
+}
+
+.tasbeeh-loader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #090d16;
+  color: #94a3b8;
+  font-size: 0.82rem;
+  z-index: 5;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.tasbeeh-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(99, 102, 241, 0.2);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: tasbeehSpin 0.7s linear infinite;
+}
+
+@keyframes tasbeehSpin {
+  to { transform: rotate(360deg); }
+}
+
+.spin-once {
+  animation: tasbeehSpinOnce 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes tasbeehSpinOnce {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+#miro-toolbar-right #tasbeeh-btn.active-toggle {
+  background: rgba(99, 102, 241, 0.25);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.5);
+}
+
