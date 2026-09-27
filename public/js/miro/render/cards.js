@@ -4245,13 +4245,15 @@ function buildMiroBookmarkWidget(card) {
   el.style.overflow = 'hidden';
 
   // Apply colors if any defaults specified (fallback to standard dark mode logic)
-  const c = card.color || { r: 50, g: 50, b: 50, a: 0.8 };
+  const c = typeof normalizeColor === 'function' ? normalizeColor(card.color || { r: 18, g: 20, b: 32, a: 0.94 }) : (card.color || { r: 18, g: 20, b: 32, a: 0.94 });
   // Luma calculation copy-pasted for consistency
   const light = ((c.r * 299 + c.g * 587 + c.b * 114) / 1000) > 140;
-  const txtCol = light ? '#111' : '#dde1ee';
-  const muCol = light ? '#666' : 'rgba(255,255,255,.42)';
-  const bdCol = light ? 'rgba(0,0,0,.1)' : `rgba(255,255,255,${Math.min(c.a * 0.13, 0.09)})`;
-  el.style.cssText += `background:rgba(${c.r},${c.g},${c.b},${c.a});border:1px solid ${bdCol};color:${txtCol};--w-tx:${txtCol};--w-mu:${muCol};`;
+  const txtCol = light ? '#0f172a' : '#f8fafc';
+  const muCol = light ? '#64748b' : 'rgba(255,255,255,.65)';
+  const bdCol = light ? 'rgba(0,0,0,.1)' : `rgba(255,255,255,${Math.min((c.a || 1) * 0.13, 0.12)})`;
+  const hovBg = light ? 'rgba(0,0,0,.05)' : 'rgba(255,255,255,.08)';
+  const bdDashed = light ? 'rgba(0,0,0,.15)' : 'rgba(255,255,255,.15)';
+  el.style.cssText += `background:${rgba(c)};border:1px solid ${bdCol};color:${txtCol};--w-tx:${txtCol};--w-mu:${muCol};--w-hov:${hovBg};--w-bd-dashed:${bdDashed};`;
 
   // Custom Header
   const hdr = document.createElement('div');
@@ -4276,7 +4278,7 @@ function buildMiroBookmarkWidget(card) {
   hdr.innerHTML = `
     <div class="wt" style="color:${muCol}">
       <span class="bm-emoji" title="Double click to edit" style="cursor:text">${card.emoji || '📌'}</span>
-      <span class="bm-title" title="Double click to edit" style="cursor:text;flex:1">${card.title || 'Bookmarks'}</span>
+      <span class="bm-title" title="Double click to edit" style="cursor:text;flex:1;color:${txtCol};font-weight:600">${card.title || 'Bookmarks'}</span>
     </div>
     <div class="wa">
       <button class="wab" data-cl="${card.id}" title="Change Color">🎨</button>

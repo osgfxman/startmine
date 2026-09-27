@@ -71,6 +71,33 @@ function isPagePayloadEqual(p1, p2) {
 }
 window.isPagePayloadEqual = isPagePayloadEqual;
 const DEF_COLOR = { r: 255, g: 255, b: 255, a: 0.94 };
+const WIDGET_COLOR_SWATCHES = [
+  '#121420', '#0f172a', '#1e293b', '#334155',
+  '#ffffff', '#f8fafc', '#f1f5f9', '#e2e8f0',
+  '#1e3a8a', '#2563eb', '#0284c7', '#064e3b',
+  '#059669', '#0d9488', '#4c0519', '#dc2626',
+  '#ea580c', '#78350f', '#ca8a04', '#2e1065',
+  '#7c3aed', '#9333ea', '#18181b', '#000000',
+];
+function buildWidgetColSwatches() {
+  const container = document.getElementById('col-swatches');
+  if (!container) return;
+  container.innerHTML = '';
+  WIDGET_COLOR_SWATCHES.forEach((hex) => {
+    const s = document.createElement('div');
+    s.className = 'col-sw';
+    s.dataset.hex = hex;
+    s.style.background = hex;
+    s.title = hex;
+    s.onclick = () => {
+      const norm = typeof normalizeColor === 'function' ? normalizeColor(hex) : { r: 255, g: 255, b: 255, a: 1 };
+      const curAlpha = clamp(+document.getElementById('as').value || 94, 0, 100);
+      setSl(norm.r, norm.g, norm.b, curAlpha);
+    };
+    container.appendChild(s);
+  });
+}
+window.buildWidgetColSwatches = buildWidgetColSwatches;
 const BG_SOLID_SWATCHES = [
   '#ffffff',
   '#f5f5f5',
@@ -733,8 +760,16 @@ function sanitizeData(d) {
     if (!p.widgets) p.widgets = [];
     p.widgets.forEach((w) => {
       if (w.type !== 'note' && !w.items) w.items = [];
-      if (!w.color || (w.color.r < 30 && w.color.g < 30 && w.color.b < 40)) {
+      if (!w.color) {
         w.color = { ...DEF_COLOR };
+      } else if (typeof normalizeColor === 'function') {
+        w.color = normalizeColor(w.color);
+      }
+    });
+    (p.miroCards || []).forEach((c) => {
+      if (c && c.type === 'bwidget') {
+        if (!c.color) c.color = { ...DEF_COLOR };
+        else if (typeof normalizeColor === 'function') c.color = normalizeColor(c.color);
       }
     });
     if (p.pageType === 'miro') {
@@ -3001,6 +3036,9 @@ function syncMiroBookmarksToWidgets(miroCards, widgets, numCols) {
     if (!c || c.type !== 'bwidget') return;
     let matchW = widgets.find(w => w.id === c.id || (w.title && c.title && w.title.trim().toLowerCase() === c.title.trim().toLowerCase()));
     if (matchW) {
+      if (c.color) matchW.color = { ...c.color };
+      if (c.display) matchW.display = c.display;
+      if (c.size) matchW.size = c.size;
       if (!Array.isArray(matchW.items)) matchW.items = [];
       const existingUrls = new Set(matchW.items.map(it => (it.url || '').trim().toLowerCase()));
       (c.items || []).forEach(it => {
@@ -3032,6 +3070,9 @@ function syncWidgetsBookmarksToMiro(widgets, miroCards) {
     if (!w || w.type !== 'bookmarks') return;
     let matchC = miroCards.find(c => c.id === w.id || (c.title && w.title && c.title.trim().toLowerCase() === w.title.trim().toLowerCase()));
     if (matchC) {
+      if (w.color) matchC.color = { ...w.color };
+      if (w.display) matchC.display = w.display;
+      if (w.size) matchC.size = w.size;
       if (!Array.isArray(matchC.items)) matchC.items = [];
       const existingUrls = new Set(matchC.items.map(it => (it.url || '').trim().toLowerCase()));
       let addedToCard = false;
@@ -6849,19 +6890,22 @@ function reorderStartMeWidget(page, draggedWid, targetWid, dropPosition, targetC
   buildCols();
 }
 function luma(c) {
-  return (c.r * 299 + c.g * 587 + c.b * 114) / 1000;
+  const n = typeof normalizeColor === 'function' ? normalizeColor(c) : c;
+  return ((n.r || 0) * 299 + (n.g || 0) * 587 + (n.b || 0) * 114) / 1000;
 }
 function buildWidget(w) {
   const el = document.createElement('div');
   el.className = 'widget edit';
   el.dataset.wid = w.id;
   el.draggable = true;
-  const c = w.color || DEF_COLOR;
+  const c = typeof normalizeColor === 'function' ? normalizeColor(w.color || DEF_COLOR) : (w.color || DEF_COLOR);
   const light = luma(c) > 140;
-  const txtCol = light ? '#111' : '#dde1ee';
-  const muCol = light ? '#666' : 'rgba(255,255,255,.42)';
-  const bdCol = light ? 'rgba(0,0,0,.1)' : `rgba(255,255,255,${Math.min(c.a * 0.13, 0.09)})`;
-  el.style.cssText = `background:${rgba(c)};border:1px solid ${bdCol};color:${txtCol};--w-tx:${txtCol};--w-mu:${muCol}`;
+  const txtCol = light ? '#0f172a' : '#f8fafc';
+  const muCol = light ? '#64748b' : 'rgba(255,255,255,.65)';
+  const bdCol = light ? 'rgba(0,0,0,.1)' : `rgba(255,255,255,${Math.min((c.a || 1) * 0.13, 0.12)})`;
+  const hovBg = light ? 'rgba(0,0,0,.05)' : 'rgba(255,255,255,.08)';
+  const bdDashed = light ? 'rgba(0,0,0,.15)' : 'rgba(255,255,255,.15)';
+  el.style.cssText = `background:${rgba(c)};border:1px solid ${bdCol};color:${txtCol};--w-tx:${txtCol};--w-mu:${muCol};--w-hov:${hovBg};--w-bd-dashed:${bdDashed};`;
   el.addEventListener('dragstart', (e) => {
     dragWid = w.id;
     if (e.dataTransfer) {
@@ -7727,64 +7771,88 @@ document.getElementById('dp-all').onclick = () => {
 function openColModal(wid) {
   colWid = wid;
   const w = fw(wid);
-  const c = w && w.color ? w.color : DEF_COLOR;
-  setSl(c.r, c.g, c.b, Math.round(c.a * 100));
+  const c = typeof normalizeColor === 'function' ? normalizeColor(w && w.color ? w.color : DEF_COLOR) : (w && w.color ? w.color : DEF_COLOR);
+  buildWidgetColSwatches();
+  setSl(c.r, c.g, c.b, Math.round((c.a !== undefined ? c.a : 0.94) * 100));
   openM('m-col');
 }
 function setSl(r, g, b, a) {
-  document.getElementById('rs').value = r;
-  document.getElementById('gs').value = g;
-  document.getElementById('bs').value = b;
-  document.getElementById('as').value = a;
+  r = clamp(+r || 0, 0, 255);
+  g = clamp(+g || 0, 0, 255);
+  b = clamp(+b || 0, 0, 255);
+  a = clamp(+a !== undefined && !isNaN(+a) ? +a : 94, 0, 100);
+  const rs = document.getElementById('rs');
+  if (rs) rs.value = r;
+  const gs = document.getElementById('gs');
+  if (gs) gs.value = g;
+  const bs = document.getElementById('bs');
+  if (bs) bs.value = b;
+  const as = document.getElementById('as');
+  if (as) as.value = a;
   syncCol(r, g, b, a);
 }
 function syncCol(r, g, b, a) {
-  document.getElementById('rv').textContent = r;
-  document.getElementById('gv').textContent = g;
-  document.getElementById('bv').textContent = b;
-  document.getElementById('av').textContent = a;
+  r = clamp(+r || 0, 0, 255);
+  g = clamp(+g || 0, 0, 255);
+  b = clamp(+b || 0, 0, 255);
+  a = clamp(+a !== undefined && !isNaN(+a) ? +a : 94, 0, 100);
+
+  const rv = document.getElementById('rv');
+  if (rv) rv.textContent = r;
+  const gv = document.getElementById('gv');
+  if (gv) gv.textContent = g;
+  const bv = document.getElementById('bv');
+  if (bv) bv.textContent = b;
+  const av = document.getElementById('av');
+  if (av) av.textContent = a;
+
   const hex = '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('');
-  document.getElementById('cps').style.background = `rgba(${r},${g},${b},${a / 100})`;
-  document.getElementById('hexi').value = hex;
+  const cps = document.getElementById('cps');
+  if (cps) cps.style.background = `rgba(${r},${g},${b},${a / 100})`;
+
+  const hexi = document.getElementById('hexi');
+  if (hexi && document.activeElement !== hexi) hexi.value = hex;
+
+  const nativePicker = document.getElementById('col-native-picker');
+  if (nativePicker && document.activeElement !== nativePicker) nativePicker.value = hex;
+
+  // Highlight active swatch if matches
+  document.querySelectorAll('.col-sw').forEach((sw) => {
+    sw.classList.toggle('sel', (sw.dataset.hex || '').toLowerCase() === hex.toLowerCase());
+  });
+
   const { c, m, y, k } = rgb2cmyk(r, g, b);
   _skipColor = true;
-  document.getElementById('cv').value = c;
-  document.getElementById('mv').value = m;
-  document.getElementById('yv').value = y;
-  document.getElementById('kv').value = k;
+  const cv = document.getElementById('cv');
+  if (cv) cv.value = c;
+  const mv = document.getElementById('mv');
+  if (mv) mv.value = m;
+  const yv = document.getElementById('yv');
+  if (yv) yv.value = y;
+  const kv = document.getElementById('kv');
+  if (kv) kv.value = k;
   _skipColor = false;
 }
 ['rs', 'gs', 'bs', 'as'].forEach((id) => {
-  document.getElementById(id).oninput = () =>
-    syncCol(
-      +document.getElementById('rs').value,
-      +document.getElementById('gs').value,
-      +document.getElementById('bs').value,
-      +document.getElementById('as').value,
-    );
+  const el = document.getElementById(id);
+  if (el) {
+    el.oninput = () =>
+      syncCol(
+        +document.getElementById('rs').value,
+        +document.getElementById('gs').value,
+        +document.getElementById('bs').value,
+        +document.getElementById('as').value,
+      );
+  }
 });
-document.getElementById('hexi').oninput = function () {
-  const h = this.value.trim();
-  if (!/^#[0-9a-fA-F]{6}$/.test(h)) return;
-  const r = parseInt(h.slice(1, 3), 16),
-    g = parseInt(h.slice(3, 5), 16),
-    b = parseInt(h.slice(5, 7), 16);
-  _skipColor = true;
-  document.getElementById('rs').value = r;
-  document.getElementById('gs').value = g;
-  document.getElementById('bs').value = b;
-  _skipColor = false;
-  syncCol(r, g, b, +document.getElementById('as').value);
-};
-['cv', 'mv', 'yv', 'kv'].forEach((id) => {
-  document.getElementById(id).oninput = () => {
-    if (_skipColor) return;
-    const { r, g, b } = cmyk2rgb(
-      clamp(+document.getElementById('cv').value, 0, 100),
-      clamp(+document.getElementById('mv').value, 0, 100),
-      clamp(+document.getElementById('yv').value, 0, 100),
-      clamp(+document.getElementById('kv').value, 0, 100),
-    );
+const colNativePicker = document.getElementById('col-native-picker');
+if (colNativePicker) {
+  colNativePicker.oninput = function () {
+    const h = this.value.trim();
+    if (!/^#[0-9a-fA-F]{6}$/.test(h)) return;
+    const r = parseInt(h.slice(1, 3), 16),
+      g = parseInt(h.slice(3, 5), 16),
+      b = parseInt(h.slice(5, 7), 16);
     _skipColor = true;
     document.getElementById('rs').value = r;
     document.getElementById('gs').value = g;
@@ -7792,18 +7860,75 @@ document.getElementById('hexi').oninput = function () {
     _skipColor = false;
     syncCol(r, g, b, +document.getElementById('as').value);
   };
+}
+const hexiInput = document.getElementById('hexi');
+if (hexiInput) {
+  hexiInput.oninput = function () {
+    const h = this.value.trim();
+    if (!/^#[0-9a-fA-F]{6}$/.test(h)) return;
+    const r = parseInt(h.slice(1, 3), 16),
+      g = parseInt(h.slice(3, 5), 16),
+      b = parseInt(h.slice(5, 7), 16);
+    _skipColor = true;
+    document.getElementById('rs').value = r;
+    document.getElementById('gs').value = g;
+    document.getElementById('bs').value = b;
+    _skipColor = false;
+    syncCol(r, g, b, +document.getElementById('as').value);
+  };
+}
+['cv', 'mv', 'yv', 'kv'].forEach((id) => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.oninput = () => {
+      if (_skipColor) return;
+      const { r, g, b } = cmyk2rgb(
+        clamp(+document.getElementById('cv').value, 0, 100),
+        clamp(+document.getElementById('mv').value, 0, 100),
+        clamp(+document.getElementById('yv').value, 0, 100),
+        clamp(+document.getElementById('kv').value, 0, 100),
+      );
+      _skipColor = true;
+      document.getElementById('rs').value = r;
+      document.getElementById('gs').value = g;
+      document.getElementById('bs').value = b;
+      _skipColor = false;
+      syncCol(r, g, b, +document.getElementById('as').value);
+    };
+  }
 });
 document.getElementById('ok-col').onclick = () => {
   const w = fw(colWid);
   if (!w) return;
-  w.color = {
-    r: +document.getElementById('rs').value,
-    g: +document.getElementById('gs').value,
-    b: +document.getElementById('bs').value,
-    a: +document.getElementById('as').value / 100,
+  const newCol = {
+    r: clamp(+document.getElementById('rs').value, 0, 255),
+    g: clamp(+document.getElementById('gs').value, 0, 255),
+    b: clamp(+document.getElementById('bs').value, 0, 255),
+    a: clamp(+document.getElementById('as').value / 100, 0, 1),
   };
-  sv();
-  buildCols();
+  w.color = newCol;
+
+  // Dual-view sync: update matching item in widgets or miroCards
+  const page = cp();
+  if (page) {
+    if (Array.isArray(page.widgets)) {
+      const matchW = page.widgets.find((x) => x && (x.id === colWid || (x.title && w.title && x.title.trim().toLowerCase() === w.title.trim().toLowerCase())));
+      if (matchW) matchW.color = { ...newCol };
+    }
+    if (Array.isArray(page.miroCards)) {
+      const matchC = page.miroCards.find((c) => c && (c.id === colWid || (c.title && w.title && c.title.trim().toLowerCase() === w.title.trim().toLowerCase())));
+      if (matchC) matchC.color = { ...newCol };
+    }
+    if (typeof cachePageDataSafe === 'function') {
+      cachePageDataSafe(page);
+    } else if (typeof cachePageData === 'function') {
+      cachePageData(page.id, { widgets: page.widgets, miroCards: page.miroCards });
+    }
+  }
+
+  sv(true, true);
+  if (typeof buildCols === 'function') buildCols();
+  if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
   closeM('m-col');
 };
 function rgb2cmyk(r, g, b) {

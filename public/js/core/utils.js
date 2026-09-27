@@ -17,8 +17,55 @@
   function clamp(v, a, b) {
     return Math.max(a, Math.min(b, v));
   }
+  function normalizeColor(c, fallback) {
+    const def = fallback || { r: 255, g: 255, b: 255, a: 0.94 };
+    if (!c) return { ...def };
+    if (typeof c === 'string') {
+      const s = c.trim();
+      if (s.startsWith('#')) {
+        let hex = s.slice(1);
+        if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
+        if (hex.length === 6) {
+          const r = parseInt(hex.slice(0, 2), 16);
+          const g = parseInt(hex.slice(2, 4), 16);
+          const b = parseInt(hex.slice(4, 6), 16);
+          if (!isNaN(r) && !isNaN(g) && !isNaN(b)) {
+            return { r, g, b, a: def.a !== undefined ? def.a : 1 };
+          }
+        } else if (hex.length === 8) {
+          const r = parseInt(hex.slice(0, 2), 16);
+          const g = parseInt(hex.slice(2, 4), 16);
+          const b = parseInt(hex.slice(4, 6), 16);
+          const a = Math.round((parseInt(hex.slice(6, 8), 16) / 255) * 100) / 100;
+          if (!isNaN(r) && !isNaN(g) && !isNaN(b)) {
+            return { r, g, b, a: isNaN(a) ? 1 : a };
+          }
+        }
+      }
+      const rgbMatch = s.match(/rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/i);
+      if (rgbMatch) {
+        return {
+          r: clamp(parseInt(rgbMatch[1], 10), 0, 255),
+          g: clamp(parseInt(rgbMatch[2], 10), 0, 255),
+          b: clamp(parseInt(rgbMatch[3], 10), 0, 255),
+          a: rgbMatch[4] !== undefined ? clamp(parseFloat(rgbMatch[4]), 0, 1) : (def.a !== undefined ? def.a : 1)
+        };
+      }
+      return { ...def };
+    }
+    if (typeof c === 'object') {
+      const r = typeof c.r === 'number' && !isNaN(c.r) ? clamp(Math.round(c.r), 0, 255) : def.r;
+      const g = typeof c.g === 'number' && !isNaN(c.g) ? clamp(Math.round(c.g), 0, 255) : def.g;
+      const b = typeof c.b === 'number' && !isNaN(c.b) ? clamp(Math.round(c.b), 0, 255) : def.b;
+      const a = typeof c.a === 'number' && !isNaN(c.a) ? clamp(c.a, 0, 1) : (def.a !== undefined ? def.a : 1);
+      return { r, g, b, a };
+    }
+    return { ...def };
+  }
   function rgba(c) {
-    return `rgba(${c.r},${c.g},${c.b},${c.a})`;
+    if (!c) return 'rgba(255,255,255,0.94)';
+    const n = normalizeColor(c);
+    return `rgba(${n.r},${n.g},${n.b},${n.a})`;
   }
   function getFav(url) {
     try {
@@ -111,6 +158,7 @@
   window.SM.core.uid = uid;
   window.SM.core.esc = esc;
   window.SM.core.clamp = clamp;
+  window.SM.core.normalizeColor = normalizeColor;
   window.SM.core.rgba = rgba;
   window.SM.core.getFav = getFav;
   window.SM.core.letterOf = letterOf;
@@ -126,6 +174,7 @@
   window.SM.core.expose('uid', uid);
   window.SM.core.expose('esc', esc);
   window.SM.core.expose('clamp', clamp);
+  window.SM.core.expose('normalizeColor', normalizeColor);
   window.SM.core.expose('rgba', rgba);
   window.SM.core.expose('getFav', getFav);
   window.SM.core.expose('letterOf', letterOf);

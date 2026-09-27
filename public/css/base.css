@@ -1083,9 +1083,11 @@ body {
 }
 
 .widget {
+  background: var(--s1);
+  color: var(--w-tx, var(--tx));
   border-radius: var(--r);
   overflow: hidden;
-  transition: box-shadow 0.2s;
+  transition: box-shadow 0.2s, background 0.2s, border-color 0.2s;
   position: relative;
   backdrop-filter: blur(12px);
   cursor: default;
@@ -1311,7 +1313,8 @@ body {
 
 .sp-lb {
   font-size: 0.59rem;
-  color: var(--w-mu, rgba(255, 255, 255, 0.48));
+  color: var(--w-tx, var(--tx));
+  opacity: 0.88;
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1340,7 +1343,7 @@ body {
 }
 
 .st-it:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--w-hov, rgba(255, 255, 255, 0.06));
 }
 
 .st-lb {
@@ -1348,6 +1351,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: inherit;
 }
 
 .sm .st-lb {
@@ -1381,7 +1385,7 @@ body {
 }
 
 .cd-it:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--w-hov, rgba(255, 255, 255, 0.06));
 }
 
 .cd-info {
@@ -1395,6 +1399,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: inherit;
 }
 
 .cd-url {
@@ -1495,8 +1500,8 @@ body {
   margin-top: 3px;
   border-radius: 7px;
   cursor: pointer;
-  border: 1px dashed rgba(255, 255, 255, 0.09);
-  color: var(--mu);
+  border: 1px dashed var(--w-bd-dashed, rgba(255, 255, 255, 0.12));
+  color: var(--w-mu, var(--mu));
   font-size: 0.72rem;
   transition: all 0.12s;
 }
@@ -2546,6 +2551,37 @@ input[type='range']::-webkit-slider-thumb {
 
 .bg-panel.show {
   display: block;
+}
+
+.col-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 0.85rem;
+}
+
+.col-sw {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  cursor: pointer;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.12s, border-color 0.12s, box-shadow 0.12s;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.col-sw:hover {
+  transform: scale(1.18);
+  z-index: 2;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+
+.col-sw.sel {
+  border-color: var(--ac, #6c8fff);
+  box-shadow: 0 0 0 2px var(--ac, #6c8fff);
+  transform: scale(1.12);
 }
 
 .bg-swatches {

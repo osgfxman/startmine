@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#6c8fff">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="manifest" href="/manifest.json?v=1790432585">
+  <link rel="manifest" href="/manifest.json?v=1790501805">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🍅%3C/text%3E%3C/svg%3E">
   <link rel="icon" type="image/png" sizes="192x192" href="/tomato-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="/tomato-512.png">
@@ -22,9 +22,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1790432585">
-  <link rel="stylesheet" href="css/miro.css?v=1790432585">
-  <link rel="stylesheet" href="css/life-widget-additions.css?v=1790432585">
+  <link rel="stylesheet" href="css/base.css?v=1790501805">
+  <link rel="stylesheet" href="css/miro.css?v=1790501805">
+  <link rel="stylesheet" href="css/life-widget-additions.css?v=1790501805">
 </head>
 
 <body>
@@ -792,29 +792,52 @@
   </div>
 
   <div class="mo" id="m-col">
-    <div class="mc">
-      <h3>Widget Color</h3>
-      <div class="sl">RGB</div>
-      <div class="slg"><label>Red <span id="rv">18</span></label><input type="range" id="rs" min="0" max="255"
-          value="18"></div>
-      <div class="slg"><label>Green <span id="gv">20</span></label><input type="range" id="gs" min="0" max="255"
-          value="20"></div>
-      <div class="slg"><label>Blue <span id="bv">32</span></label><input type="range" id="bs" min="0" max="255"
-          value="32"></div>
-      <div class="slg"><label>Alpha <span id="av">94</span>%</label><input type="range" id="as" min="0" max="100"
-          value="94"></div>
-      <div class="cprow">
-        <div id="cps"></div><input type="text" class="hexi fi" id="hexi" placeholder="#121420" maxlength="7">
+    <div class="mc" style="max-width: 440px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+        <h3 style="margin:0">🎨 Widget Color</h3>
+        <button class="btn-ic" onclick="closeM('m-col')" style="font-size:1.1rem;cursor:pointer;background:none;border:none;color:var(--mu)" title="Close">✕</button>
       </div>
-      <div class="sl">CMYK</div>
-      <div class="cmyk-g">
-        <div class="cf"><label>C</label><input type="number" class="fi" id="cv" min="0" max="100"></div>
-        <div class="cf"><label>M</label><input type="number" class="fi" id="mv" min="0" max="100"></div>
-        <div class="cf"><label>Y</label><input type="number" class="fi" id="yv" min="0" max="100"></div>
-        <div class="cf"><label>K</label><input type="number" class="fi" id="kv" min="0" max="100"></div>
+
+      <div class="sl" style="margin-bottom:6px">Preset Colors</div>
+      <div class="col-swatches" id="col-swatches"></div>
+
+      <div class="fg" style="margin-bottom:10px">
+        <label>Pick Color / HEX</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="color" id="col-native-picker" value="#121420"
+            style="width:40px;height:34px;border-radius:8px;border:1px solid var(--bd);cursor:pointer;background:transparent;padding:2px">
+          <input type="text" class="hexi fi" id="hexi" placeholder="#121420" maxlength="7" style="flex:1;font-family:monospace;font-weight:600">
+          <div id="cps" style="width:40px;height:34px;border-radius:8px;border:1px solid var(--bd);box-shadow:inset 0 0 4px rgba(0,0,0,0.2)"></div>
+        </div>
       </div>
-      <div class="ma"><button class="btn bg-btn" onclick="closeM('m-col')">Cancel</button><button class="btn ba"
-          id="ok-col">Apply</button></div>
+
+      <div class="slg" style="margin-bottom:12px">
+        <label>Opacity <span id="av">94</span>%</label>
+        <input type="range" id="as" min="10" max="100" value="94">
+      </div>
+
+      <details style="margin-bottom:14px;background:rgba(255,255,255,0.03);border:1px solid var(--bd);border-radius:8px;padding:8px">
+        <summary style="cursor:pointer;font-size:0.75rem;color:var(--mu);font-weight:600">Advanced Adjustments (RGB / CMYK)</summary>
+        <div style="margin-top:10px">
+          <div class="sl">RGB</div>
+          <div class="slg"><label>Red <span id="rv">18</span></label><input type="range" id="rs" min="0" max="255" value="18"></div>
+          <div class="slg"><label>Green <span id="gv">20</span></label><input type="range" id="gs" min="0" max="255" value="20"></div>
+          <div class="slg"><label>Blue <span id="bv">32</span></label><input type="range" id="bs" min="0" max="255" value="32"></div>
+
+          <div class="sl" style="margin-top:8px">CMYK</div>
+          <div class="cmyk-g">
+            <div class="cf"><label>C</label><input type="number" class="fi" id="cv" min="0" max="100"></div>
+            <div class="cf"><label>M</label><input type="number" class="fi" id="mv" min="0" max="100"></div>
+            <div class="cf"><label>Y</label><input type="number" class="fi" id="yv" min="0" max="100"></div>
+            <div class="cf"><label>K</label><input type="number" class="fi" id="kv" min="0" max="100"></div>
+          </div>
+        </div>
+      </details>
+
+      <div class="ma" style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn bg-btn" onclick="closeM('m-col')">Cancel</button>
+        <button class="btn ba" id="ok-col">Apply Color</button>
+      </div>
     </div>
   </div>
 
@@ -954,36 +977,36 @@
   </div>
 
     <!-- Core -->
-    <script src="js/core/namespace.js?v=1790432585"></script>
-    <script src="js/core/events.js?v=1790432585"></script>
-    <script src="js/core/utils.js?v=1790432585"></script>
+    <script src="js/core/namespace.js?v=1790501805"></script>
+    <script src="js/core/events.js?v=1790501805"></script>
+    <script src="js/core/utils.js?v=1790501805"></script>
 
     <!-- Data Layer -->
-    <script src="js/data/firebase.js?v=1790432585"></script>
-    <script src="js/data/offline.js?v=1790432585"></script>
-    <script src="js/data/sync.js?v=1790432585"></script>
+    <script src="js/data/firebase.js?v=1790501805"></script>
+    <script src="js/data/offline.js?v=1790501805"></script>
+    <script src="js/data/sync.js?v=1790501805"></script>
 
     <!-- UI Layer -->
-    <script src="js/ui/toasts.js?v=1790432585"></script>
-    <script src="js/ui/modals.js?v=1790432585"></script>
-    <script src="js/ui/toolbar.js?v=1790432585"></script>
-    <script src="js/ui/search.js?v=1790432585"></script>
-    <script src="js/ui/inbox-ui.js?v=1790432585"></script>
-    <script src="js/ui/tasbeeh.js?v=1790432585"></script>
-    <script src="js/thumbnails.js?v=1790432585"></script>
+    <script src="js/ui/toasts.js?v=1790501805"></script>
+    <script src="js/ui/modals.js?v=1790501805"></script>
+    <script src="js/ui/toolbar.js?v=1790501805"></script>
+    <script src="js/ui/search.js?v=1790501805"></script>
+    <script src="js/ui/inbox-ui.js?v=1790501805"></script>
+    <script src="js/ui/tasbeeh.js?v=1790501805"></script>
+    <script src="js/thumbnails.js?v=1790501805"></script>
 
     <!-- Miro Modules -->
-    <script src="js/miro/miro-state.js?v=1790432585"></script>
-    <script src="js/miro/render/cards.js?v=1790432585"></script>
-    <script src="js/miro/render/builders.js?v=1790432585"></script>
-    <script src="js/miro/layout/grid.js?v=1790432585"></script>
-    <script src="js/miro/layout/slices.js?v=1790432585"></script>
+    <script src="js/miro/miro-state.js?v=1790501805"></script>
+    <script src="js/miro/render/cards.js?v=1790501805"></script>
+    <script src="js/miro/render/builders.js?v=1790501805"></script>
+    <script src="js/miro/layout/grid.js?v=1790501805"></script>
+    <script src="js/miro/layout/slices.js?v=1790501805"></script>
 
     <!-- Original files (now wrappers) -->
-    <script src="js/miro-engine.js?v=1790432585"></script>
-    <script src="js/life-widget.js?v=1790432585"></script>
-    <script src="js/core/health.js?v=1790432585"></script>
-    <script src="js/app.js?v=1790432585"></script>
+    <script src="js/miro-engine.js?v=1790501805"></script>
+    <script src="js/life-widget.js?v=1790501805"></script>
+    <script src="js/core/health.js?v=1790501805"></script>
+    <script src="js/app.js?v=1790501805"></script>
     <script>
       // ─── Deferred secondary scripts: load after auth is ready ───
       var _mainAppLoaded=false;
@@ -991,7 +1014,7 @@
         if(_mainAppLoaded)return;_mainAppLoaded=true;
         console.log('[DEFERRED] Loading outline.js + alignment.js');
         ['js/outline.js','js/alignment.js'].forEach(function(src){
-          var s=document.createElement('script');s.src=src+'?v=1790432585';document.body.appendChild(s);
+          var s=document.createElement('script');s.src=src+'?v=1790501805';document.body.appendChild(s);
         });
       }
       // Primary trigger: load deferred scripts after auth + first render
