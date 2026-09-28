@@ -261,8 +261,8 @@
       if (window.D && window.D.pages) {
         const livePg = window.D.pages.find(p => p && p.id === pid);
         if (livePg) {
-          if ((data.widgets || []).length > 0) livePg.widgets = data.widgets;
-          if ((data.miroCards || []).length > 0) livePg.miroCards = data.miroCards;
+          if (Array.isArray(data.widgets) && (data.widgets.length > 0 || livePg._bypassVersionGuard || data._bypassVersionGuard)) livePg.widgets = data.widgets;
+          if (Array.isArray(data.miroCards) && (data.miroCards.length > 0 || livePg._bypassVersionGuard || data._bypassVersionGuard)) livePg.miroCards = data.miroCards;
           if (data.vGuides !== undefined) livePg.vGuides = data.vGuides;
           if (data.hGuides !== undefined) livePg.hGuides = data.hGuides;
           if (data.customCells !== undefined) livePg.customCells = data.customCells;
@@ -334,7 +334,7 @@
     // 1. Check active D.pages in RAM
     if (window.D && window.D.pages) {
       const livePg = window.D.pages.find(p => p && p.id === pid);
-      if (livePg && (((livePg.widgets || []).length > 0) || ((livePg.miroCards || []).length > 0) || (livePg.pageType === 'slicer'))) {
+      if (livePg && (((livePg.widgets || []).length > 0) || ((livePg.miroCards || []).length > 0) || (livePg.pageType === 'slicer') || livePg._bypassVersionGuard)) {
         return {
           widgets: livePg.widgets || [],
           miroCards: livePg.miroCards || [],

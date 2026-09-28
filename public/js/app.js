@@ -255,8 +255,8 @@ function cachePageDataSafe(pid, data) {
     if (window.D && window.D.pages) {
       const livePg = window.D.pages.find(p => p && p.id === pid);
       if (livePg) {
-        if ((data.widgets || []).length > 0) livePg.widgets = data.widgets;
-        if ((data.miroCards || []).length > 0) livePg.miroCards = data.miroCards;
+        if (Array.isArray(data.widgets) && (data.widgets.length > 0 || livePg._bypassVersionGuard || data._bypassVersionGuard)) livePg.widgets = data.widgets;
+        if (Array.isArray(data.miroCards) && (data.miroCards.length > 0 || livePg._bypassVersionGuard || data._bypassVersionGuard)) livePg.miroCards = data.miroCards;
         if (data.vGuides !== undefined) livePg.vGuides = data.vGuides;
         if (data.hGuides !== undefined) livePg.hGuides = data.hGuides;
         if (data.customCells !== undefined) livePg.customCells = data.customCells;
@@ -5382,18 +5382,26 @@ const STORAGE_LAST_MV_PG = 'sm_last_mv_pg';
 
 function _findWidgetAndPage(wid) {
   if (!wid) return null;
-  // 1. Search in-memory D.pages
+  // 1. Check ACTIVE PAGE (cp()) FIRST - crucial so we prioritize the page the user is currently viewing!
+  const curP = typeof cp === 'function' ? cp() : null;
+  if (curP && curP.widgets) {
+    const idx = curP.widgets.findIndex((x) => x && x.id === wid);
+    if (idx !== -1) {
+      return { page: curP, widget: curP.widgets[idx], index: idx };
+    }
+  }
+  // 2. Search other in-memory D.pages
   for (const p of D.pages) {
-    if (p && p.widgets) {
+    if (p && p !== curP && p.widgets) {
       const idx = p.widgets.findIndex((x) => x && x.id === wid);
       if (idx !== -1) {
         return { page: p, widget: p.widgets[idx], index: idx };
       }
     }
   }
-  // 2. Search local cache if page was evicted or unloaded
+  // 3. Search local cache if page was evicted or unloaded
   for (const p of D.pages) {
-    if (!p) continue;
+    if (!p || p === curP) continue;
     const cached = typeof getCachedPageData === 'function' ? getCachedPageData(p.id) : null;
     if (cached && cached.widgets) {
       const idx = cached.widgets.findIndex((x) => x && x.id === wid);
@@ -5407,16 +5415,27 @@ function _findWidgetAndPage(wid) {
   return null;
 }
 
-function _ensurePageWidgetsLoaded(page) {
+async function _ensurePageWidgetsLoaded(page) {
   if (!page) return;
   if (!page.widgets || page.widgets.length === 0) {
-    const cached = typeof getCachedPageData === 'function' ? getCachedPageData(page.id) : null;
-    if (cached && cached.widgets && cached.widgets.length > 0) {
-      page.widgets = cached.widgets;
-      if (cached.miroCards) page.miroCards = cached.miroCards;
+    if (typeof getCachedPageDataAsync === 'function') {
+      try {
+        const cached = await getCachedPageDataAsync(page.id);
+        if (cached) {
+          if (cached.widgets && cached.widgets.length > 0) page.widgets = cached.widgets;
+          if (cached.miroCards && cached.miroCards.length > 0) page.miroCards = cached.miroCards;
+        }
+      } catch (e) {}
+    } else if (typeof getCachedPageData === 'function') {
+      const cached = getCachedPageData(page.id);
+      if (cached) {
+        if (cached.widgets && cached.widgets.length > 0) page.widgets = cached.widgets;
+        if (cached.miroCards && cached.miroCards.length > 0) page.miroCards = cached.miroCards;
+      }
     }
   }
   if (!page.widgets) page.widgets = [];
+  if (!page.miroCards) page.miroCards = [];
 }
 
 function _safePersistPagePayload(page) {
@@ -5440,7 +5459,8 @@ function _safePersistPagePayload(page) {
     cellGuides: page.cellGuides || {},
     _layoutGuidesMode: page._layoutGuidesMode || false,
     cols: page.cols !== undefined ? page.cols : 3,
-    ts: page.ts
+    ts: page.ts,
+    _bypassVersionGuard: page._bypassVersionGuard || false
   };
 
   // 1. Save to local cache (localStorage + IndexedDB)
@@ -5452,6 +5472,7 @@ function _safePersistPagePayload(page) {
 
   // 2. Direct write to Firebase Realtime Database shard
   if (typeof USER_ID !== 'undefined' && USER_ID && typeof db !== 'undefined') {
+    if (typeof setOwnWrite === 'function') setOwnWrite(true);
     const updates = {};
     updates[`users/${USER_ID}/startmine_pages/${page.id}`] = payload;
     db.ref().update(updates).catch((e) => console.warn('[PAGE SYNC DB]', page.id, e));
@@ -5541,6 +5562,98 @@ function updateMvPages() {
   }
 }
 
+function _areWidgetBookmarksIdentical(w1, w2) {
+  if (!w1 || !w2) return false;
+  const items1 = Array.isArray(w1.items) ? w1.items : [];
+  const items2 = Array.isArray(w2.items) ? w2.items : [];
+  if (items1.length !== items2.length) return false;
+  const urls1 = items1.map((i) => (i.url || '').trim().toLowerCase()).sort();
+  const urls2 = items2.map((i) => (i.url || '').trim().toLowerCase()).sort();
+  return urls1.every((u, idx) => u === urls2[idx]);
+}
+
+function _getNextAvailableWidgetTitle(page, baseTitle) {
+  const cleanTitle = (baseTitle || 'ويدجيت').replace(/\s*\(\d+\)$/, '').trim();
+  const existingTitles = new Set(
+    (page.widgets || []).map((w) => (w && w.title ? w.title.trim().toLowerCase() : ''))
+  );
+  let counter = 1;
+  while (existingTitles.has(`${cleanTitle.toLowerCase()} (${counter})`)) {
+    counter++;
+  }
+  return `${cleanTitle} (${counter})`;
+}
+
+function _findMatchingWidgetInPage(tgtPage, widgetData, excludeWid = null) {
+  if (!tgtPage || !tgtPage.widgets || !widgetData) return null;
+  const srcTitle = (widgetData.title || '').trim().toLowerCase();
+
+  // 1. Check for match with same title AND identical bookmarks
+  const exactMatch = tgtPage.widgets.find((w) => {
+    if (!w || (excludeWid && w.id === excludeWid)) return false;
+    const tTitle = (w.title || '').trim().toLowerCase();
+    return tTitle === srcTitle && _areWidgetBookmarksIdentical(w, widgetData);
+  });
+  if (exactMatch) return { widget: exactMatch, exactBookmarks: true };
+
+  // 2. Check if title matches (same name)
+  const titleMatch = tgtPage.widgets.find((w) => {
+    if (!w || (excludeWid && w.id === excludeWid)) return false;
+    return (w.title || '').trim().toLowerCase() === srcTitle;
+  });
+  if (titleMatch) return { widget: titleMatch, exactBookmarks: false };
+
+  return null;
+}
+
+function promptWidgetConflict(existingWidget, widgetData, targetPage, actionType = 'move') {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('m-mv-conflict');
+    const newTitle = _getNextAvailableWidgetTitle(targetPage, widgetData.title);
+
+    if (!modal) {
+      const choice = confirm(
+        `الويدجيت "${widgetData.title}" موجود بالفعل في صفحة "${targetPage.name}".\n\nاضغط OK للاستبدال (Replace)، أو Cancel للنسخ باسم جديد "${newTitle}".`
+      );
+      resolve({ action: choice ? 'replace' : 'rename', newTitle });
+      return;
+    }
+
+    const descEl = document.getElementById('mv-conflict-desc');
+    const nameEl = document.getElementById('mv-conflict-name');
+    const newNameEl = document.getElementById('mv-conflict-newname');
+    const replaceBtn = document.getElementById('mv-conflict-replace');
+    const renameBtn = document.getElementById('mv-conflict-rename');
+    const cancelBtn = document.getElementById('mv-conflict-cancel');
+
+    if (nameEl) nameEl.textContent = widgetData.title || 'ويدجيت';
+    if (newNameEl) newNameEl.textContent = newTitle;
+    const counterNum = newTitle.match(/\((\d+)\)$/)?.[1] || '1';
+    if (renameBtn) renameBtn.textContent = `📋 نسخ باسم جديد (${counterNum})`;
+
+    const isIdentical = _areWidgetBookmarksIdentical(existingWidget, widgetData);
+    if (descEl) {
+      const actionName = actionType === 'move' ? 'نقله' : 'نسخه';
+      descEl.textContent = isIdentical
+        ? `الويدجيت المراد ${actionName} موجود بالفعل في صفحة "${targetPage.name}" بنفس الاسم وجميع الروابط.`
+        : `يوجد ويدجيت آخر في صفحة "${targetPage.name}" يحمل نفس الاسم "${widgetData.title}".`;
+    }
+
+    const cleanup = () => {
+      modal.classList.remove('open');
+      replaceBtn.onclick = null;
+      renameBtn.onclick = null;
+      cancelBtn.onclick = null;
+    };
+
+    replaceBtn.onclick = () => { cleanup(); resolve({ action: 'replace', newTitle }); };
+    renameBtn.onclick = () => { cleanup(); resolve({ action: 'rename', newTitle }); };
+    cancelBtn.onclick = () => { cleanup(); resolve({ action: 'cancel', newTitle }); };
+
+    modal.classList.add('open');
+  });
+}
+
 document.getElementById('mv-move').onclick = async () => {
   const wid = _mvWid;
   if (!wid) {
@@ -5558,7 +5671,6 @@ document.getElementById('mv-move').onclick = async () => {
   }
 
   const srcPage = found.page;
-  const widgetIdx = found.index;
   const widgetData = found.widget;
 
   // 2. Locate target page
@@ -5577,20 +5689,95 @@ document.getElementById('mv-move').onclick = async () => {
   localStorage.setItem(STORAGE_LAST_MV_GRP, document.getElementById('mv-grp').value);
   localStorage.setItem(STORAGE_LAST_MV_PG, tgtPid);
 
-  // 3. Ensure target page's existing widgets are loaded from cache/IDB if not in memory
-  _ensurePageWidgetsLoaded(tgtPage);
+  // 3. Ensure target and source pages' widgets & miroCards are fully loaded (including IDB)
+  await _ensurePageWidgetsLoaded(tgtPage);
+  await _ensurePageWidgetsLoaded(srcPage);
 
-  // 4. Prepare cloned widget for target
+  // 4. Check for duplicate/conflict in target page!
+  const matchConflict = _findMatchingWidgetInPage(tgtPage, widgetData, (srcPage.id === tgtPage.id ? wid : null));
+  let finalDecision = null;
+  if (matchConflict) {
+    finalDecision = await promptWidgetConflict(matchConflict.widget, widgetData, tgtPage, 'move');
+    if (!finalDecision || finalDecision.action === 'cancel') {
+      if (typeof showToast === 'function') showToast('تم إلغاء عملية النقل', 2500);
+      return;
+    }
+  }
+
+  // 5. Prepare moved widget for target
   const movedWidget = JSON.parse(JSON.stringify(widgetData));
   movedWidget.col = 0;
 
+  if (finalDecision && finalDecision.action === 'rename') {
+    movedWidget.title = finalDecision.newTitle;
+  }
+
+  // Also check if corresponding card exists in srcPage.miroCards to move
+  let movedCard = null;
+  if (Array.isArray(srcPage.miroCards)) {
+    const cardIdx = srcPage.miroCards.findIndex((c) => c && (c.id === wid || (c.type === 'bwidget' && widgetData.title && c.title === widgetData.title)));
+    if (cardIdx !== -1) {
+      movedCard = JSON.parse(JSON.stringify(srcPage.miroCards[cardIdx]));
+      srcPage.miroCards.splice(cardIdx, 1);
+      if (finalDecision && finalDecision.action === 'rename') {
+        movedCard.title = finalDecision.newTitle;
+      }
+    }
+  }
+
   if (srcPage.id === tgtPage.id) {
-    // Same page move: relocate to top
-    srcPage.widgets.splice(widgetIdx, 1);
+    // Same page move: relocate to top of col 0
+    srcPage.widgets = (srcPage.widgets || []).filter((w) => w && w.id !== wid);
     srcPage.widgets.unshift(movedWidget);
+    if (movedCard) {
+      srcPage.miroCards = (srcPage.miroCards || []).filter((c) => c && c.id !== movedCard.id);
+      srcPage.miroCards.unshift(movedCard);
+    }
   } else {
-    // Inter-page move: Add to target FIRST, verify, then remove from source!
-    tgtPage.widgets.unshift(movedWidget);
+    // Inter-page move:
+    if (finalDecision && finalDecision.action === 'replace') {
+      // Replace existing widget on target page
+      const repIdx = tgtPage.widgets.findIndex((w) => w && w.id === matchConflict.widget.id);
+      if (repIdx !== -1) {
+        tgtPage.widgets[repIdx] = movedWidget;
+      } else {
+        tgtPage.widgets.unshift(movedWidget);
+      }
+      // Also replace in target miroCards if present
+      if (tgtPage.miroCards) {
+        const repCardIdx = tgtPage.miroCards.findIndex((c) => c && (c.id === matchConflict.widget.id || (c.type === 'bwidget' && c.title === widgetData.title)));
+        if (repCardIdx !== -1) {
+          if (movedCard) {
+            movedCard.x = tgtPage.miroCards[repCardIdx].x;
+            movedCard.y = tgtPage.miroCards[repCardIdx].y;
+            tgtPage.miroCards[repCardIdx] = movedCard;
+          }
+        } else if (movedCard) {
+          tgtPage.miroCards.push(movedCard);
+        }
+      }
+    } else {
+      // Normal or rename: add to target widgets
+      tgtPage.widgets = (tgtPage.widgets || []).filter((w) => w && w.id !== movedWidget.id);
+      tgtPage.widgets.unshift(movedWidget);
+
+      // Keep target miroCards in sync
+      if (movedCard) {
+        tgtPage.miroCards = (tgtPage.miroCards || []).filter((c) => c && c.id !== movedCard.id);
+        let maxX = 100;
+        (tgtPage.miroCards || []).forEach((c) => {
+          const r = (c.x || 0) + (c.w || 300);
+          if (r > maxX) maxX = r;
+        });
+        movedCard.x = maxX + 40;
+        movedCard.y = 100;
+        tgtPage.miroCards.push(movedCard);
+      } else if (tgtPage.pageType === 'miro' || (tgtPage.miroCards && tgtPage.miroCards.length > 0)) {
+        if (typeof syncWidgetsBookmarksToMiro === 'function') {
+          syncWidgetsBookmarksToMiro([movedWidget], tgtPage.miroCards);
+        }
+      }
+    }
 
     const verified = tgtPage.widgets.some((w) => w && w.id === movedWidget.id);
     if (!verified) {
@@ -5598,29 +5785,40 @@ document.getElementById('mv-move').onclick = async () => {
       return;
     }
 
-    // Only remove from source after verification
-    srcPage.widgets.splice(widgetIdx, 1);
+    // Completely remove from source page widgets
+    srcPage.widgets = (srcPage.widgets || []).filter((w) => w && w.id !== wid);
+
+    // Completely remove from source page miroCards
+    srcPage.miroCards = (srcPage.miroCards || []).filter((c) => c && c.id !== wid && (!widgetData.title || c.title !== widgetData.title || c.type !== 'bwidget'));
+
+    // If source page is now completely empty, set bypass guard so empty state is saved
+    if (srcPage.widgets.length === 0 && srcPage.miroCards.length === 0) {
+      srcPage._bypassVersionGuard = true;
+    }
   }
 
-  // 5. Persist BOTH target and source pages to cache and database immediately!
+  // 6. Persist BOTH target and source pages to cache and database immediately!
   _safePersistPagePayload(tgtPage);
   if (srcPage.id !== tgtPage.id) {
     _safePersistPagePayload(srcPage);
   }
 
-  // 6. Global sync to update pagesMeta, timestamps and metadata
+  // 7. Global sync to update pagesMeta, timestamps and metadata
   if (typeof sv === 'function') {
     sv(true, true);
   }
 
-  // 7. Update UI
+  // 8. Update UI
   if (typeof buildCols === 'function') {
     buildCols();
   }
 
   closeM('m-mv');
+  const actionMsg = finalDecision?.action === 'replace'
+    ? `⚡ تم استبدال "${movedWidget.title}" في "${tgtPage.name}" بنجاح!`
+    : `📦 تم نقل "${movedWidget.title || 'الويدجيت'}" إلى "${tgtPage.name}" بنجاح!`;
   if (typeof showToast === 'function') {
-    showToast(`📦 تم نقل "${movedWidget.title || 'الويدجيت'}" إلى "${tgtPage.name}" بنجاح!`, 3500);
+    showToast(actionMsg, 3500);
   }
 };
 
@@ -5651,7 +5849,18 @@ document.getElementById('mv-copy').onclick = async () => {
   localStorage.setItem(STORAGE_LAST_MV_GRP, document.getElementById('mv-grp').value);
   localStorage.setItem(STORAGE_LAST_MV_PG, tgtPid);
 
-  _ensurePageWidgetsLoaded(tgtPage);
+  await _ensurePageWidgetsLoaded(tgtPage);
+
+  // Check for duplicate/conflict in target page!
+  const matchConflict = _findMatchingWidgetInPage(tgtPage, found.widget);
+  let finalDecision = null;
+  if (matchConflict) {
+    finalDecision = await promptWidgetConflict(matchConflict.widget, found.widget, tgtPage, 'copy');
+    if (!finalDecision || finalDecision.action === 'cancel') {
+      if (typeof showToast === 'function') showToast('تم إلغاء عملية النسخ', 2500);
+      return;
+    }
+  }
 
   const clone = JSON.parse(JSON.stringify(found.widget));
   clone.id = uid();
@@ -5660,7 +5869,33 @@ document.getElementById('mv-copy').onclick = async () => {
     clone.items.forEach((it) => (it.id = uid()));
   }
 
-  tgtPage.widgets.unshift(clone);
+  if (finalDecision && finalDecision.action === 'rename') {
+    clone.title = finalDecision.newTitle;
+  }
+
+  if (finalDecision && finalDecision.action === 'replace') {
+    const repIdx = tgtPage.widgets.findIndex((w) => w && w.id === matchConflict.widget.id);
+    if (repIdx !== -1) {
+      tgtPage.widgets[repIdx] = clone;
+    } else {
+      tgtPage.widgets.unshift(clone);
+    }
+    if (tgtPage.miroCards) {
+      const repCardIdx = tgtPage.miroCards.findIndex((c) => c && (c.id === matchConflict.widget.id || (c.type === 'bwidget' && c.title === found.widget.title)));
+      if (repCardIdx !== -1) {
+        tgtPage.miroCards.splice(repCardIdx, 1);
+      }
+    }
+  } else {
+    tgtPage.widgets.unshift(clone);
+  }
+
+  // If tgtPage has miroCards or is miro view, keep miroCards in sync
+  if (tgtPage.pageType === 'miro' || (tgtPage.miroCards && tgtPage.miroCards.length > 0)) {
+    if (typeof syncWidgetsBookmarksToMiro === 'function') {
+      syncWidgetsBookmarksToMiro([clone], tgtPage.miroCards);
+    }
+  }
 
   _safePersistPagePayload(tgtPage);
 
@@ -5672,8 +5907,11 @@ document.getElementById('mv-copy').onclick = async () => {
   }
 
   closeM('m-mv');
+  const actionMsg = finalDecision?.action === 'replace'
+    ? `⚡ تم استبدال "${clone.title}" في "${tgtPage.name}" بنجاح!`
+    : `📋 تم نسخ "${clone.title || 'الويدجيت'}" إلى "${tgtPage.name}" بنجاح!`;
   if (typeof showToast === 'function') {
-    showToast(`📋 تم نسخ "${clone.title || 'الويدجيت'}" إلى "${tgtPage.name}" بنجاح!`, 3500);
+    showToast(actionMsg, 3500);
   }
 };
 
@@ -7482,6 +7720,7 @@ function delWidget(wid) {
 
   D.pages.forEach((p) => {
     p.widgets = (p.widgets || []).filter((w) => w.id !== wid);
+    p.miroCards = (p.miroCards || []).filter((c) => c && c.id !== wid);
   });
   sv();
   buildCols();

@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#6c8fff">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="manifest" href="/manifest.json?v=1790501805">
+  <link rel="manifest" href="/manifest.json?v=1790623720">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🍅%3C/text%3E%3C/svg%3E">
   <link rel="icon" type="image/png" sizes="192x192" href="/tomato-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="/tomato-512.png">
@@ -22,9 +22,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1790501805">
-  <link rel="stylesheet" href="css/miro.css?v=1790501805">
-  <link rel="stylesheet" href="css/life-widget-additions.css?v=1790501805">
+  <link rel="stylesheet" href="css/base.css?v=1790623720">
+  <link rel="stylesheet" href="css/miro.css?v=1790623720">
+  <link rel="stylesheet" href="css/life-widget-additions.css?v=1790623720">
 </head>
 
 <body>
@@ -248,6 +248,33 @@
         <button class="btn bg-btn" onclick="closeM('m-mv')">Cancel</button>
         <button class="btn ba" id="mv-copy">📋 Copy</button>
         <button class="btn ba" id="mv-move">📦 Move</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mo" id="m-mv-conflict" style="z-index:1000002;">
+    <div class="mc" style="background:#141c2e;color:#f8fafc;border:1px solid rgba(255,255,255,0.16);box-shadow:0 20px 60px rgba(0,0,0,0.75);border-radius:16px;max-width:440px;width:90%;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <span style="font-size:1.4rem">⚠️</span>
+        <h3 style="color:#ffffff;font-weight:600;margin:0;font-size:1.1rem;">ويدجيت مطابق موجود بالفعل</h3>
+      </div>
+      <div style="font-size:0.86rem;color:#cbd5e1;line-height:1.5;margin-bottom:14px;" id="mv-conflict-desc">
+        الويدجيت موجود بالفعل في هذه الصفحة بنفس الاسم والروابط.
+      </div>
+      <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:0.84rem;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+          <span style="color:#94a3b8;">الاسم الحالي:</span>
+          <span id="mv-conflict-name" style="font-weight:600;color:#fff;"></span>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span style="color:#94a3b8;">الاسم الجديد المقترح:</span>
+          <span id="mv-conflict-newname" style="font-weight:600;color:#38bdf8;"></span>
+        </div>
+      </div>
+      <div class="ma" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:0;">
+        <button class="btn bg-btn" id="mv-conflict-cancel" style="padding:0.5rem 0.9rem;">إلغاء</button>
+        <button class="btn ba" id="mv-conflict-replace" style="background:linear-gradient(135deg, #ef4444, #dc2626);color:#fff;font-weight:600;border:none;padding:0.5rem 1rem;border-radius:8px;">⚡ استبدال (Replace)</button>
+        <button class="btn ba" id="mv-conflict-rename" style="background:linear-gradient(135deg, #3b82f6, #2563eb);color:#fff;font-weight:600;border:none;padding:0.5rem 1rem;border-radius:8px;">📋 نسخ باسم جديد (1)</button>
       </div>
     </div>
   </div>
@@ -977,36 +1004,36 @@
   </div>
 
     <!-- Core -->
-    <script src="js/core/namespace.js?v=1790501805"></script>
-    <script src="js/core/events.js?v=1790501805"></script>
-    <script src="js/core/utils.js?v=1790501805"></script>
+    <script src="js/core/namespace.js?v=1790623720"></script>
+    <script src="js/core/events.js?v=1790623720"></script>
+    <script src="js/core/utils.js?v=1790623720"></script>
 
     <!-- Data Layer -->
-    <script src="js/data/firebase.js?v=1790501805"></script>
-    <script src="js/data/offline.js?v=1790501805"></script>
-    <script src="js/data/sync.js?v=1790501805"></script>
+    <script src="js/data/firebase.js?v=1790623720"></script>
+    <script src="js/data/offline.js?v=1790623720"></script>
+    <script src="js/data/sync.js?v=1790623720"></script>
 
     <!-- UI Layer -->
-    <script src="js/ui/toasts.js?v=1790501805"></script>
-    <script src="js/ui/modals.js?v=1790501805"></script>
-    <script src="js/ui/toolbar.js?v=1790501805"></script>
-    <script src="js/ui/search.js?v=1790501805"></script>
-    <script src="js/ui/inbox-ui.js?v=1790501805"></script>
-    <script src="js/ui/tasbeeh.js?v=1790501805"></script>
-    <script src="js/thumbnails.js?v=1790501805"></script>
+    <script src="js/ui/toasts.js?v=1790623720"></script>
+    <script src="js/ui/modals.js?v=1790623720"></script>
+    <script src="js/ui/toolbar.js?v=1790623720"></script>
+    <script src="js/ui/search.js?v=1790623720"></script>
+    <script src="js/ui/inbox-ui.js?v=1790623720"></script>
+    <script src="js/ui/tasbeeh.js?v=1790623720"></script>
+    <script src="js/thumbnails.js?v=1790623720"></script>
 
     <!-- Miro Modules -->
-    <script src="js/miro/miro-state.js?v=1790501805"></script>
-    <script src="js/miro/render/cards.js?v=1790501805"></script>
-    <script src="js/miro/render/builders.js?v=1790501805"></script>
-    <script src="js/miro/layout/grid.js?v=1790501805"></script>
-    <script src="js/miro/layout/slices.js?v=1790501805"></script>
+    <script src="js/miro/miro-state.js?v=1790623720"></script>
+    <script src="js/miro/render/cards.js?v=1790623720"></script>
+    <script src="js/miro/render/builders.js?v=1790623720"></script>
+    <script src="js/miro/layout/grid.js?v=1790623720"></script>
+    <script src="js/miro/layout/slices.js?v=1790623720"></script>
 
     <!-- Original files (now wrappers) -->
-    <script src="js/miro-engine.js?v=1790501805"></script>
-    <script src="js/life-widget.js?v=1790501805"></script>
-    <script src="js/core/health.js?v=1790501805"></script>
-    <script src="js/app.js?v=1790501805"></script>
+    <script src="js/miro-engine.js?v=1790623720"></script>
+    <script src="js/life-widget.js?v=1790623720"></script>
+    <script src="js/core/health.js?v=1790623720"></script>
+    <script src="js/app.js?v=1790623720"></script>
     <script>
       // ─── Deferred secondary scripts: load after auth is ready ───
       var _mainAppLoaded=false;
@@ -1014,7 +1041,7 @@
         if(_mainAppLoaded)return;_mainAppLoaded=true;
         console.log('[DEFERRED] Loading outline.js + alignment.js');
         ['js/outline.js','js/alignment.js'].forEach(function(src){
-          var s=document.createElement('script');s.src=src+'?v=1790501805';document.body.appendChild(s);
+          var s=document.createElement('script');s.src=src+'?v=1790623720';document.body.appendChild(s);
         });
       }
       // Primary trigger: load deferred scripts after auth + first render
