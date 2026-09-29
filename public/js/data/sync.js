@@ -18,6 +18,23 @@
   // Extracted syncNow
   window.syncNow = async function () {
   if (!USER_ID) return Promise.resolve();
+
+  if (!window._initialSyncCompleted && !_offlineMode) {
+    console.warn('[SYNC ⛔] syncNow blocked: Initial cloud sync not yet completed.');
+    if (typeof showToast === 'function') showToast('⏳ جارٍ مزامنة البيانات السحابية أولاً، يرجى الانتظار ثوانٍ...', 3500);
+    return Promise.resolve();
+  }
+
+  // ⛔ ZERO-DATA-LOSS GUARD: Check if saving would cause bookmark or item drops
+  if (typeof window.checkDataLossGuard === 'function') {
+    const isSafe = await window.checkDataLossGuard(window.D, 'Manual Cloud Sync (syncNow)');
+    if (!isSafe) {
+      setOwnWrite(false);
+      console.warn('[SYNC ⛔] Sync cancelled by Zero-Data-Loss Protection.');
+      return Promise.resolve();
+    }
+  }
+
   showToast('🔄 Syncing to cloud...');
   setOwnWrite(true);
 
@@ -354,6 +371,10 @@
         D.groups = meta.groups || [{ id: 'g0', name: 'Main Group', envId: 'e0' }];
         D.inbox = meta.inbox || [];
         
+        if (meta.stats && typeof window.syncHighestCountsFromCloud === 'function') {
+          window.syncHighestCountsFromCloud(meta.stats);
+        }
+
         if (window.sanitizeData) {
           window.sanitizeData(D);
         }
@@ -489,6 +510,9 @@
           }
           isFirstLoad = false;
           switchActivePage(D.cur); // This will render All
+          setTimeout(() => {
+            window._initialSyncCompleted = true;
+          }, 1500);
         } else {
           renderMeta();
         }
@@ -622,7 +646,26 @@
     return;
   }
 
-  const doSave = () => {
+  const doSave = async () => {
+    if (!window._initialSyncCompleted && !_offlineMode && !window._bypassingInitialLock) {
+      console.warn('[SV ⛔] Cloud save blocked: Initial cloud sync not yet completed.');
+      return;
+    }
+
+    const activePg = cp();
+    const candidatePages = saveAll ? (D ? D.pages : []) : (activePg ? [activePg] : []);
+    if (typeof window.checkDataLossGuard === 'function') {
+      const isSafe = await window.checkDataLossGuard(
+        { pages: candidatePages, inbox: D ? D.inbox : [] },
+        'Auto Cloud Save'
+      );
+      if (!isSafe) {
+        setOwnWrite(false);
+        console.warn('[SV ⛔] Save cancelled by Zero-Data-Loss Protection.');
+        return;
+      }
+    }
+
     setOwnWrite(true);
 
     const metaRef = `users/${USER_ID}/startmine_meta`;
@@ -635,7 +678,8 @@
       curGroup: D.curGroup,
       environments: D.environments,
       groups: D.groups,
-      inbox: D.inbox
+      inbox: D.inbox,
+      stats: window._cloudStats || (typeof window.getHighestCounts === 'function' ? window.getHighestCounts() : null)
     };
 
     const pagesMeta = D.pages.filter(p => p).map(p => ({

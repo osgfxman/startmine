@@ -703,6 +703,18 @@
       const ok = confirm("هل تريد بالتأكيد حذف العنصر الأخير وجعل الصفحة فارغة تماماً؟");
       if (!ok) return;
     }
+    const deletedCard = page.miroCards.find((c) => c.id === cid);
+    if (deletedCard && typeof window.addToRecycleBin === 'function') {
+      window.addToRecycleBin({
+        type: 'card',
+        title: deletedCard.title || deletedCard.content || deletedCard.type || 'بطاقة ميرو',
+        url: deletedCard.url || deletedCard.linkUrl || '',
+        data: deletedCard,
+        sourcePageId: page.id,
+        sourcePageName: page.name
+      });
+    }
+
     page._bypassVersionGuard = true; // Bypass version guard!
     page.miroCards = page.miroCards.filter((c) => c.id !== cid);
     sv();

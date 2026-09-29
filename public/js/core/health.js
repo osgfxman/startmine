@@ -16,6 +16,8 @@
       { name: 'syncNow', test: () => typeof window.syncNow === 'function' },
       { name: 'sv', test: () => typeof window.sv === 'function' },
       { name: 'toggleOfflineMode', test: () => typeof window.toggleOfflineMode === 'function' },
+      { name: 'checkDataLossGuard', test: () => typeof window.checkDataLossGuard === 'function' },
+      { name: 'addToRecycleBin', test: () => typeof window.addToRecycleBin === 'function' },
 
       // UI layer
       { name: 'showToast', test: () => typeof window.showToast === 'function' },

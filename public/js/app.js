@@ -472,10 +472,14 @@ function autoSnapshot() {
     }
   });
   
-  // Keep last 5 snapshots (rotating)
-  idbSet('snapshot_' + (now % 5), snapshot).then(() => {
+  // Keep timestamped snapshots and latest snapshot
+  idbSet('snapshot_latest', snapshot);
+  idbSet('snapshot_' + now, snapshot).then(() => {
     console.log(`[AUTO-SNAPSHOT ✅] Full backup saved (${Object.keys(snapshot.pages).length} pages, ${new Date(now).toLocaleTimeString()})`);
   });
+  if (typeof saveSnapshot === 'function') {
+    saveSnapshot(true).catch(() => {});
+  }
 }
 // Run every 5 minutes (snapshot logic internally checks 15-min cooldown)
 setInterval(autoSnapshot, 5 * 60 * 1000);
@@ -483,9 +487,19 @@ setInterval(autoSnapshot, 5 * 60 * 1000);
 // ═══════════════════════════════════════════════════════════════
 // ██  LAYER 8: Page Version Tracking — never go backwards  ██
 // ═══════════════════════════════════════════════════════════════
+function getPageItemsCount(widgets, miroCards) {
+  let count = 0;
+  (widgets || []).forEach(w => {
+    if (w && Array.isArray(w.items)) count += w.items.length;
+    else if (w) count++;
+  });
+  count += (miroCards || []).length;
+  return count;
+}
+
 const _pageVersions = {}; // { pageId: { count, timestamp } }
 function trackPageVersion(pageId, widgets, miroCards) {
-  const count = (widgets || []).length + (miroCards || []).length;
+  const count = getPageItemsCount(widgets, miroCards);
   _pageVersions[pageId] = { count, ts: Date.now() };
 }
 function isVersionRegression(pageId, newWidgets, newMiroCards) {
@@ -495,17 +509,27 @@ function isVersionRegression(pageId, newWidgets, newMiroCards) {
     delete pg._bypassVersionGuard;
     return false;
   }
-  const prev = _pageVersions[pageId];
-  if (!prev) return false; // No previous version — ok
-  const newCount = (newWidgets || []).length + (newMiroCards || []).length;
+  let prev = _pageVersions[pageId];
+  if (!prev) {
+    const cached = typeof getCachedPageData === 'function' ? getCachedPageData(pageId) : null;
+    if (cached) {
+      const cachedCount = getPageItemsCount(cached.widgets, cached.miroCards);
+      if (cachedCount > 0) {
+        prev = { count: cachedCount, ts: cached.ts || 0 };
+      }
+    }
+  }
+  if (!prev) return false;
+
+  const newCount = getPageItemsCount(newWidgets, newMiroCards);
   // Regression = new count is 0 while previous was > 0
   if (newCount === 0 && prev.count > 0) {
     console.error(`[VERSION GUARD ⛔] Page ${pageId}: count went from ${prev.count} → ${newCount} — REGRESSION BLOCKED!`);
     return true;
   }
-  // Big drop (lost >50% of items in < 5 seconds) — suspicious
-  if (newCount < prev.count * 0.5 && Date.now() - prev.ts < 5000) {
-    console.error(`[VERSION GUARD ⚠️] Page ${pageId}: sudden drop from ${prev.count} → ${newCount} items in ${Date.now() - prev.ts}ms — suspicious!`);
+  // Drop of >30% of items
+  if (newCount < prev.count * 0.7 && prev.count > 3) {
+    console.error(`[VERSION GUARD ⚠️] Page ${pageId}: drop from ${prev.count} → ${newCount} items — REGRESSION BLOCKED!`);
     return true;
   }
   return false;
@@ -1220,12 +1244,11 @@ function switchActivePage(pageId) {
         return;
       }
 
-      // ⛔ GUARD: If Firebase sends empty but we have local data, refuse the overwrite 
-      // (Only do this if the server data is indeed older/equal, i.e., incomingTs <= localTs)
+      // ⛔ GUARD: If Firebase sends empty but we have local data, refuse the overwrite unconditionally
       const incomingEmpty = (incomingW === 0 && incomingC === 0 && incomingG === 0);
-      if (incomingEmpty && localHasData && incomingTs <= localTs) {
+      if (incomingEmpty && localHasData) {
         console.error(`[FIREBASE GUARD ⛔] Incoming data for "${pg.name}" is EMPTY but local has data/guides — IGNORING Firebase update!`);
-        if (typeof showToast === 'function') showToast('⚠️ Empty data from server ignored — local data preserved', 4000);
+        if (typeof showToast === 'function') showToast('⚠️ تم حظر مسح بيانات الصفحة محلياً (بيانات فارغة من السحابة)', 6000);
         return; // Don't apply empty data
       }
 
@@ -1275,6 +1298,7 @@ function switchActivePage(pageId) {
       
       pg.ts = incomingTs;
       pg._hasBeenLoaded = true;
+      window._initialSyncCompleted = true;
 
       // Cache to BOTH localStorage and IndexedDB
       cachePageData(pageId, {
@@ -1371,35 +1395,53 @@ function checkDataIntegrity(exportData, operationName = 'Backup') {
     return false;
   }
 
+  const counts = typeof window.countAllData === 'function' ? window.countAllData(exportData) : null;
   let totalItems = 0;
+  let totalBookmarks = 0;
   let emptyPagesCount = 0;
-  exportData.pages.forEach(p => {
-    const count = (p.widgets || []).length + (p.miroCards || []).length;
-    totalItems += count;
-    if (count === 0 && p.pageType !== 'slicer') emptyPagesCount++;
-  });
 
+  if (counts) {
+    totalItems = counts.total;
+    totalBookmarks = counts.bookmarks;
+    (exportData.pages || []).forEach(p => {
+      const c = ((p && p.widgets) || []).length + ((p && p.miroCards) || []).length;
+      if (c === 0 && p && p.pageType !== 'slicer') emptyPagesCount++;
+    });
+  } else {
+    (exportData.pages || []).forEach(p => {
+      const count = ((p && p.widgets) || []).length + ((p && p.miroCards) || []).length;
+      totalItems += count;
+      if (count === 0 && p && p.pageType !== 'slicer') emptyPagesCount++;
+    });
+  }
+
+  const highest = typeof window.getHighestCounts === 'function' ? window.getHighestCounts() : { bookmarks: 0, total: 0 };
   const LS_HIGHEST = 'sm_highest_item_count';
-  let highestCount = parseInt(localStorage.getItem(LS_HIGHEST) || '0', 10);
+  let highestCount = Math.max(highest.total, parseInt(localStorage.getItem(LS_HIGHEST) || '0', 10));
+  let highestBm = Math.max(highest.bookmarks, parseInt(localStorage.getItem('sm_highest_bookmarks') || '0', 10));
 
-  console.log(`[INTEGRITY CHECK] ${operationName}: Total items = ${totalItems} (Highest recorded: ${highestCount}), Pages: ${exportData.pages.length}, Empty pages: ${emptyPagesCount}`);
+  console.log(`[INTEGRITY CHECK] ${operationName}: Total items = ${totalItems} (Highest: ${highestCount}), Bookmarks = ${totalBookmarks} (Highest Bm: ${highestBm}), Pages: ${(exportData.pages || []).length}, Empty: ${emptyPagesCount}`);
 
   // Guard 1: Absolute empty wipe prevention
-  if (totalItems === 0 && highestCount > 10) {
-    const errMsg = `🚨 تم حظر العملية لحماية بياناتك!\nتم رصد 0 عنصر في العملية "${operationName}" بينما سجل مكتبتك يحتوي على ${highestCount} عنصر سابقاً.\nتم إيقاف الحفظ فوراً لمنع تصفير البيانات!`;
+  if (totalItems === 0 && (highestCount > 10 || highestBm > 10)) {
+    const errMsg = `🚨 تم حظر العملية لحماية بياناتك!\nتم رصد 0 عنصر في العملية "${operationName}" بينما سجل مكتبتك يحتوي على ${highestBm || highestCount} عنصر سابقاً.\nتم إيقاف الحفظ فوراً لمنع تصفير البيانات!`;
     console.error(`[DATA INTEGRITY GUARD] Blocked 0-item wipeout in ${operationName}`);
     if (typeof showToast === 'function') showToast('🚨 تم حظر الحفظ لمنع مسح البيانات!', 8000);
     alert(errMsg);
     return false;
   }
 
-  // Guard 2: Significant drop prevention (>15% drop when highestCount > 50)
-  if (highestCount > 50 && totalItems < Math.floor(highestCount * 0.85)) {
-    const drop = highestCount - totalItems;
-    const dropPct = Math.round((drop / highestCount) * 100);
+  // Guard 2: Significant drop prevention (>15% drop or drop in bookmarks)
+  const isDrop = (highestBm > 50 && totalBookmarks < Math.floor(highestBm * 0.85)) ||
+                 (highestCount > 50 && totalItems < Math.floor(highestCount * 0.85));
+
+  if (isDrop) {
+    const drop = highestBm > totalBookmarks ? (highestBm - totalBookmarks) : (highestCount - totalItems);
+    const base = highestBm > totalBookmarks ? highestBm : highestCount;
+    const dropPct = Math.round((drop / base) * 100);
     const confirmMsg = `⚠️ تحذير أمان وسلامة البيانات (DATA INTEGRITY GUARD):\n\n` +
-      `سجل مكتبتك سابقاً يحتوي على (${highestCount}) عنصر محفوظ.\n` +
-      `النسخة الحالية للعملية "${operationName}" تحتوي فقط على (${totalItems}) عنصر (فقدان ${drop} عنصر بنسبة ${dropPct}%!).\n\n` +
+      `سجل مكتبتك سابقاً يحتوي على (${base}) موقع/عنصر محفوظ.\n` +
+      `النسخة الحالية للعملية "${operationName}" تحتوي فقط على (${totalBookmarks || totalItems}) عنصر (فقدان ${drop} عنصر بنسبة ${dropPct}%!).\n\n` +
       `هل أنت متأكد تماماً أنك قمت بحذف هذه العناصر عن عمد وتريد استبدال النسخ الاحتياطية؟\n\n` +
       `اضغط Cancel لإلغاء الحفظ وحماية بياناتك السابقة.`;
     
@@ -1410,7 +1452,10 @@ function checkDataIntegrity(exportData, operationName = 'Backup') {
     }
   }
 
-  // Update highest count if current is larger
+  // Update highest count
+  if (counts && typeof window.updateHighestCounts === 'function') {
+    window.updateHighestCounts(counts);
+  }
   if (totalItems > highestCount) {
     try { localStorage.setItem(LS_HIGHEST, String(totalItems)); } catch(e) {}
   }
@@ -6467,7 +6512,16 @@ function delPage(pid) {
     alert('Cannot delete the only page in this group.');
     return;
   }
-  if (!confirm('Delete this page?')) return;
+  if (!confirm('Delete this page? (ستبقى الصفحة ومحتوياتها محفوظة في سلة المحذوفات لمدة 30 يوم)')) return;
+  if (pg && typeof window.addToRecycleBin === 'function') {
+    window.addToRecycleBin({
+      type: 'page',
+      title: pg.name || 'صفحة',
+      data: pg,
+      sourcePageId: pg.id,
+      sourcePageName: pg.name
+    });
+  }
 
   // FIX: Queue deleted page ID for Firebase cleanup
   _pendingDeletePageIds.push(pid);
@@ -7718,6 +7772,27 @@ function delWidget(wid) {
     affectedPage._bypassVersionGuard = true;
   }
 
+  let deletedWidget = null;
+  let deletedFromPage = null;
+  D.pages.forEach((p) => {
+    if (p && p.widgets) {
+      const found = p.widgets.find((w) => w.id === wid);
+      if (found) { deletedWidget = found; deletedFromPage = p; }
+    }
+  });
+
+  if (deletedWidget && typeof window.addToRecycleBin === 'function') {
+    window.addToRecycleBin({
+      type: 'widget',
+      title: deletedWidget.title || 'ويدجت',
+      data: deletedWidget,
+      sourceWidgetId: wid,
+      sourceWidgetTitle: deletedWidget.title || '',
+      sourcePageId: deletedFromPage ? deletedFromPage.id : '',
+      sourcePageName: deletedFromPage ? deletedFromPage.name : ''
+    });
+  }
+
   D.pages.forEach((p) => {
     p.widgets = (p.widgets || []).filter((w) => w.id !== wid);
     p.miroCards = (p.miroCards || []).filter((c) => c && c.id !== wid);
@@ -7728,6 +7803,20 @@ function delWidget(wid) {
 function rmItem(wid, itemId) {
   const w = fw(wid);
   if (!w || !w.items) return;
+  const deletedItem = w.items.find((i) => i.id === itemId);
+  if (deletedItem && typeof window.addToRecycleBin === 'function') {
+    const curP = typeof cp === 'function' ? cp() : null;
+    window.addToRecycleBin({
+      type: 'bookmark',
+      title: deletedItem.label || deletedItem.url || 'رابط بوكمارك',
+      url: deletedItem.url || '',
+      data: deletedItem,
+      sourceWid: wid,
+      sourceWidgetTitle: w.title || '',
+      sourcePageId: curP ? curP.id : '',
+      sourcePageName: curP ? curP.name : ''
+    });
+  }
   w.items = w.items.filter((i) => i.id !== itemId);
 
   // Sync removal across dual-view if present in counterpart
