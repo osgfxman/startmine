@@ -3,7 +3,7 @@
  * @description Advanced Zero-Data-Loss Protection, Drop Interceptor, Cloud Item Tracker, and 30-Day Recycle Bin
  * @namespace SM.data.protection
  * @depends namespace.js, events.js, utils.js, firebase.js
- * @provides window.countAllData, window.checkDataLossGuard, window.showDropWarningModal, window.addToRecycleBin, window.restoreRecycleBinItem, window.openRecycleBinModal, window.closeRecycleBinModal, window.saveSafetySnapshot
+ * @provides window.countAllData, window.checkDataLossGuard, window.showDropWarningModal, window.addToRecycleBin, window.restoreRecycleBinItem, window.openRecycleBinModal, window.closeRecycleBinModal, window.saveSafetySnapshot, window.recalibrateHighestCounts
  * @safety Never allow silent overwrites or drops. All deleted items preserved for 30 days.
  */
 // js/data/protection.js
@@ -23,57 +23,93 @@
   window._activeWarningResolve = null;
 
   /* ─────────────────────────────────────────────────────────────
-   * 1. ACCURATE ITEM & BOOKMARK COUNTER
+   * 1. ACCURATE ITEM & BOOKMARK COUNTER (DUAL-VIEW DEDUPLICATED)
    * ───────────────────────────────────────────────────────────── */
   function countAllData(source) {
     const d = source || window.D;
-    if (!d) return { bookmarks: 0, widgets: 0, widgetItems: 0, cards: 0, pages: 0, inbox: 0, total: 0 };
+    if (!d) return { bookmarks: 0, widgets: 0, widgetItems: 0, cards: 0, pages: 0, inbox: 0, total: 0, rawCombinedBm: 0 };
 
-    let bookmarks = 0;
-    let widgets = 0;
-    let widgetItems = 0;
-    let cards = 0;
+    let totalBookmarks = 0;
+    let totalWidgets = 0;
+    let totalWidgetItems = 0;
+    let totalCards = 0;
+    let rawCombinedBm = 0;
 
     const pagesList = Array.isArray(d.pages) ? d.pages : (d.pages && typeof d.pages === 'object' ? Object.values(d.pages) : []);
 
     pagesList.forEach(p => {
       if (!p) return;
-      if (Array.isArray(p.widgets)) {
-        widgets += p.widgets.length;
-        p.widgets.forEach(w => {
+
+      // Ensure background unhydrated pages read from cache if available
+      let widgets = p.widgets;
+      let miroCards = p.miroCards;
+      if ((!widgets || widgets.length === 0) && (!miroCards || miroCards.length === 0) && p.id && typeof getCachedPageData === 'function') {
+        try {
+          const cached = getCachedPageData(p.id);
+          if (cached) {
+            if (cached.widgets && cached.widgets.length > 0) widgets = cached.widgets;
+            if (cached.miroCards && cached.miroCards.length > 0) miroCards = cached.miroCards;
+          }
+        } catch(e) {}
+      }
+
+      let pageWidgetBm = 0;
+      let pageWidgetItems = 0;
+      if (Array.isArray(widgets)) {
+        totalWidgets += widgets.length;
+        widgets.forEach(w => {
           if (w && Array.isArray(w.items)) {
-            widgetItems += w.items.length;
+            pageWidgetItems += w.items.length;
             w.items.forEach(it => {
-              if (it && (it.url || it.label)) bookmarks++;
+              if (it && (it.url || it.label)) pageWidgetBm++;
             });
           }
         });
       }
-      if (Array.isArray(p.miroCards)) {
-        cards += p.miroCards.length;
-        p.miroCards.forEach(c => {
-          if (c && (c.type === 'bookmark' || c.url || c.linkUrl)) bookmarks++;
+      totalWidgetItems += pageWidgetItems;
+
+      let pageMiroBm = 0;
+      if (Array.isArray(miroCards)) {
+        totalCards += miroCards.length;
+        miroCards.forEach(c => {
+          if (!c) return;
+          if (c.type === 'bwidget' && Array.isArray(c.items)) {
+            c.items.forEach(it => {
+              if (it && (it.url || it.label)) pageMiroBm++;
+            });
+          } else if (c.type === 'bookmark' || c.url || c.linkUrl) {
+            pageMiroBm++;
+          }
         });
       }
+
+      rawCombinedBm += (pageWidgetBm + pageMiroBm);
+
+      // In Startmine's dual-view architecture, StartMe widgets and Miro cards on the same page
+      // are twin reflections of the exact same bookmarks.
+      // The true deduplicated count for page p is Math.max(pageWidgetBm, pageMiroBm):
+      const pageDeduplicatedBm = Math.max(pageWidgetBm, pageMiroBm);
+      totalBookmarks += pageDeduplicatedBm;
     });
 
     const inboxCount = Array.isArray(d.inbox) ? d.inbox.length : 0;
-    const nonBmWidgetItems = widgetItems > bookmarks ? (widgetItems - bookmarks) : 0;
-    const total = bookmarks + cards + nonBmWidgetItems + inboxCount;
+    const nonBmWidgetItems = totalWidgetItems > totalBookmarks ? (totalWidgetItems - totalBookmarks) : 0;
+    const total = totalBookmarks + totalCards + nonBmWidgetItems + inboxCount;
 
     return {
-      bookmarks,
-      widgets,
-      widgetItems,
-      cards,
+      bookmarks: totalBookmarks,
+      widgets: totalWidgets,
+      widgetItems: totalWidgetItems,
+      cards: totalCards,
       pages: pagesList.length,
       inbox: inboxCount,
-      total
+      total,
+      rawCombinedBm
     };
   }
 
   /* ─────────────────────────────────────────────────────────────
-   * 2. GOLDEN RECORD TRACKING (LOCAL + CLOUD)
+   * 2. GOLDEN RECORD TRACKING (LOCAL + CLOUD) & RECALIBRATION
    * ───────────────────────────────────────────────────────────── */
   function getHighestCounts() {
     let bm = parseInt(localStorage.getItem(LS_KEY_HIGHEST_BM) || '0', 10);
@@ -86,6 +122,63 @@
         total = window._cloudStats.highestTotal;
       }
     }
+
+    // Auto-recalibrate if highest was inflated by v274 dual-view doubling
+    if (window.D && bm > 0) {
+      const live = countAllData(window.D);
+      if (live.bookmarks > 0) {
+        const isInflatedDouble = (live.rawCombinedBm > 0 && Math.abs(bm - live.rawCombinedBm) <= 30) ||
+                                 (Math.abs(bm - (live.bookmarks * 2)) <= 30);
+        if (isInflatedDouble && live.bookmarks >= 20) {
+          console.warn(`[DATA LOSS GUARD 🔄] Auto-recalibrating inflated dual-view baseline: was ${bm}, corrected to ${live.bookmarks}`);
+          bm = live.bookmarks;
+          total = live.total;
+          try {
+            localStorage.setItem(LS_KEY_HIGHEST_BM, String(bm));
+            localStorage.setItem(LS_KEY_HIGHEST_TOTAL, String(total));
+          } catch(e) {}
+          if (window._cloudStats) {
+            window._cloudStats.highestBookmarks = bm;
+            window._cloudStats.highestTotal = total;
+          }
+          if (window.USER_ID && window.db) {
+            window.db.ref(`users/${window.USER_ID}/startmine_meta/stats`).update({
+              highestBookmarks: bm,
+              highestTotal: total,
+              lastUpdated: Date.now()
+            }).catch(e => console.warn('[STATS CLOUD UPDATE]', e));
+          }
+        }
+      }
+    }
+
+    return { bookmarks: bm, total: total };
+  }
+
+  function recalibrateHighestCounts(newBm, newTotal) {
+    let bm = typeof newBm === 'number' ? newBm : 0;
+    let total = typeof newTotal === 'number' ? newTotal : 0;
+    if (!bm && window.D) {
+      const counts = countAllData(window.D);
+      bm = counts.bookmarks;
+      total = counts.total;
+    }
+    try {
+      localStorage.setItem(LS_KEY_HIGHEST_BM, String(bm));
+      localStorage.setItem(LS_KEY_HIGHEST_TOTAL, String(total));
+    } catch(e) {}
+    if (window._cloudStats) {
+      window._cloudStats.highestBookmarks = bm;
+      window._cloudStats.highestTotal = total;
+    }
+    if (window.USER_ID && window.db) {
+      window.db.ref(`users/${window.USER_ID}/startmine_meta/stats`).update({
+        highestBookmarks: bm,
+        highestTotal: total,
+        lastUpdated: Date.now()
+      }).catch(e => console.warn('[RECALIBRATE STATS FB]', e));
+    }
+    console.log(`[PROTECTION] Golden bookmark baseline recalibrated to ${bm} (Total: ${total})`);
     return { bookmarks: bm, total: total };
   }
 
@@ -120,12 +213,30 @@
     let localBm = parseInt(localStorage.getItem(LS_KEY_HIGHEST_BM) || '0', 10);
     let localTotal = parseInt(localStorage.getItem(LS_KEY_HIGHEST_TOTAL) || '0', 10);
 
-    if (cloudStats.highestBookmarks && cloudStats.highestBookmarks > localBm) {
-      localBm = cloudStats.highestBookmarks;
+    let cloudBm = cloudStats.highestBookmarks || 0;
+    let cloudTotal = cloudStats.highestTotal || 0;
+
+    // Check if cloud was also inflated by v274 doubling
+    if (window.D && cloudBm > 0) {
+      const live = countAllData(window.D);
+      if (live.bookmarks > 0) {
+        const isInflatedDouble = (live.rawCombinedBm > 0 && Math.abs(cloudBm - live.rawCombinedBm) <= 30) ||
+                                 (Math.abs(cloudBm - (live.bookmarks * 2)) <= 30);
+        if (isInflatedDouble && live.bookmarks >= 20) {
+          cloudBm = live.bookmarks;
+          cloudTotal = live.total;
+          window._cloudStats.highestBookmarks = cloudBm;
+          window._cloudStats.highestTotal = cloudTotal;
+        }
+      }
+    }
+
+    if (cloudBm > localBm) {
+      localBm = cloudBm;
       try { localStorage.setItem(LS_KEY_HIGHEST_BM, String(localBm)); } catch(e) {}
     }
-    if (cloudStats.highestTotal && cloudStats.highestTotal > localTotal) {
-      localTotal = cloudStats.highestTotal;
+    if (cloudTotal > localTotal) {
+      localTotal = cloudTotal;
       try { localStorage.setItem(LS_KEY_HIGHEST_TOTAL, String(localTotal)); } catch(e) {}
     }
   }
@@ -156,10 +267,14 @@
     const totalDrop = baselineTotal - candidate.total;
 
     // Detect dangerous loss:
-    // 1. Any drop in bookmarks when baseline was non-zero
-    // 2. Total items dropped significantly (>10% or >5 items)
-    const isDangerousLoss = (baselineBm > 0 && candidate.bookmarks < baselineBm) ||
-                            (baselineTotal > 5 && totalDrop > 5);
+    // 1. Total wipeout: bookmarks drop to near 0 while baseline had substantial bookmarks
+    // 2. Massive bookmark drop: >15% drop AND losing 25+ bookmarks at once
+    // 3. Massive total items drop: >20% drop AND losing 40+ total items at once
+    const isWipeout = (baselineBm >= 20 && candidate.bookmarks <= 5);
+    const isMassiveBmDrop = (baselineBm >= 20 && bmDrop >= 25 && candidate.bookmarks < Math.floor(baselineBm * 0.85));
+    const isMassiveTotalDrop = (baselineTotal >= 30 && totalDrop >= 40 && candidate.total < Math.floor(baselineTotal * 0.80));
+
+    const isDangerousLoss = isWipeout || isMassiveBmDrop || isMassiveTotalDrop;
 
     if (isDangerousLoss) {
       console.warn(`[DATA LOSS GUARD 🚨] ${operationName} detected drop! Baseline: ${baselineBm} bookmarks (${baselineTotal} items) vs Target: ${candidate.bookmarks} bookmarks (${candidate.total} items). Drop: -${bmDrop}`);
@@ -257,6 +372,9 @@
             </button>
 
             <div style="display:flex; gap:8px; margin-top:4px;">
+              <button id="btn-drop-recalibrate" class="btn" style="flex:1; background:rgba(255, 209, 102, 0.15); border:1px solid rgba(255,209,102,0.4); color:#ffd166; padding:9px; border-radius:10px; cursor:pointer; font-size:0.78rem;">
+                ⚖️ معايرة العداد (الروابط سليمة ومكررة في Miro)
+              </button>
               <button id="btn-drop-confirm-deliberate" class="btn" style="flex:1; background:rgba(255, 68, 68, 0.15); border:1px solid rgba(255,68,68,0.4); color:#ff7b7b; padding:9px; border-radius:10px; cursor:pointer; font-size:0.78rem;">
                 ⚠️ أؤكد الحذف بنفسي (أنا من قمت بحذف هذه الروابط عمداً)
               </button>
@@ -290,6 +408,17 @@
           window.syncNow();
         }
       };
+
+      const recalibrateBtn = document.getElementById('btn-drop-recalibrate');
+      if (recalibrateBtn) {
+        recalibrateBtn.onclick = () => {
+          recalibrateHighestCounts(params.candidateBm, params.candidateTotal);
+          if (typeof window.showToast === 'function') {
+            window.showToast(`✅ تم إعادة معايرة عداد المواقع بنجاح (${params.candidateBm} رابط)!`, 4000);
+          }
+          closeWith(true);
+        };
+      }
 
       document.getElementById('btn-drop-confirm-deliberate').onclick = () => {
         const sure = confirm(`تأكيد نهائي صارم:\nهل أنت متأكد تماماً من رغبتك في حذف ${params.bmDrop} رابط واستبدال النسخة بـ (${params.candidateBm}) فقط؟`);
@@ -756,6 +885,7 @@
   SM.data.protection = {
     countAllData,
     getHighestCounts,
+    recalibrateHighestCounts,
     updateHighestCounts,
     syncHighestCountsFromCloud,
     checkDataLossGuard,
@@ -772,6 +902,7 @@
 
   // Expose to window for inline HTML handlers & legacy inter-op
   window.countAllData = countAllData;
+  window.recalibrateHighestCounts = recalibrateHighestCounts;
   window.checkDataLossGuard = checkDataLossGuard;
   window.showDropWarningModal = showDropWarningModal;
   window.addToRecycleBin = addToRecycleBin;

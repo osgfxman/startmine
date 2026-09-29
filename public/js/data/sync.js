@@ -653,11 +653,10 @@
     }
 
     const activePg = cp();
-    const candidatePages = saveAll ? (D ? D.pages : []) : (activePg ? [activePg] : []);
     if (typeof window.checkDataLossGuard === 'function') {
       const isSafe = await window.checkDataLossGuard(
-        { pages: candidatePages, inbox: D ? D.inbox : [] },
-        'Auto Cloud Save'
+        window.D,
+        saveAll ? 'Full Cloud Save (All Pages)' : 'Auto Cloud Save'
       );
       if (!isSafe) {
         setOwnWrite(false);

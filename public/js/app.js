@@ -7073,9 +7073,10 @@ async function applyStartMePageSettings(targetPages, options) {
     updatedCount++;
   }
 
-  // 8. Sanitize & Save ALL pages to Firebase and local storage
+  // 8. Sanitize & Save pages to Firebase and local storage
+  const isMultiPage = targetPages.length > 1;
   if (typeof sanitizeData === 'function') sanitizeData(D);
-  if (typeof sv === 'function') sv(true, true);
+  if (typeof sv === 'function') sv(isMultiPage, true);
 
   // 9. Re-render UI if on current page
   const activePage = cp();
