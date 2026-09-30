@@ -57,14 +57,21 @@ const TAB_COLORS = [
 ];
 function isPagePayloadEqual(p1, p2) {
   if (!p1 || !p2) return false;
+  const _arr = (v) => Array.isArray(v) ? v : (v && typeof v === 'object' ? Object.values(v) : []);
   const fields = [
     'widgets', 'miroCards', 'vGuides', 'hGuides', '_guidesMode', 'lockedGuides',
     'cellStates', 'mergedCells', 'customCells', 'cellGuides', '_layoutGuidesMode',
     'gridRows', 'gridCols', 'cellPages', 'slicerColSizes', 'slicerRowSizes'
   ];
   for (const f of fields) {
-    const v1 = JSON.stringify(p1[f] || (f === 'cellStates' ? {} : (f === '_guidesMode' || f === '_layoutGuidesMode' ? false : [])));
-    const v2 = JSON.stringify(p2[f] || (f === 'cellStates' ? {} : (f === '_guidesMode' || f === '_layoutGuidesMode' ? false : [])));
+    let val1 = p1[f];
+    let val2 = p2[f];
+    if (f === 'widgets' || f === 'miroCards' || f === 'vGuides' || f === 'hGuides' || f === 'customCells' || f === 'mergedCells') {
+      val1 = _arr(val1);
+      val2 = _arr(val2);
+    }
+    const v1 = JSON.stringify(val1 || (f === 'cellStates' ? {} : (f === '_guidesMode' || f === '_layoutGuidesMode' ? false : [])));
+    const v2 = JSON.stringify(val2 || (f === 'cellStates' ? {} : (f === '_guidesMode' || f === '_layoutGuidesMode' ? false : [])));
     if (v1 !== v2) return false;
   }
   return true;
@@ -1109,12 +1116,13 @@ function switchActivePage(pageId) {
       if (mzPct) mzPct.textContent = (activePg.zoom || 100) + '%';
     }
 
+    const _ensureArr = (v) => Array.isArray(v) ? v : (v && typeof v === 'object' ? Object.values(v) : []);
     const cachedPage = getCachedPageData(pageId);
-    if (cachedPage && ((cachedPage.widgets || []).length > 0 || (cachedPage.miroCards || []).length > 0 || (cachedPage.vGuides || []).length > 0 || (cachedPage.hGuides || []).length > 0 || (cachedPage.customCells || []).length > 0 || cachedPage.pageType === 'slicer' || cachedPage.gridRows)) {
+    if (cachedPage && (_ensureArr(cachedPage.widgets).length > 0 || _ensureArr(cachedPage.miroCards).length > 0 || (cachedPage.vGuides || []).length > 0 || (cachedPage.hGuides || []).length > 0 || (cachedPage.customCells || []).length > 0 || cachedPage.pageType === 'slicer' || cachedPage.gridRows)) {
       const pg = cp();
       if (pg) {
-        pg.widgets = cachedPage.widgets || [];
-        pg.miroCards = cachedPage.miroCards || [];
+        pg.widgets = _ensureArr(cachedPage.widgets);
+        pg.miroCards = _ensureArr(cachedPage.miroCards);
         pg.vGuides = cachedPage.vGuides || [];
         pg.hGuides = cachedPage.hGuides || [];
         pg._guidesMode = cachedPage._guidesMode || false;
@@ -1149,19 +1157,20 @@ function switchActivePage(pageId) {
       }
       // Try IndexedDB async (larger, more reliable cache)
       getCachedPageDataAsync(pageId).then(idbCached => {
-      if (idbCached && ((idbCached.widgets || []).length > 0 || (idbCached.miroCards || []).length > 0 || (idbCached.vGuides || []).length > 0 || (idbCached.hGuides || []).length > 0 || (idbCached.customCells || []).length > 0 || idbCached.pageType === 'slicer' || idbCached.gridRows)) {
+      const _ensureArr = (v) => Array.isArray(v) ? v : (v && typeof v === 'object' ? Object.values(v) : []);
+      if (idbCached && (_ensureArr(idbCached.widgets).length > 0 || _ensureArr(idbCached.miroCards).length > 0 || (idbCached.vGuides || []).length > 0 || (idbCached.hGuides || []).length > 0 || (idbCached.customCells || []).length > 0 || idbCached.pageType === 'slicer' || idbCached.gridRows)) {
         const pg = cp();
         if (pg && pg.id === pageId) { // Make sure we're still on same page
           // ⛔ RACE CONDITION GUARD: Only reject if local memory ACTUALLY has data AND newer timestamp!
-          const localHasData = (pg.widgets && pg.widgets.length > 0) || (pg.miroCards && pg.miroCards.length > 0) || (pg.customCells && pg.customCells.length > 0);
+          const localHasData = (_ensureArr(pg.widgets).length > 0) || (_ensureArr(pg.miroCards).length > 0) || ((pg.customCells || []).length > 0);
           const localTs = pg.ts || 0;
           const cachedTs = idbCached.ts || 0;
           if (localHasData && localTs > cachedTs) {
             console.warn(`[IDB RESTORE GUARD ⛔] Page "${pg.name}" already has newer local data (${localTs}) than IndexedDB cache (${cachedTs}) — skipping overwrite.`);
             return;
           }
-          pg.widgets = idbCached.widgets || [];
-          pg.miroCards = idbCached.miroCards || [];
+          pg.widgets = _ensureArr(idbCached.widgets);
+          pg.miroCards = _ensureArr(idbCached.miroCards);
           pg.vGuides = idbCached.vGuides || [];
           pg.hGuides = idbCached.hGuides || [];
           pg._guidesMode = idbCached._guidesMode || false;
@@ -1229,11 +1238,12 @@ function switchActivePage(pageId) {
         pg.ts = pData.ts || 0;
         return;
       }
-      const incomingW = (pData.widgets || []).length;
-      const incomingC = (pData.miroCards || []).length;
+      const _ensureArr = (v) => Array.isArray(v) ? v : (v && typeof v === 'object' ? Object.values(v) : []);
+      const incomingW = _ensureArr(pData.widgets).length;
+      const incomingC = _ensureArr(pData.miroCards).length;
       const incomingG = (pData.vGuides || []).length + (pData.hGuides || []).length + (pData.customCells || []).length;
-      const localW = (pg.widgets || []).length;
-      const localC = (pg.miroCards || []).length;
+      const localW = _ensureArr(pg.widgets).length;
+      const localC = _ensureArr(pg.miroCards).length;
       const localG = (pg.vGuides || []).length + (pg.hGuides || []).length + (pg.customCells || []).length;
       const localHasData = (localW > 0 || localC > 0 || localG > 0);
 
@@ -1255,8 +1265,8 @@ function switchActivePage(pageId) {
         return; // Don't apply empty data
       }
 
-      pg.widgets = pData.widgets || [];
-      pg.miroCards = pData.miroCards || [];
+      pg.widgets = _ensureArr(pData.widgets);
+      pg.miroCards = _ensureArr(pData.miroCards);
       if (pData.vGuides !== undefined) pg.vGuides = pData.vGuides;
       else if (pg.vGuides === undefined) pg.vGuides = [];
       
@@ -6692,10 +6702,14 @@ if (document.getElementById('mz-autofit-btn')) {
 
 function buildCols() {
   const page = cp();
+  if (!page) return;
+  const _ensureArr = (arr) => Array.isArray(arr) ? arr : (arr && typeof arr === 'object' ? Object.values(arr) : []);
+  page.widgets = _ensureArr(page.widgets);
+  page.miroCards = _ensureArr(page.miroCards);
   const isMiro = page.pageType === 'miro';
   
   // Diagnostic Log inside the main render function
-  console.log('[RENDER] Rendering page:', page.name, 'pageType:', page.pageType, 'widgets:', (page.widgets||[]).length, 'miroCards:', (page.miroCards||[]).length);
+  console.log('[RENDER] Rendering page:', page.name, 'pageType:', page.pageType, 'widgets:', page.widgets.length, 'miroCards:', page.miroCards.length);
   
   const wrap = document.getElementById('cw');
   wrap.classList.remove('cw-slicer');
@@ -6817,9 +6831,12 @@ function buildCols() {
       reorderStartMeWidget(page, dragWid, null, null, ci);
       dragWid = null;
     });
-    const colWidgets = (page.widgets || []).filter((w) => w.col === ci);
+    const _ensureArr = (arr) => Array.isArray(arr) ? arr : (arr && typeof arr === 'object' ? Object.values(arr) : []);
+    const pWidgets = _ensureArr(page.widgets);
+    page.widgets = pWidgets;
+    const colWidgets = pWidgets.filter((w) => w && w.col === ci);
     if (ci === numCols - 1) {
-      (page.widgets || []).filter((w) => w.col >= numCols).forEach((w) => colWidgets.push(w));
+      pWidgets.filter((w) => w && w.col >= numCols).forEach((w) => colWidgets.push(w));
     }
     colWidgets.forEach((w) => col.appendChild(buildWidget(w)));
     const ab = document.createElement('button');
@@ -7383,8 +7400,9 @@ function moveBookmarkItem(bmId, srcWid, targetWid, insertIdx = null, fallbackIte
   dragWid = null;
 
   // 6. Persist & Re-render
+  page.ts = Date.now();
   if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page.id, page);
-  if (typeof sv === 'function') sv();
+  if (typeof sv === 'function') sv(false, true);
   const isMiro = (page && page.pageType === 'miro');
   if (typeof buildCols === 'function' && !isMiro) buildCols();
   if (typeof buildMiroCanvas === 'function' && isMiro) buildMiroCanvas();
@@ -7444,8 +7462,9 @@ function moveInboxItem(inboxId, targetWid, insertIdx = null) {
   window._dragInboxId = null;
   dragWid = null;
 
+  page.ts = Date.now();
   if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page.id, page);
-  if (typeof sv === 'function') sv();
+  if (typeof sv === 'function') sv(false, true);
   const isMiro = (page && page.pageType === 'miro');
   if (typeof buildCols === 'function' && !isMiro) buildCols();
   if (typeof buildMiroCanvas === 'function' && isMiro) buildMiroCanvas();
@@ -8115,8 +8134,10 @@ function delWidget(wid) {
   D.pages.forEach((p) => {
     p.widgets = (p.widgets || []).filter((w) => w.id !== wid);
     p.miroCards = (p.miroCards || []).filter((c) => c && c.id !== wid);
+    p.ts = Date.now();
+    if (typeof cachePageDataSafe === 'function') cachePageDataSafe(p.id, p);
   });
-  sv();
+  sv(false, true);
   buildCols();
 }
 function rmItem(wid, itemId) {
@@ -8155,9 +8176,10 @@ function rmItem(wid, itemId) {
         matchC.h = Math.max(matchC.h || 200, 70 + (reqRows * itemPx));
       }
     }
+    page.ts = Date.now();
+    if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page.id, page);
   }
-
-  sv();
+  sv(false, true);
   if (cp().pageType === 'miro') {
     if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
   } else {
@@ -8209,7 +8231,9 @@ document.getElementById('ok-aw').onclick = () => {
   const page = D.pages.find(p => p.id === targetPageId) || cp();
   if (!page.widgets) page.widgets = [];
   page.widgets.push(w);
-  sv();
+  page.ts = Date.now();
+  if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page.id, page);
+  if (typeof sv === 'function') sv(false, true);
   buildCols();
   closeM('m-aw');
   window._widgetAddTargetPageId = null;
@@ -8261,7 +8285,11 @@ document.getElementById('ok-bm').onclick = () => {
     }
   }
 
-  sv();
+  if (curPage) {
+    curPage.ts = Date.now();
+    if (typeof cachePageDataSafe === 'function') cachePageDataSafe(curPage.id, curPage);
+  }
+  sv(false, true);
   if (cp().pageType === 'miro') {
     if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
   } else {

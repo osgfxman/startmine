@@ -331,8 +331,9 @@
           const cachedPage = getCachedPageData(D.cur);
           const pg = cp();
           if (pg && cachedPage) {
-            pg.widgets = cachedPage.widgets || [];
-            pg.miroCards = cachedPage.miroCards || [];
+            const ensureArray = (arr) => Array.isArray(arr) ? arr : (arr && typeof arr === 'object' ? Object.values(arr) : []);
+            pg.widgets = ensureArray(cachedPage.widgets);
+            pg.miroCards = ensureArray(cachedPage.miroCards);
             pg.vGuides = cachedPage.vGuides || [];
             pg.hGuides = cachedPage.hGuides || [];
             pg._guidesMode = cachedPage._guidesMode || false;
@@ -347,6 +348,7 @@
               miroCards: JSON.stringify(pg.miroCards)
             };
           }
+          window._initialSyncCompleted = true;
           renderMeta();
           buildCols();
           setSyncStatus('ok', 'Loaded from cache — syncing…');
@@ -540,7 +542,7 @@
           }
           window._isFbConnected = true;
           console.log('[SYNC] Connected successfully');
-          if (!isFirstLoad && (typeof _syncMode === 'undefined' || _syncMode === 'realtime')) {
+          if (typeof _syncMode === 'undefined' || _syncMode === 'realtime') {
             if (typeof setSyncStatus === 'function') {
               setSyncStatus('ok', 'Realtime Sync Active \u2713');
             }
@@ -673,7 +675,9 @@
   }
 
   const doSave = async () => {
-    if (!window._initialSyncCompleted && !_offlineMode && !window._bypassingInitialLock) {
+    const hasPages = window.D && Array.isArray(window.D.pages) && window.D.pages.length > 0;
+    if (hasPages) window._initialSyncCompleted = true;
+    if (!window._initialSyncCompleted && !hasPages && !_offlineMode && !window._bypassingInitialLock) {
       console.warn('[SV ⛔] Cloud save blocked: Initial cloud sync not yet completed.');
       return;
     }
@@ -936,12 +940,6 @@
                 return;
               }
             }
-            // ─── VERSION REGRESSION GUARD ───
-            if (isVersionRegression(activePg.id, activePg.widgets, activePg.miroCards)) {
-              console.error(`[SV GUARD] 🚨 Version regression on "${activePg.name}" — save blocked!`);
-              if (typeof showToast === 'function') showToast('⚠️ Suspicious data drop detected — save blocked', 5000);
-              return;
-            }
             trackPageVersion(activePg.id, activePg.widgets, activePg.miroCards);
             activePg.ts = Date.now(); // Update timestamp on every save
             updates[`users/${USER_ID}/startmine_pages/${activePg.id}/cols`] = activePg.cols !== undefined ? activePg.cols : 3;
@@ -967,46 +965,9 @@
               updates[`users/${USER_ID}/startmine_pages/${activePg.id}/slicerColSizes`] = activePg.slicerColSizes || null;
               updates[`users/${USER_ID}/startmine_pages/${activePg.id}/slicerRowSizes`] = activePg.slicerRowSizes || null;
 
-              const oldWidgets = JSON.parse(_lastSyncedPageData.widgets || '[]');
-              const oldCards = JSON.parse(_lastSyncedPageData.miroCards || '[]');
-              const curWidgets = activePg.widgets || [];
-              const curCards = activePg.miroCards || [];
-
-              let widgetsChanged = false;
-              if (oldWidgets.length !== curWidgets.length) widgetsChanged = true;
-              else {
-                for (let i = 0; i < curWidgets.length; i++) {
-                  if (!curWidgets[i] || !oldWidgets[i] || curWidgets[i].id !== oldWidgets[i].id) { widgetsChanged = true; break; }
-                }
-              }
-
-              if (widgetsChanged) {
-                updates[`users/${USER_ID}/startmine_pages/${activePg.id}/widgets`] = curWidgets;
-              } else {
-                for (let i = 0; i < curWidgets.length; i++) {
-                  if (!curWidgets[i] || !oldWidgets[i] || JSON.stringify(curWidgets[i]) !== JSON.stringify(oldWidgets[i])) {
-                    updates[`users/${USER_ID}/startmine_pages/${activePg.id}/widgets/${i}`] = curWidgets[i];
-                  }
-                }
-              }
-
-              let cardsChanged = false;
-              if (oldCards.length !== curCards.length) cardsChanged = true;
-              else {
-                for (let i = 0; i < curCards.length; i++) {
-                  if (!curCards[i] || !oldCards[i] || curCards[i].id !== oldCards[i].id) { cardsChanged = true; break; }
-                }
-              }
-
-              if (cardsChanged) {
-                updates[`users/${USER_ID}/startmine_pages/${activePg.id}/miroCards`] = curCards;
-              } else {
-                for (let i = 0; i < curCards.length; i++) {
-                  if (!curCards[i] || !oldCards[i] || JSON.stringify(curCards[i]) !== JSON.stringify(oldCards[i])) {
-                    updates[`users/${USER_ID}/startmine_pages/${activePg.id}/miroCards/${i}`] = curCards[i];
-                  }
-                }
-              }
+              // Write widgets and miroCards atomically as full arrays to prevent array-object corruption in Firebase
+              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/widgets`] = activePg.widgets || [];
+              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/miroCards`] = activePg.miroCards || [];
 
               // Update baseline payload
               _lastSyncedPageData.widgets = curWidgetsStr;
@@ -1042,10 +1003,6 @@
                 console.warn(`[SV GUARD ⛔] Subpage "${p.name}" (${p.id}) resolved to empty in memory but had cached data — save skipped to prevent data loss.`);
                 return;
               }
-            }
-            if (isVersionRegression(p.id, p.widgets, p.miroCards)) {
-              console.error(`[SV GUARD] 🚨 Version regression on subpage "${p.name}" — save blocked!`);
-              return;
             }
             trackPageVersion(p.id, p.widgets, p.miroCards);
             p.ts = Date.now();

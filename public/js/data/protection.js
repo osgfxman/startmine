@@ -18,7 +18,6 @@
   const RECYCLE_BIN_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 Days in ms
 
   window._cloudStats = window._cloudStats || null;
-  window._initialSyncCompleted = false;
   window._userConfirmedDataLoss = false;
   window._activeWarningResolve = null;
 
