@@ -343,6 +343,13 @@
             pg.customCells = cachedPage.customCells || [];
             pg.cellGuides = cachedPage.cellGuides || {};
             pg._layoutGuidesMode = cachedPage._layoutGuidesMode || false;
+            pg.gridRows = cachedPage.gridRows || null;
+            pg.gridCols = cachedPage.gridCols || null;
+            pg.cellPages = cachedPage.cellPages || null;
+            pg.slicerColSizes = cachedPage.slicerColSizes || null;
+            pg.slicerRowSizes = cachedPage.slicerRowSizes || null;
+            if (cachedPage.cols !== undefined) pg.cols = cachedPage.cols;
+            pg.ts = cachedPage.ts || 0;
             _lastSyncedPageData = {
               widgets: JSON.stringify(pg.widgets),
               miroCards: JSON.stringify(pg.miroCards)
@@ -942,58 +949,32 @@
             }
             trackPageVersion(activePg.id, activePg.widgets, activePg.miroCards);
             activePg.ts = Date.now(); // Update timestamp on every save
-            updates[`users/${USER_ID}/startmine_pages/${activePg.id}/cols`] = activePg.cols !== undefined ? activePg.cols : 3;
-            if (_lastSyncedPageData) {
-              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/ts`] = activePg.ts;
 
-              const curWidgetsStr = JSON.stringify(activePg.widgets || []);
-              const curCardsStr = JSON.stringify(activePg.miroCards || []);
+            updates[`users/${USER_ID}/startmine_pages/${activePg.id}`] = {
+              widgets: activePg.widgets || [],
+              miroCards: activePg.miroCards || [],
+              vGuides: activePg.vGuides || [],
+              hGuides: activePg.hGuides || [],
+              _guidesMode: activePg._guidesMode || false,
+              lockedGuides: activePg.lockedGuides || [],
+              cellStates: activePg.cellStates || {},
+              mergedCells: activePg.mergedCells || [],
+              customCells: activePg.customCells || [],
+              cellGuides: activePg.cellGuides || {},
+              _layoutGuidesMode: activePg._layoutGuidesMode || false,
+              gridRows: activePg.gridRows || null,
+              gridCols: activePg.gridCols || null,
+              cellPages: activePg.cellPages || null,
+              slicerColSizes: activePg.slicerColSizes || null,
+              slicerRowSizes: activePg.slicerRowSizes || null,
+              cols: activePg.cols !== undefined ? activePg.cols : 3,
+              ts: activePg.ts
+            };
 
-              // Always write guides/slices properties when _lastSyncedPageData is active
-              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/vGuides`] = activePg.vGuides || [];
-              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/hGuides`] = activePg.hGuides || [];
-              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/_guidesMode`] = activePg._guidesMode || false;
-              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/lockedGuides`] = activePg.lockedGuides || [];
-              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/cellStates`] = activePg.cellStates || {};
-              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/mergedCells`] = activePg.mergedCells || [];
-              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/customCells`] = activePg.customCells || [];
-              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/cellGuides`] = activePg.cellGuides || {};
-              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/_layoutGuidesMode`] = activePg._layoutGuidesMode || false;
-              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/gridRows`] = activePg.gridRows || null;
-              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/gridCols`] = activePg.gridCols || null;
-              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/cellPages`] = activePg.cellPages || null;
-              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/slicerColSizes`] = activePg.slicerColSizes || null;
-              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/slicerRowSizes`] = activePg.slicerRowSizes || null;
-
-              // Write widgets and miroCards atomically as full arrays to prevent array-object corruption in Firebase
-              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/widgets`] = activePg.widgets || [];
-              updates[`users/${USER_ID}/startmine_pages/${activePg.id}/miroCards`] = activePg.miroCards || [];
-
-              // Update baseline payload
-              _lastSyncedPageData.widgets = curWidgetsStr;
-              _lastSyncedPageData.miroCards = curCardsStr;
-            } else {
-              updates[`users/${USER_ID}/startmine_pages/${activePg.id}`] = {
-                widgets: activePg.widgets || [],
-                miroCards: activePg.miroCards || [],
-                vGuides: activePg.vGuides || [],
-                hGuides: activePg.hGuides || [],
-                _guidesMode: activePg._guidesMode || false,
-                lockedGuides: activePg.lockedGuides || [],
-                cellStates: activePg.cellStates || {},
-                mergedCells: activePg.mergedCells || [],
-                customCells: activePg.customCells || [],
-                cellGuides: activePg.cellGuides || {},
-                _layoutGuidesMode: activePg._layoutGuidesMode || false,
-                gridRows: activePg.gridRows || null,
-                gridCols: activePg.gridCols || null,
-                cellPages: activePg.cellPages || null,
-                slicerColSizes: activePg.slicerColSizes || null,
-                slicerRowSizes: activePg.slicerRowSizes || null,
-                cols: activePg.cols !== undefined ? activePg.cols : 3,
-                ts: activePg.ts
-              };
-            }
+            _lastSyncedPageData = {
+              widgets: JSON.stringify(activePg.widgets || []),
+              miroCards: JSON.stringify(activePg.miroCards || [])
+            };
           } else {
             // For subpages, write their whole payload directly
             const subHasData = (p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0);
@@ -1037,7 +1018,8 @@
       return;
     }
 
-    db.ref().update(updates)
+    const cleanUpdates = JSON.parse(JSON.stringify(updates));
+    db.ref().update(cleanUpdates)
       .then(() => {
         setOwnWrite(false);
         _lastSvTs = Date.now();

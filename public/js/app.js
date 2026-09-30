@@ -8224,16 +8224,23 @@ document.getElementById('ok-aw').onclick = () => {
     size: 'md',
     vis: 'all',
     color: { ...DEF_COLOR },
-    items: selType !== 'note' ? [] : undefined,
-    content: selType === 'note' ? '' : undefined,
+    items: [],
+    content: '',
   };
   const targetPageId = window._widgetAddTargetPageId || D.cur;
   const page = D.pages.find(p => p.id === targetPageId) || cp();
   if (!page.widgets) page.widgets = [];
   page.widgets.push(w);
+
+  // Dual-view sync: mirror newly created widget to Miro cards
+  if (page.miroCards && typeof syncWidgetsBookmarksToMiro === 'function') {
+    syncWidgetsBookmarksToMiro([w], page.miroCards);
+  }
+
   page.ts = Date.now();
   if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page.id, page);
-  if (typeof sv === 'function') sv(false, true);
+  const isDifferentPage = targetPageId && cp() && targetPageId !== cp().id;
+  if (typeof sv === 'function') sv(isDifferentPage, true);
   buildCols();
   closeM('m-aw');
   window._widgetAddTargetPageId = null;
