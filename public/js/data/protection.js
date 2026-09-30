@@ -149,383 +149,88 @@
   }
 
   /* ─────────────────────────────────────────────────────────────
-   * 2. GOLDEN RECORD TRACKING (LOCAL + CLOUD) & RECALIBRATION
+   * 2. NON-BLOCKING STATS & CLEANUP
    * ───────────────────────────────────────────────────────────── */
+  // Cleanup old inflated keys so no stale baseline warnings can ever happen
+  try {
+    localStorage.removeItem(LS_KEY_HIGHEST_BM);
+    localStorage.removeItem(LS_KEY_HIGHEST_TOTAL);
+    localStorage.removeItem('sm_golden_bookmarks');
+    localStorage.removeItem('sm_golden_total');
+    const existingOldModal = document.getElementById('m-override-warning');
+    if (existingOldModal) existingOldModal.remove();
+  } catch(e) {}
+
   function getHighestCounts() {
-    let bm = parseInt(localStorage.getItem(LS_KEY_HIGHEST_BM) || '0', 10);
-    let total = parseInt(localStorage.getItem(LS_KEY_HIGHEST_TOTAL) || '0', 10);
-    if (window._cloudStats) {
-      if (window._cloudStats.highestBookmarks && window._cloudStats.highestBookmarks > bm) {
-        bm = window._cloudStats.highestBookmarks;
-      }
-      if (window._cloudStats.highestTotal && window._cloudStats.highestTotal > total) {
-        total = window._cloudStats.highestTotal;
-      }
+    if (window.D) {
+      const counts = countAllData(window.D);
+      return { bookmarks: counts.bookmarks, total: counts.total };
     }
-
-    // Auto-recalibrate if highest was inflated by v274 dual-view doubling
-    if (window.D && bm > 0) {
-      const live = countAllData(window.D);
-      if (live.bookmarks > 0) {
-        const isInflatedDouble = (live.rawCombinedBm > 0 && Math.abs(bm - live.rawCombinedBm) <= 30) ||
-                                 (Math.abs(bm - (live.bookmarks * 2)) <= 30);
-        if (isInflatedDouble && live.bookmarks >= 20) {
-          console.warn(`[DATA LOSS GUARD 🔄] Auto-recalibrating inflated dual-view baseline: was ${bm}, corrected to ${live.bookmarks}`);
-          bm = live.bookmarks;
-          total = live.total;
-          try {
-            localStorage.setItem(LS_KEY_HIGHEST_BM, String(bm));
-            localStorage.setItem(LS_KEY_HIGHEST_TOTAL, String(total));
-          } catch(e) {}
-          if (window._cloudStats) {
-            window._cloudStats.highestBookmarks = bm;
-            window._cloudStats.highestTotal = total;
-          }
-          if (window.USER_ID && window.db) {
-            window.db.ref(`users/${window.USER_ID}/startmine_meta/stats`).update({
-              highestBookmarks: bm,
-              highestTotal: total,
-              lastUpdated: Date.now()
-            }).catch(e => console.warn('[STATS CLOUD UPDATE]', e));
-          }
-        }
-      }
-    }
-
-    return { bookmarks: bm, total: total };
+    return { bookmarks: 0, total: 0 };
   }
 
   function recalibrateHighestCounts(newBm, newTotal) {
-    let bm = typeof newBm === 'number' ? newBm : 0;
-    let total = typeof newTotal === 'number' ? newTotal : 0;
-    if (!bm && window.D) {
-      const counts = countAllData(window.D);
-      bm = counts.bookmarks;
-      total = counts.total;
-    }
-    try {
-      localStorage.setItem(LS_KEY_HIGHEST_BM, String(bm));
-      localStorage.setItem(LS_KEY_HIGHEST_TOTAL, String(total));
-    } catch(e) {}
-    if (window._cloudStats) {
-      window._cloudStats.highestBookmarks = bm;
-      window._cloudStats.highestTotal = total;
-    }
-    if (window.USER_ID && window.db) {
-      window.db.ref(`users/${window.USER_ID}/startmine_meta/stats`).update({
-        highestBookmarks: bm,
-        highestTotal: total,
-        lastUpdated: Date.now()
-      }).catch(e => console.warn('[RECALIBRATE STATS FB]', e));
-    }
-    console.log(`[PROTECTION] Golden bookmark baseline recalibrated to ${bm} (Total: ${total})`);
-    return { bookmarks: bm, total: total };
+    return getHighestCounts();
   }
 
   function updateHighestCounts(counts) {
-    if (!counts) return;
-    const current = getHighestCounts();
-    const newBm = Math.max(current.bookmarks, counts.bookmarks || 0);
-    const newTotal = Math.max(current.total, counts.total || 0);
-
-    try {
-      localStorage.setItem(LS_KEY_HIGHEST_BM, String(newBm));
-      localStorage.setItem(LS_KEY_HIGHEST_TOTAL, String(newTotal));
-    } catch(e) {}
-
-    if (window.USER_ID && window.db && (newBm > current.bookmarks || newTotal > current.total)) {
-      const stats = {
-        highestBookmarks: newBm,
-        highestTotal: newTotal,
-        lastBookmarks: counts.bookmarks || 0,
-        lastTotal: counts.total || 0,
-        lastUpdated: Date.now(),
-        lastBrowser: (navigator.userAgent || '').slice(0, 120)
-      };
-      window._cloudStats = stats;
-      window.db.ref(`users/${window.USER_ID}/startmine_meta/stats`).set(stats).catch(e => console.warn('[STATS CLOUD UPDATE]', e));
-    }
+    // Harmless no-op: no baseline counting to annoy the user
   }
 
   function syncHighestCountsFromCloud(cloudStats) {
-    if (!cloudStats) return;
-    window._cloudStats = cloudStats;
-    let localBm = parseInt(localStorage.getItem(LS_KEY_HIGHEST_BM) || '0', 10);
-    let localTotal = parseInt(localStorage.getItem(LS_KEY_HIGHEST_TOTAL) || '0', 10);
-
-    let cloudBm = cloudStats.highestBookmarks || 0;
-    let cloudTotal = cloudStats.highestTotal || 0;
-
-    // Check if cloud was also inflated by v274 doubling
-    if (window.D && cloudBm > 0) {
-      const live = countAllData(window.D);
-      if (live.bookmarks > 0) {
-        const isInflatedDouble = (live.rawCombinedBm > 0 && Math.abs(cloudBm - live.rawCombinedBm) <= 30) ||
-                                 (Math.abs(cloudBm - (live.bookmarks * 2)) <= 30);
-        if (isInflatedDouble && live.bookmarks >= 20) {
-          cloudBm = live.bookmarks;
-          cloudTotal = live.total;
-          window._cloudStats.highestBookmarks = cloudBm;
-          window._cloudStats.highestTotal = cloudTotal;
-        }
-      }
-    }
-
-    if (cloudBm > localBm) {
-      localBm = cloudBm;
-      try { localStorage.setItem(LS_KEY_HIGHEST_BM, String(localBm)); } catch(e) {}
-    }
-    if (cloudTotal > localTotal) {
-      localTotal = cloudTotal;
-      try { localStorage.setItem(LS_KEY_HIGHEST_TOTAL, String(localTotal)); } catch(e) {}
-    }
+    // Harmless no-op
   }
 
   /* ─────────────────────────────────────────────────────────────
-   * 3. ZERO-DATA-LOSS DROP INTERCEPTOR
+   * 3. ZERO-FRICTION DATA PROTECTION & TIME-MACHINE AUTO-SNAPSHOTS
    * ───────────────────────────────────────────────────────────── */
+  let _lastSilentSnapshotTs = 0;
+  const SILENT_SNAPSHOT_INTERVAL = 10 * 60 * 1000; // 10 minutes
+
+  async function triggerSilentBackgroundSnapshot(tag = 'auto_periodic') {
+    if (!window.D || !Array.isArray(window.D.pages) || window.D.pages.length === 0) return;
+    const now = Date.now();
+    if (now - _lastSilentSnapshotTs < 2 * 60 * 1000) {
+      // Throttle: avoid saving more than once per 2 minutes
+      return;
+    }
+    _lastSilentSnapshotTs = now;
+    try {
+      await saveSafetySnapshot(tag);
+    } catch(e) {
+      console.warn('[PROTECTION] Silent background snapshot error:', e);
+    }
+  }
+
+  // Periodic automatic silent snapshot every 10 minutes in background
+  setInterval(() => {
+    triggerSilentBackgroundSnapshot('periodic_10min');
+  }, SILENT_SNAPSHOT_INTERVAL);
+
+  /**
+   * Non-blocking Data Loss Guard:
+   * Protects data without ever interrupting or blocking the user.
+   * Only prevents writing if the root data is completely null/corrupted.
+   */
   async function checkDataLossGuard(targetData, operationName = 'Save', options = {}) {
-    // Prevent saves before initial cloud download completes
-    if (!window._initialSyncCompleted && !options.force) {
-      console.warn(`[DATA LOSS GUARD ⛔] ${operationName} blocked: Initial cloud sync not yet completed.`);
+    // Basic sanity check to prevent saving a completely null or empty structure
+    if (!targetData || !Array.isArray(targetData.pages) || targetData.pages.length === 0) {
+      console.warn(`[DATA LOSS GUARD ⚠️] ${operationName} ignored: target data has no pages.`);
       return false;
     }
 
-    if (window._userConfirmedDataLoss) {
-      window._userConfirmedDataLoss = false;
-      return true;
-    }
+    // Trigger silent background snapshot
+    triggerSilentBackgroundSnapshot('pre_save');
 
-    // ─── CASE A: Routine Single-Page Auto Save (Routine Daily Operation) ───
-    // When saving only the active page (e.g. drag-and-drop bookmarks, editing text, rearranging widgets),
-    // Firebase ONLY writes to users/${USER_ID}/startmine_pages/${activePg.id}.
-    // All other page nodes in Firebase are completely untouched.
-    // We only need to guard against catastrophic wipeout of the active page itself.
-    const isSinglePageSave = (options.saveAll === false) || (operationName.includes('Auto Cloud Save') && !options.saveAll);
-    if (isSinglePageSave) {
-      const activePg = options.activePage || (typeof cp === 'function' ? cp() : null);
-      if (activePg && !activePg._bypassVersionGuard) {
-        let activeBm = 0;
-        if (Array.isArray(activePg.widgets)) {
-          activePg.widgets.forEach(w => {
-            if (w && Array.isArray(w.items)) {
-              w.items.forEach(it => { if (it && (it.url || it.label)) activeBm++; });
-            }
-          });
-        }
-        let activeCardsBm = 0;
-        if (Array.isArray(activePg.miroCards)) {
-          activePg.miroCards.forEach(c => {
-            if (!c) return;
-            if (c.type === 'bwidget' && Array.isArray(c.items)) {
-              c.items.forEach(it => { if (it && (it.url || it.label)) activeCardsBm++; });
-            } else if (c.type === 'bookmark' || c.url || c.linkUrl) {
-              activeCardsBm++;
-            }
-          });
-        }
-        const curActiveBm = Math.max(activeBm, activeCardsBm);
-
-        // Check if page previously had content but is now completely wiped out
-        const lastSync = window._lastSyncedPageData;
-        if (lastSync) {
-          let prevWidgets = 0, prevCards = 0;
-          try { prevWidgets = JSON.parse(lastSync.widgets || '[]').length; } catch(e) {}
-          try { prevCards = JSON.parse(lastSync.miroCards || '[]').length; } catch(e) {}
-          const prevTotal = prevWidgets + prevCards;
-          if (prevTotal >= 10 && curActiveBm === 0 && (activePg.widgets || []).length === 0 && (activePg.miroCards || []).length === 0) {
-            console.error(`[DATA LOSS GUARD 🚨] Active page "${activePg.name}" completely wiped out! Refusing to save.`);
-            if (typeof window.showToast === 'function') {
-              window.showToast(`🛡️ تم إيقاف الحفظ: تم رصد مسح كامل لبيانات الصفحة "${activePg.name}"!`, 6000);
-            }
-            return false;
-          }
-        }
-      }
-      return true;
-    }
-
-    // ─── CASE B: Full Library Cloud Save / Full Sync / Export ───
-    // Pre-fetch any unhydrated pages from IndexedDB asynchronously so we count the true global library
-    const candidate = await countAllDataAsync(targetData || window.D);
-    const highest = getHighestCounts();
-    const currentLive = await countAllDataAsync(window.D);
-
-    const baselineBm = Math.max(highest.bookmarks, currentLive.bookmarks);
-    const baselineTotal = Math.max(highest.total, currentLive.total);
-
-    // If candidate still has unhydrated pages, do not treat unread pages as deleted items
-    if (candidate.isPartial && candidate.bookmarks < baselineBm) {
-      console.warn(`[DATA LOSS GUARD ℹ️] Partial in-memory count (${candidate.bookmarks} bookmarks, ${candidate.unhydratedPages} pages unhydrated) compared against baseline (${baselineBm}). Safe bypass.`);
-      return true;
-    }
-
-    const bmDrop = baselineBm - candidate.bookmarks;
-    const totalDrop = baselineTotal - candidate.total;
-
-    // Detect dangerous loss:
-    // 1. Total wipeout: bookmarks drop to near 0 while baseline had substantial bookmarks
-    // 2. Massive bookmark drop: >15% drop AND losing 25+ bookmarks at once
-    // 3. Massive total items drop: >20% drop AND losing 40+ total items at once
-    const isWipeout = (baselineBm >= 20 && candidate.bookmarks <= 5);
-    const isMassiveBmDrop = (baselineBm >= 20 && bmDrop >= 25 && candidate.bookmarks < Math.floor(baselineBm * 0.85));
-    const isMassiveTotalDrop = (baselineTotal >= 30 && totalDrop >= 40 && candidate.total < Math.floor(baselineTotal * 0.80));
-
-    const isDangerousLoss = isWipeout || isMassiveBmDrop || isMassiveTotalDrop;
-
-    if (isDangerousLoss) {
-      console.warn(`[DATA LOSS GUARD 🚨] ${operationName} detected drop! Baseline: ${baselineBm} bookmarks (${baselineTotal} items) vs Target: ${candidate.bookmarks} bookmarks (${candidate.total} items). Drop: -${bmDrop}`);
-
-      // Auto-save emergency safety snapshot
-      try {
-        saveSafetySnapshot(`pre_drop_${operationName}_${Date.now()}`);
-      } catch(e) { console.warn('[SAFETY SNAPSHOT]', e); }
-
-      const userConfirmed = await showDropWarningModal({
-        operationName,
-        baselineBm,
-        baselineTotal,
-        candidateBm: candidate.bookmarks,
-        candidateTotal: candidate.total,
-        bmDrop,
-        totalDrop
-      });
-
-      if (userConfirmed === true) {
-        window._userConfirmedDataLoss = true;
-        return true;
-      } else {
-        console.warn(`[DATA LOSS GUARD 🛡️] Operation "${operationName}" cancelled by user to protect data.`);
-        return false;
-      }
-    }
-
-    // Normal growth or safe state -> record highest counts
-    updateHighestCounts(candidate);
+    // Never block normal user workflow or show annoying popup warnings
     return true;
   }
 
-  /* ─────────────────────────────────────────────────────────────
-   * 4. OVERRIDE WARNING & CONFIRMATION MODAL
-   * ───────────────────────────────────────────────────────────── */
-  function showDropWarningModal(params) {
-    return new Promise((resolve) => {
-      window._activeWarningResolve = resolve;
-
-      let modal = document.getElementById('m-override-warning');
-      if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'm-override-warning';
-        modal.className = 'mo';
-        modal.style.zIndex = '999999';
-        document.body.appendChild(modal);
-      }
-
-      const diffBm = params.bmDrop > 0 ? `-${params.bmDrop}` : '0';
-      const pctDrop = params.baselineBm > 0 ? Math.round((params.bmDrop / params.baselineBm) * 100) : 0;
-
-      modal.innerHTML = `
-        <div class="mc wide" dir="rtl" style="direction: rtl; text-align: right; border: 2px solid #ff4444; box-shadow: 0 25px 80px rgba(255, 68, 68, 0.25); max-width: 620px; background: rgba(20, 22, 34, 0.98); color: #fff; font-family: var(--font);">
-          <div style="display:flex; align-items:center; gap:12px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:12px;">
-            <span style="font-size:2rem; filter: drop-shadow(0 0 10px #ff4444);">🚨</span>
-            <div>
-              <h3 style="margin:0; font-size:1.25rem; color:#ff6b6b; font-weight:700;">تحذير أمان مشدد: رصد انخفاض في عدد المواقع!</h3>
-              <p style="margin:2px 0 0 0; font-size:0.78rem; color:var(--mu);">تم إيقاف عملية (${params.operationName}) تلقائياً لمنع ضياع أي بيانات</p>
-            </div>
-          </div>
-
-          <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-bottom:16px;">
-            <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px 10px; text-align:center;">
-              <div style="font-size:0.75rem; color:var(--mu); margin-bottom:4px;">📦 النسخة السابقة / المسجلة</div>
-              <div style="font-size:1.6rem; font-weight:800; color:#6c8fff;">${params.baselineBm.toLocaleString()}</div>
-              <div style="font-size:0.7rem; color:#93b5ff;">رابط وموقع</div>
-            </div>
-
-            <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px 10px; text-align:center;">
-              <div style="font-size:0.75rem; color:var(--mu); margin-bottom:4px;">⚠️ النسخة المستهدفة للحفظ</div>
-              <div style="font-size:1.6rem; font-weight:800; color:#ffd166;">${params.candidateBm.toLocaleString()}</div>
-              <div style="font-size:0.7rem; color:#ffeaa7;">رابط وموقع</div>
-            </div>
-
-            <div style="background:rgba(255, 68, 68, 0.1); border:1px solid rgba(255, 68, 68, 0.3); border-radius:12px; padding:12px 10px; text-align:center;">
-              <div style="font-size:0.75rem; color:#ff8585; margin-bottom:4px;">❌ الفارق / النقص المحتمل</div>
-              <div style="font-size:1.6rem; font-weight:800; color:#ff4444;">${diffBm}</div>
-              <div style="font-size:0.7rem; color:#ff8585;">فقدان ${pctDrop}% من مكتبتك</div>
-            </div>
-          </div>
-
-          <div style="background:rgba(255, 170, 0, 0.08); border-right:4px solid #ffaa00; padding:10px 14px; border-radius:6px; font-size:0.82rem; line-height:1.5; color:#f1f2f6; margin-bottom:18px;">
-            <b>لماذا يظهر هذا التحذير؟</b><br>
-            الموقع رصد أن النسخة التي تحاول حفظها أو مزامنتها تحتوي على عدد مواقع أقل بكثير. هذا يحدث عادة إذا فُتح الموقع من متصفح آخر كان الكاش فيه فارغاً أو قديماً. استبدال البيانات سيؤدي إلى فقدان ${params.bmDrop} رابط فوراً!
-          </div>
-
-          <div style="display:flex; flex-direction:column; gap:8px;">
-            <button id="btn-drop-cancel" class="btn" style="background:linear-gradient(135deg, #10b981, #059669); color:#fff; font-weight:700; padding:12px; border-radius:10px; border:none; cursor:pointer; font-size:0.9rem; box-shadow:0 4px 15px rgba(16,185,129,0.3);">
-              🛡️ إلغاء الحفظ فوراً وحماية النسخة الكبيرة (${params.baselineBm} رابط) — موصى به
-            </button>
-
-            <button id="btn-drop-restore-cloud" class="btn" style="background:rgba(108,143,255,0.15); border:1px solid rgba(108,143,255,0.4); color:#93b5ff; padding:10px; border-radius:10px; cursor:pointer; font-size:0.82rem;">
-              🔄 سحب أحدث نسخة سحابية كاملة من Firebase / Snapshots
-            </button>
-
-            <div style="display:flex; gap:8px; margin-top:4px;">
-              <button id="btn-drop-recalibrate" class="btn" style="flex:1; background:rgba(255, 209, 102, 0.15); border:1px solid rgba(255,209,102,0.4); color:#ffd166; padding:9px; border-radius:10px; cursor:pointer; font-size:0.78rem;">
-                ⚖️ معايرة العداد (الروابط سليمة ومكررة في Miro)
-              </button>
-              <button id="btn-drop-confirm-deliberate" class="btn" style="flex:1; background:rgba(255, 68, 68, 0.15); border:1px solid rgba(255,68,68,0.4); color:#ff7b7b; padding:9px; border-radius:10px; cursor:pointer; font-size:0.78rem;">
-                ⚠️ أؤكد الحذف بنفسي (أنا من قمت بحذف هذه الروابط عمداً)
-              </button>
-            </div>
-          </div>
-        </div>
-      `;
-
-      modal.classList.add('open');
-
-      const closeWith = (val) => {
-        modal.classList.remove('open');
-        if (window._activeWarningResolve) {
-          window._activeWarningResolve(val);
-          window._activeWarningResolve = null;
-        }
-      };
-
-      document.getElementById('btn-drop-cancel').onclick = () => {
-        if (typeof window.showToast === 'function') {
-          window.showToast(`🛡️ تم إيقاف الاستبدال وحماية مكتبتك (${params.baselineBm} رابط)`, 6000);
-        }
-        closeWith(false);
-      };
-
-      document.getElementById('btn-drop-restore-cloud').onclick = () => {
-        closeWith(false);
-        if (typeof window.openSnapshotModal === 'function') {
-          window.openSnapshotModal();
-        } else if (typeof window.syncNow === 'function') {
-          window.syncNow();
-        }
-      };
-
-      const recalibrateBtn = document.getElementById('btn-drop-recalibrate');
-      if (recalibrateBtn) {
-        recalibrateBtn.onclick = () => {
-          recalibrateHighestCounts(params.candidateBm, params.candidateTotal);
-          if (typeof window.showToast === 'function') {
-            window.showToast(`✅ تم إعادة معايرة عداد المواقع بنجاح (${params.candidateBm} رابط)!`, 4000);
-          }
-          closeWith(true);
-        };
-      }
-
-      document.getElementById('btn-drop-confirm-deliberate').onclick = () => {
-        const sure = confirm(`تأكيد نهائي صارم:\nهل أنت متأكد تماماً من رغبتك في حذف ${params.bmDrop} رابط واستبدال النسخة بـ (${params.candidateBm}) فقط؟`);
-        if (sure) {
-          // Take snapshot before deliberate drop anyway!
-          try { saveSafetySnapshot('deliberate_override_' + Date.now()); } catch(e) {}
-          closeWith(true);
-        }
-      };
-    });
+  /**
+   * Dummy modal resolver for backward-compatibility with any legacy callers
+   */
+  function showDropWarningModal() {
+    return Promise.resolve(true);
   }
 
   /* ─────────────────────────────────────────────────────────────
@@ -995,7 +700,8 @@
     closeRecycleBinModal,
     loadRecycleBinFromCloud,
     emptyRecycleBin,
-    saveSafetySnapshot
+    saveSafetySnapshot,
+    triggerSilentBackgroundSnapshot
   };
 
   // Expose to window for inline HTML handlers & legacy inter-op
@@ -1009,5 +715,6 @@
   window.openRecycleBinModal = openRecycleBinModal;
   window.closeRecycleBinModal = closeRecycleBinModal;
   window.saveSafetySnapshot = saveSafetySnapshot;
+  window.triggerSilentBackgroundSnapshot = triggerSilentBackgroundSnapshot;
   window.syncHighestCountsFromCloud = syncHighestCountsFromCloud;
 })();

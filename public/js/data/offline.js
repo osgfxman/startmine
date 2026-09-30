@@ -111,7 +111,11 @@
         const isDirty = activePg && window._dirtyPages && window._dirtyPages[activePg.id];
         setSyncStatus('ok', isDirty ? '☁️ SaveUpload (Unsaved *)' : '☁️ SaveUpload (Synced)');
       } else {
-        setSyncStatus('ok', 'Realtime Sync Active ✓');
+        if (window._isFbConnected === false) {
+          setSyncStatus('loading', '🔄 Disconnected \u2014 reconnecting...');
+        } else {
+          setSyncStatus('ok', 'Realtime Sync Active ✓');
+        }
       }
     }
   }

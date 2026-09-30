@@ -528,13 +528,36 @@
         }
       });
 
+      // Ensure single listener and debounced disconnect handling to eliminate UI flash toggling
+      db.ref('.info/connected').off();
+      let _disconnectTimer = null;
       db.ref('.info/connected').on('value', (snap) => {
-        if (snap.val()) {
+        const isConnected = !!snap.val();
+        if (isConnected) {
+          if (_disconnectTimer) {
+            clearTimeout(_disconnectTimer);
+            _disconnectTimer = null;
+          }
+          window._isFbConnected = true;
           console.log('[SYNC] Connected successfully');
-          if (!isFirstLoad) setSyncStatus('ok', 'Realtime Sync Active \u2713');
+          if (!isFirstLoad && (typeof _syncMode === 'undefined' || _syncMode === 'realtime')) {
+            if (typeof setSyncStatus === 'function') {
+              setSyncStatus('ok', 'Realtime Sync Active \u2713');
+            }
+          }
         } else {
-          console.warn('[SYNC] Disconnected / Offline');
-          setSyncStatus('loading', '🔄 Disconnected \u2014 reconnecting...');
+          // Grace period: debounce disconnect warning by 3.5 seconds to prevent flash toggles on brief reconnects or auth token refreshes
+          if (!_disconnectTimer) {
+            _disconnectTimer = setTimeout(() => {
+              window._isFbConnected = false;
+              console.warn('[SYNC] Disconnected / Offline (grace period expired)');
+              if (typeof _syncMode === 'undefined' || _syncMode === 'realtime') {
+                if (typeof setSyncStatus === 'function') {
+                  setSyncStatus('loading', '🔄 Disconnected \u2014 reconnecting...');
+                }
+              }
+            }, 3500);
+          }
         }
       });
     } catch(error) {
