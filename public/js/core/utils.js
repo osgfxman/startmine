@@ -137,6 +137,7 @@
       const img = document.createElement('img');
       img.src = furl;
       img.alt = '';
+      img.draggable = false;
       img.onerror = () => {
         img.remove();
         showLetter(el, bm);

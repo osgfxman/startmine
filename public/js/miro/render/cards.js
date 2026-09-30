@@ -4422,48 +4422,38 @@ function buildMiroBookmarkWidget(card) {
 
   // Handle dropping bookmarks into this Miro widget
   el.addEventListener('dragover', (e) => {
-    if ((typeof _dragInboxId !== 'undefined' && _dragInboxId) ||
-      (typeof _dragBmId !== 'undefined' && _dragBmId)) {
+    const curInbox = (typeof _dragInboxId !== 'undefined' && _dragInboxId) || window._dragInboxId;
+    const curBm = (typeof _dragBmId !== 'undefined' && _dragBmId) || window._dragBmId;
+    if (curInbox || curBm) {
       e.preventDefault();
       el.style.outline = '2px solid var(--ac)';
     }
   });
-  el.addEventListener('dragleave', () => {
-    el.style.outline = '';
+  el.addEventListener('dragleave', (e) => {
+    if (!el.contains(e.relatedTarget)) {
+      el.style.outline = '';
+    }
   });
   el.addEventListener('drop', (e) => {
-    if (typeof _dragInboxId !== 'undefined' && _dragInboxId) {
+    el.style.outline = '';
+    const curInbox = (typeof _dragInboxId !== 'undefined' && _dragInboxId) || window._dragInboxId;
+    if (curInbox) {
       e.preventDefault();
-      el.style.outline = '';
-      const inboxItem = (typeof D !== 'undefined' && D.inbox || []).find((x) => x.id === _dragInboxId);
-      if (inboxItem) {
-        if (!card.items) card.items = [];
-        card.items.push({ id: (typeof uid === 'function' ? uid() : Date.now().toString()), label: inboxItem.label, url: inboxItem.url, emoji: '' });
-        D.inbox = D.inbox.filter((x) => x.id !== _dragInboxId);
-        _dragInboxId = null;
-        if (typeof sv === 'function') sv();
-        if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
-        if (typeof buildInbox === 'function') buildInbox();
+      e.stopPropagation();
+      if (typeof window.moveInboxItem === 'function') {
+        window.moveInboxItem(curInbox, card.id, null);
       }
-    } else if (typeof _dragBmId !== 'undefined' && _dragBmId && typeof _dragBmSrcWid !== 'undefined') {
-      e.preventDefault();
-      el.style.outline = '';
-      const page = typeof cp === 'function' ? cp() : null;
-      if (!page) return;
-      let srcW = (page.widgets || []).find(x => x.id === _dragBmSrcWid);
-      if (!srcW && page.miroCards) srcW = page.miroCards.find(x => x.id === _dragBmSrcWid);
-      if (!srcW) return;
+      return;
+    }
+    const { bmId, srcWid, bmItem } = (typeof window.getBmDragData === 'function')
+      ? window.getBmDragData(e)
+      : { bmId: (typeof _dragBmId !== 'undefined' && _dragBmId) || window._dragBmId, srcWid: (typeof _dragBmSrcWid !== 'undefined' && _dragBmSrcWid) || window._dragBmSrcWid, bmItem: null };
 
-      const bmItemIdx = (srcW.items || []).findIndex(x => x.id === _dragBmId);
-      if (bmItemIdx >= 0) {
-        const bmItem = srcW.items.splice(bmItemIdx, 1)[0];
-        if (!card.items) card.items = [];
-        card.items.push(bmItem);
-        _dragBmId = null;
-        _dragBmSrcWid = null;
-        if (typeof sv === 'function') sv();
-        if (typeof buildCols === 'function' && typeof _miroMode !== 'undefined' && !_miroMode) buildCols();
-        if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+    if (bmId) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof window.moveBookmarkItem === 'function') {
+        window.moveBookmarkItem(bmId, srcWid, card.id, null, bmItem);
       }
     }
   });

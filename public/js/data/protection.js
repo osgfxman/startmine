@@ -3,7 +3,7 @@
  * @description Advanced Zero-Data-Loss Protection, Drop Interceptor, Cloud Item Tracker, and 30-Day Recycle Bin
  * @namespace SM.data.protection
  * @depends namespace.js, events.js, utils.js, firebase.js
- * @provides window.countAllData, window.checkDataLossGuard, window.showDropWarningModal, window.addToRecycleBin, window.restoreRecycleBinItem, window.openRecycleBinModal, window.closeRecycleBinModal, window.saveSafetySnapshot, window.recalibrateHighestCounts
+ * @provides window.countAllData, window.countAllDataAsync, window.checkDataLossGuard, window.showDropWarningModal, window.addToRecycleBin, window.restoreRecycleBinItem, window.openRecycleBinModal, window.closeRecycleBinModal, window.saveSafetySnapshot, window.recalibrateHighestCounts
  * @safety Never allow silent overwrites or drops. All deleted items preserved for 30 days.
  */
 // js/data/protection.js
@@ -27,13 +27,14 @@
    * ───────────────────────────────────────────────────────────── */
   function countAllData(source) {
     const d = source || window.D;
-    if (!d) return { bookmarks: 0, widgets: 0, widgetItems: 0, cards: 0, pages: 0, inbox: 0, total: 0, rawCombinedBm: 0 };
+    if (!d) return { bookmarks: 0, widgets: 0, widgetItems: 0, cards: 0, pages: 0, inbox: 0, total: 0, rawCombinedBm: 0, isPartial: false, unhydratedPages: 0 };
 
     let totalBookmarks = 0;
     let totalWidgets = 0;
     let totalWidgetItems = 0;
     let totalCards = 0;
     let rawCombinedBm = 0;
+    let unhydratedPages = 0;
 
     const pagesList = Array.isArray(d.pages) ? d.pages : (d.pages && typeof d.pages === 'object' ? Object.values(d.pages) : []);
 
@@ -51,6 +52,12 @@
             if (cached.miroCards && cached.miroCards.length > 0) miroCards = cached.miroCards;
           }
         } catch(e) {}
+      }
+
+      const hasWidgets = Array.isArray(widgets) && widgets.length > 0;
+      const hasCards = Array.isArray(miroCards) && miroCards.length > 0;
+      if (!hasWidgets && !hasCards && p.pageType !== 'slicer' && !p._bypassVersionGuard) {
+        unhydratedPages++;
       }
 
       let pageWidgetBm = 0;
@@ -104,8 +111,41 @@
       pages: pagesList.length,
       inbox: inboxCount,
       total,
-      rawCombinedBm
+      rawCombinedBm,
+      isPartial: unhydratedPages > 0,
+      unhydratedPages
     };
+  }
+
+  async function countAllDataAsync(source) {
+    const d = source || window.D;
+    if (!d) return countAllData(d);
+
+    const pagesList = Array.isArray(d.pages) ? d.pages : (d.pages && typeof d.pages === 'object' ? Object.values(d.pages) : []);
+
+    // Pre-fetch any unhydrated pages asynchronously from IndexedDB
+    const promises = pagesList.map(async (p) => {
+      if (!p || !p.id) return;
+      const hasWidgets = Array.isArray(p.widgets) && p.widgets.length > 0;
+      const hasCards = Array.isArray(p.miroCards) && p.miroCards.length > 0;
+      if (!hasWidgets && !hasCards && p.pageType !== 'slicer' && !p._bypassVersionGuard) {
+        try {
+          if (typeof getCachedPageDataAsync === 'function') {
+            await getCachedPageDataAsync(p.id);
+          } else if (typeof getCachedPageData === 'function') {
+            getCachedPageData(p.id);
+          }
+        } catch (e) {}
+      }
+    });
+
+    try {
+      await Promise.all(promises);
+    } catch(err) {
+      console.warn('[PROTECTION] Async page pre-fetch warning:', err);
+    }
+
+    return countAllData(d);
   }
 
   /* ─────────────────────────────────────────────────────────────
@@ -256,12 +296,69 @@
       return true;
     }
 
-    const candidate = countAllData(targetData || window.D);
+    // ─── CASE A: Routine Single-Page Auto Save (Routine Daily Operation) ───
+    // When saving only the active page (e.g. drag-and-drop bookmarks, editing text, rearranging widgets),
+    // Firebase ONLY writes to users/${USER_ID}/startmine_pages/${activePg.id}.
+    // All other page nodes in Firebase are completely untouched.
+    // We only need to guard against catastrophic wipeout of the active page itself.
+    const isSinglePageSave = (options.saveAll === false) || (operationName.includes('Auto Cloud Save') && !options.saveAll);
+    if (isSinglePageSave) {
+      const activePg = options.activePage || (typeof cp === 'function' ? cp() : null);
+      if (activePg && !activePg._bypassVersionGuard) {
+        let activeBm = 0;
+        if (Array.isArray(activePg.widgets)) {
+          activePg.widgets.forEach(w => {
+            if (w && Array.isArray(w.items)) {
+              w.items.forEach(it => { if (it && (it.url || it.label)) activeBm++; });
+            }
+          });
+        }
+        let activeCardsBm = 0;
+        if (Array.isArray(activePg.miroCards)) {
+          activePg.miroCards.forEach(c => {
+            if (!c) return;
+            if (c.type === 'bwidget' && Array.isArray(c.items)) {
+              c.items.forEach(it => { if (it && (it.url || it.label)) activeCardsBm++; });
+            } else if (c.type === 'bookmark' || c.url || c.linkUrl) {
+              activeCardsBm++;
+            }
+          });
+        }
+        const curActiveBm = Math.max(activeBm, activeCardsBm);
+
+        // Check if page previously had content but is now completely wiped out
+        const lastSync = window._lastSyncedPageData;
+        if (lastSync) {
+          let prevWidgets = 0, prevCards = 0;
+          try { prevWidgets = JSON.parse(lastSync.widgets || '[]').length; } catch(e) {}
+          try { prevCards = JSON.parse(lastSync.miroCards || '[]').length; } catch(e) {}
+          const prevTotal = prevWidgets + prevCards;
+          if (prevTotal >= 10 && curActiveBm === 0 && (activePg.widgets || []).length === 0 && (activePg.miroCards || []).length === 0) {
+            console.error(`[DATA LOSS GUARD 🚨] Active page "${activePg.name}" completely wiped out! Refusing to save.`);
+            if (typeof window.showToast === 'function') {
+              window.showToast(`🛡️ تم إيقاف الحفظ: تم رصد مسح كامل لبيانات الصفحة "${activePg.name}"!`, 6000);
+            }
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    // ─── CASE B: Full Library Cloud Save / Full Sync / Export ───
+    // Pre-fetch any unhydrated pages from IndexedDB asynchronously so we count the true global library
+    const candidate = await countAllDataAsync(targetData || window.D);
     const highest = getHighestCounts();
-    const currentLive = countAllData(window.D);
+    const currentLive = await countAllDataAsync(window.D);
 
     const baselineBm = Math.max(highest.bookmarks, currentLive.bookmarks);
     const baselineTotal = Math.max(highest.total, currentLive.total);
+
+    // If candidate still has unhydrated pages, do not treat unread pages as deleted items
+    if (candidate.isPartial && candidate.bookmarks < baselineBm) {
+      console.warn(`[DATA LOSS GUARD ℹ️] Partial in-memory count (${candidate.bookmarks} bookmarks, ${candidate.unhydratedPages} pages unhydrated) compared against baseline (${baselineBm}). Safe bypass.`);
+      return true;
+    }
 
     const bmDrop = baselineBm - candidate.bookmarks;
     const totalDrop = baselineTotal - candidate.total;
@@ -884,6 +981,7 @@
    * ───────────────────────────────────────────────────────────── */
   SM.data.protection = {
     countAllData,
+    countAllDataAsync,
     getHighestCounts,
     recalibrateHighestCounts,
     updateHighestCounts,
@@ -902,6 +1000,7 @@
 
   // Expose to window for inline HTML handlers & legacy inter-op
   window.countAllData = countAllData;
+  window.countAllDataAsync = countAllDataAsync;
   window.recalibrateHighestCounts = recalibrateHighestCounts;
   window.checkDataLossGuard = checkDataLossGuard;
   window.showDropWarningModal = showDropWarningModal;

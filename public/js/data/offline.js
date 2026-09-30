@@ -3,7 +3,7 @@
  * @description Manages offline mode toggles and local caching fallback
  * @namespace SM.data
  * @depends namespace.js
- * @provides window.toggleOfflineMode, window.setOfflineMode, window.updateOfflineUI, window.markDirtyOffline
+ * @provides window.toggleOfflineMode, window.setOfflineMode, window.updateOfflineUI, window.markDirtyOffline, window.prewarmPageCache
  * @safety Do not trigger live DB reads while in offline mode
  */
 // js/data/offline.js
@@ -390,8 +390,35 @@
     return { used, max, pct: Math.round(used / max * 100) };
   }
 
+  function prewarmPageCache() {
+    if (!window.D || !Array.isArray(window.D.pages)) return;
+    const unhydrated = window.D.pages.filter(p => p && p.id && (!p.widgets || p.widgets.length === 0) && (!p.miroCards || p.miroCards.length === 0) && p.pageType !== 'slicer');
+    if (unhydrated.length === 0) return;
+
+    let idx = 0;
+    const warmNext = () => {
+      if (idx >= unhydrated.length) return;
+      const p = unhydrated[idx++];
+      if (typeof getCachedPageDataAsync === 'function') {
+        getCachedPageDataAsync(p.id).finally(() => {
+          if ('requestIdleCallback' in window) {
+            requestIdleCallback(warmNext, { timeout: 2000 });
+          } else {
+            setTimeout(warmNext, 80);
+          }
+        });
+      }
+    };
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(warmNext, { timeout: 2000 });
+    } else {
+      setTimeout(warmNext, 120);
+    }
+  }
+
   // Export to SM.data
   window.SM.data.pruneLocalStorageCache = pruneLocalStorageCache;
+  window.SM.data.prewarmPageCache = prewarmPageCache;
   window.SM.data.setOfflineMode = setOfflineMode;
   window.SM.data.changeSyncMode = changeSyncMode;
   window.SM.data.updateOfflineUI = updateOfflineUI;
@@ -439,6 +466,7 @@
   window.SM.core.expose('getLsUsage', getLsUsage);
   window.SM.core.expose('getLsCapacity', getLsCapacity);
   window.SM.core.expose('pruneLocalStorageCache', pruneLocalStorageCache);
+  window.SM.core.expose('prewarmPageCache', prewarmPageCache);
 
   SM.data.toggleOfflineMode = typeof toggleOfflineMode !== 'undefined' ? toggleOfflineMode : window.toggleOfflineMode;
   SM.data.setOfflineMode = typeof setOfflineMode !== 'undefined' ? setOfflineMode : window.setOfflineMode;
@@ -446,6 +474,7 @@
   SM.data.updateOfflineUI = typeof updateOfflineUI !== 'undefined' ? updateOfflineUI : window.updateOfflineUI;
   SM.data.updateDirtyStatus = typeof updateDirtyStatus !== 'undefined' ? updateDirtyStatus : window.updateDirtyStatus;
   SM.data.markDirtyOffline = typeof markDirtyOffline !== 'undefined' ? markDirtyOffline : window.markDirtyOffline;
+  SM.data.prewarmPageCache = prewarmPageCache;
 
   window.toggleOfflineMode = SM.data.toggleOfflineMode;
   window.setOfflineMode = SM.data.setOfflineMode;
@@ -453,4 +482,5 @@
   window.updateOfflineUI = SM.data.updateOfflineUI;
   window.updateDirtyStatus = SM.data.updateDirtyStatus;
   window.markDirtyOffline = SM.data.markDirtyOffline;
+  window.prewarmPageCache = prewarmPageCache;
 })();

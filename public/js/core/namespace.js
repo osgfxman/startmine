@@ -23,3 +23,10 @@ window.SM.integrations = window.SM.integrations || {};
 window.SM.core.expose = function(name, fn) {
   window[name] = fn;
 };
+
+// Global cross-module drag-and-drop state
+window._dragInboxId = null;
+window._dragBmId = null;
+window._dragBmSrcWid = null;
+window._dragBmItem = null;
+

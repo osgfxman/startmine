@@ -1272,6 +1272,9 @@ body {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  pointer-events: none;
+  -webkit-user-drag: none;
+  user-select: none;
 }
 
 .spark {
@@ -2844,7 +2847,46 @@ body:not(.outline-open) #root {
   animation: outlineHighlight 1.2s ease;
 }
 
-/* Bookmark Drop Indicators */
+/* Bookmark Dragging & Drop Indicators */
+.sp-it.dragging,
+.st-it.dragging,
+.cd-it.dragging,
+.cl-it.dragging {
+  opacity: 0.35 !important;
+  transform: scale(0.95);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.edit .sp-it,
+.edit .st-it,
+.edit .cd-it,
+.edit .cl-it {
+  cursor: grab;
+  user-select: none;
+}
+
+.edit .sp-it:active,
+.edit .st-it:active,
+.edit .cd-it:active,
+.edit .cl-it:active {
+  cursor: grabbing;
+}
+
+.sp-it > *,
+.st-it > *,
+.cd-it > *,
+.cl-it > * {
+  pointer-events: none;
+  user-select: none;
+}
+
+.sp-it > .rmb,
+.st-it > .rmb,
+.cd-it > .rmb,
+.cl-it > .rmb {
+  pointer-events: auto;
+}
+
 .bm-drop-top {
   border-top: 2px solid var(--ac) !important;
 }

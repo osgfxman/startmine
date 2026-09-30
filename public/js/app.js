@@ -876,6 +876,9 @@ function initDB() {
       renderMeta();
       buildCols();
       updateOfflineUI();
+      if (typeof window.prewarmPageCache === 'function') {
+        window.prewarmPageCache();
+      }
     }
     return;
   }
@@ -6010,6 +6013,10 @@ document.getElementById('inbox-input').addEventListener('paste', (e) => {
 let _dragInboxId = null;
 let _dragBmId = null;
 let _dragBmSrcWid = null;
+window._dragInboxId = null;
+window._dragBmId = null;
+window._dragBmSrcWid = null;
+window._dragBmItem = null;
 
 
 
@@ -7186,6 +7193,267 @@ function luma(c) {
   const n = typeof normalizeColor === 'function' ? normalizeColor(c) : c;
   return ((n.r || 0) * 299 + (n.g || 0) * 587 + (n.b || 0) * 114) / 1000;
 }
+
+function getBmDragData(e) {
+  let bmId = _dragBmId || window._dragBmId || null;
+  let srcWid = _dragBmSrcWid || window._dragBmSrcWid || null;
+  let bmItem = window._dragBmItem || null;
+
+  if (e && e.dataTransfer) {
+    if (!bmId) {
+      try {
+        const d = e.dataTransfer.getData('text/bm-id');
+        if (d) bmId = d.trim();
+      } catch (err) {}
+    }
+    if (!srcWid) {
+      try {
+        const d = e.dataTransfer.getData('text/bm-src-wid');
+        if (d) srcWid = d.trim();
+      } catch (err) {}
+    }
+    if (!bmId || !srcWid || !bmItem) {
+      try {
+        const jsonStr = e.dataTransfer.getData('application/json');
+        if (jsonStr) {
+          const parsed = JSON.parse(jsonStr);
+          if (parsed && typeof parsed === 'object') {
+            if (!bmId && parsed.id) bmId = String(parsed.id);
+            if (!srcWid && parsed.srcWid) srcWid = String(parsed.srcWid);
+            if (!bmItem) bmItem = parsed;
+          }
+        }
+      } catch (err) {}
+    }
+  }
+  return { bmId, srcWid, bmItem };
+}
+window.getBmDragData = getBmDragData;
+
+function moveBookmarkItem(bmId, srcWid, targetWid, insertIdx = null, fallbackItem = null) {
+  if (!bmId || !targetWid) return false;
+  const page = typeof cp === 'function' ? cp() : null;
+  if (!page) return false;
+
+  // 1. Locate destination widget
+  let destW = (page.widgets || []).find(w => String(w.id) === String(targetWid));
+  if (!destW && page.miroCards) {
+    destW = page.miroCards.find(w => String(w.id) === String(targetWid));
+  }
+  if (!destW) {
+    console.warn('[DnD] Destination widget not found on page:', targetWid);
+    return false;
+  }
+  if (!destW.items) destW.items = [];
+
+  // Matching helper: match by ID or by URL
+  const matchFn = (it) => {
+    if (!it) return false;
+    if (bmId && it.id && String(it.id) === String(bmId)) return true;
+    if (fallbackItem && fallbackItem.id && it.id && String(it.id) === String(fallbackItem.id)) return true;
+    if (fallbackItem && fallbackItem.url && it.url && it.url.trim().toLowerCase() === fallbackItem.url.trim().toLowerCase()) return true;
+    return false;
+  };
+
+  // 2. Locate source widget
+  let srcW = null;
+  if (srcWid) {
+    srcW = (page.widgets || []).find(w => String(w.id) === String(srcWid));
+    if (!srcW && page.miroCards) {
+      srcW = page.miroCards.find(w => String(w.id) === String(srcWid));
+    }
+  }
+  // Robust fallback: search by matchFn across all widgets/cards on the current page
+  if (!srcW) {
+    srcW = (page.widgets || []).find(w => (w.items || []).some(matchFn));
+    if (!srcW && page.miroCards) {
+      srcW = page.miroCards.find(w => (w.items || []).some(matchFn));
+    }
+  }
+  // Robust fallback 2: search all pages in D.pages (if dragged from another page)
+  if (!srcW && typeof D !== 'undefined' && Array.isArray(D.pages)) {
+    for (const p of D.pages) {
+      const found = (p.widgets || []).find(w => (w.items || []).some(matchFn))
+        || (p.miroCards || []).find(w => (w.items || []).some(matchFn));
+      if (found) {
+        srcW = found;
+        break;
+      }
+    }
+  }
+
+  // 3. Extract the item
+  let bmItem = null;
+  let oldIdx = -1;
+  if (srcW && Array.isArray(srcW.items)) {
+    oldIdx = srcW.items.findIndex(matchFn);
+    if (oldIdx >= 0) {
+      bmItem = srcW.items.splice(oldIdx, 1)[0];
+    }
+  }
+  if (!bmItem && fallbackItem) {
+    bmItem = {
+      id: fallbackItem.id || (typeof uid === 'function' ? uid() : String(Date.now())),
+      label: fallbackItem.label || fallbackItem.url || 'Bookmark',
+      url: fallbackItem.url || '',
+      emoji: fallbackItem.emoji || ''
+    };
+  }
+
+  if (!bmItem) {
+    console.warn('[DnD] Bookmark item could not be extracted:', bmId);
+    return false;
+  }
+
+  // 4. Check if same widget reordering vs cross-widget moving
+  const isSameWidget = srcW && (String(srcW.id) === String(destW.id));
+  if (isSameWidget && insertIdx === null) {
+    // Dropped on empty space of same widget: put it back
+    if (oldIdx >= 0) {
+      destW.items.splice(oldIdx, 0, bmItem);
+    } else {
+      destW.items.push(bmItem);
+    }
+    return true;
+  }
+
+  if (isSameWidget) {
+    let finalInsertIdx = insertIdx;
+    if (oldIdx >= 0 && oldIdx < insertIdx) {
+      finalInsertIdx--;
+    }
+    finalInsertIdx = Math.max(0, Math.min(finalInsertIdx, destW.items.length));
+    destW.items.splice(finalInsertIdx, 0, bmItem);
+  } else {
+    // Cross-widget MOVE:
+    // Insert into destination widget
+    if (insertIdx === null || insertIdx === undefined) {
+      destW.items.push(bmItem);
+    } else {
+      const safeInsertIdx = Math.max(0, Math.min(insertIdx, destW.items.length));
+      destW.items.splice(safeInsertIdx, 0, bmItem);
+    }
+
+    // STRICT GUARANTEE: Remove the moved bookmark from ALL other widgets and cards on this page
+    // (This guarantees it will strictly MOVE and never copy, even if dual-view sync is active)
+    (page.widgets || []).forEach(w => {
+      if (String(w.id) !== String(destW.id) && Array.isArray(w.items)) {
+        w.items = w.items.filter(it => !matchFn(it));
+      }
+    });
+    if (page.miroCards) {
+      page.miroCards.forEach(c => {
+        if (String(c.id) !== String(destW.id) && Array.isArray(c.items)) {
+          c.items = c.items.filter(it => !matchFn(it));
+        }
+      });
+    }
+
+    // Dual-view sync for destination widget: if destination widget has counterpart in other view, add it there too
+    const isWidget = (page.widgets || []).some(w => String(w.id) === String(destW.id));
+    if (isWidget && page.miroCards) {
+      const matchCard = page.miroCards.find(c => String(c.id) === String(destW.id) || (c.title && destW.title && c.title.trim().toLowerCase() === destW.title.trim().toLowerCase()));
+      if (matchCard) {
+        if (!Array.isArray(matchCard.items)) matchCard.items = [];
+        if (!matchCard.items.some(matchFn)) {
+          matchCard.items.push({ ...bmItem });
+          const wCols = 6;
+          const itemPx = 94;
+          const reqRows = Math.ceil(matchCard.items.length / wCols);
+          matchCard.h = Math.max(matchCard.h || 200, 70 + (reqRows * itemPx));
+        }
+      }
+    } else if (!isWidget && page.widgets) {
+      const matchWidget = page.widgets.find(w => String(w.id) === String(destW.id) || (w.title && destW.title && w.title.trim().toLowerCase() === destW.title.trim().toLowerCase()));
+      if (matchWidget) {
+        if (!Array.isArray(matchWidget.items)) matchWidget.items = [];
+        if (!matchWidget.items.some(matchFn)) {
+          matchWidget.items.push({ ...bmItem });
+        }
+      }
+    }
+  }
+
+  // 5. Clean up drag globals
+  _dragBmId = null;
+  _dragBmSrcWid = null;
+  window._dragBmId = null;
+  window._dragBmSrcWid = null;
+  window._dragBmItem = null;
+  dragWid = null;
+
+  // 6. Persist & Re-render
+  if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page.id, page);
+  if (typeof sv === 'function') sv();
+  const isMiro = (page && page.pageType === 'miro');
+  if (typeof buildCols === 'function' && !isMiro) buildCols();
+  if (typeof buildMiroCanvas === 'function' && isMiro) buildMiroCanvas();
+
+  console.log('[DnD] Successfully moved bookmark:', bmItem.label || bmItem.url, 'to widget:', destW.title || destW.id);
+  return true;
+}
+window.moveBookmarkItem = moveBookmarkItem;
+
+function moveInboxItem(inboxId, targetWid, insertIdx = null) {
+  if (!inboxId || !targetWid) return false;
+  const page = typeof cp === 'function' ? cp() : null;
+  if (!page) return false;
+
+  let destW = (page.widgets || []).find(w => String(w.id) === String(targetWid));
+  if (!destW && page.miroCards) {
+    destW = page.miroCards.find(w => String(w.id) === String(targetWid));
+  }
+  if (!destW) return false;
+  if (!destW.items) destW.items = [];
+
+  const inboxIdx = (D.inbox || []).findIndex(x => String(x.id) === String(inboxId));
+  if (inboxIdx < 0) return false;
+
+  const inboxItem = D.inbox.splice(inboxIdx, 1)[0];
+  const newItem = {
+    id: typeof uid === 'function' ? uid() : String(Date.now()),
+    label: inboxItem.label || inboxItem.url,
+    url: inboxItem.url,
+    emoji: inboxItem.emoji || ''
+  };
+
+  if (insertIdx === null || insertIdx === undefined) {
+    destW.items.push(newItem);
+  } else {
+    const safeIdx = Math.max(0, Math.min(insertIdx, destW.items.length));
+    destW.items.splice(safeIdx, 0, newItem);
+  }
+
+  // Dual-view sync for destination widget
+  const isWidget = (page.widgets || []).some(w => String(w.id) === String(destW.id));
+  if (isWidget && page.miroCards) {
+    const matchCard = page.miroCards.find(c => String(c.id) === String(destW.id) || (c.title && destW.title && c.title.trim().toLowerCase() === destW.title.trim().toLowerCase()));
+    if (matchCard) {
+      if (!Array.isArray(matchCard.items)) matchCard.items = [];
+      matchCard.items.push({ ...newItem });
+    }
+  } else if (!isWidget && page.widgets) {
+    const matchWidget = page.widgets.find(w => String(w.id) === String(destW.id) || (w.title && destW.title && w.title.trim().toLowerCase() === destW.title.trim().toLowerCase()));
+    if (matchWidget) {
+      if (!Array.isArray(matchWidget.items)) matchWidget.items = [];
+      matchWidget.items.push({ ...newItem });
+    }
+  }
+
+  _dragInboxId = null;
+  window._dragInboxId = null;
+  dragWid = null;
+
+  if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page.id, page);
+  if (typeof sv === 'function') sv();
+  const isMiro = (page && page.pageType === 'miro');
+  if (typeof buildCols === 'function' && !isMiro) buildCols();
+  if (typeof buildMiroCanvas === 'function' && isMiro) buildMiroCanvas();
+  if (typeof buildInbox === 'function') buildInbox();
+  return true;
+}
+window.moveInboxItem = moveInboxItem;
+
 function buildWidget(w) {
   const el = document.createElement('div');
   el.className = 'widget edit';
@@ -7200,6 +7468,13 @@ function buildWidget(w) {
   const bdDashed = light ? 'rgba(0,0,0,.15)' : 'rgba(255,255,255,.15)';
   el.style.cssText = `background:${rgba(c)};border:1px solid ${bdCol};color:${txtCol};--w-tx:${txtCol};--w-mu:${muCol};--w-hov:${hovBg};--w-bd-dashed:${bdDashed};`;
   el.addEventListener('dragstart', (e) => {
+    const curBm = _dragBmId || window._dragBmId;
+    if (curBm || (e.target && e.target.closest && e.target.closest('.sp-it, .st-it, .cd-it, .cl-it, .rmb, .wab, input, textarea, button, a'))) {
+      if (!curBm) {
+        e.preventDefault();
+      }
+      return;
+    }
     dragWid = w.id;
     if (e.dataTransfer) {
       e.dataTransfer.setData('text/plain', w.id);
@@ -7230,17 +7505,20 @@ function buildWidget(w) {
       }
       return;
     }
-    if (_dragInboxId || (_dragBmId && w.type !== 'note' && w.type !== 'todo')) {
+    const curBm = _dragBmId || window._dragBmId;
+    const curInbox = _dragInboxId || window._dragInboxId;
+    if (curInbox || (curBm && w.type !== 'note' && w.type !== 'todo')) {
       e.preventDefault();
+      if (e.dataTransfer) { e.dataTransfer.dropEffect = 'move'; }
       el.style.outline = '2px solid var(--ac)';
     }
   });
   el.addEventListener('dragleave', (e) => {
     if (!el.contains(e.relatedTarget)) {
       el.classList.remove('drag-over-top', 'drag-over-bottom');
-    }
-    if (_dragInboxId || _dragBmId) {
-      el.style.outline = '';
+      if (_dragInboxId || window._dragInboxId || _dragBmId || window._dragBmId) {
+        el.style.outline = '';
+      }
     }
   });
   el.addEventListener('drop', (e) => {
@@ -7256,38 +7534,19 @@ function buildWidget(w) {
       dragWid = null;
       return;
     }
-    if (_dragInboxId) {
+    const curInbox = _dragInboxId || window._dragInboxId;
+    const { bmId, srcWid, bmItem } = getBmDragData(e);
+    if (curInbox) {
       e.preventDefault();
       el.style.outline = '';
-      const inboxItem = (D.inbox || []).find((x) => x.id === _dragInboxId);
-      if (inboxItem && w.type !== 'note') {
-        if (!w.items) w.items = [];
-        w.items.push({ id: uid(), label: inboxItem.label, url: inboxItem.url, emoji: '' });
-        D.inbox = D.inbox.filter((x) => x.id !== _dragInboxId);
-        _dragInboxId = null;
-        sv();
-        buildCols();
-        buildInbox();
+      if (w.type !== 'note') {
+        moveInboxItem(curInbox, w.id, null);
       }
-    } else if (_dragBmId) {
+    } else if (bmId) {
       e.preventDefault();
       el.style.outline = '';
       if (w.type !== 'note' && w.type !== 'todo') {
-        const page = cp();
-        let srcW = (page.widgets || []).find(x => x.id === _dragBmSrcWid);
-        if (!srcW && page.miroCards) srcW = page.miroCards.find(x => x.id === _dragBmSrcWid);
-        if (!srcW) return;
-        const bmItemIdx = (srcW.items || []).findIndex(x => x.id === _dragBmId);
-        if (bmItemIdx >= 0) {
-          const bmItem = srcW.items.splice(bmItemIdx, 1)[0];
-          if (!w.items) w.items = [];
-          w.items.push(bmItem);
-          _dragBmId = null;
-          _dragBmSrcWid = null;
-          sv();
-          if (typeof buildCols === 'function') buildCols();
-          if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
-        }
+        moveBookmarkItem(bmId, srcWid, w.id, null, bmItem);
       }
     }
   });
@@ -7489,29 +7748,113 @@ function buildBmBody(body, w) {
     shown.forEach((bm) => wrap.appendChild(mkStreamItem(bm, w, sz)));
   }
   wrap.appendChild(mkAddBtn(w.id));
+
+  // Allow dropping directly into wrap container (empty space between or after bookmarks)
+  wrap.addEventListener('dragover', (e) => {
+    const curBm = _dragBmId || window._dragBmId;
+    const curInbox = _dragInboxId || window._dragInboxId;
+    if (curBm || curInbox) {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    }
+  });
+  wrap.addEventListener('drop', (e) => {
+    const curInbox = _dragInboxId || window._dragInboxId;
+    const { bmId, srcWid, bmItem } = getBmDragData(e);
+    if (curInbox) {
+      e.preventDefault();
+      e.stopPropagation();
+      moveInboxItem(curInbox, w.id, null);
+    } else if (bmId) {
+      e.preventDefault();
+      e.stopPropagation();
+      moveBookmarkItem(bmId, srcWid, w.id, null, bmItem);
+    }
+  });
+
+  // Also allow dropping directly on widget body (.wb) padding or empty area
+  body.addEventListener('dragover', (e) => {
+    const curBm = _dragBmId || window._dragBmId;
+    const curInbox = _dragInboxId || window._dragInboxId;
+    if (curBm || curInbox) {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    }
+  });
+  body.addEventListener('drop', (e) => {
+    const curInbox = _dragInboxId || window._dragInboxId;
+    const { bmId, srcWid, bmItem } = getBmDragData(e);
+    if (curInbox) {
+      e.preventDefault();
+      e.stopPropagation();
+      moveInboxItem(curInbox, w.id, null);
+    } else if (bmId) {
+      e.preventDefault();
+      e.stopPropagation();
+      moveBookmarkItem(bmId, srcWid, w.id, null, bmItem);
+    }
+  });
+
   body.appendChild(wrap);
 }
 function makeBmDraggable(a, bm, w) {
   a.draggable = true;
   a.addEventListener('dragstart', (e) => {
+    if (e.target && e.target.closest && e.target.closest('.rmb')) {
+      e.preventDefault();
+      return;
+    }
     _dragBmId = bm.id;
     _dragBmSrcWid = w.id;
-    e.dataTransfer.effectAllowed = 'move';
+    window._dragBmId = bm.id;
+    window._dragBmSrcWid = w.id;
+    window._dragBmItem = bm;
+    dragWid = null;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'copyMove';
+      try {
+        e.dataTransfer.setData('text/plain', bm.url || bm.label || String(bm.id));
+        e.dataTransfer.setData('text/bm-id', String(bm.id));
+        e.dataTransfer.setData('text/bm-src-wid', String(w.id));
+        e.dataTransfer.setData('application/json', JSON.stringify({ id: bm.id, srcWid: w.id, url: bm.url, label: bm.label }));
+      } catch (err) {}
+    }
     setTimeout(() => a.classList.add('dragging'), 0);
   });
-  a.addEventListener('dragend', () => {
+  a.addEventListener('dragend', (e) => {
+    e.stopPropagation();
     a.classList.remove('dragging');
-    _dragBmId = null;
-    _dragBmSrcWid = null;
+    setTimeout(() => {
+      _dragBmId = null;
+      _dragBmSrcWid = null;
+      window._dragBmId = null;
+      window._dragBmSrcWid = null;
+      window._dragBmItem = null;
+      dragWid = null;
+    }, 400);
+    document.querySelectorAll('.bm-drop-top, .bm-drop-bottom, .bm-drop-left, .bm-drop-right').forEach((x) => {
+      x.classList.remove('bm-drop-top', 'bm-drop-bottom', 'bm-drop-left', 'bm-drop-right');
+    });
+    document.querySelectorAll('.widget').forEach((x) => {
+      x.style.outline = '';
+    });
+    document.querySelectorAll('.miro-widget').forEach((x) => {
+      x.style.outline = '';
+    });
   });
   a.addEventListener('dragover', (e) => {
-    if ((_dragBmId && _dragBmId !== bm.id) || _dragInboxId) {
+    const curBm = _dragBmId || window._dragBmId;
+    const curInbox = _dragInboxId || window._dragInboxId;
+    if ((curBm && String(curBm) !== String(bm.id)) || curInbox) {
       e.preventDefault();
       e.stopPropagation();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'move';
+      }
       const rect = a.getBoundingClientRect();
-      const isCard = w.display === 'card';
-      const isStream = w.display === 'stream';
-      const isVertical = isCard || isStream;
+      const isCard = a.classList.contains('cd-it') || w.display === 'card';
+      const isStream = a.classList.contains('st-it') || w.display === 'stream';
+      const isVertical = isCard || isStream || (w.display !== 'spark' && w.display !== 'cloud' && (w.items || []).length > 8);
 
       a.classList.remove('bm-drop-top', 'bm-drop-bottom', 'bm-drop-left', 'bm-drop-right');
 
@@ -7524,11 +7867,16 @@ function makeBmDraggable(a, bm, w) {
       }
     }
   });
-  a.addEventListener('dragleave', () => {
-    a.classList.remove('bm-drop-top', 'bm-drop-bottom', 'bm-drop-left', 'bm-drop-right');
+  a.addEventListener('dragleave', (e) => {
+    if (!a.contains(e.relatedTarget)) {
+      a.classList.remove('bm-drop-top', 'bm-drop-bottom', 'bm-drop-left', 'bm-drop-right');
+    }
   });
   a.addEventListener('drop', (e) => {
-    if ((_dragBmId && _dragBmId !== bm.id) || _dragInboxId) {
+    const curInbox = _dragInboxId || window._dragInboxId;
+    const { bmId, srcWid, bmItem } = getBmDragData(e);
+
+    if ((bmId && String(bmId) !== String(bm.id)) || curInbox) {
       e.preventDefault();
       e.stopPropagation();
 
@@ -7536,43 +7884,13 @@ function makeBmDraggable(a, bm, w) {
       a.classList.remove('bm-drop-top', 'bm-drop-bottom', 'bm-drop-left', 'bm-drop-right');
 
       if (!w.items) w.items = [];
-      const targetIdx = w.items.findIndex(x => x.id === bm.id);
-      const insertIdx = insertAfter ? targetIdx + 1 : Math.max(0, targetIdx);
+      const targetIdx = w.items.findIndex(x => String(x.id) === String(bm.id));
+      const insertIdx = insertAfter ? (targetIdx >= 0 ? targetIdx + 1 : w.items.length) : Math.max(0, targetIdx);
 
-      if (_dragInboxId) {
-        const inboxItem = (D.inbox || []).find((x) => x.id === _dragInboxId);
-        if (inboxItem) {
-          w.items.splice(insertIdx, 0, { id: uid(), label: inboxItem.label, url: inboxItem.url, emoji: '' });
-          D.inbox = D.inbox.filter((x) => x.id !== _dragInboxId);
-          _dragInboxId = null;
-          sv();
-          if (typeof buildCols === 'function' && !_miroMode) buildCols();
-          if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
-          if (typeof buildInbox === 'function') buildInbox();
-        }
-      } else if (_dragBmId) {
-        const page = cp();
-        let srcW = (page.widgets || []).find(x => x.id === _dragBmSrcWid);
-        if (!srcW && page.miroCards) srcW = page.miroCards.find(x => x.id === _dragBmSrcWid);
-        if (!srcW) return;
-
-        const bmItemIdx = (srcW.items || []).findIndex(x => x.id === _dragBmId);
-        if (bmItemIdx < 0) return;
-
-        let finalInsertIdx = insertIdx;
-        // If sorting within the same widget and moving downwards, adjust index
-        if (srcW.id === w.id && bmItemIdx < insertIdx) {
-          finalInsertIdx--;
-        }
-
-        const bmItem = srcW.items.splice(bmItemIdx, 1)[0];
-        w.items.splice(finalInsertIdx, 0, bmItem);
-
-        _dragBmId = null;
-        _dragBmSrcWid = null;
-        sv();
-        if (typeof buildCols === 'function' && typeof _miroMode !== 'undefined' && !_miroMode) buildCols();
-        if (typeof buildMiroCanvas === 'function') buildMiroCanvas();
+      if (curInbox) {
+        moveInboxItem(curInbox, w.id, insertIdx);
+      } else if (bmId) {
+        moveBookmarkItem(bmId, srcWid, w.id, insertIdx, bmItem);
       }
     }
   });

@@ -512,6 +512,9 @@
           switchActivePage(D.cur); // This will render All
           setTimeout(() => {
             window._initialSyncCompleted = true;
+            if (typeof window.prewarmPageCache === 'function') {
+              window.prewarmPageCache();
+            }
           }, 1500);
         } else {
           renderMeta();
@@ -656,7 +659,8 @@
     if (typeof window.checkDataLossGuard === 'function') {
       const isSafe = await window.checkDataLossGuard(
         window.D,
-        saveAll ? 'Full Cloud Save (All Pages)' : 'Auto Cloud Save'
+        saveAll ? 'Full Cloud Save (All Pages)' : 'Auto Cloud Save',
+        { saveAll: !!saveAll, activePage: activePg }
       );
       if (!isSafe) {
         setOwnWrite(false);
