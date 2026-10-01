@@ -2739,65 +2739,52 @@ document.getElementById('mtb-mindmap').onclick = () => {
 // State moved to miro-state.js
 document.addEventListener('mousemove', e => { _mouseX = e.clientX; _mouseY = e.clientY; });
 
-document.addEventListener('keydown', (e) => {
-  // ESC during contentEditable editing: blur the element and exit edit mode
-  if (e.key === 'Escape' && (e.target.contentEditable === 'true' || e.target.tagName === 'TEXTAREA')) {
-    e.preventDefault();
-    e.target.blur();
-    setActiveTool('select');
-    return;
-  }
-  // Don't trigger shortcuts during text input
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.contentEditable === 'true') return;
-
+// Global high-priority backup shortcut capture on window (capture phase ensures Chrome default Save Page dialog is completely suppressed)
+window.addEventListener('keydown', (e) => {
   const isCmd = e.ctrlKey || e.metaKey;
-  const key = e.key.toLowerCase();
+  const isS = e.code === 'KeyS' || e.key === 's' || e.key === 'س' || e.key === 'S';
+  const isA = e.code === 'KeyA' || e.key === 'a' || e.key === 'ش' || e.key === 'A';
+  const isG = e.code === 'KeyG' || e.key === 'g' || e.key === 'ل' || e.key === 'G';
+  const isTextInput = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.contentEditable === 'true' || e.target.isContentEditable);
 
-  // F1 / ? — Open Shortcuts Modal
-  if (e.key === 'F1' || (e.key === '?' && !isCmd && !e.altKey)) {
+  // F1 / ? — Open Shortcuts Modal (when not actively typing inside input)
+  if ((e.key === 'F1' || (e.key === '?' && !isCmd && !e.altKey)) && !isTextInput) {
     e.preventDefault();
+    e.stopPropagation();
     if (typeof openShortcutsModal === 'function') openShortcutsModal();
     return;
   }
 
-  // Ctrl+Shift+Alt+S / Ctrl+Alt+A / Ctrl+Alt+ش — Save All (Firebase + Drive + GitHub)
-  if (isCmd && ((e.altKey && e.shiftKey && (key === 's' || key === 'س')) || (e.altKey && (key === 'a' || key === 'ش')))) {
+  // 1. Save All: Ctrl+Shift+Alt+S / Ctrl+Alt+A / Ctrl+Alt+ش
+  if (isCmd && ((e.altKey && e.shiftKey && isS) || (e.altKey && isA))) {
     e.preventDefault();
+    e.stopPropagation();
     if (typeof saveAllBackups === 'function') saveAllBackups();
     return;
   }
 
-  // Ctrl+Alt+S / Ctrl+Alt+س — Secondary Google Drive Export (StartMe-Miro folder)
-  if (isCmd && e.altKey && !e.shiftKey && (key === 's' || key === 'س')) {
+  // 2. GitHub Export: Ctrl+Alt+G / Ctrl+Alt+ل
+  if (isCmd && e.altKey && !e.shiftKey && isG) {
     e.preventDefault();
-    if (typeof saveCurrentEnvironmentToDrive === 'function') {
-      saveCurrentEnvironmentToDrive();
-    } else if (typeof doExportSelectedToDrive === 'function') {
-      doExportSelectedToDrive(false);
-    } else if (typeof exportToGoogleDrive === 'function') {
-      exportToGoogleDrive();
-    }
-    return;
-  }
-
-  // Ctrl+Alt+G / Ctrl+Alt+ل — Export to GitHub
-  if (isCmd && e.altKey && (key === 'g' || key === 'ل')) {
-    e.preventDefault();
+    e.stopPropagation();
     if (typeof exportToGitHub === 'function') exportToGitHub();
     return;
   }
 
-  // Ctrl+Shift+S / Ctrl+Shift+س — Save Snapshot & Manual Sync to Firebase & IndexedDB
-  if (isCmd && e.shiftKey && !e.altKey && (key === 's' || key === 'س')) {
+  // 3. Firebase & IndexedDB Snapshot: Ctrl+Shift+S / Ctrl+Shift+س
+  if (isCmd && e.shiftKey && !e.altKey && isS) {
     e.preventDefault();
+    e.stopPropagation();
     if (typeof triggerManualSave === 'function') triggerManualSave();
     if (typeof saveSnapshot === 'function') saveSnapshot();
     return;
   }
 
-  // Ctrl+S / Ctrl+س — Export & Save to Google Drive in folder StartMe-Miro (same as Environment Save Button)
-  if (isCmd && !e.shiftKey && !e.altKey && (key === 's' || key === 'س')) {
+  // 4. Google Drive Export (StartMe-Miro folder):
+  // Works with Ctrl+S, Alt+S, and Ctrl+Alt+S — prevents Chrome Save-As HTML dialog with capture: true
+  if ((isCmd && !e.shiftKey && !e.altKey && isS) || (e.altKey && !isCmd && !e.shiftKey && isS) || (isCmd && e.altKey && !e.shiftKey && isS)) {
     e.preventDefault();
+    e.stopPropagation();
     if (typeof triggerManualSave === 'function') triggerManualSave();
     if (typeof saveSnapshot === 'function') saveSnapshot(true);
     if (typeof saveCurrentEnvironmentToDrive === 'function') {
@@ -2809,6 +2796,18 @@ document.addEventListener('keydown', (e) => {
     }
     return;
   }
+}, { capture: true });
+
+document.addEventListener('keydown', (e) => {
+  // ESC during contentEditable editing: blur the element and exit edit mode
+  if (e.key === 'Escape' && (e.target.contentEditable === 'true' || e.target.tagName === 'TEXTAREA')) {
+    e.preventDefault();
+    e.target.blur();
+    setActiveTool('select');
+    return;
+  }
+  // Don't trigger canvas tool shortcuts during text input
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.contentEditable === 'true') return;
 
   const activePg = cp();
   if (!activePg) return;
