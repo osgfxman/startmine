@@ -1955,7 +1955,7 @@ function closeSnapshotModal() {
 }
 
 // ─── Google Drive Backup System ───
-const GDRIVE_FOLDER_NAME = 'Startmine Backups';
+const GDRIVE_FOLDER_NAME = 'StartMe-Miro';
 const GDRIVE_BACKUP_PREFIX = 'startmine_backup_';
 
 
@@ -2083,11 +2083,13 @@ function openSelIO(mode = 'export', data = null) {
   const drvBtn = document.getElementById('sel-io-drive-btn');
   
   if (mode === 'export') {
-    title.textContent = '📤 Export Data';
+    title.textContent = (data && data.environments && data.environments.length === 1)
+      ? `📤 تصدير / حفظ بيئة: ${data.environments[0].name}`
+      : '📤 Export Data';
     expBtn.style.display = '';
     impBtn.style.display = '';
     drvBtn.style.display = '';
-    buildSelIOTree(D);
+    buildSelIOTree(data || D);
   } else {
     title.textContent = '📥 Import Data — Select items to add';
     expBtn.style.display = 'none';
@@ -2292,19 +2294,42 @@ async function doSelectiveExport() {
   showToast(`📤 Exported ${exportData.pages.length} pages (${totalItems} items), ${exportData.groups.length} groups`, 3500);
 }
 
-// Export selected environments/groups/pages directly to Google Drive Root
-async function doExportSelectedToDrive(toRoot = true) {
-  const { envIds, groupIds, pageIds } = getSelIOChecked();
-  if (pageIds.size === 0 && groupIds.size === 0 && envIds.size === 0) {
-    showToast('⚠️ يرجى تحديد العناصر المراد حفظها على Drive', 3000);
-    return;
+// Export selected environments/groups/pages (or current environment) directly to Google Drive folder StartMe-Miro
+async function doExportSelectedToDrive(toRoot = false) {
+  const modal = document.getElementById('sel-io-modal');
+  const isModalOpen = modal && modal.style.display !== 'none';
+
+  let targetEnvs = [];
+  let targetGroups = [];
+  let targetPages = [];
+
+  if (isModalOpen) {
+    const { envIds, groupIds, pageIds } = getSelIOChecked();
+    if (pageIds.size === 0 && groupIds.size === 0 && envIds.size === 0) {
+      showToast('⚠️ يرجى تحديد العناصر المراد حفظها على Drive', 3000);
+      return false;
+    }
+    targetEnvs = D.environments.filter(e => envIds.has(e.id));
+    targetGroups = D.groups.filter(g => groupIds.has(g.id));
+    targetPages = D.pages.filter(p => pageIds.has(p.id));
+  } else {
+    // Current environment fallback (when triggered directly via shortcut Ctrl+S)
+    const curEnv = D.environments.find(e => e.id === D.curEnv) || D.environments[0];
+    if (curEnv) {
+      targetEnvs = [curEnv];
+      targetGroups = D.groups.filter(g => g.envId === curEnv.id);
+      targetPages = D.pages.filter(p => targetGroups.some(g => g.id === p.groupId));
+    } else {
+      targetEnvs = D.environments;
+      targetGroups = D.groups;
+      targetPages = D.pages;
+    }
   }
-  
-  showToast('⏳ جاري تجهيز البيانات للحفظ على Google Drive…', 2500);
-  const rawPages = D.pages.filter(p => pageIds.has(p.id));
+
+  showToast('⏳ جاري تجهيز البيانات للحفظ على Google Drive (StartMe-Miro)…', 2500);
   const exportPages = [];
 
-  for (const p of rawPages) {
+  for (const p of targetPages) {
     let widgets = p.widgets || [];
     let miroCards = p.miroCards || [];
     let vGuides = p.vGuides || [];
@@ -2356,15 +2381,15 @@ async function doExportSelectedToDrive(toRoot = true) {
     _selectiveExport: true,
     exportDate: new Date().toISOString(),
     settings: D.settings,
-    environments: D.environments.filter(e => envIds.has(e.id)),
-    groups: D.groups.filter(g => groupIds.has(g.id)),
+    environments: targetEnvs,
+    groups: targetGroups,
     pages: exportPages
   };
 
   let totalItems = 0;
   exportPages.forEach(p => { totalItems += (p.widgets || []).length + (p.miroCards || []).length; });
 
-  const envNames = exportData.environments.map(e => e.name).join('_') || 'selected';
+  const envNames = exportData.environments.map(e => e.name).join('_') || 'current';
   const customFileName = `startmine_${envNames}_${new Date().toISOString().slice(0, 10)}_${totalItems}_items.json`;
 
   const res = await exportToGoogleDrive({
@@ -2374,11 +2399,18 @@ async function doExportSelectedToDrive(toRoot = true) {
   });
 
   if (res) {
-    closeSelIO();
-    showToast(`☁️ تم الحفظ بنجاح على Google Drive (الرووت): ${customFileName}`, 5000);
+    if (isModalOpen) closeSelIO();
+    showToast(`☁️ تم الحفظ بنجاح على Google Drive (مجلد StartMe-Miro): ${customFileName}`, 5000);
   }
+  return res;
 }
 window.doExportSelectedToDrive = doExportSelectedToDrive;
+
+// Save current environment (or selection) to Google Drive in folder StartMe-Miro
+async function saveCurrentEnvironmentToDrive() {
+  return await doExportSelectedToDrive(false);
+}
+window.saveCurrentEnvironmentToDrive = saveCurrentEnvironmentToDrive;
 
 function handleSelIOImport(e) {
   const file = e.target.files[0];
@@ -2570,7 +2602,7 @@ async function exportToGoogleDrive(opts = {}) {
     return { uploadResp, fileName, totalItems, pagesCount: (exportData.pages || []).length };
   }
   try {
-    showToast(toRoot ? '☁️ جاري الحفظ في الرووت على Google Drive…' : '☁️ Exporting to Google Drive…');
+    showToast(toRoot ? '☁️ جاري الحفظ في الرووت على Google Drive…' : '☁️ جاري الحفظ في مجلد StartMe-Miro على Google Drive…');
     let token;
     try {
       token = await ensureGoogleToken();
@@ -2596,7 +2628,7 @@ async function exportToGoogleDrive(opts = {}) {
       throw new Error('Upload failed: ' + errText);
     }
     const uploadJson = await uploadResult.uploadResp.json();
-    showToast(`✅ Saved to Google Drive${toRoot ? ' (Root)' : ''}: ${uploadResult.totalItems} items (${uploadResult.pagesCount} pages)`, 4000);
+    showToast(toRoot ? `✅ Saved to Google Drive (Root): ${uploadResult.totalItems} items (${uploadResult.pagesCount} pages)` : `✅ تم الحفظ في مجلد StartMe-Miro على Google Drive: ${uploadResult.totalItems} عنصر (${uploadResult.pagesCount} صفحة)`, 4000);
     console.log('[GDRIVE] Backup uploaded:', uploadJson);
     return uploadJson;
   } catch (err) {
@@ -11737,6 +11769,7 @@ window.setPageColumns = setPageColumns;
 window.balancePageWidgetsAcrossCols = balancePageWidgetsAcrossCols;
 window.reorderStartMeWidget = reorderStartMeWidget;
 window.getActiveViewItem = getActiveViewItem;
+window.saveCurrentEnvironmentToDrive = saveCurrentEnvironmentToDrive;
 
 // Window aliases for backward compatibility
 SM.renderAll = typeof renderAll !== 'undefined' ? renderAll : window.renderAll;
@@ -11747,6 +11780,7 @@ SM.renderStartMeColsToolbar = renderStartMeColsToolbar;
 SM.setPageColumns = setPageColumns;
 SM.balancePageWidgetsAcrossCols = balancePageWidgetsAcrossCols;
 SM.reorderStartMeWidget = reorderStartMeWidget;
+SM.saveCurrentEnvironmentToDrive = saveCurrentEnvironmentToDrive;
 SM.openShortcutsModal = typeof openShortcutsModal !== 'undefined' ? openShortcutsModal : window.openShortcutsModal;
 SM.closeShortcutsModal = typeof closeShortcutsModal !== 'undefined' ? closeShortcutsModal : window.closeShortcutsModal;
 
@@ -11756,7 +11790,14 @@ window.saveAllBackups = SM.saveAllBackups;
 window.openSnapshotModal = SM.openSnapshotModal;
 window.openShortcutsModal = function() {
   const modal = document.getElementById('shortcuts-modal');
-  if (modal) modal.style.display = 'flex';
+  if (modal) {
+    const inp = document.getElementById('shortcuts-search-inp');
+    if (inp) {
+      inp.value = '';
+      if (typeof filterShortcutsList === 'function') filterShortcutsList('');
+    }
+    modal.style.display = 'flex';
+  }
 };
 window.closeShortcutsModal = function() {
   const modal = document.getElementById('shortcuts-modal');

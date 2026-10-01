@@ -2767,10 +2767,16 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Ctrl+Shift+S / Ctrl+Alt+S / Ctrl+Shift+س / Ctrl+Alt+س — Export to Google Drive
-  if (isCmd && (e.shiftKey || e.altKey) && (key === 's' || key === 'س')) {
+  // Ctrl+Alt+S / Ctrl+Alt+س — Secondary Google Drive Export (StartMe-Miro folder)
+  if (isCmd && e.altKey && !e.shiftKey && (key === 's' || key === 'س')) {
     e.preventDefault();
-    if (typeof exportToGoogleDrive === 'function') exportToGoogleDrive();
+    if (typeof saveCurrentEnvironmentToDrive === 'function') {
+      saveCurrentEnvironmentToDrive();
+    } else if (typeof doExportSelectedToDrive === 'function') {
+      doExportSelectedToDrive(false);
+    } else if (typeof exportToGoogleDrive === 'function') {
+      exportToGoogleDrive();
+    }
     return;
   }
 
@@ -2781,11 +2787,26 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Ctrl+S / Ctrl+س — Save Snapshot & Manual Sync (works on ALL page types)
-  if (isCmd && !e.shiftKey && !e.altKey && (key === 's' || key === 'س')) {
+  // Ctrl+Shift+S / Ctrl+Shift+س — Save Snapshot & Manual Sync to Firebase & IndexedDB
+  if (isCmd && e.shiftKey && !e.altKey && (key === 's' || key === 'س')) {
     e.preventDefault();
     if (typeof triggerManualSave === 'function') triggerManualSave();
     if (typeof saveSnapshot === 'function') saveSnapshot();
+    return;
+  }
+
+  // Ctrl+S / Ctrl+س — Export & Save to Google Drive in folder StartMe-Miro (same as Environment Save Button)
+  if (isCmd && !e.shiftKey && !e.altKey && (key === 's' || key === 'س')) {
+    e.preventDefault();
+    if (typeof triggerManualSave === 'function') triggerManualSave();
+    if (typeof saveSnapshot === 'function') saveSnapshot(true);
+    if (typeof saveCurrentEnvironmentToDrive === 'function') {
+      saveCurrentEnvironmentToDrive();
+    } else if (typeof doExportSelectedToDrive === 'function') {
+      doExportSelectedToDrive(false);
+    } else if (typeof exportToGoogleDrive === 'function') {
+      exportToGoogleDrive();
+    }
     return;
   }
 
