@@ -154,6 +154,8 @@
   try {
     localStorage.removeItem(LS_KEY_HIGHEST_BM);
     localStorage.removeItem(LS_KEY_HIGHEST_TOTAL);
+    localStorage.removeItem('sm_highest_item_count');
+    localStorage.removeItem('sm_last_item_count');
     localStorage.removeItem('sm_golden_bookmarks');
     localStorage.removeItem('sm_golden_total');
     const existingOldModal = document.getElementById('m-override-warning');
@@ -173,7 +175,7 @@
   }
 
   function updateHighestCounts(counts) {
-    // Harmless no-op: no baseline counting to annoy the user
+    // Harmless no-op
   }
 
   function syncHighestCountsFromCloud(cloudStats) {
@@ -181,47 +183,18 @@
   }
 
   /* ─────────────────────────────────────────────────────────────
-   * 3. ZERO-FRICTION DATA PROTECTION & TIME-MACHINE AUTO-SNAPSHOTS
+   * 3. ZERO-INTERFERENCE GUARD (NON-BLOCKING PASS-THROUGH)
    * ───────────────────────────────────────────────────────────── */
-  let _lastSilentSnapshotTs = 0;
-  const SILENT_SNAPSHOT_INTERVAL = 10 * 60 * 1000; // 10 minutes
-
   async function triggerSilentBackgroundSnapshot(tag = 'auto_periodic') {
-    if (!window.D || !Array.isArray(window.D.pages) || window.D.pages.length === 0) return;
-    const now = Date.now();
-    if (now - _lastSilentSnapshotTs < 2 * 60 * 1000) {
-      // Throttle: avoid saving more than once per 2 minutes
-      return;
-    }
-    _lastSilentSnapshotTs = now;
-    try {
-      await saveSafetySnapshot(tag);
-    } catch(e) {
-      console.warn('[PROTECTION] Silent background snapshot error:', e);
-    }
+    // No-op: background automated snapshot of unhydrated pages disabled to prevent saving empty structures
+    return Promise.resolve();
   }
 
-  // Periodic automatic silent snapshot every 10 minutes in background
-  setInterval(() => {
-    triggerSilentBackgroundSnapshot('periodic_10min');
-  }, SILENT_SNAPSHOT_INTERVAL);
-
   /**
-   * Non-blocking Data Loss Guard:
-   * Protects data without ever interrupting or blocking the user.
-   * Only prevents writing if the root data is completely null/corrupted.
+   * Completely Non-blocking Data Guard:
+   * Returns true immediately without interfering with normal user workflow or manual saves.
    */
   async function checkDataLossGuard(targetData, operationName = 'Save', options = {}) {
-    // Basic sanity check to prevent saving a completely null or empty structure
-    if (!targetData || !Array.isArray(targetData.pages) || targetData.pages.length === 0) {
-      console.warn(`[DATA LOSS GUARD ⚠️] ${operationName} ignored: target data has no pages.`);
-      return false;
-    }
-
-    // Trigger silent background snapshot
-    triggerSilentBackgroundSnapshot('pre_save');
-
-    // Never block normal user workflow or show annoying popup warnings
     return true;
   }
 
@@ -636,48 +609,8 @@
    * 7. EMERGENCY SAFETY SNAPSHOT
    * ───────────────────────────────────────────────────────────── */
   async function saveSafetySnapshot(tag = 'safety') {
-    if (!window.D) return;
-    const now = Date.now();
-    const count = countAllData(window.D);
-
-    const snapshot = {
-      ts: now,
-      tag,
-      itemCount: count.total,
-      bookmarkCount: count.bookmarks,
-      pagesMeta: (window.D.pages || []).map(p => ({ id: p.id, name: p.name, groupId: p.groupId, pageType: p.pageType })),
-      meta: {
-        settings: window.D.settings,
-        curEnv: window.D.curEnv,
-        curGroup: window.D.curGroup,
-        environments: window.D.environments,
-        groups: window.D.groups,
-        inbox: window.D.inbox
-      },
-      pages: {}
-    };
-
-    (window.D.pages || []).forEach(p => {
-      snapshot.pages[p.id] = {
-        widgets: p.widgets || [],
-        miroCards: p.miroCards || [],
-        vGuides: p.vGuides || [],
-        hGuides: p.hGuides || []
-      };
-    });
-
-    // 1. Save to IndexedDB
-    try {
-      if (typeof window.idbSet === 'function') {
-        await window.idbSet(`safety_snapshot_${now}`, snapshot);
-      }
-    } catch(e) {}
-
-    // 2. Save to Firebase
-    if (window.USER_ID && window.db) {
-      window.db.ref(`users/${window.USER_ID}/startmine_snapshots/${now}`).set(snapshot)
-        .catch(e => console.warn('[SAFETY SNAPSHOT FB]', e));
-    }
+    // Harmless no-op: manual snapshots and standard saveSnapshot handle full data safely
+    return Promise.resolve();
   }
 
   /* ─────────────────────────────────────────────────────────────

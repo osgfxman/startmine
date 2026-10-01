@@ -2750,29 +2750,39 @@ document.addEventListener('keydown', (e) => {
   // Don't trigger shortcuts during text input
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.contentEditable === 'true') return;
 
-  // Ctrl+Alt+A / Ctrl+Alt+ش — Save All (Firebase + Drive + GitHub)
-  if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key.toLowerCase() === 'a' || e.key === 'ش')) {
+  const isCmd = e.ctrlKey || e.metaKey;
+  const key = e.key.toLowerCase();
+
+  // F1 / ? — Open Shortcuts Modal
+  if (e.key === 'F1' || (e.key === '?' && !isCmd && !e.altKey)) {
+    e.preventDefault();
+    if (typeof openShortcutsModal === 'function') openShortcutsModal();
+    return;
+  }
+
+  // Ctrl+Shift+Alt+S / Ctrl+Alt+A / Ctrl+Alt+ش — Save All (Firebase + Drive + GitHub)
+  if (isCmd && ((e.altKey && e.shiftKey && (key === 's' || key === 'س')) || (e.altKey && (key === 'a' || key === 'ش')))) {
     e.preventDefault();
     if (typeof saveAllBackups === 'function') saveAllBackups();
     return;
   }
 
-  // Ctrl+Alt+G / Ctrl+Alt+ل — Export to GitHub
-  if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key.toLowerCase() === 'g' || e.key === 'ل')) {
-    e.preventDefault();
-    if (typeof exportToGitHub === 'function') exportToGitHub();
-    return;
-  }
-
-  // Ctrl+Alt+S / Ctrl+Alt+س — Export to Google Drive
-  if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key.toLowerCase() === 's' || e.key === 'س')) {
+  // Ctrl+Shift+S / Ctrl+Alt+S / Ctrl+Shift+س / Ctrl+Alt+س — Export to Google Drive
+  if (isCmd && (e.shiftKey || e.altKey) && (key === 's' || key === 'س')) {
     e.preventDefault();
     if (typeof exportToGoogleDrive === 'function') exportToGoogleDrive();
     return;
   }
 
+  // Ctrl+Alt+G / Ctrl+Alt+ل — Export to GitHub
+  if (isCmd && e.altKey && (key === 'g' || key === 'ل')) {
+    e.preventDefault();
+    if (typeof exportToGitHub === 'function') exportToGitHub();
+    return;
+  }
+
   // Ctrl+S / Ctrl+س — Save Snapshot & Manual Sync (works on ALL page types)
-  if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 's' || e.key === 'س')) {
+  if (isCmd && !e.shiftKey && !e.altKey && (key === 's' || key === 'س')) {
     e.preventDefault();
     if (typeof triggerManualSave === 'function') triggerManualSave();
     if (typeof saveSnapshot === 'function') saveSnapshot();

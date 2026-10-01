@@ -135,17 +135,10 @@ function cacheGoogleToken(token) {
 function restoreGoogleToken() {
   try {
     const t = localStorage.getItem(LS_G_TOKEN);
-    const exp = parseInt(localStorage.getItem(LS_G_TOKEN_EXP) || '0');
-    if (t && exp > Date.now()) {
-      _googleAccessToken = t;
-      _googleTokenExpiry = exp;
-      return true;
-    }
-    // Token expired or missing — clear stale data
     if (t) {
-      _googleAccessToken = null;
-      localStorage.removeItem(LS_G_TOKEN);
-      localStorage.removeItem(LS_G_TOKEN_EXP);
+      _googleAccessToken = t;
+      _googleTokenExpiry = parseInt(localStorage.getItem(LS_G_TOKEN_EXP) || '0');
+      return true;
     }
   } catch (e) {}
   return false;
@@ -158,37 +151,21 @@ function isGoogleTokenExpired() {
 // Restore on load
 restoreGoogleToken();
 
-// ─── Auto-refresh Google token before expiry ───
-// Refresh proactively every 45 min to avoid 401s during API calls
-setInterval(async () => {
-  if (_googleAccessToken && Date.now() >= _googleTokenExpiry - 10 * 60 * 1000) {
-    console.log('[Token] Proactive refresh — will refresh on next user action');
-    // Don't auto-popup — just clear the token so next user-triggered action re-auths
-    _googleAccessToken = null;
-    _googleTokenExpiry = 0;
-    try { localStorage.removeItem(LS_G_TOKEN); localStorage.removeItem(LS_G_TOKEN_EXP); } catch(e) {}
-  }
-}, 5 * 60 * 1000); // Check every 5 minutes
-
-// Ensure we have a valid Google access token
-// NEVER opens a popup — returns cached token or throws NEEDS_AUTH.
-// Popups should only be triggered by direct user clicks (login button, calendar connect button).
-async function ensureGoogleToken() {
+// ─── Google token management ───
+// Don't eagerly wipe token; let API calls attempt use and re-auth only on 401
+function ensureGoogleToken() {
   if (!_googleAccessToken) restoreGoogleToken();
   if (!_googleAccessToken) {
-    // No token — callers should show a "connect" button
     const e = new Error('NEEDS_AUTH'); e.needsAuth = true; throw e;
   }
-  // If expired, still return the token — let the API call try it.
-  // If it 401s, the retry logic will call ensureGoogleTokenFresh → manualGoogleReAuth from a user click.
-  return _googleAccessToken;
+  return Promise.resolve(_googleAccessToken);
 }
+
 // Force-refresh token (called from user-triggered retry after 401)
 async function ensureGoogleTokenFresh() {
   try {
     return await manualGoogleReAuth();
   } catch(e) {
-    // Don't show toast here — let callers handle it
     return null;
   }
 }
@@ -202,15 +179,27 @@ async function manualGoogleReAuth() {
   hintProvider.addScope('https://www.googleapis.com/auth/calendar.events');
   hintProvider.addScope('https://www.googleapis.com/auth/calendar.readonly');
   hintProvider.addScope('https://www.googleapis.com/auth/tasks');
-  hintProvider.setCustomParameters({ login_hint: user.email });
+  if (user.email) {
+    hintProvider.setCustomParameters({ login_hint: user.email });
+  }
   try {
     const result = await auth.signInWithPopup(hintProvider);
-    if (result.credential) {
-      cacheGoogleToken(result.credential.accessToken);
+    var cred = result.credential || (firebase.auth.GoogleAuthProvider.credentialFromResult && firebase.auth.GoogleAuthProvider.credentialFromResult(result));
+    if (cred && cred.accessToken) {
+      cacheGoogleToken(cred.accessToken);
       return _googleAccessToken;
     }
+    if (result.user && typeof result.user.getIdToken === 'function') {
+      const idToken = await result.user.getIdToken();
+      if (idToken) {
+        // Fallback token
+        cacheGoogleToken(idToken);
+        return idToken;
+      }
+    }
   } catch (e) {
-    if (typeof showToast === 'function') showToast('❌ Auth failed: ' + e.message, 4000);
+    console.error('[AUTH REAUTH ERROR]', e);
+    if (typeof showToast === 'function') showToast('❌ Auth failed: ' + (e.message || e), 4000);
     throw e;
   }
   throw new Error('Could not get Google access token');

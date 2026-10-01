@@ -479,12 +479,13 @@ function autoSnapshot() {
     }
   });
   
-  // Keep timestamped snapshots and latest snapshot
+  // Keep timestamped snapshots and latest snapshot in local IndexedDB
   idbSet('snapshot_latest', snapshot);
   idbSet('snapshot_' + now, snapshot).then(() => {
-    console.log(`[AUTO-SNAPSHOT ✅] Full backup saved (${Object.keys(snapshot.pages).length} pages, ${new Date(now).toLocaleTimeString()})`);
+    console.log(`[AUTO-SNAPSHOT ✅] Full backup saved to IndexedDB (${Object.keys(snapshot.pages).length} pages, ${new Date(now).toLocaleTimeString()})`);
   });
-  if (typeof saveSnapshot === 'function') {
+  // Only push automated snapshot to Firebase once every 2 hours to avoid pruning user's manual snapshots
+  if (typeof saveSnapshot === 'function' && (now - (_lastSnapshotTs || 0) > 2 * 60 * 60 * 1000)) {
     saveSnapshot(true).catch(() => {});
   }
 }
@@ -1257,12 +1258,22 @@ function switchActivePage(pageId) {
         return;
       }
 
-      // ⛔ GUARD: If Firebase sends empty but we have local data, refuse the overwrite unconditionally
+      // ⛔ GUARD: If Firebase sends empty but local has data or cache has data, refuse the overwrite unconditionally
       const incomingEmpty = (incomingW === 0 && incomingC === 0 && incomingG === 0);
-      if (incomingEmpty && localHasData) {
-        console.error(`[FIREBASE GUARD ⛔] Incoming data for "${pg.name}" is EMPTY but local has data/guides — IGNORING Firebase update!`);
-        if (typeof showToast === 'function') showToast('⚠️ تم حظر مسح بيانات الصفحة محلياً (بيانات فارغة من السحابة)', 6000);
-        return; // Don't apply empty data
+      if (incomingEmpty) {
+        if (localHasData) {
+          console.warn(`[FIREBASE GUARD ⛔] Incoming data for "${pg.name}" is EMPTY but local memory has data — IGNORING Firebase update!`);
+          return;
+        }
+        const cached = typeof getCachedPageData === 'function' ? getCachedPageData(pageId) : null;
+        const cachedHasData = cached && (((cached.widgets || []).length > 0) || ((cached.miroCards || []).length > 0));
+        if (cachedHasData) {
+          console.warn(`[FIREBASE GUARD ⛔] Incoming data for "${pg.name}" is EMPTY but cache has data — restoring from cache!`);
+          pg.widgets = cached.widgets || [];
+          pg.miroCards = cached.miroCards || [];
+          buildCols();
+          return;
+        }
       }
 
       pg.widgets = _ensureArr(pData.widgets);
@@ -1373,7 +1384,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ─── Versioned Snapshot Backup System ───
-const SNAPSHOT_MAX = 30;
+const SNAPSHOT_MAX = 100;
 let _snapshotSaving = false;
 let _lastSnapshotTs = 0;
 
@@ -1401,79 +1412,10 @@ var showToast = (typeof SM !== 'undefined' && SM.ui && SM.ui.showToast) ? SM.ui.
 // ═══════════════════════════════════════════════════════════════
 
 function checkDataIntegrity(exportData, operationName = 'Backup') {
-  if (!exportData || !exportData.pages) {
-    const msg = `🚨 CRITICAL BLOCKED: Empty data structure detected for ${operationName}`;
-    console.error(msg);
-    if (typeof showToast === 'function') showToast(msg, 6000);
+  if (!exportData || !exportData.pages || !Array.isArray(exportData.pages) || exportData.pages.length === 0) {
+    console.warn(`[DATA INTEGRITY] Empty data structure detected for ${operationName}`);
     return false;
   }
-
-  const counts = typeof window.countAllData === 'function' ? window.countAllData(exportData) : null;
-  let totalItems = 0;
-  let totalBookmarks = 0;
-  let emptyPagesCount = 0;
-
-  if (counts) {
-    totalItems = counts.total;
-    totalBookmarks = counts.bookmarks;
-    (exportData.pages || []).forEach(p => {
-      const c = ((p && p.widgets) || []).length + ((p && p.miroCards) || []).length;
-      if (c === 0 && p && p.pageType !== 'slicer') emptyPagesCount++;
-    });
-  } else {
-    (exportData.pages || []).forEach(p => {
-      const count = ((p && p.widgets) || []).length + ((p && p.miroCards) || []).length;
-      totalItems += count;
-      if (count === 0 && p && p.pageType !== 'slicer') emptyPagesCount++;
-    });
-  }
-
-  const highest = typeof window.getHighestCounts === 'function' ? window.getHighestCounts() : { bookmarks: 0, total: 0 };
-  const LS_HIGHEST = 'sm_highest_item_count';
-  let highestCount = Math.max(highest.total, parseInt(localStorage.getItem(LS_HIGHEST) || '0', 10));
-  let highestBm = Math.max(highest.bookmarks, parseInt(localStorage.getItem('sm_highest_bookmarks') || '0', 10));
-
-  console.log(`[INTEGRITY CHECK] ${operationName}: Total items = ${totalItems} (Highest: ${highestCount}), Bookmarks = ${totalBookmarks} (Highest Bm: ${highestBm}), Pages: ${(exportData.pages || []).length}, Empty: ${emptyPagesCount}`);
-
-  // Guard 1: Absolute empty wipe prevention
-  if (totalItems === 0 && (highestCount > 10 || highestBm > 10)) {
-    const errMsg = `🚨 تم حظر العملية لحماية بياناتك!\nتم رصد 0 عنصر في العملية "${operationName}" بينما سجل مكتبتك يحتوي على ${highestBm || highestCount} عنصر سابقاً.\nتم إيقاف الحفظ فوراً لمنع تصفير البيانات!`;
-    console.error(`[DATA INTEGRITY GUARD] Blocked 0-item wipeout in ${operationName}`);
-    if (typeof showToast === 'function') showToast('🚨 تم حظر الحفظ لمنع مسح البيانات!', 8000);
-    alert(errMsg);
-    return false;
-  }
-
-  // Guard 2: Significant drop prevention (>15% drop or drop in bookmarks)
-  const isDrop = (highestBm > 50 && totalBookmarks < Math.floor(highestBm * 0.85)) ||
-                 (highestCount > 50 && totalItems < Math.floor(highestCount * 0.85));
-
-  if (isDrop) {
-    const drop = highestBm > totalBookmarks ? (highestBm - totalBookmarks) : (highestCount - totalItems);
-    const base = highestBm > totalBookmarks ? highestBm : highestCount;
-    const dropPct = Math.round((drop / base) * 100);
-    const confirmMsg = `⚠️ تحذير أمان وسلامة البيانات (DATA INTEGRITY GUARD):\n\n` +
-      `سجل مكتبتك سابقاً يحتوي على (${base}) موقع/عنصر محفوظ.\n` +
-      `النسخة الحالية للعملية "${operationName}" تحتوي فقط على (${totalBookmarks || totalItems}) عنصر (فقدان ${drop} عنصر بنسبة ${dropPct}%!).\n\n` +
-      `هل أنت متأكد تماماً أنك قمت بحذف هذه العناصر عن عمد وتريد استبدال النسخ الاحتياطية؟\n\n` +
-      `اضغط Cancel لإلغاء الحفظ وحماية بياناتك السابقة.`;
-    
-    if (!confirm(confirmMsg)) {
-      console.warn(`[DATA INTEGRITY GUARD] User aborted ${operationName} due to item drop (${totalItems} vs ${highestCount})`);
-      if (typeof showToast === 'function') showToast('🛡️ تم إيقاف الحفظ لحماية بياناتك من الفقدان', 5000);
-      return false;
-    }
-  }
-
-  // Update highest count
-  if (counts && typeof window.updateHighestCounts === 'function') {
-    window.updateHighestCounts(counts);
-  }
-  if (totalItems > highestCount) {
-    try { localStorage.setItem(LS_HIGHEST, String(totalItems)); } catch(e) {}
-  }
-  try { localStorage.setItem('sm_last_item_count', String(totalItems)); } catch(e) {}
-
   return true;
 }
 
@@ -1632,42 +1574,54 @@ async function saveSnapshot(silent = false) {
 
     const snapRef = `users/${USER_ID}/startmine_snapshots/${now}`;
     await db.ref(snapRef).set(snapshot);
+    // Also persist safety snapshot locally in IndexedDB
+    try {
+      idbSet(`safety_snapshot_${now}`, snapshot);
+    } catch(e) {}
     _snapshotSaving = false;
     if (!silent) showToast(`✅ Snapshot saved (${totalItems} items, ${fullData.pages.length} pages)`);
 
-    // Smart Rotation: Top 5 snapshots with the highest item count are NEVER deleted (Golden Snapshots)
-    const snap = await db.ref(`users/${USER_ID}/startmine_snapshots`).orderByKey().once('value');
-    if (snap && snap.exists()) {
-      const allSnaps = [];
-      snap.forEach(child => {
-        const val = child.val() || {};
-        let items = val.itemCount;
-        if (items === undefined && val.pages) {
-          items = 0;
-          Object.values(val.pages).forEach(pg => {
-            items += ((pg && pg.widgets) || []).length + ((pg && pg.miroCards) || []).length;
-          });
-        }
-        allSnaps.push({ key: child.key, itemCount: items || 0, ts: val.ts || parseInt(child.key) });
-      });
+    // Smart Rotation: Top 15 snapshots with the highest item count are NEVER deleted (Golden Snapshots)
+    // Snapshots created within the last 48 hours are also NEVER deleted
+    try {
+      const snap = await db.ref(`users/${USER_ID}/startmine_snapshots`).orderByKey().once('value');
+      if (snap && snap.exists()) {
+        const allSnaps = [];
+        snap.forEach(child => {
+          const val = child.val() || {};
+          let items = val.itemCount;
+          if (items === undefined && val.pages) {
+            items = 0;
+            Object.values(val.pages).forEach(pg => {
+              items += ((pg && pg.widgets) || []).length + ((pg && pg.miroCards) || []).length;
+            });
+          }
+          allSnaps.push({ key: child.key, itemCount: items || 0, ts: val.ts || parseInt(child.key) });
+        });
 
-      if (allSnaps.length > SNAPSHOT_MAX) {
-        // Protect top 5 snapshots with highest item count forever
-        const sortedByItems = [...allSnaps].sort((a, b) => b.itemCount - a.itemCount);
-        const protectedKeys = new Set(sortedByItems.slice(0, 5).map(s => s.key));
+        if (allSnaps.length > SNAPSHOT_MAX) {
+          // Protect top 15 snapshots with highest item count forever
+          const sortedByItems = [...allSnaps].sort((a, b) => b.itemCount - a.itemCount);
+          const protectedKeys = new Set(sortedByItems.slice(0, 15).map(s => s.key));
 
-        // Delete from oldest non-protected snapshots
-        const deletable = allSnaps.filter(s => !protectedKeys.has(s.key)).sort((a, b) => a.ts - b.ts);
-        const excess = allSnaps.length - SNAPSHOT_MAX;
-        const toDelete = deletable.slice(0, excess);
+          // Never delete snapshots taken within the last 48 hours
+          const recentCutoff = Date.now() - (48 * 3600 * 1000);
 
-        if (toDelete.length > 0) {
-          const updates = {};
-          toDelete.forEach(s => { updates[`users/${USER_ID}/startmine_snapshots/${s.key}`] = null; });
-          await db.ref().update(updates);
-          console.log(`[SNAPSHOT ROTATION] Pruned ${toDelete.length} snapshots; top 5 golden snapshots preserved.`);
+          // Delete only from older, non-golden snapshots
+          const deletable = allSnaps.filter(s => !protectedKeys.has(s.key) && s.ts < recentCutoff).sort((a, b) => a.ts - b.ts);
+          const excess = allSnaps.length - SNAPSHOT_MAX;
+          const toDelete = deletable.slice(0, Math.min(excess, deletable.length));
+
+          if (toDelete.length > 0) {
+            const updates = {};
+            toDelete.forEach(s => { updates[`users/${USER_ID}/startmine_snapshots/${s.key}`] = null; });
+            await db.ref().update(updates);
+            console.log(`[SNAPSHOT ROTATION] Pruned ${toDelete.length} old snapshots; golden and recent 48h snapshots preserved.`);
+          }
         }
       }
+    } catch(rotErr) {
+      console.warn('[SNAPSHOT ROTATION WARNING]', rotErr);
     }
   } catch (err) {
     _snapshotSaving = false;
@@ -1730,42 +1684,114 @@ function saveSnapshotBeacon() {
   } catch (e) { console.error('[BEACON SNAPSHOT ERROR]', e); }
 }
 
-// Load all snapshots for restore UI (with item counts)
-function loadSnapshots() {
-  if (!USER_ID) return Promise.resolve([]);
-  return db.ref(`users/${USER_ID}/startmine_snapshots`)
-    .orderByKey().once('value')
-    .then(snap => {
-      const list = [];
-      snap.forEach(child => {
-        const v = child.val() || {};
-        const pageNames = (v.pagesMeta || []).map(p => p.name || 'Untitled');
-        let count = v.itemCount;
-        if (count === undefined && v.pages) {
-          count = 0;
-          Object.values(v.pages).forEach(pg => {
-            count += ((pg && pg.widgets) || []).length + ((pg && pg.miroCards) || []).length;
+// Load all snapshots for restore UI (combines Firebase and local IndexedDB snapshots)
+async function loadSnapshots() {
+  const list = [];
+  const seenKeys = new Set();
+  const seenTimestamps = new Set();
+
+  // 1. Try Firebase with 5s timeout
+  if (USER_ID && window.db) {
+    try {
+      const fbPromise = db.ref(`users/${USER_ID}/startmine_snapshots`).orderByKey().once('value');
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase timeout')), 5000));
+      const snap = await Promise.race([fbPromise, timeoutPromise]);
+      if (snap && snap.exists()) {
+        snap.forEach(child => {
+          const v = child.val() || {};
+          const pageNames = (v.pagesMeta || []).map(p => p.name || 'Untitled');
+          let count = v.itemCount;
+          if (count === undefined && v.pages) {
+            count = 0;
+            Object.values(v.pages).forEach(pg => {
+              count += ((pg && pg.widgets) || []).length + ((pg && pg.miroCards) || []).length;
+            });
+          }
+          const ts = v.ts || parseInt(child.key) || Date.now();
+          seenKeys.add(child.key);
+          seenTimestamps.add(ts);
+          list.push({
+            key: child.key,
+            source: 'firebase',
+            ts: ts,
+            itemCount: count !== undefined ? count : '—',
+            pageCount: (v.pagesMeta || []).length || (v.pages ? Object.keys(v.pages).length : 0),
+            pageNames: pageNames
           });
-        }
-        list.push({
-          key: child.key,
-          ts: v.ts || parseInt(child.key),
-          itemCount: count !== undefined ? count : '—',
-          pageCount: (v.pagesMeta || []).length,
-          pageNames: pageNames
         });
-      });
-      return list.reverse(); // newest first
-    });
+      }
+    } catch (err) {
+      console.warn('[LOAD SNAPSHOTS] Firebase fetch warning:', err);
+    }
+  }
+
+  // 2. Also retrieve safety and auto snapshots from IndexedDB
+  try {
+    const idbInstance = await openIDB();
+    if (idbInstance) {
+      const tx = idbInstance.transaction(IDB_STORE, 'readonly');
+      const store = tx.objectStore(IDB_STORE);
+      const req = store.getAllKeys ? store.getAllKeys() : null;
+      if (req) {
+        const keys = await new Promise(res => { req.onsuccess = () => res(req.result || []); req.onerror = () => res([]); });
+        for (const k of keys) {
+          if (typeof k === 'string' && (k.startsWith('snapshot_') || k.startsWith('safety_snapshot_')) && k !== 'snapshot_latest') {
+            const rawTs = parseInt(k.replace('snapshot_', '').replace('safety_snapshot_', ''));
+            if (!seenKeys.has(k) && (!rawTs || !seenTimestamps.has(rawTs))) {
+              const val = await idbGet(k);
+              if (val) {
+                let count = val.itemCount;
+                if (count === undefined && val.pages) {
+                  count = 0;
+                  Object.values(val.pages).forEach(pg => {
+                    count += ((pg && pg.widgets) || []).length + ((pg && pg.miroCards) || []).length;
+                  });
+                }
+                const pageNames = (val.pagesMeta || []).map(p => p.name || 'Untitled');
+                const snapTs = val.timestamp || val.ts || rawTs || Date.now();
+                list.push({
+                  key: k,
+                  source: 'idb',
+                  ts: snapTs,
+                  itemCount: count !== undefined ? count : '—',
+                  pageCount: (val.pagesMeta || []).length || (val.pages ? Object.keys(val.pages).length : 0),
+                  pageNames: pageNames
+                });
+                seenKeys.add(k);
+                if (rawTs) seenTimestamps.add(rawTs);
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (idbErr) {
+    console.warn('[LOAD SNAPSHOTS] IDB scan warning:', idbErr);
+  }
+
+  return list.sort((a, b) => b.ts - a.ts);
 }
 
-// Restore a specific snapshot with integrity verification
+// Restore a specific snapshot with integrity verification (supports Firebase & IndexedDB)
 async function restoreSnapshot(key) {
-  if (!USER_ID || !key) return;
+  if (!key) return;
 
   try {
-    const snap = await db.ref(`users/${USER_ID}/startmine_snapshots/${key}`).once('value');
-    const data = snap.val();
+    let data = null;
+    const isIdbKey = key.startsWith('snapshot_') || key.startsWith('safety_snapshot_');
+
+    if (isIdbKey) {
+      data = await idbGet(key);
+    }
+    if (!data && USER_ID && window.db) {
+      try {
+        const snap = await db.ref(`users/${USER_ID}/startmine_snapshots/${key}`).once('value');
+        data = snap.val();
+      } catch(e) {}
+    }
+    if (!data && !isIdbKey) {
+      data = (await idbGet('safety_snapshot_' + key)) || (await idbGet('snapshot_' + key));
+    }
     if (!data) { showToast('❌ Snapshot not found'); return; }
 
     // Count items in the snapshot
@@ -1869,7 +1895,7 @@ function openSnapshotModal() {
     modal = document.createElement('div');
     modal.id = 'snapshot-modal';
     modal.innerHTML = `
-      <div class="snap-overlay"></div>
+      <div class="snap-overlay" onclick="closeSnapshotModal()"></div>
       <div class="snap-dialog">
         <div class="snap-header">
           <span>📸 Saved Snapshots</span>
@@ -1887,8 +1913,8 @@ function openSnapshotModal() {
   const listEl = document.getElementById('snap-list');
   listEl.innerHTML = '<div style="text-align:center;padding:20px;color:rgba(255,255,255,.5)">Loading...</div>';
   loadSnapshots().then(snapshots => {
-    if (snapshots.length === 0) {
-      listEl.innerHTML = '<div style="text-align:center;padding:30px;color:rgba(255,255,255,.5)">No snapshots yet.<br>Press <b>Ctrl+S</b> or close the browser to create one.</div>';
+    if (!snapshots || snapshots.length === 0) {
+      listEl.innerHTML = '<div style="text-align:center;padding:30px;color:rgba(255,255,255,.5)">No snapshots found yet.<br>Press <b>Ctrl+S</b> to create one.</div>';
       return;
     }
     listEl.innerHTML = '';
@@ -1896,11 +1922,12 @@ function openSnapshotModal() {
       const date = new Date(s.ts);
       const timeStr = date.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) + ' ' +
                       date.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+      const srcTag = s.source === 'idb' ? '<span style="margin-left:6px;background:rgba(52,211,153,0.18);color:#34d399;padding:1px 6px;border-radius:6px;font-size:0.7rem;">💾 Local</span>' : '<span style="margin-left:6px;background:rgba(96,165,250,0.18);color:#60a5fa;padding:1px 6px;border-radius:6px;font-size:0.7rem;">🔥 Firebase</span>';
       const row = document.createElement('div');
       row.className = 'snap-row';
       row.innerHTML = `
         <div class="snap-info">
-          <div class="snap-time">${timeStr} <span style="margin-left:8px;background:rgba(108,143,255,0.2);color:#93b5ff;padding:2px 8px;border-radius:10px;font-size:0.75rem;font-weight:bold;">📦 ${s.itemCount} items</span></div>
+          <div class="snap-time">${timeStr} ${srcTag} <span style="margin-left:8px;background:rgba(108,143,255,0.2);color:#93b5ff;padding:2px 8px;border-radius:10px;font-size:0.75rem;font-weight:bold;">📦 ${s.itemCount} items</span></div>
           <div class="snap-pages">${s.pageCount} page${s.pageCount !== 1 ? 's' : ''}: ${s.pageNames.slice(0, 5).join(', ')}${s.pageNames.length > 5 ? '...' : ''}</div>
         </div>
         <button class="snap-restore-btn" title="Restore this version">Restore</button>`;
@@ -1911,6 +1938,14 @@ function openSnapshotModal() {
       };
       listEl.appendChild(row);
     });
+  }).catch(err => {
+    console.error('[OPEN SNAPSHOT MODAL ERROR]', err);
+    listEl.innerHTML = `
+      <div style="text-align:center;padding:25px;color:rgba(255,255,255,.7)">
+        <div style="font-size:1.5rem;margin-bottom:8px">⚠️</div>
+        <div>تعذر تحميل النسخ الاحتياطية (${err.message || 'خطأ في الاتصال'})</div>
+        <button onclick="openSnapshotModal()" class="snap-restore-btn" style="margin-top:14px;padding:6px 16px;background:#6c8fff;color:#fff;border:none;border-radius:6px;cursor:pointer">🔄 إعادة المحاولة</button>
+      </div>`;
   });
 }
 
@@ -2257,6 +2292,94 @@ async function doSelectiveExport() {
   showToast(`📤 Exported ${exportData.pages.length} pages (${totalItems} items), ${exportData.groups.length} groups`, 3500);
 }
 
+// Export selected environments/groups/pages directly to Google Drive Root
+async function doExportSelectedToDrive(toRoot = true) {
+  const { envIds, groupIds, pageIds } = getSelIOChecked();
+  if (pageIds.size === 0 && groupIds.size === 0 && envIds.size === 0) {
+    showToast('⚠️ يرجى تحديد العناصر المراد حفظها على Drive', 3000);
+    return;
+  }
+  
+  showToast('⏳ جاري تجهيز البيانات للحفظ على Google Drive…', 2500);
+  const rawPages = D.pages.filter(p => pageIds.has(p.id));
+  const exportPages = [];
+
+  for (const p of rawPages) {
+    let widgets = p.widgets || [];
+    let miroCards = p.miroCards || [];
+    let vGuides = p.vGuides || [];
+    let hGuides = p.hGuides || [];
+    let _guidesMode = p._guidesMode || false;
+    let lockedGuides = p.lockedGuides || [];
+    let cellStates = p.cellStates || {};
+    let mergedCells = p.mergedCells || [];
+    let customCells = p.customCells || [];
+    let cellGuides = p.cellGuides || {};
+    let _layoutGuidesMode = p._layoutGuidesMode || false;
+    let gridRows = p.gridRows || null;
+    let gridCols = p.gridCols || null;
+    let cellPages = p.cellPages || null;
+    let slicerColSizes = p.slicerColSizes || null;
+    let slicerRowSizes = p.slicerRowSizes || null;
+
+    if (widgets.length === 0 && miroCards.length === 0 && (customCells || []).length === 0) {
+      const cached = await getCachedPageDataAsync(p.id);
+      if (cached) {
+        widgets = cached.widgets || [];
+        miroCards = cached.miroCards || [];
+        vGuides = cached.vGuides || vGuides;
+        hGuides = cached.hGuides || hGuides;
+        _guidesMode = cached._guidesMode || _guidesMode;
+        lockedGuides = cached.lockedGuides || lockedGuides;
+        cellStates = cached.cellStates || cellStates;
+        mergedCells = cached.mergedCells || mergedCells;
+        customCells = cached.customCells || customCells;
+        cellGuides = cached.cellGuides || cellGuides;
+        _layoutGuidesMode = cached._layoutGuidesMode || _layoutGuidesMode;
+        gridRows = cached.gridRows || gridRows;
+        gridCols = cached.gridCols || gridCols;
+        cellPages = cached.cellPages || cellPages;
+        slicerColSizes = cached.slicerColSizes || slicerColSizes;
+        slicerRowSizes = cached.slicerRowSizes || slicerRowSizes;
+        p.widgets = widgets;
+        p.miroCards = miroCards;
+      }
+    }
+    exportPages.push({
+      ...p,
+      widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, customCells,
+      cellGuides, _layoutGuidesMode, gridRows, gridCols, cellPages, slicerColSizes, slicerRowSizes
+    });
+  }
+
+  const exportData = {
+    _selectiveExport: true,
+    exportDate: new Date().toISOString(),
+    settings: D.settings,
+    environments: D.environments.filter(e => envIds.has(e.id)),
+    groups: D.groups.filter(g => groupIds.has(g.id)),
+    pages: exportPages
+  };
+
+  let totalItems = 0;
+  exportPages.forEach(p => { totalItems += (p.widgets || []).length + (p.miroCards || []).length; });
+
+  const envNames = exportData.environments.map(e => e.name).join('_') || 'selected';
+  const customFileName = `startmine_${envNames}_${new Date().toISOString().slice(0, 10)}_${totalItems}_items.json`;
+
+  const res = await exportToGoogleDrive({
+    toRoot: toRoot,
+    data: exportData,
+    customFileName: customFileName
+  });
+
+  if (res) {
+    closeSelIO();
+    showToast(`☁️ تم الحفظ بنجاح على Google Drive (الرووت): ${customFileName}`, 5000);
+  }
+}
+window.doExportSelectedToDrive = doExportSelectedToDrive;
+
 function handleSelIOImport(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -2407,35 +2530,47 @@ function doMergeImport() {
 }
 
 // Export to Google Drive (with Data Integrity Guard & Async Full Page Resolution)
-async function exportToGoogleDrive() {
+// Export to Google Drive (with Data Integrity Guard, Root folder option, & Async Full Page Resolution)
+async function exportToGoogleDrive(opts = {}) {
+  const toRoot = opts.toRoot === true;
+  const customData = opts.data || null;
+  const customFileName = opts.customFileName || null;
+
   async function _doUpload(token) {
-    const folderId = await getOrCreateDriveFolder(token);
-    const exportData = await buildFullExportDataAsync();
+    let parents = [];
+    if (toRoot) {
+      parents = ['root'];
+    } else {
+      const folderId = await getOrCreateDriveFolder(token);
+      parents = [folderId];
+    }
+
+    const exportData = customData || (await buildFullExportDataAsync());
     
-    if (!checkDataIntegrity(exportData, 'Google Drive')) {
+    if (!customData && !checkDataIntegrity(exportData, 'Google Drive')) {
       throw new Error('Export aborted by Data Integrity Guard');
     }
 
     let totalItems = 0;
-    exportData.pages.forEach(p => {
+    (exportData.pages || []).forEach(p => {
       totalItems += (p.widgets || []).length + (p.miroCards || []).length;
     });
 
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 19).replace(/[T:]/g, '-');
-    const fileName = GDRIVE_BACKUP_PREFIX + dateStr + '_' + totalItems + '_items.json';
+    const fileName = customFileName || (GDRIVE_BACKUP_PREFIX + dateStr + '_' + totalItems + '_items.json');
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const metadata = { name: fileName, parents: [folderId], mimeType: 'application/json' };
+    const metadata = { name: fileName, parents: parents, mimeType: 'application/json' };
     const form = new FormData();
     form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
     form.append('file', blob);
     const uploadResp = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
       method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: form
     });
-    return { uploadResp, fileName, totalItems, pagesCount: exportData.pages.length };
+    return { uploadResp, fileName, totalItems, pagesCount: (exportData.pages || []).length };
   }
   try {
-    showToast('☁️ Exporting to Google Drive…');
+    showToast(toRoot ? '☁️ جاري الحفظ في الرووت على Google Drive…' : '☁️ Exporting to Google Drive…');
     let token;
     try {
       token = await ensureGoogleToken();
@@ -2461,16 +2596,17 @@ async function exportToGoogleDrive() {
       throw new Error('Upload failed: ' + errText);
     }
     const uploadJson = await uploadResult.uploadResp.json();
-    showToast(`✅ Saved to Google Drive: ${uploadResult.totalItems} items (${uploadResult.pagesCount} pages)`, 4000);
+    showToast(`✅ Saved to Google Drive${toRoot ? ' (Root)' : ''}: ${uploadResult.totalItems} items (${uploadResult.pagesCount} pages)`, 4000);
     console.log('[GDRIVE] Backup uploaded:', uploadJson);
     return uploadJson;
   } catch (err) {
     console.error('[GDRIVE EXPORT ERROR]', err);
     let msg = err.message || String(err);
     if (err.code === 'auth/popup-blocked') {
-      msg = 'Browser popup blocked! Please check your browser address bar and allow popups for this site.';
+      msg = 'Browser popup blocked! Please allow popups for this site in your browser bar.';
     }
     showToast('❌ Drive export failed: ' + msg, 6000);
+    return null;
   }
 }
 
@@ -2618,12 +2754,13 @@ async function restoreFromGoogleDrive() {
 
 // ─── GitHub Backup System (Version Control) ───
 // Token stored in localStorage to avoid GitHub Secret Scanning auto-revoking it
-function getGitHubPAT() {
+function getGitHubPAT(forcePrompt = false) {
   let pat = localStorage.getItem('gh_pat');
-  if (!pat) {
-    pat = prompt('Enter your GitHub Personal Access Token (PAT).\nThis is stored locally and only needs to be entered once.\n\nGet one from: github.com/settings/tokens');
+  if (!pat || forcePrompt) {
+    pat = prompt('يرجى إدخال GitHub Personal Access Token (PAT):\nيتم حفظه محلياً في المتصفح للحفظ التلقائي.\n(احصل عليه من: github.com/settings/tokens)');
     if (pat && pat.trim()) {
       localStorage.setItem('gh_pat', pat.trim());
+      return pat.trim();
     } else {
       return null;
     }
@@ -2673,16 +2810,17 @@ async function ensureGitHubRepo() {
 }
 
 // Export to GitHub (commit with version control and data integrity check)
-async function exportToGitHub() {
+async function exportToGitHub(forcePrompt = false) {
   try {
-    if (!getGitHubPAT()) { showToast('❌ GitHub token required', 3000); return; }
+    const pat = getGitHubPAT(forcePrompt);
+    if (!pat) { showToast('⚠️ تم إلغاء الحفظ على GitHub (لا يوجد Token)', 3000); return null; }
     showToast('🐙 Saving to GitHub…');
     await ensureGitHubRepo();
 
     const exportData = await buildFullExportDataAsync();
     
     if (!checkDataIntegrity(exportData, 'GitHub Backup')) {
-      return;
+      return null;
     }
 
     let totalItems = 0;
@@ -2698,11 +2836,19 @@ async function exportToGitHub() {
     let sha = null;
     try {
       const getResp = await fetch(`${GITHUB_API}/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE}`, { headers: ghHeaders() });
+      if (getResp.status === 401) {
+        localStorage.removeItem('gh_pat');
+        const retry = confirm('⚠️ انتهت صلاحية GitHub Token أو أنه غير صحيح (401 Unauthorized).\nهل تريد إدخال Token جديد والمحاولة مرة أخرى؟');
+        if (retry) return exportToGitHub(true);
+        throw new Error('401 Unauthorized (Bad credentials)');
+      }
       if (getResp.ok) {
         const fileData = await getResp.json();
         sha = fileData.sha;
       }
-    } catch (e) { /* file doesn't exist yet */ }
+    } catch (e) {
+      if (e.message && e.message.includes('401')) throw e;
+    }
 
     // Create or update file
     const body = { message: commitMsg, content };
@@ -2713,6 +2859,13 @@ async function exportToGitHub() {
       headers: ghHeaders(),
       body: JSON.stringify(body)
     });
+
+    if (putResp.status === 401) {
+      localStorage.removeItem('gh_pat');
+      const retry = confirm('⚠️ انتهت صلاحية GitHub Token أو أنه غير صحيح (401 Unauthorized).\nهل تريد إدخال Token جديد والمحاولة مرة أخرى؟');
+      if (retry) return exportToGitHub(true);
+      throw new Error('401 Unauthorized (Bad credentials)');
+    }
 
     if (!putResp.ok) {
       const errData = await putResp.json();
@@ -2725,7 +2878,8 @@ async function exportToGitHub() {
     return result;
   } catch (err) {
     console.error('[GITHUB EXPORT ERROR]', err);
-    showToast('❌ GitHub export failed: ' + err.message, 4000);
+    showToast('❌ GitHub export failed: ' + err.message, 4500);
+    return null;
   }
 }
 
@@ -2857,20 +3011,26 @@ async function restoreFromGitHub() {
 
 // ─── Save All: Firebase Snapshot + Google Drive + GitHub ───
 async function saveAllBackups() {
-  showToast('🔄 Saving to all destinations…');
+  showToast('🔄 جاري حفظ النسخ الاحتياطية في جميع الأماكن (Firebase + Drive + GitHub)…', 4000);
   const results = { firebase: false, drive: false, github: false };
 
   // 1. Firebase Snapshot
   try {
-    await saveSnapshot(true);
+    await saveSnapshot(false);
     results.firebase = true;
   } catch (e) { console.error('[SAVE ALL] Firebase failed:', e); }
 
-  // 2. Google Drive + GitHub in parallel
-  const [driveResult, githubResult] = await Promise.allSettled([
-    exportToGoogleDrive().then(() => { results.drive = true; }),
-    exportToGitHub().then(() => { results.github = true; })
-  ]);
+  // 2. Google Drive
+  try {
+    const drv = await exportToGoogleDrive();
+    if (drv) results.drive = true;
+  } catch (e) { console.error('[SAVE ALL] Drive failed:', e); }
+
+  // 3. GitHub
+  try {
+    const gh = await exportToGitHub();
+    if (gh) results.github = true;
+  } catch (e) { console.error('[SAVE ALL] GitHub failed:', e); }
 
   const icons = [
     results.firebase ? '✅' : '❌',
@@ -2879,10 +3039,11 @@ async function saveAllBackups() {
   ];
   const allOk = results.firebase && results.drive && results.github;
   showToast(
-    (allOk ? '✅ All saved! ' : '⚠️ Partial save: ') +
-    `Firebase ${icons[0]}  Drive ${icons[1]}  GitHub ${icons[2]}`,
-    allOk ? 3000 : 5000
+    (allOk ? '✅ تم حفظ جميع النسخ بنجاح!\n' : '⚠️ تقرير الحفظ الشامل:\n') +
+    `Firebase: ${icons[0]} | Google Drive: ${icons[1]} | GitHub: ${icons[2]}`,
+    allOk ? 4000 : 7000
   );
+  return results;
 }
 
 
@@ -11586,9 +11747,20 @@ SM.renderStartMeColsToolbar = renderStartMeColsToolbar;
 SM.setPageColumns = setPageColumns;
 SM.balancePageWidgetsAcrossCols = balancePageWidgetsAcrossCols;
 SM.reorderStartMeWidget = reorderStartMeWidget;
-SM.getActiveViewItem = getActiveViewItem;
+SM.openShortcutsModal = typeof openShortcutsModal !== 'undefined' ? openShortcutsModal : window.openShortcutsModal;
+SM.closeShortcutsModal = typeof closeShortcutsModal !== 'undefined' ? closeShortcutsModal : window.closeShortcutsModal;
 
 window.renderAll = SM.renderAll;
 window.buildCols = SM.buildCols;
 window.saveAllBackups = SM.saveAllBackups;
 window.openSnapshotModal = SM.openSnapshotModal;
+window.openShortcutsModal = function() {
+  const modal = document.getElementById('shortcuts-modal');
+  if (modal) modal.style.display = 'flex';
+};
+window.closeShortcutsModal = function() {
+  const modal = document.getElementById('shortcuts-modal');
+  if (modal) modal.style.display = 'none';
+};
+SM.openShortcutsModal = window.openShortcutsModal;
+SM.closeShortcutsModal = window.closeShortcutsModal;

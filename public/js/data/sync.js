@@ -19,22 +19,6 @@
   window.syncNow = async function () {
   if (!USER_ID) return Promise.resolve();
 
-  if (!window._initialSyncCompleted && !_offlineMode) {
-    console.warn('[SYNC ⛔] syncNow blocked: Initial cloud sync not yet completed.');
-    if (typeof showToast === 'function') showToast('⏳ جارٍ مزامنة البيانات السحابية أولاً، يرجى الانتظار ثوانٍ...', 3500);
-    return Promise.resolve();
-  }
-
-  // ⛔ ZERO-DATA-LOSS GUARD: Check if saving would cause bookmark or item drops
-  if (typeof window.checkDataLossGuard === 'function') {
-    const isSafe = await window.checkDataLossGuard(window.D, 'Manual Cloud Sync (syncNow)');
-    if (!isSafe) {
-      setOwnWrite(false);
-      console.warn('[SYNC ⛔] Sync cancelled by Zero-Data-Loss Protection.');
-      return Promise.resolve();
-    }
-  }
-
   showToast('🔄 Syncing to cloud...');
   setOwnWrite(true);
 
@@ -173,17 +157,15 @@
         ts = p.ts || Date.now();
       } else {
         const cached = cachedPagesMap.get(p.id) || getCachedPageData(p.id);
-        const hasCachedData = cached && (
-          (cached.widgets && cached.widgets.length > 0) ||
-          (cached.miroCards && cached.miroCards.length > 0) ||
-          (cached.vGuides && cached.vGuides.length > 0) ||
-          (cached.hGuides && cached.hGuides.length > 0) ||
-          cached._guidesMode ||
-          (cached.customCells && cached.customCells.length > 0) ||
-          cached._layoutGuidesMode ||
-          cached.cellGuides
+        const hasCachedItems = cached && (
+          (Array.isArray(cached.widgets) && cached.widgets.length > 0) ||
+          (Array.isArray(cached.miroCards) && cached.miroCards.length > 0)
         );
-        if (hasCachedData) {
+        const hasMemItems = (
+          (Array.isArray(p.widgets) && p.widgets.length > 0) ||
+          (Array.isArray(p.miroCards) && p.miroCards.length > 0)
+        );
+        if (hasCachedItems) {
           widgets = cached.widgets || [];
           miroCards = cached.miroCards || [];
           vGuides = cached.vGuides || [];
@@ -201,7 +183,7 @@
           slicerColSizes = cached.slicerColSizes || null;
           slicerRowSizes = cached.slicerRowSizes || null;
           ts = cached.ts || p.ts || Date.now();
-        } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0) || (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode || (p.customCells && p.customCells.length > 0) || p._layoutGuidesMode || p.cellGuides) {
+        } else if (hasMemItems) {
           widgets = p.widgets || [];
           miroCards = p.miroCards || [];
           vGuides = p.vGuides || [];
@@ -220,8 +202,8 @@
           slicerRowSizes = p.slicerRowSizes || null;
           ts = p.ts || Date.now();
         } else {
-          // SAFETY: skip to avoid overwriting Firebase with empty data
-          console.warn(`[SYNC GUARD] Skipping page "${p.name}" (${p.id}) — no data available`);
+          // SAFETY: skip unloaded non-active page to prevent overwriting cloud shard with empty arrays
+          console.warn(`[SYNC GUARD] Skipping non-active unloaded page "${p.name}" (${p.id}) — cloud shard preserved.`);
           return;
         }
       }
@@ -425,7 +407,7 @@
         D.pages.forEach(p => {
           if (p) {
             const hasData = (p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0);
-            const hasGuides = (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode || (p.customCells && p.customCells.length > 0) || p._layoutGuidesMode || p.cellGuides;
+            const hasGuides = (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode || (p.customCells && p.customCells.length > 0) || p._layoutGuidesMode || (p.cellGuides && Object.keys(p.cellGuides).length > 0);
             const hasSlicer = p.pageType === 'slicer' || p.gridRows !== undefined || p.cellPages !== undefined;
             if (hasData || hasGuides || hasSlicer) {
               heavyDataMap[p.id] = {
@@ -689,19 +671,6 @@
       return;
     }
 
-    const activePg = cp();
-    if (typeof window.checkDataLossGuard === 'function') {
-      const isSafe = await window.checkDataLossGuard(
-        window.D,
-        saveAll ? 'Full Cloud Save (All Pages)' : 'Auto Cloud Save',
-        { saveAll: !!saveAll, activePage: activePg }
-      );
-      if (!isSafe) {
-        setOwnWrite(false);
-        console.warn('[SV ⛔] Save cancelled by Zero-Data-Loss Protection.');
-        return;
-      }
-    }
 
     setOwnWrite(true);
 
@@ -832,17 +801,15 @@
             ts = p.ts || Date.now();
           } else {
             const cached = getCachedPageData(p.id);
-            const hasCachedData = cached && (
-              (cached.widgets && cached.widgets.length > 0) ||
-              (cached.miroCards && cached.miroCards.length > 0) ||
-              (cached.vGuides && cached.vGuides.length > 0) ||
-              (cached.hGuides && cached.hGuides.length > 0) ||
-              cached._guidesMode ||
-              (cached.customCells && cached.customCells.length > 0) ||
-              cached._layoutGuidesMode ||
-              cached.cellGuides
+            const hasCachedItems = cached && (
+              (Array.isArray(cached.widgets) && cached.widgets.length > 0) ||
+              (Array.isArray(cached.miroCards) && cached.miroCards.length > 0)
             );
-            if (hasCachedData) {
+            const hasMemItems = (
+              (Array.isArray(p.widgets) && p.widgets.length > 0) ||
+              (Array.isArray(p.miroCards) && p.miroCards.length > 0)
+            );
+            if (hasCachedItems) {
               widgets = cached.widgets || [];
               miroCards = cached.miroCards || [];
               vGuides = cached.vGuides || [];
@@ -860,7 +827,7 @@
               slicerColSizes = cached.slicerColSizes || null;
               slicerRowSizes = cached.slicerRowSizes || null;
               ts = cached.ts || p.ts || Date.now();
-            } else if ((p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0) || (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode || (p.customCells && p.customCells.length > 0) || p._layoutGuidesMode || p.cellGuides) {
+            } else if (hasMemItems) {
               widgets = p.widgets || [];
               miroCards = p.miroCards || [];
               vGuides = p.vGuides || [];
@@ -879,9 +846,8 @@
               slicerRowSizes = p.slicerRowSizes || null;
               ts = p.ts || Date.now();
             } else {
-              // ⛔ ABSOLUTE GUARD: NEVER write empty data to Firebase
-              // This page has no data anywhere — skip it entirely
-              console.warn(`[SV GUARD ⛔] Skipping page "${p.name}" (${p.id}) — EMPTY. Firebase data preserved.`);
+              // ⛔ ABSOLUTE GUARD: Non-active page with no loaded items in memory or cache.
+              // NEVER write empty shard to Firebase. Keep the existing Firebase data untouched.
               _skippedCount++;
               return;
             }
@@ -938,12 +904,13 @@
           if (p.id === activePg.id) {
             // ─── DATA LOSS GUARD: Don't overwrite non-empty Firebase data with empty data ───
             const curHasData = (activePg.widgets && activePg.widgets.length > 0) || (activePg.miroCards && activePg.miroCards.length > 0);
-            if (!curHasData && _lastSyncedPageData && !activePg._hasBeenLoaded && !activePg._bypassVersionGuard) {
-              const oldHadWidgets = JSON.parse(_lastSyncedPageData.widgets || '[]').length > 0;
-              const oldHadCards = JSON.parse(_lastSyncedPageData.miroCards || '[]').length > 0;
-              if (oldHadWidgets || oldHadCards) {
-                console.error(`[SV GUARD] 🚨 Refusing to overwrite page "${activePg.name}" — was non-empty, now empty!`);
-                if (typeof showToast === 'function') showToast('⚠️ Data loss prevented — page was not saved (empty data detected)', 5000);
+            if (!curHasData && !activePg._bypassVersionGuard) {
+              const cached = typeof getCachedPageData === 'function' ? getCachedPageData(activePg.id) : null;
+              const cachedHadData = cached && (((cached.widgets || []).length > 0) || ((cached.miroCards || []).length > 0));
+              const oldHadWidgets = _lastSyncedPageData && JSON.parse(_lastSyncedPageData.widgets || '[]').length > 0;
+              const oldHadCards = _lastSyncedPageData && JSON.parse(_lastSyncedPageData.miroCards || '[]').length > 0;
+              if (oldHadWidgets || oldHadCards || cachedHadData) {
+                console.warn(`[SV GUARD ⛔] Refusing to overwrite page "${activePg.name}" with empty items — cache/cloud has items!`);
                 return;
               }
             }

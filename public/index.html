@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#6c8fff">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="manifest" href="/manifest.json?v=1790772531">
+  <link rel="manifest" href="/manifest.json?v=1790852028">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🍅%3C/text%3E%3C/svg%3E">
   <link rel="icon" type="image/png" sizes="192x192" href="/tomato-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="/tomato-512.png">
@@ -22,9 +22,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
-  <link rel="stylesheet" href="css/base.css?v=1790772531">
-  <link rel="stylesheet" href="css/miro.css?v=1790772531">
-  <link rel="stylesheet" href="css/life-widget-additions.css?v=1790772531">
+  <link rel="stylesheet" href="css/base.css?v=1790852028">
+  <link rel="stylesheet" href="css/miro.css?v=1790852028">
+  <link rel="stylesheet" href="css/life-widget-additions.css?v=1790852028">
 </head>
 
 <body>
@@ -695,6 +695,9 @@
     <button class="mtb-btn" id="pv-mode-btn" title="Quick Preview Mode">👁️</button>
     <button class="mtb-btn" id="settings-btn" title="Settings">⚙️</button>
     <button class="mtb-btn" id="outline-btn" title="Page Outline (F2)">📑</button>
+    <div style="flex:1;min-height:8px;"></div>
+    <div style="width:24px;height:1px;background:rgba(255,255,255,.08);margin:4px auto;"></div>
+    <button class="mtb-btn" id="shortcuts-btn" title="دليل جميع اختصارات البرنامج (F1 / Shortcuts)" onclick="openShortcutsModal()" style="color:#38bdf8;font-size:1.15rem;margin-top:auto;">⌨️</button>
   </div>
 
   <!-- Pen toolbar (color + thickness) -->
@@ -1005,37 +1008,37 @@
   </div>
 
     <!-- Core -->
-    <script src="js/core/namespace.js?v=1790772531"></script>
-    <script src="js/core/events.js?v=1790772531"></script>
-    <script src="js/core/utils.js?v=1790772531"></script>
+    <script src="js/core/namespace.js?v=1790852028"></script>
+    <script src="js/core/events.js?v=1790852028"></script>
+    <script src="js/core/utils.js?v=1790852028"></script>
 
     <!-- Data Layer -->
-    <script src="js/data/firebase.js?v=1790772531"></script>
-    <script src="js/data/offline.js?v=1790772531"></script>
-    <script src="js/data/protection.js?v=1790772531"></script>
-    <script src="js/data/sync.js?v=1790772531"></script>
+    <script src="js/data/firebase.js?v=1790852028"></script>
+    <script src="js/data/offline.js?v=1790852028"></script>
+    <script src="js/data/protection.js?v=1790852028"></script>
+    <script src="js/data/sync.js?v=1790852028"></script>
 
     <!-- UI Layer -->
-    <script src="js/ui/toasts.js?v=1790772531"></script>
-    <script src="js/ui/modals.js?v=1790772531"></script>
-    <script src="js/ui/toolbar.js?v=1790772531"></script>
-    <script src="js/ui/search.js?v=1790772531"></script>
-    <script src="js/ui/inbox-ui.js?v=1790772531"></script>
-    <script src="js/ui/tasbeeh.js?v=1790772531"></script>
-    <script src="js/thumbnails.js?v=1790772531"></script>
+    <script src="js/ui/toasts.js?v=1790852028"></script>
+    <script src="js/ui/modals.js?v=1790852028"></script>
+    <script src="js/ui/toolbar.js?v=1790852028"></script>
+    <script src="js/ui/search.js?v=1790852028"></script>
+    <script src="js/ui/inbox-ui.js?v=1790852028"></script>
+    <script src="js/ui/tasbeeh.js?v=1790852028"></script>
+    <script src="js/thumbnails.js?v=1790852028"></script>
 
     <!-- Miro Modules -->
-    <script src="js/miro/miro-state.js?v=1790772531"></script>
-    <script src="js/miro/render/cards.js?v=1790772531"></script>
-    <script src="js/miro/render/builders.js?v=1790772531"></script>
-    <script src="js/miro/layout/grid.js?v=1790772531"></script>
-    <script src="js/miro/layout/slices.js?v=1790772531"></script>
+    <script src="js/miro/miro-state.js?v=1790852028"></script>
+    <script src="js/miro/render/cards.js?v=1790852028"></script>
+    <script src="js/miro/render/builders.js?v=1790852028"></script>
+    <script src="js/miro/layout/grid.js?v=1790852028"></script>
+    <script src="js/miro/layout/slices.js?v=1790852028"></script>
 
     <!-- Original files (now wrappers) -->
-    <script src="js/miro-engine.js?v=1790772531"></script>
-    <script src="js/life-widget.js?v=1790772531"></script>
-    <script src="js/core/health.js?v=1790772531"></script>
-    <script src="js/app.js?v=1790772531"></script>
+    <script src="js/miro-engine.js?v=1790852028"></script>
+    <script src="js/life-widget.js?v=1790852028"></script>
+    <script src="js/core/health.js?v=1790852028"></script>
+    <script src="js/app.js?v=1790852028"></script>
     <script>
       // ─── Deferred secondary scripts: load after auth is ready ───
       var _mainAppLoaded=false;
@@ -1043,7 +1046,7 @@
         if(_mainAppLoaded)return;_mainAppLoaded=true;
         console.log('[DEFERRED] Loading outline.js + alignment.js');
         ['js/outline.js','js/alignment.js'].forEach(function(src){
-          var s=document.createElement('script');s.src=src+'?v=1790772531';document.body.appendChild(s);
+          var s=document.createElement('script');s.src=src+'?v=1790852028';document.body.appendChild(s);
         });
       }
       // Primary trigger: load deferred scripts after auth + first render
@@ -1089,13 +1092,282 @@
       </div>
       <div id="sel-io-tree" style="flex:1;overflow-y:auto;padding:12px 20px;max-height:50vh"></div>
       <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,.06);display:flex;gap:8px;flex-wrap:wrap">
-        <button id="sel-io-export-btn" onclick="doSelectiveExport()" style="flex:1;padding:8px;border-radius:8px;border:none;background:linear-gradient(135deg,#6c8fff,#a278ff);color:#fff;font-weight:600;font-size:.75rem;cursor:pointer">📤 Export Selected</button>
-        <button id="sel-io-import-btn" onclick="document.getElementById('sel-io-file').click()" style="flex:1;padding:8px;border-radius:8px;border:none;background:linear-gradient(135deg,#34d399,#3b82f6);color:#fff;font-weight:600;font-size:.75rem;cursor:pointer">📥 Import File</button>
-        <button id="sel-io-drive-btn" onclick="doImportFromDrive()" style="flex:1;padding:8px;border-radius:8px;border:none;background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;font-weight:600;font-size:.75rem;cursor:pointer">☁️ From Drive</button>
+        <button id="sel-io-export-btn" onclick="doSelectiveExport()" style="flex:1;min-width:110px;padding:8px;border-radius:8px;border:none;background:linear-gradient(135deg,#6c8fff,#a278ff);color:#fff;font-weight:600;font-size:.75rem;cursor:pointer">📤 Export Local</button>
+        <button id="sel-io-drive-save-btn" onclick="doExportSelectedToDrive(true)" style="flex:1;min-width:140px;padding:8px;border-radius:8px;border:none;background:linear-gradient(135deg,#0284c7,#2563eb);color:#fff;font-weight:600;font-size:.75rem;cursor:pointer" title="حفظ العناصر المحددة مباشرة في مجلد الرووت على Google Drive بدون طلب دخول متكرر">☁️ حفظ على Drive (الرووت)</button>
+        <button id="sel-io-import-btn" onclick="document.getElementById('sel-io-file').click()" style="flex:1;min-width:100px;padding:8px;border-radius:8px;border:none;background:linear-gradient(135deg,#34d399,#3b82f6);color:#fff;font-weight:600;font-size:.75rem;cursor:pointer">📥 Import File</button>
+        <button id="sel-io-drive-btn" onclick="doImportFromDrive()" style="flex:1;min-width:100px;padding:8px;border-radius:8px;border:none;background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;font-weight:600;font-size:.75rem;cursor:pointer">☁️ From Drive</button>
         <input type="file" id="sel-io-file" accept=".json" style="display:none" onchange="handleSelIOImport(event)">
       </div>
     </div>
   </div>
+
+  <!-- Shortcuts Cheat Sheet Modal -->
+  <div id="shortcuts-modal" style="display:none;position:fixed;inset:0;z-index:999999;align-items:center;justify-content:center;background:rgba(8,10,18,0.78);backdrop-filter:blur(10px);" onclick="if(event.target===this)closeShortcutsModal()">
+    <div style="position:relative;background:#151828;border:1px solid rgba(255,255,255,0.12);border-radius:18px;width:760px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 30px 90px rgba(0,0,0,0.7);color:#f1f5f9;direction:rtl;text-align:right;overflow:hidden;">
+      
+      <!-- Header -->
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.02);">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:1.4rem;">⌨️</span>
+          <div>
+            <div style="font-size:1.05rem;font-weight:700;color:#fff;">دليل جميع اختصارات لوحة المفاتيح</div>
+            <div style="font-size:0.75rem;color:#94a3b8;">Shortcuts Cheat Sheet (F1 أو ؟)</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <input type="text" id="shortcuts-search-inp" placeholder="🔍 بحث في الاختصارات..." style="padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.3);color:#fff;font-size:0.8rem;outline:none;width:190px;" oninput="filterShortcutsList(this.value)">
+          <button onclick="closeShortcutsModal()" style="background:rgba(255,255,255,0.06);border:none;color:#94a3b8;width:32px;height:32px;border-radius:8px;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;" onmouseover="this.style.color='#fff';this.style.background='rgba(239,68,68,0.3)'" onmouseout="this.style.color='#94a3b8';this.style.background='rgba(255,255,255,0.06)'">✕</button>
+        </div>
+      </div>
+
+      <!-- Body / Categories -->
+      <div id="shortcuts-body" style="flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:20px;">
+        
+        <!-- Category: Backups -->
+        <div class="shortcut-cat-group">
+          <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:0.88rem;color:#38bdf8;margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid rgba(56,189,248,0.2);">
+            <span>💾</span> <span>أزرار الحفظ والنسخ الاحتياطي (Backups & S-Keys)</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:8px;">
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">حفظ لقطة سريعة في Firebase و IndexedDB</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Ctrl</kbd>+<kbd class="sm-kbd">S</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">تصدير وحفظ فوري على Google Drive</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Ctrl</kbd>+<kbd class="sm-kbd">Shift</kbd>+<kbd class="sm-kbd">S</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">تصدير فوري بديل لـ Google Drive</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Ctrl</kbd>+<kbd class="sm-kbd">Alt</kbd>+<kbd class="sm-kbd">S</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">تصدير وتوثيق نسخة على GitHub (Git Commit)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Ctrl</kbd>+<kbd class="sm-kbd">Alt</kbd>+<kbd class="sm-kbd">G</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;grid-column:1/-1;">
+              <span style="font-size:0.82rem;font-weight:600;color:#38bdf8;">حفظ شامل في كل الأماكن (Firebase + Drive + GitHub)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Ctrl</kbd>+<kbd class="sm-kbd">Shift</kbd>+<kbd class="sm-kbd">Alt</kbd>+<kbd class="sm-kbd">S</kbd> <span style="color:#64748b;margin:0 4px">أو</span> <kbd class="sm-kbd">Ctrl</kbd>+<kbd class="sm-kbd">Alt</kbd>+<kbd class="sm-kbd">A</kbd></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Category: Creation & Tools -->
+        <div class="shortcut-cat-group">
+          <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:0.88rem;color:#a855f7;margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid rgba(168,85,247,0.2);">
+            <span>🛠️</span> <span>أدوات الكنفاس والرسم (Canvas Tools)</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:8px;">
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">أداة التحديد والتحريك (Select Tool)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">V</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ر</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">إضافة ورقة ملاحظات لاصقة (Sticky Note)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">N</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ى</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">إضافة كارت نص حر (Text Card)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">T</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ف</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">إضافة شكل هندسي (Shape)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">S</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">س</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">تفعيل القلم الحر للرسم (Pen Draw)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">P</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ح</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">إضافة جدول شبكي متقدم (Grid Table)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">G</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ل</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">إنشاء خريطة ذهنية (Mind Map)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">M</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ة</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">إضافة ودجت روابط وقوائم (Widget)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">W</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ص</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">لوحة مهام كانبان (Trello Kanban)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">K</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ن</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">رفع وإدراج صورة (Image Card)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">I</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ه</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">إضافة كارت بوكمارك سريع بالمنتصف</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">B</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">لا</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">تضمين موقع ويب (Embed Web View)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">E</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ث</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">إضافة عنوان ديناميكي متزامن (Dynamic Title)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Alt</kbd>+<kbd class="sm-kbd">D</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ي</kbd></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Category: Navigation & View -->
+        <div class="shortcut-cat-group">
+          <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:0.88rem;color:#34d399;margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid rgba(52,211,153,0.2);">
+            <span>🧭</span> <span>التنقل والعرض والتكبير (Navigation & Canvas)</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:8px;">
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">تحريك وسحب الكنفاس بحرية (Pan)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Space</kbd> + سحب بالماوس</div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">تكبير وتصغير الكنفاس (Zoom)</span>
+              <div style="display:flex;gap:4px;direction:ltr;">عجلة الماوس <kbd class="sm-kbd">Wheel</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">تكبير/تصغير محلي لخلية التقسيم (Cell Zoom)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Ctrl</kbd>+<kbd class="sm-kbd">Alt</kbd>+<kbd class="sm-kbd">Wheel</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">ملاءمة المحتوى المحدد للشاشة (Fit Selection)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">F</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">Z</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ب</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">ملاءمة كافة صفحات المجموعة (Fit All Group)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Ctrl</kbd>+<kbd class="sm-kbd">Shift</kbd>+<kbd class="sm-kbd">Z</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">التبديل بين الصفحة المقسمة والصفحة الفرعية</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">`</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ذ</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">شريط الفهرس وهيكل الصفحات (Page Outline)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">F2</kbd></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Category: Edit & Clipboard -->
+        <div class="shortcut-cat-group">
+          <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:0.88rem;color:#f59e0b;margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid rgba(245,158,11,0.2);">
+            <span>✂️</span> <span>التعديل والطبقات والحافظة (Edit, Layers & Clipboard)</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:8px;">
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">تحديد جميع الكروت في الكنفاس (Select All)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Ctrl</kbd>+<kbd class="sm-kbd">A</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ش</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">نسخ الكروت المحددة (Copy)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Ctrl</kbd>+<kbd class="sm-kbd">C</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ؤ</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">لصق الكروت أو النصوص والروابط (Paste)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Ctrl</kbd>+<kbd class="sm-kbd">V</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ر</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">تراجع عن آخر إجراء (Undo)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Ctrl</kbd>+<kbd class="sm-kbd">Z</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ئ</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">إعادة الخطوة المتراجع عنها (Redo)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Ctrl</kbd>+<kbd class="sm-kbd">Y</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">حذف الكروت المحددة بأمان (Delete)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Delete</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">Backspace</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">تجميع الكروت المحددة (Group)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Ctrl</kbd>+<kbd class="sm-kbd">G</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ل</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">فك تجميع الكروت المحددة (Ungroup)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Ctrl</kbd>+<kbd class="sm-kbd">Shift</kbd>+<kbd class="sm-kbd">G</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">إحضار الكارت لأقصى المقدمة (Bring to Front)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Ctrl</kbd>+<kbd class="sm-kbd">Shift</kbd>+<kbd class="sm-kbd">↑</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">إرسال الكارت لأقصى الخلفية (Send to Back)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Ctrl</kbd>+<kbd class="sm-kbd">Shift</kbd>+<kbd class="sm-kbd">↓</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">إلغاء التحديد / إغلاق النوافذ والقوائم</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Escape</kbd></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Category: Mini Apps & Overlays -->
+        <div class="shortcut-cat-group">
+          <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:0.88rem;color:#f43f5e;margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid rgba(244,63,94,0.2);">
+            <span>🪟</span> <span>التطبيقات والودجات المصغرة (Mini-Apps & Overlays)</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:8px;">
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">فتح شاشات التطبيقات (1:اليوم, 2:جانت, 3:إحصائيات, 4:فواكه, 5:زووبر, 6:لايف)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">1</kbd> إلى <kbd class="sm-kbd">6</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">إدراج التطبيق كودجت مباشر داخل الكنفاس</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Shift</kbd> + <kbd class="sm-kbd">1-6</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">فتح السبحة الإلكترونية الرقمية (Tasbeeh)</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Q</kbd> <span style="color:#64748b">/</span> <kbd class="sm-kbd">ض</kbd></div>
+            </div>
+            <div class="shortcut-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;">
+              <span style="font-size:0.82rem;color:#cbd5e1;">فتح صندوق الوارد (Inbox) والتركيز على الإدخال فوراً</span>
+              <div style="display:flex;gap:4px;direction:ltr;"><kbd class="sm-kbd">Ctrl</kbd>+<kbd class="sm-kbd">Enter</kbd></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer -->
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 24px;border-top:1px solid rgba(255,255,255,0.08);background:rgba(0,0,0,0.2);font-size:0.75rem;color:#94a3b8;">
+        <span>💡 كل الاختصارات تعمل تلقائياً مع اللغتين العربية والإنجليزية.</span>
+        <button onclick="closeShortcutsModal()" style="padding:6px 16px;border-radius:8px;border:none;background:#38bdf8;color:#0b1120;font-weight:700;font-size:0.8rem;cursor:pointer;">إغلاق (Esc)</button>
+      </div>
+
+    </div>
+  </div>
+
+  <style>
+    .sm-kbd {
+      display: inline-block;
+      padding: 2px 7px;
+      font-size: 0.72rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-weight: 700;
+      line-height: 1.2;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 5px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+    }
+  </style>
+
+  <script>
+    function filterShortcutsList(q) {
+      q = (q || '').trim().toLowerCase();
+      document.querySelectorAll('#shortcuts-body .shortcut-item').forEach(el => {
+        const txt = el.textContent.toLowerCase();
+        el.style.display = (!q || txt.includes(q)) ? 'flex' : 'none';
+      });
+      document.querySelectorAll('#shortcuts-body .shortcut-cat-group').forEach(grp => {
+        const visibleItems = grp.querySelectorAll('.shortcut-item:not([style*="display: none"])');
+        grp.style.display = visibleItems.length > 0 ? 'block' : 'none';
+      });
+    }
+  </script>
 
   <div id="miro-pinned-layer"></div>
 </body>
