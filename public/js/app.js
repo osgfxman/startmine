@@ -1960,7 +1960,7 @@ const GDRIVE_BACKUP_PREFIX = 'startmine_backup_';
 
 
 
-// Find or create the Startmine Backups folder on Google Drive
+// Find or create the StartMe-Miro folder on Google Drive
 async function getOrCreateDriveFolder(token) {
   // Search for existing folder
   const searchResp = await fetch(
@@ -1969,7 +1969,10 @@ async function getOrCreateDriveFolder(token) {
   );
   if (!searchResp.ok) {
     const errText = await searchResp.text();
-    throw new Error('Google Drive search failed: ' + errText);
+    const err = new Error('Google Drive search failed: ' + errText);
+    err.status = searchResp.status;
+    err.isAuthError = searchResp.status === 401;
+    throw err;
   }
   const searchData = await searchResp.json();
   if (searchData.files && searchData.files.length > 0) {
@@ -1990,7 +1993,10 @@ async function getOrCreateDriveFolder(token) {
   });
   if (!createResp.ok) {
     const errText = await createResp.text();
-    throw new Error('Google Drive folder creation failed: ' + errText);
+    const err = new Error('Google Drive folder creation failed: ' + errText);
+    err.status = createResp.status;
+    err.isAuthError = createResp.status === 401;
+    throw err;
   }
   const folder = await createResp.json();
   if (!folder.id) {
@@ -2615,14 +2621,30 @@ async function exportToGoogleDrive(opts = {}) {
       }
     }
     if (!token) throw new Error('No Google token');
-    let uploadResult = await _doUpload(token);
-    // Auto-retry on 401 (expired token)
-    if (uploadResult.uploadResp.status === 401) {
-      showToast('🔄 Token expired — re-authenticating…');
-      token = await ensureGoogleTokenFresh();
+
+    let uploadResult;
+    try {
+      uploadResult = await _doUpload(token);
+    } catch (uploadErr) {
+      // Catch 401 anywhere in _doUpload (search folder, create folder, or upload)
+      if (uploadErr.status === 401 || uploadErr.isAuthError || (uploadErr.message && (uploadErr.message.includes('401') || uploadErr.message.includes('UNAUTHENTICATED')))) {
+        showToast('🔄 انتهت صلاحية الدخول — جاري تجديد تصريح Google Drive…');
+        token = await manualGoogleReAuth();
+        if (!token) throw new Error('Re-authentication failed');
+        uploadResult = await _doUpload(token);
+      } else {
+        throw uploadErr;
+      }
+    }
+
+    // Auto-retry on 401 in uploadResp
+    if (uploadResult && uploadResult.uploadResp && uploadResult.uploadResp.status === 401) {
+      showToast('🔄 Token expired — re-authenticating with Google…');
+      token = await manualGoogleReAuth();
       if (!token) throw new Error('Re-authentication failed');
       uploadResult = await _doUpload(token);
     }
+
     if (!uploadResult.uploadResp.ok) {
       const errText = await uploadResult.uploadResp.text();
       throw new Error('Upload failed: ' + errText);

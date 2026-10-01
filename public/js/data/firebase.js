@@ -152,10 +152,9 @@ function isGoogleTokenExpired() {
 restoreGoogleToken();
 
 // ─── Google token management ───
-// Don't eagerly wipe token; let API calls attempt use and re-auth only on 401
 function ensureGoogleToken() {
   if (!_googleAccessToken) restoreGoogleToken();
-  if (!_googleAccessToken) {
+  if (!_googleAccessToken || isGoogleTokenExpired()) {
     const e = new Error('NEEDS_AUTH'); e.needsAuth = true; throw e;
   }
   return Promise.resolve(_googleAccessToken);
