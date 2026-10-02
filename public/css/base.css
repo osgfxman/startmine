@@ -1079,7 +1079,8 @@ body {
   flex-direction: column;
   gap: 0.85rem;
   min-width: 0;
-  overflow: hidden;
+  min-height: 100%;
+  padding-bottom: 80px;
 }
 
 .widget {
@@ -2186,37 +2187,37 @@ input[type='range']::-webkit-slider-thumb {
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45) !important;
 }
 
-.widget.drag-over-top {
-  position: relative;
+.widget.drag-over-top,
+.widget.drag-over-bottom {
+  overflow: visible !important;
+  z-index: 100 !important;
 }
+
 .widget.drag-over-top::before {
   content: '';
   position: absolute;
-  top: -5px;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: #34d399;
-  border-radius: 3px;
-  box-shadow: 0 0 12px rgba(52, 211, 153, 0.9);
-  z-index: 999;
+  top: -8px;
+  left: -2px;
+  right: -2px;
+  height: 6px;
+  background: #10b981;
+  border-radius: 4px;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.95), 0 0 4px #ffffff;
+  z-index: 9999;
   pointer-events: none;
 }
 
-.widget.drag-over-bottom {
-  position: relative;
-}
 .widget.drag-over-bottom::after {
   content: '';
   position: absolute;
-  bottom: -5px;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: #34d399;
-  border-radius: 3px;
-  box-shadow: 0 0 12px rgba(52, 211, 153, 0.9);
-  z-index: 999;
+  bottom: -8px;
+  left: -2px;
+  right: -2px;
+  height: 6px;
+  background: #10b981;
+  border-radius: 4px;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.95), 0 0 4px #ffffff;
+  z-index: 9999;
   pointer-events: none;
 }
 

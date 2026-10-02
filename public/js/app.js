@@ -7028,24 +7028,62 @@ function buildCols() {
     const col = document.createElement('div');
     col.className = 'col';
     col.dataset.ci = ci;
+
+    // Double-click on empty area in column -> Create new widget at that position!
+    col.addEventListener('dblclick', (e) => {
+      if (e.target.closest('.widget') || e.target.closest('button, input, textarea, a, .wh, .wb, .wab, .rmb')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const pos = getWidgetDropTargetInCol(col, e.clientY);
+      insertNewWidgetAt(page, ci, pos.targetWid, pos.dropPosition);
+    });
+
+    // Drag-over column -> Highlight precise insertion line between widgets
     col.addEventListener('dragover', (e) => {
-      if (dragWid) {
-        e.preventDefault();
-        col.classList.add('dragover');
+      if (!dragWid) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      col.classList.add('dragover');
+
+      const target = getWidgetDropTargetInCol(col, e.clientY, dragWid);
+      document.querySelectorAll('.widget.drag-over-top, .widget.drag-over-bottom').forEach(x => {
+        if (!target.el || x !== target.el) {
+          x.classList.remove('drag-over-top', 'drag-over-bottom');
+        }
+      });
+
+      if (target.el) {
+        if (target.dropPosition === 'before') {
+          target.el.classList.add('drag-over-top');
+          target.el.classList.remove('drag-over-bottom');
+        } else {
+          target.el.classList.add('drag-over-bottom');
+          target.el.classList.remove('drag-over-top');
+        }
       }
     });
+
     col.addEventListener('dragleave', (e) => {
       if (!col.contains(e.relatedTarget)) {
         col.classList.remove('dragover');
+        col.querySelectorAll('.widget').forEach(x => x.classList.remove('drag-over-top', 'drag-over-bottom'));
       }
     });
+
     col.addEventListener('drop', (e) => {
       if (!dragWid) return;
       e.preventDefault();
+      e.stopPropagation();
       col.classList.remove('dragover');
-      reorderStartMeWidget(page, dragWid, null, null, ci);
+      document.querySelectorAll('.widget.drag-over-top, .widget.drag-over-bottom, .col.dragover').forEach(x => {
+        x.classList.remove('drag-over-top', 'drag-over-bottom', 'dragover');
+      });
+
+      const target = getWidgetDropTargetInCol(col, e.clientY, dragWid);
+      reorderStartMeWidget(page, dragWid, target.targetWid, target.dropPosition, ci);
       dragWid = null;
     });
+
     const _ensureArr = (arr) => Array.isArray(arr) ? arr : (arr && typeof arr === 'object' ? Object.values(arr) : []);
     const pWidgets = _ensureArr(page.widgets);
     page.widgets = pWidgets;
@@ -7064,6 +7102,28 @@ function buildCols() {
     col.appendChild(ab);
     wrap.appendChild(col);
   }
+
+  // Also support double-click on wrap (e.g. between columns or below all columns)
+  wrap.addEventListener('dblclick', (e) => {
+    if (e.target.closest('.widget') || e.target.closest('button, input, textarea, a, .wh, .wb, .wab, .rmb')) return;
+    const colEl = e.target.closest('.col');
+    if (!colEl) {
+      const allCols = Array.from(wrap.querySelectorAll('.col'));
+      if (allCols.length === 0) return;
+      let targetColEl = allCols[0];
+      for (const cEl of allCols) {
+        const cRect = cEl.getBoundingClientRect();
+        if (e.clientX >= cRect.left && e.clientX <= cRect.right) {
+          targetColEl = cEl;
+          break;
+        }
+      }
+      const colIdx = parseInt(targetColEl.dataset.ci || '0', 10);
+      const pos = getWidgetDropTargetInCol(targetColEl, e.clientY);
+      insertNewWidgetAt(page, colIdx, pos.targetWid, pos.dropPosition);
+    }
+  });
+
   if (typeof buildOutline === 'function') buildOutline();
 }
 
@@ -7377,6 +7437,108 @@ window.renderStartMeColsToolbar = renderStartMeColsToolbar;
 window.setPageColumns = setPageColumns;
 window.balancePageWidgetsAcrossCols = balancePageWidgetsAcrossCols;
 
+// Calculate target widget and position ('before' or 'after') inside a column given cursor clientY
+function getWidgetDropTargetInCol(col, clientY, excludeWid = null) {
+  if (!col) return { targetWid: null, dropPosition: null, el: null };
+  const widgetEls = Array.from(col.querySelectorAll('.widget')).filter(el => {
+    return el.dataset.wid && (!excludeWid || el.dataset.wid !== excludeWid) && !el.classList.contains('dragging');
+  });
+  if (widgetEls.length === 0) {
+    return { targetWid: null, dropPosition: null, el: null };
+  }
+
+  for (let i = 0; i < widgetEls.length; i++) {
+    const el = widgetEls[i];
+    const rect = el.getBoundingClientRect();
+    const midY = rect.top + (rect.height / 2);
+    if (clientY < midY) {
+      return { targetWid: el.dataset.wid, dropPosition: 'before', el };
+    }
+  }
+
+  const lastEl = widgetEls[widgetEls.length - 1];
+  return { targetWid: lastEl.dataset.wid, dropPosition: 'after', el: lastEl };
+}
+window.getWidgetDropTargetInCol = getWidgetDropTargetInCol;
+
+// Insert a new Bookmarks widget at specific location between widgets
+function insertNewWidgetAt(page, colIdx, targetWid, dropPosition) {
+  if (!page) page = cp();
+  if (!page) return null;
+  if (!page.widgets) page.widgets = [];
+
+  const newW = {
+    id: uid(),
+    col: (typeof colIdx === 'number') ? colIdx : 0,
+    title: 'Bookmarks',
+    emoji: '📌',
+    type: 'bookmarks',
+    display: 'auto',
+    size: 'md',
+    vis: 'all',
+    color: { ...DEF_COLOR },
+    items: [],
+    content: ''
+  };
+
+  if (targetWid) {
+    const targetIdx = page.widgets.findIndex(w => w.id === targetWid);
+    if (targetIdx !== -1) {
+      newW.col = page.widgets[targetIdx].col;
+      const insertIdx = (dropPosition === 'before') ? targetIdx : targetIdx + 1;
+      page.widgets.splice(insertIdx, 0, newW);
+    } else {
+      newW.col = (typeof colIdx === 'number') ? colIdx : 0;
+      page.widgets.push(newW);
+    }
+  } else {
+    newW.col = (typeof colIdx === 'number') ? colIdx : 0;
+    let lastInColIdx = -1;
+    for (let i = page.widgets.length - 1; i >= 0; i--) {
+      if (page.widgets[i].col === newW.col) {
+        lastInColIdx = i;
+        break;
+      }
+    }
+    if (lastInColIdx !== -1) {
+      page.widgets.splice(lastInColIdx + 1, 0, newW);
+    } else {
+      page.widgets.push(newW);
+    }
+  }
+
+  // Dual-view sync: mirror newly created widget to Miro cards
+  if (page.miroCards && typeof syncWidgetsBookmarksToMiro === 'function') {
+    syncWidgetsBookmarksToMiro([newW], page.miroCards);
+  }
+
+  page.ts = Date.now();
+  if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page.id, page);
+  if (typeof sv === 'function') sv(false, true);
+  buildCols();
+
+  // Highlight and gently scroll to the new widget
+  setTimeout(() => {
+    const el = document.querySelector(`.widget[data-wid="${newW.id}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      el.style.boxShadow = '0 0 0 3px #10b981, 0 10px 30px rgba(16, 185, 129, 0.45)';
+      el.style.transform = 'scale(1.02)';
+      setTimeout(() => {
+        el.style.boxShadow = '';
+        el.style.transform = '';
+      }, 1200);
+    }
+  }, 50);
+
+  if (typeof showToast === 'function') {
+    showToast('✨ تم إنشاء ويدجيت جديد في هذا المكان بنجاح!', 2500);
+  }
+
+  return newW;
+}
+window.insertNewWidgetAt = insertNewWidgetAt;
+
 function reorderStartMeWidget(page, draggedWid, targetWid, dropPosition, targetCol) {
   if (!page) page = cp();
   if (!page || !page.widgets || !draggedWid) return;
@@ -7400,7 +7562,7 @@ function reorderStartMeWidget(page, draggedWid, targetWid, dropPosition, targetC
       page.widgets.push(draggedW);
     }
   } else {
-    // Dropped into empty space of column targetCol
+    // Dropped into empty space or end of column targetCol
     const colIdx = (typeof targetCol === 'number') ? targetCol : 0;
     draggedW.col = colIdx;
     let lastInColIdx = -1;
@@ -7417,10 +7579,17 @@ function reorderStartMeWidget(page, draggedWid, targetWid, dropPosition, targetC
     }
   }
 
-  if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page);
-  sv();
+  // Dual-view sync: mirror reordered widgets to Miro cards
+  if (page.miroCards && typeof syncWidgetsBookmarksToMiro === 'function') {
+    syncWidgetsBookmarksToMiro(page.widgets, page.miroCards);
+  }
+
+  page.ts = Date.now();
+  if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page.id, page);
+  if (typeof sv === 'function') sv(false, true);
   buildCols();
 }
+window.reorderStartMeWidget = reorderStartMeWidget;
 function luma(c) {
   const n = typeof normalizeColor === 'function' ? normalizeColor(c) : c;
   return ((n.r || 0) * 299 + (n.g || 0) * 587 + (n.b || 0) * 114) / 1000;
@@ -7728,8 +7897,14 @@ function buildWidget(w) {
       if (dragWid === w.id) return;
       e.preventDefault();
       e.stopPropagation();
+      if (e.dataTransfer) { e.dataTransfer.dropEffect = 'move'; }
       const rect = el.getBoundingClientRect();
       const isUpper = (e.clientY - rect.top) < (rect.height / 2);
+
+      document.querySelectorAll('.widget.drag-over-top, .widget.drag-over-bottom').forEach((x) => {
+        if (x !== el) x.classList.remove('drag-over-top', 'drag-over-bottom');
+      });
+
       if (isUpper) {
         el.classList.add('drag-over-top');
         el.classList.remove('drag-over-bottom');
@@ -7762,7 +7937,9 @@ function buildWidget(w) {
       e.stopPropagation();
       const rect = el.getBoundingClientRect();
       const isUpper = (e.clientY - rect.top) < (rect.height / 2);
-      el.classList.remove('drag-over-top', 'drag-over-bottom');
+      document.querySelectorAll('.widget.drag-over-top, .widget.drag-over-bottom, .col.dragover').forEach((x) => {
+        x.classList.remove('drag-over-top', 'drag-over-bottom', 'dragover');
+      });
       const page = cp();
       reorderStartMeWidget(page, dragWid, w.id, isUpper ? 'before' : 'after', w.col);
       dragWid = null;
@@ -11792,6 +11969,8 @@ window.balancePageWidgetsAcrossCols = balancePageWidgetsAcrossCols;
 window.reorderStartMeWidget = reorderStartMeWidget;
 window.getActiveViewItem = getActiveViewItem;
 window.saveCurrentEnvironmentToDrive = saveCurrentEnvironmentToDrive;
+window.getWidgetDropTargetInCol = getWidgetDropTargetInCol;
+window.insertNewWidgetAt = insertNewWidgetAt;
 
 // Window aliases for backward compatibility
 SM.renderAll = typeof renderAll !== 'undefined' ? renderAll : window.renderAll;
@@ -11802,6 +11981,8 @@ SM.renderStartMeColsToolbar = renderStartMeColsToolbar;
 SM.setPageColumns = setPageColumns;
 SM.balancePageWidgetsAcrossCols = balancePageWidgetsAcrossCols;
 SM.reorderStartMeWidget = reorderStartMeWidget;
+SM.getWidgetDropTargetInCol = getWidgetDropTargetInCol;
+SM.insertNewWidgetAt = insertNewWidgetAt;
 SM.saveCurrentEnvironmentToDrive = saveCurrentEnvironmentToDrive;
 SM.openShortcutsModal = typeof openShortcutsModal !== 'undefined' ? openShortcutsModal : window.openShortcutsModal;
 SM.closeShortcutsModal = typeof closeShortcutsModal !== 'undefined' ? closeShortcutsModal : window.closeShortcutsModal;
