@@ -319,12 +319,14 @@
     if (livePg && livePg._localDirtyTs && syncData) {
       return syncData;
     }
-    const syncCount = syncData ? ((syncData.widgets || []).length + (syncData.miroCards || []).length + (syncData.customCells || []).length) : 0;
+    const syncSlicerCount = syncData && syncData.cellPages ? Object.keys(syncData.cellPages).length : 0;
+    const syncCount = syncData ? ((syncData.widgets || []).length + (syncData.miroCards || []).length + (syncData.customCells || []).length + syncSlicerCount) : 0;
 
     // 2. Always check IndexedDB as well so large pages (>120KB) or newer IDB entries are never missed
     const idbData = await idbGet('page_' + pid);
     if (idbData) {
-      const idbCount = (idbData.widgets || []).length + (idbData.miroCards || []).length + (idbData.customCells || []).length;
+      const idbSlicerCount = idbData.cellPages ? Object.keys(idbData.cellPages).length : 0;
+      const idbCount = (idbData.widgets || []).length + (idbData.miroCards || []).length + (idbData.customCells || []).length + idbSlicerCount;
       const idbTs = idbData.ts || 0;
       const syncTs = (syncData && syncData.ts) || 0;
       // Prefer IDB if syncData was empty, or if IDB is newer/richer and livePg wasn't intentionally cleared
@@ -358,10 +360,11 @@
     return syncData || idbData || null;
   }
   function getCachedPageDataSync(pid) {
-    // 1. Check active D.pages in RAM
+    // 1. Check active D.pages in RAM (only if actually hydrated with content or slicer cells!)
     if (window.D && window.D.pages) {
       const livePg = window.D.pages.find(p => p && p.id === pid);
-      if (livePg && (((livePg.widgets || []).length > 0) || ((livePg.miroCards || []).length > 0) || ((livePg.customCells || []).length > 0) || (livePg.pageType === 'slicer') || livePg._bypassVersionGuard)) {
+      const hasSlicerData = livePg && livePg.pageType === 'slicer' && ((livePg.cellPages && Object.keys(livePg.cellPages).length > 0) || livePg.gridRows);
+      if (livePg && (((livePg.widgets || []).length > 0) || ((livePg.miroCards || []).length > 0) || ((livePg.customCells || []).length > 0) || hasSlicerData || livePg._bypassVersionGuard)) {
         return {
           widgets: livePg.widgets || [],
           miroCards: livePg.miroCards || [],

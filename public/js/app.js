@@ -466,8 +466,18 @@ setInterval(runIntegrityCheck, 2 * 60 * 1000);
 
 document.getElementById('login-btn').onclick = () => {
     localStorage.setItem('sm_remember_me', 'true');
+    localStorage.removeItem('sm_explicit_logout');
     sessionStorage.removeItem('sm_auth_redirected');
+    try {
+      provider.setCustomParameters({ login_hint: localStorage.getItem('sm_saved_email') || 'osgfxman@gmail.com' });
+    } catch (e) {}
     auth.signInWithPopup(provider).then((result) => {
+      if (result && result.user) {
+        try {
+          localStorage.setItem('sm_saved_uid', result.user.uid);
+          localStorage.setItem('sm_saved_email', result.user.email || 'osgfxman@gmail.com');
+        } catch (e) {}
+      }
       var cred = result.credential || (firebase.auth.GoogleAuthProvider.credentialFromResult && firebase.auth.GoogleAuthProvider.credentialFromResult(result));
       if (cred && cred.accessToken) {
         cacheGoogleToken(cred.accessToken);
@@ -486,6 +496,11 @@ document.getElementById('login-btn').onclick = () => {
   auth.getRedirectResult().then(function(result) {
     if (result && result.user) {
       localStorage.setItem('sm_remember_me', 'true');
+      localStorage.removeItem('sm_explicit_logout');
+      try {
+        localStorage.setItem('sm_saved_uid', result.user.uid);
+        localStorage.setItem('sm_saved_email', result.user.email || 'osgfxman@gmail.com');
+      } catch (e) {}
       var cred = result.credential || (firebase.auth.GoogleAuthProvider.credentialFromResult && firebase.auth.GoogleAuthProvider.credentialFromResult(result));
       if (cred && cred.accessToken) {
         cacheGoogleToken(cred.accessToken);
@@ -497,27 +512,87 @@ document.getElementById('login-btn').onclick = () => {
   });
 document.getElementById('logout-btn').onclick = () => {
   localStorage.removeItem('sm_remember_me');
+  localStorage.removeItem('sm_saved_uid');
+  localStorage.setItem('sm_explicit_logout', 'true');
   sessionStorage.removeItem('sm_auth_redirected');
   auth.signOut();
 };
 
-auth.onAuthStateChanged((user) => {
-  if (user) {
-    USER_ID = user.uid;
-    DB_REF = 'users/' + USER_ID + '/startmine_data';
-    document.getElementById('user-email').textContent = '👤 ' + user.email;
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('root').style.display = 'flex';
-    // Restore Google access token from cache if we don't have one
-    if (!_googleAccessToken) {
-      restoreGoogleToken();
+let _dbInitializedForUid = null;
+let _dbInitializedWithAuthForUid = null;
+function _activateUserWorkspace(uid, email, hasRealAuth = false) {
+  if (!uid) return;
+  USER_ID = uid;
+  DB_REF = 'users/' + USER_ID + '/startmine_data';
+  const emailEl = document.getElementById('user-email');
+  if (emailEl) emailEl.textContent = '👤 ' + (email || 'osgfxman@gmail.com');
+  const loginScr = document.getElementById('login-screen');
+  if (loginScr) loginScr.style.display = 'none';
+  const rootEl = document.getElementById('root');
+  if (rootEl) rootEl.style.display = 'flex';
+  if (!_googleAccessToken) {
+    restoreGoogleToken();
+  }
+  if (hasRealAuth && (!_googleAccessToken || isGoogleTokenExpired()) && typeof window.syncGoogleTokenFromCloud === 'function') {
+    window.syncGoogleTokenFromCloud().catch(() => {});
+  }
+  if (hasRealAuth) {
+    if (_dbInitializedWithAuthForUid !== uid) {
+      _dbInitializedWithAuthForUid = uid;
+      _dbInitializedForUid = uid;
+      window._cloudHealRanForUid = null;
+      if (SM.core.runHealthCheck) SM.core.runHealthCheck();
+      initDB();
     }
-    
+  } else if (_dbInitializedForUid !== uid) {
+    _dbInitializedForUid = uid;
     if (SM.core.runHealthCheck) SM.core.runHealthCheck();
     initDB();
+  }
+}
+
+// Instant Remember-Me Boot: if owner already signed in before and has local cache, render cache immediately while Auth initializes
+(function instantRememberMeBoot() {
+  try {
+    if (localStorage.getItem('sm_explicit_logout') === 'true') return;
+    const savedUid = localStorage.getItem('sm_saved_uid');
+    const savedEmail = localStorage.getItem('sm_saved_email') || 'osgfxman@gmail.com';
+    const hasCachedWorkspace = Boolean(typeof getCachedPagesMeta === 'function' && getCachedPagesMeta());
+    if (savedUid && hasCachedWorkspace) {
+      localStorage.setItem('sm_remember_me', 'true');
+      setTimeout(() => {
+        if (!USER_ID) {
+          console.log('[AUTH] Instant Remember-Me cache boot for saved owner:', savedEmail);
+          _activateUserWorkspace(savedUid, savedEmail, false);
+        }
+      }, 0);
+    }
+  } catch (e) {}
+})();
+
+auth.onAuthStateChanged((user) => {
+  if (user) {
+    try {
+      localStorage.setItem('sm_saved_uid', user.uid);
+      localStorage.setItem('sm_saved_email', user.email || 'osgfxman@gmail.com');
+      localStorage.setItem('sm_remember_me', 'true');
+      localStorage.removeItem('sm_explicit_logout');
+    } catch (e) {}
+    _activateUserWorkspace(user.uid, user.email, true);
   } else {
+    // Remember User: if owner is saved and has local cached pages, keep workspace active!
+    const savedUid = localStorage.getItem('sm_saved_uid');
+    const savedEmail = localStorage.getItem('sm_saved_email') || 'osgfxman@gmail.com';
+    const hasCachedWorkspace = Boolean(typeof getCachedPagesMeta === 'function' && getCachedPagesMeta());
+    if (savedUid && hasCachedWorkspace && localStorage.getItem('sm_explicit_logout') !== 'true') {
+      console.log('[AUTH] Keeping remembered owner session active from cache:', savedEmail);
+      _activateUserWorkspace(savedUid, savedEmail, false);
+      return;
+    }
     USER_ID = null;
     DB_REF = null;
+    _dbInitializedForUid = null;
+    _dbInitializedWithAuthForUid = null;
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('root').style.display = 'none';
     const spinner = document.getElementById('splash-spinner');
@@ -942,7 +1017,8 @@ function switchActivePage(pageId) {
 
   // ─── Instant render from in-memory / cache, IndexedDB fallback ───
   const livePg = cp();
-  const hasLiveInMemory = livePg && (((livePg.widgets || []).length > 0) || ((livePg.miroCards || []).length > 0) || ((livePg.customCells || []).length > 0) || livePg.pageType === 'slicer');
+  const hasSlicerCellsInRam = Boolean(livePg && livePg.pageType === 'slicer' && ((livePg.cellPages && Object.keys(livePg.cellPages).length > 0) || livePg.gridRows));
+  const hasLiveInMemory = Boolean(livePg && livePg._hasBeenLoaded && (((livePg.widgets || []).length > 0) || ((livePg.miroCards || []).length > 0) || ((livePg.customCells || []).length > 0) || hasSlicerCellsInRam));
 
   if (hasLiveInMemory) {
     // Page is already fully loaded in RAM — render immediately without risking overwrite from stale cache!
@@ -972,7 +1048,8 @@ function switchActivePage(pageId) {
 
     const _ensureArr = (v) => Array.isArray(v) ? v : (v && typeof v === 'object' ? Object.values(v) : []);
     const cachedPage = getCachedPageData(pageId);
-    if (cachedPage && (_ensureArr(cachedPage.widgets).length > 0 || _ensureArr(cachedPage.miroCards).length > 0 || (cachedPage.vGuides || []).length > 0 || (cachedPage.hGuides || []).length > 0 || (cachedPage.customCells || []).length > 0 || cachedPage.pageType === 'slicer' || cachedPage.gridRows)) {
+    const cachedHasSlicer = cachedPage && ((cachedPage.cellPages && Object.keys(cachedPage.cellPages).length > 0) || Boolean(cachedPage.gridRows));
+    if (cachedPage && (_ensureArr(cachedPage.widgets).length > 0 || _ensureArr(cachedPage.miroCards).length > 0 || (cachedPage.vGuides || []).length > 0 || (cachedPage.hGuides || []).length > 0 || (cachedPage.customCells || []).length > 0 || cachedHasSlicer)) {
       const pg = cp();
       if (pg) {
         pg.widgets = _ensureArr(cachedPage.widgets);
@@ -1012,7 +1089,8 @@ function switchActivePage(pageId) {
       // Try IndexedDB async (larger, more reliable cache)
       getCachedPageDataAsync(pageId).then(idbCached => {
       const _ensureArr = (v) => Array.isArray(v) ? v : (v && typeof v === 'object' ? Object.values(v) : []);
-      if (idbCached && (_ensureArr(idbCached.widgets).length > 0 || _ensureArr(idbCached.miroCards).length > 0 || (idbCached.vGuides || []).length > 0 || (idbCached.hGuides || []).length > 0 || (idbCached.customCells || []).length > 0 || idbCached.pageType === 'slicer' || idbCached.gridRows)) {
+      const idbHasSlicer = idbCached && ((idbCached.cellPages && Object.keys(idbCached.cellPages).length > 0) || Boolean(idbCached.gridRows));
+      if (idbCached && (_ensureArr(idbCached.widgets).length > 0 || _ensureArr(idbCached.miroCards).length > 0 || (idbCached.vGuides || []).length > 0 || (idbCached.hGuides || []).length > 0 || (idbCached.customCells || []).length > 0 || idbHasSlicer)) {
         const pg = cp();
         if (pg && pg.id === pageId) { // Make sure we're still on same page
           // ⛔ RACE CONDITION GUARD: Only reject if local memory ACTUALLY has data AND newer timestamp!
@@ -1067,7 +1145,8 @@ function switchActivePage(pageId) {
   }
 
   db.ref(pageDataRef).on('value', (snap) => {
-    if (isOwnWrite()) return;
+    const pgCheck = D.pages.find(p => p && p.id === pageId);
+    if (pgCheck && pgCheck._hasBeenLoaded && isOwnWrite()) return;
     if (window._isActivelyUpgradingMiroImages) {
       console.warn('[FIREBASE GUARD] Actively localizing Miro images, ignoring incoming update.');
       return;
@@ -1088,30 +1167,31 @@ function switchActivePage(pageId) {
         return;
       }
 
-      if (isPagePayloadEqual(pg, pData)) {
+      if (pg._hasBeenLoaded && isPagePayloadEqual(pg, pData)) {
         pg.ts = pData.ts || 0;
         return;
       }
       const _ensureArr = (v) => Array.isArray(v) ? v : (v && typeof v === 'object' ? Object.values(v) : []);
       const incomingW = _ensureArr(pData.widgets).length;
       const incomingC = _ensureArr(pData.miroCards).length;
-      const incomingG = (pData.vGuides || []).length + (pData.hGuides || []).length + (pData.customCells || []).length;
+      const incomingSlicer = (pData.cellPages && Object.keys(pData.cellPages).length) || (pData.gridRows ? 1 : 0);
+      const incomingG = (pData.vGuides || []).length + (pData.hGuides || []).length + (pData.customCells || []).length + incomingSlicer;
       const localW = _ensureArr(pg.widgets).length;
       const localC = _ensureArr(pg.miroCards).length;
-      const localG = (pg.vGuides || []).length + (pg.hGuides || []).length + (pg.customCells || []).length;
+      const localSlicer = (pg.cellPages && Object.keys(pg.cellPages).length) || (pg.gridRows ? 1 : 0);
+      const localG = (pg.vGuides || []).length + (pg.hGuides || []).length + (pg.customCells || []).length + localSlicer;
       const localHasData = (localW > 0 || localC > 0 || localG > 0);
 
-      // ⛔ TIMESTAMP GUARD: If local data is newer than incoming server data AND local actually has content, ignore update
+      // ⛔ TIMESTAMP GUARD: Only ignore incoming server data if local page actually has unsaved local edits (_localDirtyTs) that are newer!
       const incomingTs = pData.ts || 0;
       const localTs = pg.ts || 0;
-      if (localHasData && localTs > incomingTs) {
-        console.warn(`[FIREBASE GUARD ⛔] Local data for "${pg.name}" is newer (${localTs}) than incoming (${incomingTs}) — ignoring update.`);
-        // Upload our newer local data to server
+      if (localHasData && pg._localDirtyTs && localTs > incomingTs) {
+        console.warn(`[FIREBASE GUARD ⛔] Local dirty data for "${pg.name}" is newer (${localTs}) than incoming (${incomingTs}) — ignoring update.`);
         sv(false, true);
         return;
       }
 
-      // ⛔ GUARD: If Firebase sends empty but local has data or cache has data, refuse the overwrite unconditionally
+      // ⛔ GUARD: If Firebase sends empty but local has data or cache/snapshot has data, refuse the overwrite unconditionally
       const incomingEmpty = (incomingW === 0 && incomingC === 0 && incomingG === 0);
       if (incomingEmpty) {
         if (localHasData) {
@@ -1119,13 +1199,20 @@ function switchActivePage(pageId) {
           return;
         }
         const cached = typeof getCachedPageData === 'function' ? getCachedPageData(pageId) : null;
-        const cachedHasData = cached && (((cached.widgets || []).length > 0) || ((cached.miroCards || []).length > 0));
+        const cachedHasData = cached && (((cached.widgets || []).length > 0) || ((cached.miroCards || []).length > 0) || (cached.cellPages && Object.keys(cached.cellPages).length > 0));
         if (cachedHasData) {
           console.warn(`[FIREBASE GUARD ⛔] Incoming data for "${pg.name}" is EMPTY but cache has data — restoring from cache!`);
           pg.widgets = cached.widgets || [];
           pg.miroCards = cached.miroCards || [];
+          if (cached.cellPages) pg.cellPages = cached.cellPages;
+          if (cached.gridRows) pg.gridRows = cached.gridRows;
+          if (cached.gridCols) pg.gridCols = cached.gridCols;
+          pg._hasBeenLoaded = true;
           buildCols();
           return;
+        }
+        if (typeof window.healWorkspaceFromCloud === 'function' && window._cloudHealRanForUid !== USER_ID) {
+          window.healWorkspaceFromCloud();
         }
       }
 
@@ -5464,9 +5551,10 @@ document.getElementById('ok-settings').onclick = () => {
 };
 
 window.triggerImageMigration = async function () {
-  if (typeof confirm === 'function') {
-    const ok = confirm('هذا الإجراء سيقوم بفحص جميع الصفحات وتأمين كافة الصور (بما فيها صور ImgBB والصور المحلية) برفعها مباشرة إلى حسابك في Google Drive (مجلد StartMe-Miro/Images) وحفظها في الخزنة المحلية للمتصفح لضمان عدم اختفائها أبداً. هل تريد الاستمرار؟');
-    if (!ok) return;
+  if (window._imageMigrationRunning) {
+    window._cancelImageMigration = true;
+    if (typeof showToast === 'function') showToast('⏹️ جاري إيقاف النقل وحفظ ما تم تأمينه حتى الآن...', 3500);
+    return;
   }
 
   if (!USER_ID) {
@@ -5474,45 +5562,72 @@ window.triggerImageMigration = async function () {
     return;
   }
 
+  // Trigger Google Drive token refresh synchronously on direct button click (before any confirm/await) so browsers never block the popup
+  let activeDriveToken = null;
+  if (typeof window.restoreGoogleToken === 'function' && !window._googleAccessToken) {
+    window.restoreGoogleToken();
+  }
+  if (window._googleAccessToken && typeof window.isGoogleTokenExpired === 'function' && !window.isGoogleTokenExpired()) {
+    activeDriveToken = window._googleAccessToken;
+  } else if (typeof window.manualGoogleReAuth === 'function') {
+    try {
+      activeDriveToken = await window.manualGoogleReAuth({ silentOnBlock: true });
+    } catch (e) { /* will try cloud token next */ }
+  }
+
+  if (!activeDriveToken && typeof window.getGoogleDriveActiveToken === 'function') {
+    activeDriveToken = await window.getGoogleDriveActiveToken(false);
+  }
+
+  window._imageMigrationRunning = true;
+  window._cancelImageMigration = false;
+
   const btn = document.getElementById('migrate-images-btn');
   if (btn) {
-    btn.disabled = true;
+    btn.disabled = false;
     btn.textContent = '⏳ جاري الاتصال بـ Google Drive وفحص الصور...';
   }
 
+  let pendingUpdates = {};
+  const flushPendingUpdates = async () => {
+    const keys = Object.keys(pendingUpdates);
+    if (keys.length === 0) return;
+    const toFlush = pendingUpdates;
+    pendingUpdates = {};
+    const BATCH_SIZE = 50;
+    for (let b = 0; b < keys.length; b += BATCH_SIZE) {
+      const batch = {};
+      keys.slice(b, b + BATCH_SIZE).forEach(k => { batch[k] = toFlush[k]; });
+      await Promise.race([
+        firebase.database().ref().update(batch),
+        new Promise((r) => setTimeout(r, 10000))
+      ]);
+    }
+  };
+
   try {
-    // Request Google Drive token interactively if not already active
-    if (typeof window.requestGoogleDriveToken === 'function') {
-      const token = await window.requestGoogleDriveToken(true);
-      if (!token) {
-        if (typeof showToast === 'function') showToast('⚠️ لم يتم منح صلاحية Google Drive — سيتم الرفع إلى السحابة الاحتياطية والخزنة المحلية', 4000);
-      }
+    if (!activeDriveToken) {
+      if (typeof showToast === 'function') showToast('⚠️ تنبيه: لم يتم تفعيل توكن Google Drive — سيتم التأمين في الخزنة المحلية والسحابة الاحتياطية', 4500);
     }
 
-    if (typeof showToast === 'function') showToast('⏳ جاري فحص قاعدة البيانات لتأمين الصور...', 4000);
+    if (typeof showToast === 'function') showToast('⏳ جاري فحص قاعدة البيانات لحصر الصور غير المؤمنة...', 3500);
 
     const snap = await firebase.database().ref(`users/${USER_ID}/startmine_pages`).once('value');
     const allPages = snap.val();
 
     if (!allPages) {
       if (typeof showToast === 'function') showToast('✅ لا توجد صفحات للفحص');
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = '☁️ تأمين ونقل جميع الصور إلى Google Drive';
-      }
       return;
     }
 
-    let totalFound = 0;
-    let totalUploaded = 0;
-    let totalFailed = 0;
+    // Pre-collect all candidate cards so we know the exact total count
+    const queue = [];
+    let totalAlreadyDrive = 0;
     let totalSkippedBlob = 0;
-    const updates = {};
 
     for (const [pageId, pageData] of Object.entries(allPages)) {
       if (!pageData || !pageData.miroCards) continue;
       const cardsRaw = pageData.miroCards;
-
       const cardEntries = Array.isArray(cardsRaw)
         ? cardsRaw.map((c, i) => [String(i), c])
         : Object.entries(cardsRaw);
@@ -5520,9 +5635,11 @@ window.triggerImageMigration = async function () {
       for (const [cardKey, card] of cardEntries) {
         if (!card || !card.imageUrl) continue;
 
-        // Skip if already backed up on Google Drive
-        const hasDriveBackup = Boolean(card.driveFileId && card.driveUrl);
-        if (hasDriveBackup) continue;
+        const hasDriveBackup = Boolean(card.driveFileId && card.driveUrl) || /googleusercontent\.com\/d\/|drive\.google\.com/i.test(card.imageUrl);
+        if (hasDriveBackup) {
+          totalAlreadyDrive++;
+          continue;
+        }
 
         const isBase64 = card.imageUrl.startsWith('data:image');
         const isBlob = card.imageUrl.startsWith('blob:');
@@ -5535,14 +5652,46 @@ window.triggerImageMigration = async function () {
         }
 
         if (isBase64 || isLocalPath || isExternalUrl) {
-          totalFound++;
-          if (btn) btn.textContent = `⏳ جاري تأمين الصورة ${totalFound}...`;
-          if (typeof showToast === 'function') showToast(`⏳ جاري تأمين ورفع الصورة ${totalFound} إلى Google Drive...`, 2000);
+          queue.push({ pageId, cardKey, card, isBase64, isExternalUrl, isLocalPath });
+        }
+      }
+    }
 
-          try {
-            let uploadRes = null;
+    const totalFound = queue.length;
+    if (totalFound === 0) {
+      if (typeof showToast === 'function') {
+        showToast(`✅ جميع الصور (${totalAlreadyDrive} صورة) مؤمنة ومحفوظة بالفعل على Google Drive!`, 5000);
+      }
+      return;
+    }
 
-            // 1. Check if we already have this image in the Local IndexedDB Vault
+    let totalUploaded = 0;
+    let totalFailed = 0;
+
+    for (let idx = 0; idx < queue.length; idx++) {
+      if (window._cancelImageMigration) {
+        console.log('[Migration] Cancelled by user at index', idx);
+        break;
+      }
+
+      const { pageId, cardKey, card, isBase64, isExternalUrl, isLocalPath } = queue[idx];
+      const currentNum = idx + 1;
+      const statusText = `⏳ تأمين ${currentNum} / ${totalFound} (حُفظ ${totalUploaded}) — اضغط للإيقاف`;
+      if (btn) btn.textContent = statusText;
+      if (idx === 0 || currentNum % 5 === 0 || currentNum === totalFound) {
+        if (typeof showToast === 'function') {
+          showToast(`⏳ جاري تأمين الصورة ${currentNum} من ${totalFound} (تم حفظ ${totalUploaded})...`, 2500);
+        }
+      }
+
+      try {
+        // Strict 22-second per-image timeout so no single image (#366 or any other) can ever hang the loop
+        const uploadRes = await Promise.race([
+          (async () => {
+            let res = null;
+            const existingImgbb = /ibb\.co|imgbb\.com/i.test(card.imageUrl) ? card.imageUrl : (card.imgbbUrl || null);
+
+            // 1. Check Local IndexedDB Vault first
             if (typeof window.getImageVaultBlob === 'function' && typeof window.blobToDataUrl === 'function') {
               const vaultBlob = await window.getImageVaultBlob([
                 card.id ? `img_cid_${card.id}` : null,
@@ -5552,79 +5701,96 @@ window.triggerImageMigration = async function () {
               if (vaultBlob) {
                 const b64 = await window.blobToDataUrl(vaultBlob);
                 if (b64 && typeof window.uploadImageSmart === 'function') {
-                  uploadRes = await window.uploadImageSmart(b64, { cardId: card.id, label: card.label || card.id });
+                  res = await window.uploadImageSmart(b64, {
+                    cardId: card.id,
+                    label: card.label || card.id,
+                    existingImgbbUrl: existingImgbb
+                  });
                 }
               }
             }
 
             // 2. Otherwise upload from Base64 or fetch from external URL (ImgBB, etc.)
-            if (!uploadRes) {
+            if (!res) {
               if (isBase64 && typeof window.uploadImageSmart === 'function') {
-                uploadRes = await window.uploadImageSmart(card.imageUrl, { cardId: card.id, label: card.label || card.id });
-              } else if ((isExternalUrl || isLocalPath) && typeof window.fetchAndUploadToImgBB === 'function') {
-                uploadRes = await window.fetchAndUploadToImgBB(card.imageUrl, {
+                res = await window.uploadImageSmart(card.imageUrl, {
                   cardId: card.id,
                   label: card.label || card.id,
+                  existingImgbbUrl: existingImgbb
+                });
+              } else if ((isExternalUrl || isLocalPath) && typeof window.fetchAndUploadToImgBB === 'function') {
+                res = await window.fetchAndUploadToImgBB(card.imageUrl, {
+                  cardId: card.id,
+                  label: card.label || card.id,
+                  existingImgbbUrl: existingImgbb,
                   returnDetails: true
                 });
               }
             }
+            return res;
+          })(),
+          new Promise((resolve) => setTimeout(() => {
+            console.warn(`[Migration] ⏱️ Timeout (22s) on image ${currentNum}/${totalFound} (card ${card.id}) — skipping cleanly`);
+            resolve(null);
+          }, 22000))
+        ]);
 
-            const finalUrl = uploadRes && typeof uploadRes === 'object' ? uploadRes.url : uploadRes;
-            if (finalUrl) {
-              const oldUrl = card.imageUrl;
-              card.imageUrl = finalUrl;
-              const basePath = `users/${USER_ID}/startmine_pages/${pageId}/miroCards/${cardKey}`;
-              updates[`${basePath}/imageUrl`] = finalUrl;
-              if (uploadRes && typeof uploadRes === 'object') {
-                if (uploadRes.driveFileId) {
-                  card.driveFileId = uploadRes.driveFileId;
-                  updates[`${basePath}/driveFileId`] = uploadRes.driveFileId;
-                }
-                if (uploadRes.driveUrl) {
-                  card.driveUrl = uploadRes.driveUrl;
-                  updates[`${basePath}/driveUrl`] = uploadRes.driveUrl;
-                }
-                const imgbbKeep = uploadRes.imgbbUrl || (/ibb\.co|imgbb\.com/i.test(oldUrl) ? oldUrl : null);
-                if (imgbbKeep) {
-                  card.imgbbUrl = imgbbKeep;
-                  updates[`${basePath}/imgbbUrl`] = imgbbKeep;
-                }
-                if (uploadRes.thumbPreview) {
-                  card.thumbPreview = uploadRes.thumbPreview;
-                  updates[`${basePath}/thumbPreview`] = uploadRes.thumbPreview;
-                }
-              }
-              totalUploaded++;
-              console.log(`[Migration] ✅ Secured card ${card.id} (key ${cardKey}) on page ${pageId}`);
-            } else {
-              totalFailed++;
-              console.warn(`[Migration] ❌ Upload failed for card ${card.id} on page ${pageId}`);
+        const finalUrl = uploadRes && typeof uploadRes === 'object' ? uploadRes.url : uploadRes;
+        if (finalUrl) {
+          const oldUrl = card.imageUrl;
+          card.imageUrl = finalUrl;
+          const basePath = `users/${USER_ID}/startmine_pages/${pageId}/miroCards/${cardKey}`;
+          pendingUpdates[`${basePath}/imageUrl`] = finalUrl;
+          if (uploadRes && typeof uploadRes === 'object') {
+            if (uploadRes.driveFileId) {
+              card.driveFileId = uploadRes.driveFileId;
+              pendingUpdates[`${basePath}/driveFileId`] = uploadRes.driveFileId;
             }
-          } catch (uploadErr) {
-            totalFailed++;
-            console.error(`[Migration] ❌ Upload error for card ${card.id}:`, uploadErr);
+            if (uploadRes.driveUrl) {
+              card.driveUrl = uploadRes.driveUrl;
+              pendingUpdates[`${basePath}/driveUrl`] = uploadRes.driveUrl;
+            }
+            const imgbbKeep = uploadRes.imgbbUrl || (/ibb\.co|imgbb\.com/i.test(oldUrl) ? oldUrl : null);
+            if (imgbbKeep) {
+              card.imgbbUrl = imgbbKeep;
+              pendingUpdates[`${basePath}/imgbbUrl`] = imgbbKeep;
+            }
+            if (uploadRes.thumbPreview) {
+              card.thumbPreview = uploadRes.thumbPreview;
+              pendingUpdates[`${basePath}/thumbPreview`] = uploadRes.thumbPreview;
+            }
           }
-          // Brief pause to avoid rate-limiting ImgBB when pulling existing images
-          await new Promise(r => setTimeout(r, 350));
+          totalUploaded++;
+          console.log(`[Migration] ✅ (${currentNum}/${totalFound}) Secured card ${card.id} on page ${pageId}`);
+
+          // Flush incrementally every 10 secured images so progress is never lost
+          if (totalUploaded % 10 === 0) {
+            await flushPendingUpdates();
+          }
+        } else {
+          totalFailed++;
+          console.warn(`[Migration] ❌ (${currentNum}/${totalFound}) Upload failed/timed out for card ${card.id} on page ${pageId}`);
         }
+      } catch (uploadErr) {
+        totalFailed++;
+        console.error(`[Migration] ❌ Upload error for card ${card.id}:`, uploadErr);
       }
+
+      // Brief pause between images
+      await new Promise(r => setTimeout(r, 180));
     }
 
-    console.log(`[Migration] Summary: Found=${totalFound}, Uploaded=${totalUploaded}, Failed=${totalFailed}, BlobSkipped=${totalSkippedBlob}`);
+    // Flush any remaining updates
+    await flushPendingUpdates();
 
-    if (Object.keys(updates).length > 0) {
-      const updateKeys = Object.keys(updates);
-      const BATCH_SIZE = 50;
-      for (let b = 0; b < updateKeys.length; b += BATCH_SIZE) {
-        const batch = {};
-        updateKeys.slice(b, b + BATCH_SIZE).forEach(k => { batch[k] = updates[k]; });
-        await firebase.database().ref().update(batch);
-      }
+    console.log(`[Migration] Summary: Found=${totalFound}, Uploaded=${totalUploaded}, Failed=${totalFailed}, AlreadyDrive=${totalAlreadyDrive}, BlobSkipped=${totalSkippedBlob}`);
 
-      let msg = `✅ تم تأمين وحفظ ${totalUploaded} صورة على Google Drive والخزنة المحلية!`;
+    if (totalUploaded > 0) {
+      let msg = window._cancelImageMigration
+        ? `⏹️ تم إيقاف النقل مؤقتاً وحفظ ${totalUploaded} صورة بنجاح على Google Drive!`
+        : `✅ اكتمل التأمين! تم حفظ ${totalUploaded} صورة على Google Drive والخزنة المحلية!`;
       if (totalFailed > 0) msg += ` (${totalFailed} تعذر سحبها من المصدر)`;
-      if (typeof showToast === 'function') showToast(msg, 6000);
+      if (typeof showToast === 'function') showToast(msg, 6500);
 
       for (const [pageId, pageData] of Object.entries(allPages)) {
         const inMemoryPage = D.pages.find(p => p && p.id === pageId);
@@ -5651,15 +5817,16 @@ window.triggerImageMigration = async function () {
         else buildMiroCanvas();
       }
     } else {
-      let msg = totalFound === 0
-        ? '✅ جميع الصور مؤمنة ومحفوظة بالفعل على Google Drive!'
-        : `⚠️ تعذر سحب ${totalFailed} صورة من خادم المصدر حالياً — جرب تنشيطها أولاً`;
+      let msg = `⚠️ تعذر سحب ${totalFailed} صورة من خادم المصدر حالياً — جرب تنشيطها أولاً`;
       if (typeof showToast === 'function') showToast(msg, 5000);
     }
   } catch (err) {
     console.error('[Migration] Error during image migration:', err);
+    await flushPendingUpdates().catch(() => {});
     if (typeof showToast === 'function') showToast('⚠️ حدث خطأ أثناء نقل الصور: ' + err.message, 5000);
   } finally {
+    window._imageMigrationRunning = false;
+    window._cancelImageMigration = false;
     if (btn) {
       btn.disabled = false;
       btn.textContent = '☁️ تأمين ونقل جميع الصور إلى Google Drive';
@@ -7389,6 +7556,13 @@ function renderStartMeColsToolbar(page) {
       colsPop.classList.toggle('open');
       if (colsPop.classList.contains('open')) {
         renderStartMeColsToolbar(cp());
+        if (window.innerWidth > 768) {
+          const btnRect = colsBtn.getBoundingClientRect();
+          const popH = colsPop.offsetHeight || 360;
+          const idealTop = Math.max(12, Math.min(btnRect.top - 20, window.innerHeight - popH - 40));
+          colsPop.style.setProperty('top', idealTop + 'px', 'important');
+          colsPop.style.setProperty('right', '40px', 'important');
+        }
       }
     };
     colsPop.onclick = (ev) => {
@@ -10156,12 +10330,6 @@ function updateSlicerCellGrid(container, state, targetPage) {
 function setupSlicerSubPageListeners(slicerPage) {
   if (!slicerPage.cellPages) return;
 
-  // Mark all subpages of this slicer as loaded
-  Object.values(slicerPage.cellPages).forEach(subPid => {
-    const pg = D.pages.find(p => p && p.id === subPid);
-    if (pg) pg._hasBeenLoaded = true;
-  });
-
   if (_offlineMode) return; // Do not attach Firebase listeners in offline mode
 
   // Get unique subpage IDs to listen to, filtering out slicer pages to prevent circular listeners
@@ -10170,10 +10338,14 @@ function setupSlicerSubPageListeners(slicerPage) {
     return pg && pg.pageType !== 'slicer' && subPid && subPid !== slicerPage.id;
   });
 
+  const allSubsLoaded = subPageIds.every(subPid => {
+    const pg = D.pages.find(p => p && p.id === subPid);
+    return pg && pg._hasBeenLoaded && (((pg.widgets || []).length > 0) || ((pg.miroCards || []).length > 0));
+  });
   const targetPaths = subPageIds.map(subPid => `users/${USER_ID}/startmine_pages/${subPid}`).sort();
   const currentPaths = (window._activeSubPageListeners || []).map(item => item.path).sort();
   const pathsMatch = currentPaths.length === targetPaths.length && currentPaths.every((val, idx) => val === targetPaths[idx]);
-  if (pathsMatch) {
+  if (pathsMatch && allSubsLoaded) {
     return;
   }
 
@@ -10191,39 +10363,41 @@ function setupSlicerSubPageListeners(slicerPage) {
     const path = `users/${USER_ID}/startmine_pages/${subPid}`;
     let initial = true;
     const callback = (snap) => {
-      if (isOwnWrite()) return;
+      const pg = D.pages.find(p => p && p.id === subPid);
+      if (!initial && pg && pg._hasBeenLoaded && isOwnWrite()) return;
       const pData = snap.val() || { widgets: [], miroCards: [] };
       
-      const pg = D.pages.find(p => p && p.id === subPid);
       if (pg) {
-        if (isPagePayloadEqual(pg, pData)) {
+        if (pg._hasBeenLoaded && isPagePayloadEqual(pg, pData)) {
           pg.ts = pData.ts || 0;
           return;
         }
-        // Timestamp Guard
+        const _ensureArr = (v) => Array.isArray(v) ? v : (v && typeof v === 'object' ? Object.values(v) : []);
+        const incomingW = _ensureArr(pData.widgets).length;
+        const incomingC = _ensureArr(pData.miroCards).length;
+        const incomingG = (pData.vGuides || []).length + (pData.hGuides || []).length + (pData.customCells || []).length;
+        const localW = _ensureArr(pg.widgets).length;
+        const localC = _ensureArr(pg.miroCards).length;
+        const localG = (pg.vGuides || []).length + (pg.hGuides || []).length + (pg.customCells || []).length;
+        const incomingEmpty = (incomingW === 0 && incomingC === 0 && incomingG === 0);
+        const localHasData = (localW > 0 || localC > 0 || localG > 0);
+
+        // Timestamp Guard: only ignore incoming cloud data if subpage has local unsaved edits (_localDirtyTs) that are newer
         const incomingTs = pData.ts || 0;
         const localTs = pg.ts || 0;
-        if (localTs > incomingTs) {
-          console.warn(`[FIREBASE SUB GUARD ⛔] Local data for subpage "${pg.name}" is newer (${localTs}) than incoming (${incomingTs}) — ignoring update.`);
+        if (localHasData && pg._localDirtyTs && localTs > incomingTs) {
+          console.warn(`[FIREBASE SUB GUARD ⛔] Local dirty data for subpage "${pg.name}" is newer (${localTs}) than incoming (${incomingTs}) — ignoring update.`);
           return;
         }
 
         // Overwrite empty guard (same as main page)
-        const incomingW = (pData.widgets || []).length;
-        const incomingC = (pData.miroCards || []).length;
-        const incomingG = (pData.vGuides || []).length + (pData.hGuides || []).length + (pData.customCells || []).length;
-        const localW = (pg.widgets || []).length;
-        const localC = (pg.miroCards || []).length;
-        const localG = (pg.vGuides || []).length + (pg.hGuides || []).length + (pg.customCells || []).length;
-        const incomingEmpty = (incomingW === 0 && incomingC === 0 && incomingG === 0);
-        const localHasData = (localW > 0 || localC > 0 || localG > 0);
-        if (incomingEmpty && localHasData && incomingTs <= localTs) {
+        if (incomingEmpty && localHasData) {
           console.error(`[FIREBASE SUB GUARD ⛔] Incoming data for subpage "${pg.name}" is EMPTY but local has data — IGNORING Firebase update!`);
           return;
         }
 
-        pg.widgets = pData.widgets || [];
-        pg.miroCards = pData.miroCards || [];
+        pg.widgets = _ensureArr(pData.widgets);
+        pg.miroCards = _ensureArr(pData.miroCards);
         pg.vGuides = pData.vGuides || [];
         pg.hGuides = pData.hGuides || [];
         pg._guidesMode = pData._guidesMode || false;
@@ -10262,9 +10436,12 @@ function setupSlicerSubPageListeners(slicerPage) {
           ts: pg.ts
         });
 
-        // Trigger rebuild to update Slicer view (only if not the initial synchronous call)
-        if (!initial && cp().id === slicerPage.id) {
-          buildCols();
+        // Trigger rebuild to update Slicer view whenever subpage data arrives
+        if (cp() && cp().id === slicerPage.id) {
+          clearTimeout(window._slicerSubRebuildTimer);
+          window._slicerSubRebuildTimer = setTimeout(() => {
+            if (cp() && cp().id === slicerPage.id) buildCols();
+          }, 30);
         }
       }
     };

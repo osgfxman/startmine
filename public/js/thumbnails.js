@@ -103,20 +103,25 @@ async function isValidImageBlob(blob, sourceUrl = '') {
   // ImgBB's 172x96 error PNG is ~1.5KB - 2.8KB. Verify dimensions if suspiciously small:
   if (blob.size < 4500) {
     return new Promise((resolve) => {
+      let settled = false;
       const objUrl = URL.createObjectURL(blob);
+      const done = (val) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        try { URL.revokeObjectURL(objUrl); } catch (e) {}
+        resolve(val);
+      };
+      const timer = setTimeout(() => done(true), 4000);
       const testImg = new Image();
       testImg.onload = () => {
-        URL.revokeObjectURL(objUrl);
         if (isImgBBErrorPlaceholder(testImg.naturalWidth, testImg.naturalHeight)) {
-          resolve(false);
+          done(false);
         } else {
-          resolve(testImg.naturalWidth > 0 && testImg.naturalHeight > 0);
+          done(testImg.naturalWidth > 0 && testImg.naturalHeight > 0);
         }
       };
-      testImg.onerror = () => {
-        URL.revokeObjectURL(objUrl);
-        resolve(false);
-      };
+      testImg.onerror = () => done(false);
       testImg.src = objUrl;
     });
   }
@@ -153,14 +158,22 @@ function blobToDataUrl(blob) {
 function createMicroPreview(base64OrUrl, maxDim = 80, quality = 0.45) {
   return new Promise((resolve) => {
     if (!base64OrUrl) return resolve(null);
+    let settled = false;
+    const done = (val) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(val);
+    };
+    const timer = setTimeout(() => done(null), 4000);
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       try {
-        if (isImgBBErrorPlaceholder(img)) return resolve(null);
+        if (isImgBBErrorPlaceholder(img)) return done(null);
         let w = img.naturalWidth || img.width;
         let h = img.naturalHeight || img.height;
-        if (!w || !h) return resolve(null);
+        if (!w || !h) return done(null);
         if (w > maxDim || h > maxDim) {
           if (w > h) { h = Math.max(1, Math.round(h * maxDim / w)); w = maxDim; }
           else { w = Math.max(1, Math.round(w * maxDim / h)); h = maxDim; }
@@ -169,10 +182,10 @@ function createMicroPreview(base64OrUrl, maxDim = 80, quality = 0.45) {
         c.width = w; c.height = h;
         const ctx = c.getContext('2d');
         ctx.drawImage(img, 0, 0, w, h);
-        resolve(c.toDataURL('image/jpeg', quality));
-      } catch (e) { resolve(null); }
+        done(c.toDataURL('image/jpeg', quality));
+      } catch (e) { done(null); }
     };
-    img.onerror = () => resolve(null);
+    img.onerror = () => done(null);
     img.src = base64OrUrl;
   });
 }
@@ -245,10 +258,38 @@ async function getImageVaultBlob(keys) {
 let _driveImgFolderPromise = null;
 
 async function getGoogleDriveActiveToken(interactive = false) {
+  if (window._googleAccessToken) {
+    const exp = parseInt(localStorage.getItem('sm_google_token_expiry') || '0', 10);
+    if (!exp || Date.now() < exp - 60000) return window._googleAccessToken;
+  }
+  const savedSm = localStorage.getItem('sm_google_token');
+  const savedSmExp = parseInt(localStorage.getItem('sm_google_token_expiry') || '0', 10);
+  if (savedSm && savedSmExp && Date.now() < savedSmExp - 60000) {
+    window._googleAccessToken = savedSm;
+    return savedSm;
+  }
   let token = localStorage.getItem('gdrive_access_token');
   const expiry = parseInt(localStorage.getItem('gdrive_token_expiry') || '0', 10);
   if (token && expiry && Date.now() < expiry - 60000) {
     return token;
+  }
+  if (typeof window.syncGoogleTokenFromCloud === 'function') {
+    try {
+      const cloudTok = await window.syncGoogleTokenFromCloud();
+      if (cloudTok) return cloudTok;
+    } catch (e) { /* ignore */ }
+  }
+  if (typeof window.ensureGoogleToken === 'function') {
+    try {
+      const ensured = await window.ensureGoogleToken();
+      if (ensured) return ensured;
+    } catch (e) { /* ignore NEEDS_AUTH */ }
+  }
+  if (interactive && typeof window.ensureGoogleTokenFresh === 'function') {
+    try {
+      const fresh = await window.ensureGoogleTokenFresh();
+      if (fresh) return fresh;
+    } catch (e) { /* ignore */ }
   }
   if (typeof window.requestGoogleDriveToken === 'function') {
     try {
@@ -256,7 +297,17 @@ async function getGoogleDriveActiveToken(interactive = false) {
       if (token) return token;
     } catch (e) { /* ignore */ }
   }
-  return localStorage.getItem('gdrive_access_token') || null;
+  return window._googleAccessToken || localStorage.getItem('sm_google_token') || localStorage.getItem('gdrive_access_token') || null;
+}
+
+async function _fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function getOrCreateDriveImagesFolder(token) {
@@ -270,12 +321,15 @@ async function getOrCreateDriveImagesFolder(token) {
       // 1. Get or create root StartMe-Miro folder
       let rootFolderId = null;
       if (typeof window.getOrCreateDriveFolder === 'function') {
-        rootFolderId = await window.getOrCreateDriveFolder(token);
+        rootFolderId = await Promise.race([
+          window.getOrCreateDriveFolder(token),
+          new Promise((r) => setTimeout(() => r(null), 10000))
+        ]);
       } else {
         const qRoot = encodeURIComponent(`name='StartMe-Miro' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
-        const rRoot = await fetch(`https://www.googleapis.com/drive/v3/files?q=${qRoot}&fields=files(id)`, {
+        const rRoot = await _fetchWithTimeout(`https://www.googleapis.com/drive/v3/files?q=${qRoot}&fields=files(id)`, {
           headers: { 'Authorization': 'Bearer ' + token }
-        });
+        }, 10000);
         if (rRoot.ok) {
           const dRoot = await rRoot.json();
           if (dRoot.files && dRoot.files.length > 0) rootFolderId = dRoot.files[0].id;
@@ -285,9 +339,9 @@ async function getOrCreateDriveImagesFolder(token) {
       // 2. Look for 'Images' subfolder inside StartMe-Miro
       const parentClause = rootFolderId ? ` and '${rootFolderId}' in parents` : '';
       const qImg = encodeURIComponent(`name='Images' and mimeType='application/vnd.google-apps.folder' and trashed=false${parentClause}`);
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${qImg}&fields=files(id,name)`, {
+      const res = await _fetchWithTimeout(`https://www.googleapis.com/drive/v3/files?q=${qImg}&fields=files(id,name)`, {
         headers: { 'Authorization': 'Bearer ' + token }
-      });
+      }, 10000);
       if (res.ok) {
         const data = await res.json();
         if (data.files && data.files.length > 0) {
@@ -302,14 +356,14 @@ async function getOrCreateDriveImagesFolder(token) {
         mimeType: 'application/vnd.google-apps.folder'
       };
       if (rootFolderId) meta.parents = [rootFolderId];
-      const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+      const createRes = await _fetchWithTimeout('https://www.googleapis.com/drive/v3/files', {
         method: 'POST',
         headers: {
           'Authorization': 'Bearer ' + token,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(meta)
-      });
+      }, 10000);
       if (createRes.ok) {
         const created = await createRes.json();
         if (created && created.id) {
@@ -331,7 +385,7 @@ async function getOrCreateDriveImagesFolder(token) {
 
 async function uploadImageToGoogleDrive(base64OrBlob, label = '', opts = {}) {
   try {
-    const token = await getGoogleDriveActiveToken(Boolean(opts.interactive));
+    let token = await getGoogleDriveActiveToken(Boolean(opts.interactive));
     if (!token) return null;
 
     const blob = typeof base64OrBlob === 'string' ? dataUrlToBlob(base64OrBlob) : base64OrBlob;
@@ -342,36 +396,43 @@ async function uploadImageToGoogleDrive(base64OrBlob, label = '', opts = {}) {
     const cleanLabel = (label || 'startmine_img').replace(/[^a-zA-Z0-9_\-\u0600-\u06FF]/g, '_').slice(0, 40);
     const fileName = `${cleanLabel}_${Date.now()}.${ext}`;
 
-    const metadata = {
-      name: fileName,
-      mimeType: blob.type || 'image/jpeg'
+    const buildForm = (fId) => {
+      const metadata = { name: fileName, mimeType: blob.type || 'image/jpeg' };
+      if (fId) metadata.parents = [fId];
+      const f = new FormData();
+      f.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      f.append('file', blob);
+      return f;
     };
-    if (folderId) metadata.parents = [folderId];
 
-    const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-    form.append('file', blob);
-
-    let res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,thumbnailLink,webContentLink', {
+    let res = await _fetchWithTimeout('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,thumbnailLink,webContentLink', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token },
-      body: form
-    });
+      body: buildForm(folderId)
+    }, 18000);
+
+    // If token expired (401) and interactive is allowed, refresh token once
+    if (res.status === 401 && opts.interactive && typeof window.ensureGoogleTokenFresh === 'function') {
+      const freshToken = await window.ensureGoogleTokenFresh();
+      if (freshToken) {
+        token = freshToken;
+        res = await _fetchWithTimeout('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,thumbnailLink,webContentLink', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token },
+          body: buildForm(folderId)
+        }, 18000);
+      }
+    }
 
     // If cached folderId was deleted on Drive, clear cache and retry once
     if (res.status === 404 && folderId) {
       localStorage.removeItem('sm_gdrive_img_folder_id');
       folderId = await getOrCreateDriveImagesFolder(token);
-      const retryMeta = { name: fileName, mimeType: blob.type || 'image/jpeg' };
-      if (folderId) retryMeta.parents = [folderId];
-      const retryForm = new FormData();
-      retryForm.append('metadata', new Blob([JSON.stringify(retryMeta)], { type: 'application/json' }));
-      retryForm.append('file', blob);
-      res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,thumbnailLink,webContentLink', {
+      res = await _fetchWithTimeout('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,thumbnailLink,webContentLink', {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + token },
-        body: retryForm
-      });
+        body: buildForm(folderId)
+      }, 18000);
     }
 
     if (!res.ok) {
@@ -386,14 +447,14 @@ async function uploadImageToGoogleDrive(base64OrBlob, label = '', opts = {}) {
     const driveUrl = `https://lh3.googleusercontent.com/d/${driveFileId}`;
 
     // Make readable by link so <img> tags on any device can load it directly
-    fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}/permissions`, {
+    _fetchWithTimeout(`https://www.googleapis.com/drive/v3/files/${driveFileId}/permissions`, {
       method: 'POST',
       headers: {
         'Authorization': 'Bearer ' + token,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ role: 'reader', type: 'anyone' })
-    }).catch(() => {});
+    }, 8000).catch(() => {});
 
     // Save to local IndexedDB Vault under Drive ID & URL
     const vaultKeys = [`img_drv_${driveFileId}`, driveUrl];
@@ -423,9 +484,9 @@ async function fetchDriveImageBlob(driveFileId, interactive = false) {
   try {
     const token = await getGoogleDriveActiveToken(interactive);
     if (token) {
-      const resp = await fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, {
+      const resp = await _fetchWithTimeout(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, {
         headers: { 'Authorization': 'Bearer ' + token }
-      });
+      }, 12000);
       if (resp.ok) {
         const blob = await resp.blob();
         if (await isValidImageBlob(blob)) {
@@ -447,7 +508,8 @@ const _silentDriveBackedUpIds = new Set();
 
 function queueSilentDriveBackup(card, blobOrDataUrl) {
   if (!card || !card.id || card.driveFileId || _silentDriveBackedUpIds.has(card.id)) return;
-  if (!localStorage.getItem('gdrive_access_token')) return;
+  const hasToken = window._googleAccessToken || localStorage.getItem('sm_google_token') || localStorage.getItem('gdrive_access_token');
+  if (!hasToken) return;
   _silentDriveBackedUpIds.add(card.id);
   _silentDriveBackupQueue.push({ card, blobOrDataUrl });
   if (!_silentDriveBackupRunning) {

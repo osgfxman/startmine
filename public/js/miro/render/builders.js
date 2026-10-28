@@ -96,6 +96,19 @@
       const _selBox = document.getElementById('miro-sel-box');
       if (_selBox) _selBox.style.display = 'none';
     }
+    if (window.innerWidth <= 768 && !page._mobileFittedOnce && page.miroCards && page.miroCards.length > 0 && typeof window.calculatePageFit === 'function') {
+      const cw = (canvas && canvas.clientWidth) ? canvas.clientWidth : Math.max(240, window.innerWidth - 56);
+      const ch = (canvas && canvas.clientHeight) ? canvas.clientHeight : Math.max(240, window.innerHeight - 130);
+      if (cw > 80 && ch > 80) {
+        const fit = window.calculatePageFit(page.miroCards, cw, ch);
+        if (fit && fit.zoom) {
+          page.zoom = fit.zoom;
+          page.panX = fit.panX;
+          page.panY = fit.panY;
+          page._mobileFittedOnce = true;
+        }
+      }
+    }
     const zoom = (page.zoom || 100) / 100;
     const px = page.panX || 0,
       py = page.panY || 0;

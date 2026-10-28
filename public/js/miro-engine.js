@@ -1902,47 +1902,65 @@ function getImgBBKey() {
 // Preserves transparency (PNG) when detected, uses JPEG for opaque images
 function compressBase64(base64, maxDim = 1600, quality = 0.82) {
   return new Promise((resolve) => {
+    let settled = false;
+    const done = (val) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(val);
+    };
+    const timer = setTimeout(() => done(base64), 5000);
     const img = new Image();
     img.onload = () => {
-      let w = img.naturalWidth, h = img.naturalHeight;
-      if (!w || !h) return resolve(base64);
-      // Only resize if too large
-      if (w > maxDim || h > maxDim) {
-        if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
-        else { w = Math.round(w * maxDim / h); h = maxDim; }
+      try {
+        let w = img.naturalWidth, h = img.naturalHeight;
+        if (!w || !h) return done(base64);
+        // Only resize if too large
+        if (w > maxDim || h > maxDim) {
+          if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+          else { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        // Detect transparency: check if source is PNG/WebP (has alpha)
+        const isPNG = base64.includes('data:image/png') || base64.includes('data:image/webp');
+        let hasAlpha = false;
+        if (isPNG) {
+          try {
+            const data = ctx.getImageData(0, 0, w, h).data;
+            for (let i = 3; i < data.length; i += 4) {
+              if (data[i] < 254) { hasAlpha = true; break; }
+            }
+          } catch (e) { hasAlpha = isPNG; }
+        }
+        const format = hasAlpha ? 'image/png' : 'image/jpeg';
+        const compressed = canvas.toDataURL(format, quality);
+        done(compressed);
+      } catch (e) {
+        done(base64);
       }
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      // Detect transparency: check if source is PNG/WebP (has alpha)
-      const isPNG = base64.includes('data:image/png') || base64.includes('data:image/webp');
-      let hasAlpha = false;
-      if (isPNG) {
-        try {
-          const data = ctx.getImageData(0, 0, w, h).data;
-          for (let i = 3; i < data.length; i += 4) {
-            if (data[i] < 254) { hasAlpha = true; break; }
-          }
-        } catch (e) { hasAlpha = isPNG; }
-      }
-      const format = hasAlpha ? 'image/png' : 'image/jpeg';
-      const compressed = canvas.toDataURL(format, quality);
-      resolve(compressed);
     };
-    img.onerror = () => resolve(base64);
+    img.onerror = () => done(base64);
     img.src = base64;
   });
 }
 window.compressBase64 = compressBase64;
 
 async function uploadToImgBBOnly(compressedBase64) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 14000);
   try {
     const raw = compressedBase64.split(',')[1];
     if (!raw || raw.length < 100) return null;
     const fd = new FormData();
     fd.append('image', raw);
-    const resp = await fetch(`https://api.imgbb.com/1/upload?key=${getImgBBKey()}`, { method: 'POST', body: fd });
+    const resp = await fetch(`https://api.imgbb.com/1/upload?key=${getImgBBKey()}`, {
+      method: 'POST',
+      body: fd,
+      signal: ctrl.signal
+    });
     const data = await resp.json();
     if (data && data.success && data.data && data.data.url) {
       return data.data.url;
@@ -1951,6 +1969,8 @@ async function uploadToImgBBOnly(compressedBase64) {
   } catch (e) {
     console.warn('[uploadToImgBBOnly] Error:', e);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -1972,19 +1992,21 @@ async function uploadImageSmart(base64, opts = {}) {
       await window.saveImageVaultBlob([`img_cid_${opts.cardId}`], compressed);
     }
 
-    // Run Google Drive upload and ImgBB upload in parallel
-    const [driveRes, imgbbUrl] = await Promise.all([
+    // Run Google Drive upload and (unless already hosted on ImgBB) ImgBB upload in parallel
+    const shouldUploadImgBB = !opts.skipImgBB && !opts.existingImgbbUrl;
+    const [driveRes, uploadedImgbbUrl] = await Promise.all([
       typeof window.uploadImageToGoogleDrive === 'function'
         ? window.uploadImageToGoogleDrive(compressed, opts.label || opts.cardId || 'startmine_img', {
             cardId: opts.cardId,
             interactive: Boolean(opts.interactive)
           })
         : Promise.resolve(null),
-      uploadToImgBBOnly(compressed)
+      shouldUploadImgBB ? uploadToImgBBOnly(compressed) : Promise.resolve(opts.existingImgbbUrl || null)
     ]);
 
     const driveUrl = driveRes ? driveRes.driveUrl : null;
     const driveFileId = driveRes ? driveRes.driveFileId : null;
+    const imgbbUrl = uploadedImgbbUrl || opts.existingImgbbUrl || null;
     // Prefer Google Drive URL if available, otherwise ImgBB URL
     const primaryUrl = driveUrl || imgbbUrl || null;
 
@@ -2063,20 +2085,28 @@ async function fetchAndUploadToImgBB(url, opts = {}) {
     }
 
     // Try fetch with no-referrer first (handles ImgBB & CORS-enabled CDNs cleanly)
-    const bustUrl = /ibb\.co|imgbb\.com/i.test(url)
+    const isImgBB = /ibb\.co|imgbb\.com/i.test(url);
+    const bustUrl = isImgBB
       ? url + (url.includes('?') ? '&' : '?') + `_wake=${Date.now()}`
       : url;
+    const mergedOpts = isImgBB && !opts.existingImgbbUrl ? { ...opts, existingImgbbUrl: url } : opts;
 
     return await new Promise((resolve) => {
+      let settled = false;
+      const done = (val) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve(val);
+      };
       const img = new Image();
       img.referrerPolicy = 'no-referrer';
       img.crossOrigin = url.includes('miro.com/api') ? 'use-credentials' : 'anonymous';
-      const timeout = setTimeout(() => { resolve(null); }, 15000);
+      const timeout = setTimeout(() => { done(null); }, 20000);
       img.onload = async function () {
-        clearTimeout(timeout);
         if (typeof window.isImgBBErrorPlaceholder === 'function' && window.isImgBBErrorPlaceholder(img.naturalWidth, img.naturalHeight)) {
           console.warn('[fetchAndUpload] Rejected 172x96 ImgBB placeholder for:', url);
-          resolve(null);
+          done(null);
           return;
         }
         try {
@@ -2087,19 +2117,18 @@ async function fetchAndUploadToImgBB(url, opts = {}) {
           ctx.drawImage(img, 0, 0);
           const base64 = canvas.toDataURL('image/png');
           if (base64 && base64.length > 100) {
-            const uploaded = await uploadImageSmart(base64, opts);
-            resolve(opts.returnDetails ? uploaded : (uploaded ? uploaded.url : null));
+            const uploaded = await uploadImageSmart(base64, mergedOpts);
+            done(mergedOpts.returnDetails ? uploaded : (uploaded ? uploaded.url : null));
           } else {
-            resolve(null);
+            done(null);
           }
         } catch (e) {
           console.warn('[fetchAndUpload] Canvas error (CORS?):', url, e.message);
-          resolve(null);
+          done(null);
         }
       };
       img.onerror = function () {
-        clearTimeout(timeout);
-        resolve(null);
+        done(null);
       };
       img.src = bustUrl;
     });
@@ -6034,11 +6063,15 @@ window.renderZooperDayCard = function(container, dayDate, options) {
       _renderPageRef();
       return;
     }
-    // Skip Google auth popup for Life page (page 5) — it doesn't need calendar data
-    // and popup would be blocked by browser since this isn't from a user gesture
-    if (!_googleAccessToken && typeof manualGoogleReAuth === 'function' && _state.page !== 5) {
-      manualGoogleReAuth().then(() => _buildOverlay(targetContainer)).catch(() => _buildOverlay(targetContainer));
-      return;
+    // Try restoring or pulling cloud-synced Google token silently first (never trigger blocked popups on page load)
+    if (!_googleAccessToken && typeof restoreGoogleToken === 'function') {
+      restoreGoogleToken();
+    }
+    if (!_googleAccessToken && _state.page !== 5) {
+      if (typeof syncGoogleTokenFromCloud === 'function') {
+        syncGoogleTokenFromCloud().then(() => _buildOverlay(targetContainer)).catch(() => _buildOverlay(targetContainer));
+        return;
+      }
     }
     _buildOverlay(targetContainer);
   }
