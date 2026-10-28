@@ -3018,43 +3018,7 @@ document.addEventListener('keydown', (e) => {
       case 'backspace':
         if (_miroSelected.size > 0) {
           e.preventDefault();
-          
-          // Check if any page will become empty
-          const pagesToEmpty = [];
-          _miroSelected.forEach(cid => {
-            const p = D.pages.find(pg => pg.miroCards && pg.miroCards.some(c => c.id === cid)) || page;
-            if (p && !pagesToEmpty.includes(p)) {
-              const remaining = (p.miroCards || []).filter(c => !_miroSelected.has(c.id)).length;
-              const hasWidgets = p.widgets && p.widgets.length > 0;
-              if (remaining === 0 && !hasWidgets) {
-                pagesToEmpty.push(p);
-              }
-            }
-          });
-          if (pagesToEmpty.length > 0) {
-            const pageNames = pagesToEmpty.map(p => `"${p.name}"`).join(', ');
-            const msg = pagesToEmpty.length === 1 
-              ? `هل تريد بالتأكيد حذف العنصر الأخير وجعل الصفحة ${pageNames} فارغة تماماً؟`
-              : `حذف العناصر المحددة سيجعل الصفحات التالية فارغة تماماً: ${pageNames}. هل تريد الاستمرار؟`;
-            if (!confirm(msg)) return;
-          }
-
-          _miroSelected.forEach(cid => {
-            const p = D.pages.find(pg => pg.miroCards && pg.miroCards.some(c => c.id === cid)) || page;
-            if (p) {
-              p._bypassVersionGuard = true; // Bypass version guard!
-              p.miroCards = (p.miroCards || []).filter(c => c.id !== cid);
-            }
-          });
-          _miroSelected.clear();
-          sv();
-          const activePg2 = cp();
-          if (activePg2.pageType === 'slicer') {
-            buildCols();
-          } else {
-            buildMiroCanvas();
-          }
-          if (typeof buildOutline === 'function') buildOutline();
+          zDeleteCards(new Set(_miroSelected));
         }
         break;
       case 'f': case 'ب':
@@ -4539,14 +4503,96 @@ function zSendBackward(cids) {
 }
 
 function zDeleteCards(cids) {
+  if (!cids || cids.size === 0) return;
   const activePg = cp();
-  const page = getZTargetPage(cids);
-  if (!page || !page.miroCards) return;
-  if (typeof pushUndo === 'function') pushUndo();
-  page.miroCards = page.miroCards.filter(c => !cids.has(c.id));
+  const defaultPage = getZTargetPage(cids) || activePg;
+  if (!defaultPage) return;
+
+  // Gather all cards to be deleted across affected pages
+  const toDelete = [];
+  const affectedPages = new Set();
+  cids.forEach(cid => {
+    const p = D.pages.find(pg => pg && pg.miroCards && pg.miroCards.some(c => c && c.id === cid)) || defaultPage;
+    if (p && p.miroCards) {
+      const card = p.miroCards.find(c => c && c.id === cid);
+      if (card) {
+        toDelete.push({ card, page: p });
+        affectedPages.add(p);
+      }
+    }
+  });
+  if (toDelete.length === 0) return;
+
+  // Check if any page will become empty after deletion
+  const pagesToEmpty = [];
+  affectedPages.forEach(p => {
+    const remainingC = (p.miroCards || []).filter(c => c && !cids.has(c.id)).length;
+    if (remainingC === 0) {
+      pagesToEmpty.push(p);
+    }
+  });
+
+  // Always ask explicit user confirmation before deleting!
+  let confirmMsg = '';
+  if (toDelete.length === 1) {
+    const c = toDelete[0].card;
+    const cardLabel = (c.title || c.label || c.text || c.content || c.url || c.type || 'هذا العنصر').toString().replace(/<[^>]*>/g, '').trim().slice(0, 60) || 'هذا العنصر';
+    confirmMsg = pagesToEmpty.length > 0
+      ? `⚠️ العنصر "${cardLabel}" هو العنصر الأخير في الصفحة "${toDelete[0].page.name}". حذفه سيجعل الصفحة فارغة تماماً. هل أنت متأكد من الحذف؟`
+      : `⚠️ هل أنت متأكد من حذف العنصر "${cardLabel}"؟`;
+  } else {
+    confirmMsg = pagesToEmpty.length > 0
+      ? `⚠️ حذف العناصر المحددة (${toDelete.length} عنصر) سيجعل الصفحة فارغة تماماً. هل أنت متأكد من الحذف؟`
+      : `⚠️ هل أنت متأكد من حذف العناصر المحددة (${toDelete.length} عنصر)؟`;
+  }
+  if (!confirm(confirmMsg)) return;
+
+  if (typeof pushUndo === 'function') {
+    try { pushUndo(); } catch (e) {}
+  }
+
+  // Archive every deleted card to Recycle Bin
+  toDelete.forEach(({ card, page }) => {
+    if (typeof window.addToRecycleBin === 'function') {
+      const cardLabel = (card.title || card.label || card.text || card.content || card.url || card.type || 'بطاقة ميرو').toString().replace(/<[^>]*>/g, '').trim().slice(0, 60) || 'بطاقة ميرو';
+      window.addToRecycleBin({
+        type: 'card',
+        title: cardLabel,
+        url: card.url || card.linkUrl || card.imageUrl || '',
+        data: card,
+        sourcePageId: page.id,
+        sourcePageName: page.name
+      });
+    }
+  });
+
+  // Remove cards and sync with counterpart widgets in dual-view
+  affectedPages.forEach(p => {
+    const deletedTitlesNorm = new Set();
+    (p.miroCards || []).forEach(c => {
+      if (c && cids.has(c.id) && c.type === 'bwidget' && c.title) {
+        deletedTitlesNorm.add(c.title.trim().toLowerCase());
+      }
+    });
+    p.miroCards = (p.miroCards || []).filter(c => c && !cids.has(c.id));
+    if (Array.isArray(p.widgets) && p.widgets.length > 0) {
+      p.widgets = p.widgets.filter(w => {
+        if (!w) return false;
+        if (cids.has(w.id)) return false;
+        if (deletedTitlesNorm.size > 0 && w.title && deletedTitlesNorm.has(w.title.trim().toLowerCase())) return false;
+        return true;
+      });
+    }
+    if (p.miroCards.length === 0 && (!p.widgets || p.widgets.length === 0)) {
+      p._bypassVersionGuard = true;
+    }
+    p.ts = Date.now();
+    if (typeof cachePageDataSafe === 'function') cachePageDataSafe(p.id, p);
+  });
+
   clearMiroSelection();
-  sv();
-  if (activePg.pageType === 'slicer') {
+  sv(false, true);
+  if (activePg && activePg.pageType === 'slicer') {
     buildCols();
   } else {
     buildMiroCanvas();

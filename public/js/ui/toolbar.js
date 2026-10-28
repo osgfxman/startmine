@@ -78,10 +78,26 @@
   document.getElementById('io-pop').classList.remove('open');
   restoreFromGitHub();
 }
-  document.getElementById('reset-btn').onclick = () => {
-  if (!confirm('Reset all data?')) return;
+  document.getElementById('reset-btn').onclick = async () => {
+  if (!confirm('⚠️ تحذير خطير: هل أنت متأكد أنك تريد إعادة ضبط ومسح جميع البيانات؟\nسيتم أخذ نسخة احتياطية طارئة وحفظ الصفحات في سلة المحذوفات أولاً.')) return;
+  if (!confirm('⚠️ تأكيد نهائي: هل أنت متأكد تماماً من مسح جميع الصفحات والبيئات وإعادة الضبط للوضع الافتراضي؟')) return;
+  try {
+    if (typeof saveSnapshot === 'function') await saveSnapshot(true);
+    if (D && Array.isArray(D.pages) && typeof window.addToRecycleBin === 'function') {
+      D.pages.forEach(p => {
+        if (!p || p.id.startsWith('time_')) return;
+        window.addToRecycleBin({
+          type: 'page',
+          title: p.name || 'صفحة',
+          data: p,
+          sourcePageId: p.id,
+          sourcePageName: p.name
+        });
+      });
+    }
+  } catch (e) {}
   D = JSON.parse(JSON.stringify(DEF));
-  sv();
+  sv(true, true);
   renderAll();
   document.getElementById('io-pop').classList.remove('open');
 }

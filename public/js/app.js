@@ -199,197 +199,30 @@ var detachAllListeners = window.SM?.data?.detachAllListeners || window.detachAll
 
 var syncNow = window.SM?.data?.syncNow || window.syncNow;
 
-/* ─── LocalStorage + IndexedDB Cache ─── */
+/* ─── LocalStorage + IndexedDB Cache (Delegated to canonical SM.data / offline.js) ─── */
 const LS_META = 'sm_meta';
 const LS_PAGES_META = 'sm_pages_meta';
 const LS_CUR_PAGE = 'sm_cur_page';
-function lsPageKey(pid) { return 'sm_page_' + pid; }
-function cacheMeta(meta) { try { localStorage.setItem(LS_META, JSON.stringify(meta)); } catch (e) { } }
-function cachePagesMeta(pm) { try { localStorage.setItem(LS_PAGES_META, JSON.stringify(pm)); } catch (e) { } }
-function getCachedMeta() { try { return JSON.parse(localStorage.getItem(LS_META)); } catch (e) { return null; } }
-function getCachedPagesMeta() { try { return JSON.parse(localStorage.getItem(LS_PAGES_META)); } catch (e) { return null; } }
-
-// ─── IndexedDB (primary page cache — much larger than localStorage) ───
-let _idb = null;
-const IDB_NAME = 'startmine_cache';
-const IDB_STORE = 'pages';
-function openIDB() {
-  return new Promise((resolve, reject) => {
-    if (_idb) return resolve(_idb);
-    const req = indexedDB.open(IDB_NAME, 1);
-    req.onupgradeneeded = () => { req.result.createObjectStore(IDB_STORE); };
-    req.onsuccess = () => { _idb = req.result; resolve(_idb); };
-    req.onerror = () => reject(req.error);
-  });
-}
-async function idbSet(key, val) {
-  try {
-    const db = await openIDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(IDB_STORE, 'readwrite');
-      tx.objectStore(IDB_STORE).put(val, key);
-      tx.oncomplete = () => resolve(true);
-      tx.onerror = () => reject(tx.error);
-    });
-  } catch (e) { return false; }
-}
-async function idbGet(key) {
-  try {
-    const db = await openIDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(IDB_STORE, 'readonly');
-      const req = tx.objectStore(IDB_STORE).get(key);
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => resolve(null);
-    });
-  } catch (e) { return null; }
-}
-
-// ─── Safe Page Data Cache (writes to memory, IndexedDB, and localStorage) ───
 window._memoryPageCache = window._memoryPageCache || new Map();
 const _memoryPageCache = window._memoryPageCache;
 
-function cachePageDataSafe(pid, data) {
-  if (typeof pid === 'object' && pid !== null && !data) {
-    data = pid;
-    pid = data.id;
-  }
-  if (window.SM?.data?.cachePageDataSafe) {
-    return window.SM.data.cachePageDataSafe(pid, data);
-  }
-  if (pid && data) {
-    _memoryPageCache.set(pid, data);
-    if (window.D && window.D.pages) {
-      const livePg = window.D.pages.find(p => p && p.id === pid);
-      if (livePg) {
-        if (Array.isArray(data.widgets) && (data.widgets.length > 0 || livePg._bypassVersionGuard || data._bypassVersionGuard)) livePg.widgets = data.widgets;
-        if (Array.isArray(data.miroCards) && (data.miroCards.length > 0 || livePg._bypassVersionGuard || data._bypassVersionGuard)) livePg.miroCards = data.miroCards;
-        if (data.vGuides !== undefined) livePg.vGuides = data.vGuides;
-        if (data.hGuides !== undefined) livePg.hGuides = data.hGuides;
-        if (data.customCells !== undefined) livePg.customCells = data.customCells;
-        if (data.cols !== undefined) livePg.cols = data.cols;
-        if (data.pageType !== undefined) livePg.pageType = data.pageType;
-      }
-    }
-    idbSet('page_' + pid, data).catch(() => {});
-  }
-  if (!pid || !data) return false;
-  let lsOk = false;
-  try {
-    const json = JSON.stringify(data);
-    if (json.length < 120000) {
-      try {
-        localStorage.setItem(lsPageKey(pid), json);
-        lsOk = true;
-      } catch (quotaErr) {
-        if (typeof pruneLocalStorageCache === 'function') pruneLocalStorageCache(true);
-        try {
-          localStorage.setItem(lsPageKey(pid), json);
-          lsOk = true;
-        } catch(e2) {
-          lsOk = false;
-        }
-      }
-    } else {
-      try { localStorage.removeItem(lsPageKey(pid)); } catch(e) {}
-      lsOk = true;
-    }
-  } catch (e) {
-    lsOk = false;
-  }
-  return lsOk;
-}
-
-// Legacy compat wrapper
-function cachePageData(pid, data) {
-  cachePageDataSafe(pid, data);
-}
-
-// ─── Read from RAM memory first, then IndexedDB, fallback to localStorage ───
-async function getCachedPageDataAsync(pid) {
-  // 1. In-memory & live D.pages lookup
-  const syncData = getCachedPageDataSync(pid);
-  if (syncData && (((syncData.widgets || []).length > 0) || ((syncData.miroCards || []).length > 0) || (syncData.pageType === 'slicer'))) {
-    return syncData;
-  }
-  // 2. Try IndexedDB (more reliable, larger quota)
-  const idbData = await idbGet('page_' + pid);
-  if (idbData) {
-    _memoryPageCache.set(pid, idbData);
-    if (window.D && window.D.pages) {
-      const livePg = window.D.pages.find(p => p && p.id === pid);
-      if (livePg) {
-        if (!livePg.widgets || livePg.widgets.length === 0) livePg.widgets = idbData.widgets || [];
-        if (!livePg.miroCards || livePg.miroCards.length === 0) livePg.miroCards = idbData.miroCards || [];
-      }
-    }
-    return idbData;
-  }
-  return syncData;
-}
-function getCachedPageDataSync(pid) {
-  // 1. Check live D.pages in RAM first!
-  if (window.D && window.D.pages) {
-    const livePg = window.D.pages.find(p => p && p.id === pid);
-    if (livePg && (((livePg.widgets || []).length > 0) || ((livePg.miroCards || []).length > 0) || (livePg.pageType === 'slicer'))) {
-      return {
-        widgets: livePg.widgets || [],
-        miroCards: livePg.miroCards || [],
-        vGuides: livePg.vGuides || [],
-        hGuides: livePg.hGuides || [],
-        _guidesMode: livePg._guidesMode || false,
-        lockedGuides: livePg.lockedGuides || [],
-        cellStates: livePg.cellStates || {},
-        mergedCells: livePg.mergedCells || [],
-        customCells: livePg.customCells || [],
-        cellGuides: livePg.cellGuides || {},
-        _layoutGuidesMode: livePg._layoutGuidesMode || false,
-        gridRows: livePg.gridRows || null,
-        gridCols: livePg.gridCols || null,
-        cellPages: livePg.cellPages || null,
-        slicerColSizes: livePg.slicerColSizes || null,
-        slicerRowSizes: livePg.slicerRowSizes || null,
-        ts: livePg.ts || Date.now()
-      };
-    }
-  }
-  // 2. Check in-memory cache
-  if (_memoryPageCache.has(pid)) return _memoryPageCache.get(pid);
-  // 3. Fallback to localStorage
-  try {
-    const item = localStorage.getItem(lsPageKey(pid));
-    if (!item) return null;
-    const parsed = JSON.parse(item);
-    if (parsed) _memoryPageCache.set(pid, parsed);
-    return parsed;
-  } catch (e) { return null; }
-}
-// Keep sync version as default for backward compat 
-function getCachedPageData(pid) { return getCachedPageDataSync(pid); }
-
-// ─── Storage Usage Monitor ───
-function getLsUsage() {
-  let total = 0;
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      total += key.length + (localStorage.getItem(key) || '').length;
-    }
-  } catch(e) {}
-  return total;
-}
-function getLsCapacity() {
-  if (window.SM?.data?.getLsCapacity) {
-    return window.SM.data.getLsCapacity();
-  }
-  let used = getLsUsage();
-  const max = 5 * 1024 * 1024; // ~5MB typical
-  if (used > 3.2 * 1024 * 1024 && typeof pruneLocalStorageCache === 'function') {
-    pruneLocalStorageCache(false);
-    used = getLsUsage();
-  }
-  return { used, max, pct: Math.round(used / max * 100) };
-}
+var lsPageKey = window.SM?.data?.lsPageKey || window.lsPageKey;
+var cacheMeta = window.SM?.data?.cacheMeta || window.cacheMeta;
+var cachePagesMeta = window.SM?.data?.cachePagesMeta || window.cachePagesMeta;
+var getCachedMeta = window.SM?.data?.getCachedMeta || window.getCachedMeta;
+var getCachedPagesMeta = window.SM?.data?.getCachedPagesMeta || window.getCachedPagesMeta;
+var openIDB = window.SM?.data?.openIDB || window.openIDB;
+var idbSet = window.SM?.data?.idbSet || window.idbSet;
+var idbGet = window.SM?.data?.idbGet || window.idbGet;
+var cachePageDataSafe = window.SM?.data?.cachePageDataSafe || window.cachePageDataSafe;
+var cachePageData = window.SM?.data?.cachePageData || window.cachePageData;
+var getCachedPageDataAsync = window.SM?.data?.getCachedPageDataAsync || window.getCachedPageDataAsync;
+var getCachedPageDataSync = window.SM?.data?.getCachedPageDataSync || window.getCachedPageDataSync;
+var getCachedPageData = window.SM?.data?.getCachedPageData || window.getCachedPageData;
+var getLsUsage = window.SM?.data?.getLsUsage || window.getLsUsage;
+var getLsCapacity = window.SM?.data?.getLsCapacity || window.getLsCapacity;
+var pruneLocalStorageCache = window.SM?.data?.pruneLocalStorageCache || window.pruneLocalStorageCache;
+var prewarmPageCache = window.SM?.data?.prewarmPageCache || window.prewarmPageCache;
 
 // ═══════════════════════════════════════════════════════════════
 // ██  LAYER 6: beforeunload — verify ALL data is cached before tab closes  ██
@@ -433,27 +266,41 @@ window.addEventListener('beforeunload', () => {
 // ██  LAYER 7: Auto-Snapshot — full backup to IndexedDB every 15 min  ██
 // ═══════════════════════════════════════════════════════════════
 let _lastSnapshotTime = 0;
-function autoSnapshot() {
+async function autoSnapshot() {
   if (!USER_ID || typeof D === 'undefined') return;
   const now = Date.now();
   if (now - _lastSnapshotTime < 15 * 60 * 1000) return; // Skip if < 15 min
   _lastSnapshotTime = now;
-  
-  const snapshot = {
-    timestamp: now,
-    userId: USER_ID,
-    meta: { settings: D.settings, curEnv: D.curEnv, curGroup: D.curGroup, environments: D.environments, groups: D.groups },
-    pagesMeta: D.pages.map(p => ({ id: p.id, name: p.name, groupId: p.groupId, pageType: p.pageType })),
-    activePage: D.cur,
-    pages: {}
-  };
-  
-  // Save ALL pages: from memory + cache
-  D.pages.forEach(p => {
-    const wc = (p.widgets || []).length;
-    const mc = (p.miroCards || []).length;
-    const hc = (p.vGuides || []).length + (p.hGuides || []).length + (p.customCells || []).length;
-    if (wc > 0 || mc > 0 || hc > 0 || p._guidesMode || p.pageType === 'slicer') {
+
+  try {
+    const fullData = typeof buildFullExportDataAsync === 'function' ? await buildFullExportDataAsync() : null;
+    if (!fullData || !Array.isArray(fullData.pages) || fullData.pages.length === 0) return;
+
+    let totalItems = 0;
+    fullData.pages.forEach(p => {
+      totalItems += (p.widgets || []).length + (p.miroCards || []).length + (p.customCells || []).length;
+    });
+    if (totalItems === 0 && (fullData.inbox || []).length === 0) return;
+
+    const snapshot = {
+      timestamp: now,
+      ts: now,
+      itemCount: totalItems,
+      pageCount: fullData.pages.length,
+      userId: USER_ID,
+      meta: { settings: fullData.settings, curEnv: fullData.curEnv, curGroup: fullData.curGroup, environments: fullData.environments, groups: fullData.groups, inbox: fullData.inbox },
+      pagesMeta: fullData.pages.map(p => ({
+        id: p.id, name: p.name, groupId: p.groupId, pageType: p.pageType,
+        zoom: p.zoom !== undefined ? p.zoom : 100, panX: p.panX || 0, panY: p.panY || 0,
+        bg: p.bg || '', bgType: p.bgType || 'none', tabColor: p.tabColor || '',
+        cols: p.cols !== undefined ? p.cols : 3,
+        itemCount: (p.widgets || []).length + (p.miroCards || []).length
+      })),
+      activePage: fullData.cur,
+      pages: {}
+    };
+
+    fullData.pages.forEach(p => {
       snapshot.pages[p.id] = {
         widgets: p.widgets || [],
         miroCards: p.miroCards || [],
@@ -464,29 +311,29 @@ function autoSnapshot() {
         cellStates: p.cellStates || {},
         mergedCells: p.mergedCells || [],
         customCells: p.customCells || [],
+        cellGuides: p.cellGuides || {},
+        _layoutGuidesMode: p._layoutGuidesMode || false,
         gridRows: p.gridRows || null,
         gridCols: p.gridCols || null,
         cellPages: p.cellPages || null,
         slicerColSizes: p.slicerColSizes || null,
-        slicerRowSizes: p.slicerRowSizes || null
+        slicerRowSizes: p.slicerRowSizes || null,
+        cols: p.cols !== undefined ? p.cols : 3,
+        ts: p.ts || now
       };
-    } else {
-      // Try cache
-      const cached = getCachedPageData(p.id);
-      if (cached && ((cached.widgets || []).length > 0 || (cached.miroCards || []).length > 0 || (cached.vGuides || []).length > 0 || (cached.hGuides || []).length > 0 || cached._guidesMode || (cached.customCells || []).length > 0 || cached.pageType === 'slicer')) {
-        snapshot.pages[p.id] = cached;
-      }
+    });
+
+    // Keep timestamped snapshots and latest snapshot in local IndexedDB
+    idbSet('snapshot_latest', snapshot);
+    idbSet('snapshot_' + now, snapshot).then(() => {
+      console.log(`[AUTO-SNAPSHOT ✅] Full backup saved to IndexedDB (${Object.keys(snapshot.pages).length} pages, ${totalItems} items, ${new Date(now).toLocaleTimeString()})`);
+    });
+    // Only push automated snapshot to Firebase once every 2 hours to avoid pruning user's manual snapshots
+    if (typeof saveSnapshot === 'function' && (now - (_lastSnapshotTs || 0) > 2 * 60 * 60 * 1000)) {
+      saveSnapshot(true).catch(() => {});
     }
-  });
-  
-  // Keep timestamped snapshots and latest snapshot in local IndexedDB
-  idbSet('snapshot_latest', snapshot);
-  idbSet('snapshot_' + now, snapshot).then(() => {
-    console.log(`[AUTO-SNAPSHOT ✅] Full backup saved to IndexedDB (${Object.keys(snapshot.pages).length} pages, ${new Date(now).toLocaleTimeString()})`);
-  });
-  // Only push automated snapshot to Firebase once every 2 hours to avoid pruning user's manual snapshots
-  if (typeof saveSnapshot === 'function' && (now - (_lastSnapshotTs || 0) > 2 * 60 * 60 * 1000)) {
-    saveSnapshot(true).catch(() => {});
+  } catch (e) {
+    console.warn('[AUTO-SNAPSHOT WARNING]', e);
   }
 }
 // Run every 5 minutes (snapshot logic internally checks 15-min cooldown)
@@ -985,6 +832,12 @@ function renderMeta() {
 
 // Switch the active synchronized payload
 function switchActivePage(pageId) {
+  // Flush any pending debounced save on the previous active page BEFORE switching D.cur
+  if (typeof _svTimer !== 'undefined' && _svTimer) {
+    clearTimeout(_svTimer);
+    _svTimer = null;
+    if (typeof sv === 'function') sv(false, true);
+  }
   window._lastSyncedPageData = null;
 
   // Clear any existing subpage listeners
@@ -1379,7 +1232,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     forceLocalSave();
     if (_svTimer) { clearTimeout(_svTimer); sv(false, true); }
-    if (Date.now() - _lastSvTs > 3000) saveSnapshotBeacon();
+    // Do NOT call synchronous saveSnapshotBeacon() on tab switch (it misses >120KB IDB pages if not in memory).
   }
 });
 
@@ -1416,10 +1269,19 @@ function checkDataIntegrity(exportData, operationName = 'Backup') {
     console.warn(`[DATA INTEGRITY] Empty data structure detected for ${operationName}`);
     return false;
   }
+  let totalItems = 0;
+  exportData.pages.forEach(p => {
+    if (!p) return;
+    totalItems += (p.widgets || []).length + (p.miroCards || []).length + (p.customCells || []).length;
+  });
+  if (totalItems === 0 && (exportData.inbox || []).length === 0) {
+    console.warn(`[DATA INTEGRITY] Zero items detected across all pages for ${operationName} — blocking empty backup!`);
+    return false;
+  }
   return true;
 }
 
-// ─── Build Full Export Data ASYNC (Guarantees all pages loaded from IndexedDB/Cache) ───
+// ─── Build Full Export Data ASYNC (Multi-Tier Richest/Newest Resolution across RAM, IndexedDB & Firebase) ───
 async function buildFullExportDataAsync() {
   const exportPages = [];
   for (const p of D.pages) {
@@ -1440,11 +1302,16 @@ async function buildFullExportDataAsync() {
     let cellPages = p.cellPages || null;
     let slicerColSizes = p.slicerColSizes || null;
     let slicerRowSizes = p.slicerRowSizes || null;
+    let cols = p.cols !== undefined ? p.cols : 3;
+    let ts = p.ts || 0;
 
-    // If page has no items in memory, load from IndexedDB/Cache
-    if (widgets.length === 0 && miroCards.length === 0 && (customCells || []).length === 0) {
-      const cached = await getCachedPageDataAsync(p.id);
-      if (cached && ((cached.widgets || []).length > 0 || (cached.miroCards || []).length > 0 || (cached.customCells || []).length > 0)) {
+    // Multi-tier comparison: always check IndexedDB/Memory Cache to ensure we never export a stale or unhydrated page
+    const cached = await getCachedPageDataAsync(p.id);
+    if (cached && !p._bypassVersionGuard) {
+      const memCount = (typeof getPageItemsCount === 'function' ? getPageItemsCount(widgets, miroCards) : (widgets.length + miroCards.length)) + (customCells || []).length;
+      const cacheCount = (typeof getPageItemsCount === 'function' ? getPageItemsCount(cached.widgets, cached.miroCards) : ((cached.widgets || []).length + (cached.miroCards || []).length)) + (cached.customCells || []).length;
+      const cacheTs = cached.ts || 0;
+      if ((cacheCount > 0 && memCount === 0) || (cacheTs > ts && cacheCount > 0) || (cacheTs === ts && cacheCount > memCount)) {
         widgets = cached.widgets || [];
         miroCards = cached.miroCards || [];
         vGuides = cached.vGuides || vGuides;
@@ -1461,29 +1328,54 @@ async function buildFullExportDataAsync() {
         cellPages = cached.cellPages || cellPages;
         slicerColSizes = cached.slicerColSizes || slicerColSizes;
         slicerRowSizes = cached.slicerRowSizes || slicerRowSizes;
+        if (cached.cols !== undefined) cols = cached.cols;
+        if (cached.ts) ts = cached.ts;
         // Self-heal memory in D.pages
         p.widgets = widgets;
         p.miroCards = miroCards;
-      } else if (window.db && USER_ID) {
-        // Fallback: read once from Firebase if connected
-        try {
-          const snap = await db.ref(`users/${USER_ID}/startmine_pages/${p.id}`).once('value');
-          const fbData = snap.val();
-          if (fbData && ((fbData.widgets || []).length > 0 || (fbData.miroCards || []).length > 0)) {
-            widgets = fbData.widgets || [];
-            miroCards = fbData.miroCards || [];
-            p.widgets = widgets;
-            p.miroCards = miroCards;
-            cachePageDataSafe(p.id, fbData);
-          }
-        } catch(e) {}
+        p.cols = cols;
+        p.ts = ts;
       }
+    }
+
+    // Fallback: if still empty in both RAM and IndexedDB, read once from Firebase if connected
+    if (widgets.length === 0 && miroCards.length === 0 && (customCells || []).length === 0 && p.pageType !== 'slicer' && !p._bypassVersionGuard && window.db && USER_ID) {
+      try {
+        const snap = await db.ref(`users/${USER_ID}/startmine_pages/${p.id}`).once('value');
+        const fbData = snap.val();
+        if (fbData && ((fbData.widgets || []).length > 0 || (fbData.miroCards || []).length > 0 || (fbData.customCells || []).length > 0)) {
+          widgets = fbData.widgets || [];
+          miroCards = fbData.miroCards || [];
+          vGuides = fbData.vGuides || vGuides;
+          hGuides = fbData.hGuides || hGuides;
+          _guidesMode = fbData._guidesMode || _guidesMode;
+          lockedGuides = fbData.lockedGuides || lockedGuides;
+          cellStates = fbData.cellStates || cellStates;
+          mergedCells = fbData.mergedCells || mergedCells;
+          customCells = fbData.customCells || customCells;
+          cellGuides = fbData.cellGuides || cellGuides;
+          _layoutGuidesMode = fbData._layoutGuidesMode || _layoutGuidesMode;
+          gridRows = fbData.gridRows || gridRows;
+          gridCols = fbData.gridCols || gridCols;
+          cellPages = fbData.cellPages || cellPages;
+          slicerColSizes = fbData.slicerColSizes || slicerColSizes;
+          slicerRowSizes = fbData.slicerRowSizes || slicerRowSizes;
+          if (fbData.cols !== undefined) cols = fbData.cols;
+          if (fbData.ts) ts = fbData.ts;
+          p.widgets = widgets;
+          p.miroCards = miroCards;
+          p.cols = cols;
+          p.ts = ts;
+          cachePageDataSafe(p.id, fbData);
+        }
+      } catch(e) {}
     }
 
     exportPages.push({
       id: p.id, groupId: p.groupId, name: p.name,
       pageType: p.pageType, zoom: p.zoom, panX: p.panX, panY: p.panY,
       bg: p.bg, bgType: p.bgType, tabColor: p.tabColor || '',
+      cols, ts: ts || Date.now(),
       widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, customCells,
       cellGuides, _layoutGuidesMode, gridRows, gridCols, cellPages, slicerColSizes, slicerRowSizes
     });
@@ -1497,6 +1389,7 @@ async function buildFullExportDataAsync() {
     environments: D.environments,
     groups: D.groups,
     inbox: D.inbox,
+    recycleBin: D.recycleBin || [],
     pages: exportPages
   };
 }
@@ -1546,6 +1439,7 @@ async function saveSnapshot(silent = false) {
         bg: p.bg || '',
         bgType: p.bgType || 'none',
         tabColor: p.tabColor || '',
+        cols: p.cols !== undefined ? p.cols : 3,
         itemCount: (p.widgets || []).length + (p.miroCards || []).length
       })),
       pages: {}
@@ -1568,7 +1462,9 @@ async function saveSnapshot(silent = false) {
         gridCols: p.gridCols || null,
         cellPages: p.cellPages || null,
         slicerColSizes: p.slicerColSizes || null,
-        slicerRowSizes: p.slicerRowSizes || null
+        slicerRowSizes: p.slicerRowSizes || null,
+        cols: p.cols !== undefined ? p.cols : 3,
+        ts: p.ts || now
       };
     });
 
@@ -1630,24 +1526,34 @@ async function saveSnapshot(silent = false) {
   }
 }
 
-// Beacon-based snapshot for beforeunload (fire-and-forget)
+// Beacon-based snapshot for beforeunload (fire-and-forget, hardened against unhydrated pages)
 function saveSnapshotBeacon() {
-  if (!USER_ID) return;
+  if (!USER_ID || !D || !Array.isArray(D.pages) || D.pages.length === 0) return;
   const now = Date.now();
   if (now - _lastSnapshotTs < 30000) return; // Don't beacon if snapshotted recently
-  _lastSnapshotTs = now;
   try {
-    const snapshot = {
-      ts: now,
-      meta: {
-        settings: D.settings,
-        curEnv: D.curEnv,
-        curGroup: D.curGroup,
-        environments: D.environments,
-        groups: D.groups,
-        inbox: D.inbox
-      },
-      pagesMeta: D.pages.map(p => ({
+    let totalItems = 0;
+    let hasUnhydratedPage = false;
+    const pagesPayload = {};
+    const pagesMetaPayload = [];
+
+    for (const p of D.pages) {
+      if (!p) continue;
+      let src = p;
+      if (((p.widgets || []).length === 0 && (p.miroCards || []).length === 0) && !p._bypassVersionGuard) {
+        const cached = typeof getCachedPageDataSync === 'function' ? getCachedPageDataSync(p.id) : getCachedPageData(p.id);
+        if (cached && ((cached.widgets || []).length > 0 || (cached.miroCards || []).length > 0 || (cached.customCells || []).length > 0)) {
+          src = cached;
+        } else if (_pageVersions[p.id] && _pageVersions[p.id].count > 0) {
+          hasUnhydratedPage = true;
+          break;
+        }
+      }
+      const widgets = src.widgets || [];
+      const miroCards = src.miroCards || [];
+      const pageItems = widgets.length + miroCards.length;
+      totalItems += pageItems;
+      pagesMetaPayload.push({
         id: p.id || '',
         groupId: p.groupId || '',
         name: p.name || 'Untitled Page',
@@ -1657,27 +1563,51 @@ function saveSnapshotBeacon() {
         panY: p.panY !== undefined ? p.panY : 0,
         bg: p.bg || '',
         bgType: p.bgType || 'none',
-        tabColor: p.tabColor || ''
-      })),
-      pages: {}
+        tabColor: p.tabColor || '',
+        cols: p.cols !== undefined ? p.cols : 3,
+        itemCount: pageItems
+      });
+      pagesPayload[p.id] = {
+        widgets,
+        miroCards,
+        vGuides: src.vGuides || p.vGuides || [],
+        hGuides: src.hGuides || p.hGuides || [],
+        _guidesMode: src._guidesMode || p._guidesMode || false,
+        lockedGuides: src.lockedGuides || p.lockedGuides || [],
+        cellStates: src.cellStates || p.cellStates || {},
+        mergedCells: src.mergedCells || p.mergedCells || [],
+        customCells: src.customCells || p.customCells || [],
+        cellGuides: src.cellGuides || p.cellGuides || {},
+        _layoutGuidesMode: src._layoutGuidesMode || p._layoutGuidesMode || false,
+        gridRows: src.gridRows || p.gridRows || null,
+        gridCols: src.gridCols || p.gridCols || null,
+        cellPages: src.cellPages || p.cellPages || null,
+        slicerColSizes: src.slicerColSizes || p.slicerColSizes || null,
+        slicerRowSizes: src.slicerRowSizes || p.slicerRowSizes || null,
+        cols: src.cols !== undefined ? src.cols : (p.cols !== undefined ? p.cols : 3)
+      };
+    }
+
+    if (hasUnhydratedPage || totalItems === 0) {
+      return;
+    }
+
+    _lastSnapshotTs = now;
+    const snapshot = {
+      ts: now,
+      itemCount: totalItems,
+      pageCount: pagesMetaPayload.length,
+      meta: {
+        settings: D.settings,
+        curEnv: D.curEnv,
+        curGroup: D.curGroup,
+        environments: D.environments,
+        groups: D.groups,
+        inbox: D.inbox
+      },
+      pagesMeta: pagesMetaPayload,
+      pages: pagesPayload
     };
-    D.pages.forEach(p => {
-      let widgets, miroCards;
-      if (p.id === D.cur) {
-        widgets = p.widgets || [];
-        miroCards = p.miroCards || [];
-      } else {
-        const cached = getCachedPageData(p.id);
-        if (cached) {
-          widgets = cached.widgets || [];
-          miroCards = cached.miroCards || [];
-        } else {
-          widgets = p.widgets || [];
-          miroCards = p.miroCards || [];
-        }
-      }
-      snapshot.pages[p.id] = { widgets, miroCards };
-    });
     // Use fetch with keepalive + PUT for Firebase REST API (sendBeacon only does POST)
     const url = `${firebaseConfig.databaseURL}/users/${USER_ID}/startmine_snapshots/${now}.json`;
     fetch(url, { method: 'PUT', body: JSON.stringify(snapshot), keepalive: true, headers: { 'Content-Type': 'application/json' } }).catch(() => {});
@@ -1860,6 +1790,7 @@ async function restoreSnapshot(key) {
           cellPages: pageData.cellPages || null,
           slicerColSizes: pageData.slicerColSizes || null,
           slicerRowSizes: pageData.slicerRowSizes || null,
+          cols: pageData.cols !== undefined ? pageData.cols : (pm.cols !== undefined ? pm.cols : 3),
           ts: Date.now()
         };
         // Immediately persist to memory cache and IndexedDB
@@ -2055,6 +1986,8 @@ function buildFullExportData() {
       id: p.id, groupId: p.groupId, name: p.name,
       pageType: p.pageType, zoom: p.zoom, panX: p.panX, panY: p.panY,
       bg: p.bg, bgType: p.bgType, tabColor: p.tabColor || '',
+      cols: p.cols !== undefined ? p.cols : 3,
+      ts: p.ts || Date.now(),
       widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, customCells,
       cellGuides, _layoutGuidesMode, gridRows, gridCols, cellPages, slicerColSizes, slicerRowSizes
     });
@@ -2417,6 +2350,20 @@ async function saveCurrentEnvironmentToDrive() {
   return await doExportSelectedToDrive(false);
 }
 window.saveCurrentEnvironmentToDrive = saveCurrentEnvironmentToDrive;
+window.openSelIO = openSelIO;
+window.closeSelIO = closeSelIO;
+window.selIOSelectAll = selIOSelectAll;
+window.doSelectiveExport = doSelectiveExport;
+window.handleSelIOImport = handleSelIOImport;
+window.doImportFromDrive = doImportFromDrive;
+if (window.SM && window.SM.ui) {
+  window.SM.ui.openSelIO = openSelIO;
+  window.SM.ui.closeSelIO = closeSelIO;
+  window.SM.ui.selIOSelectAll = selIOSelectAll;
+  window.SM.ui.doSelectiveExport = doSelectiveExport;
+  window.SM.ui.handleSelIOImport = handleSelIOImport;
+  window.SM.ui.doImportFromDrive = doImportFromDrive;
+}
 
 function handleSelIOImport(e) {
   const file = e.target.files[0];
@@ -2482,13 +2429,17 @@ function doMergeImport() {
   const { envIds, groupIds, pageIds } = getSelIOChecked();
   
   if (mode === 'replace') {
-    if (!confirm('⚠️ Replace ALL will delete existing data. Are you sure?')) return;
+    if (!confirm('⚠️ استبدال الكل (Replace ALL) سيحذف البيانات الحالية ويستبدلها بالملف المستورد. هل أنت متأكد تماماً؟')) return;
+    try { idbSet('emergency_pre_replace_backup', JSON.parse(JSON.stringify(D))); } catch (e) {}
     D = JSON.parse(JSON.stringify(_selIOData));
     sanitizeData(D);
+    if (Array.isArray(D.pages)) {
+      D.pages.forEach(p => { if (p && p.id) cachePageDataSafe(p.id, p); });
+    }
     sv(true, true);
     switchActivePage(D.cur);
     closeSelIO();
-    showToast('✅ Data replaced', 3000);
+    showToast('✅ تم استبدال البيانات بنجاح (مع حفظ نسخة طوارئ محلية)', 3500);
     return;
   }
   
@@ -3791,7 +3742,7 @@ document.getElementById('imp-json').onchange = function (e) {
   const file = e.target.files[0];
   if (!file) return;
   const r = new FileReader();
-  r.onload = (ev) => {
+  r.onload = async (ev) => {
     try {
       const raw = JSON.parse(ev.target.result);
       const imported = _parseImport(raw);
@@ -3799,8 +3750,18 @@ document.getElementById('imp-json').onchange = function (e) {
         alert('Could not read file.');
         return;
       }
+      if (!confirm('⚠️ هل تريد استبدال البيانات الحالية بهذا الملف؟\n(سيتم حفظ نسخة احتياطية طارئة من بياناتك الحالية قبل الاستيراد)')) {
+        return;
+      }
+      try {
+        if (typeof saveSnapshot === 'function') await saveSnapshot(true);
+        if (typeof idbSet === 'function') await idbSet('emergency_pre_import_backup', { ts: Date.now(), data: JSON.parse(JSON.stringify(D)) });
+      } catch (bakErr) {}
       D = imported;
       sanitizeData(D); // Force sanitize on imported JSON before saving
+      if (Array.isArray(D.pages)) {
+        D.pages.forEach(p => { if (p && typeof cachePageDataSafe === 'function') cachePageDataSafe(p.id, p); });
+      }
       sv(true, true); // Immediate Save All
       switchActivePage(D.cur);
       alert('Imported successfully!');
@@ -3988,8 +3949,21 @@ function _importCSV(text) {
   });
   if (count > 0) {
     if (result.pages.length === 0) result.pages = JSON.parse(JSON.stringify(DEF)).pages;
-    D = result;
-    sv();
+    if (!confirm(`⚠️ سيتم استيراد (${count}) رابط من ملف CSV.\nاضغط OK لدمجها كصفحات جديدة مع بياناتك الحالية، أو Cancel للإلغاء.`)) return;
+    try {
+      if (typeof idbSet === 'function') idbSet('emergency_pre_csv_backup', { ts: Date.now(), data: JSON.parse(JSON.stringify(D)) });
+    } catch (e) {}
+    const csvGroupId = uid();
+    const curEnvId = D.curEnv || (D.environments && D.environments[0] ? D.environments[0].id : 'e0');
+    D.groups.push({ id: csvGroupId, name: 'Imported CSV', envId: curEnvId });
+    result.pages.forEach(p => {
+      p.groupId = csvGroupId;
+      D.pages.push(p);
+      if (typeof cachePageDataSafe === 'function') cachePageDataSafe(p.id, p);
+    });
+    D.curGroup = csvGroupId;
+    if (result.pages[0]) D.cur = result.pages[0].id;
+    sv(true, true);
     renderAll();
     alert('CSV imported! ' + count + ' bookmarks loaded.');
   } else alert('No valid bookmarks found.');
@@ -5748,7 +5722,14 @@ function _safePersistPagePayload(page) {
     if (typeof setOwnWrite === 'function') setOwnWrite(true);
     const updates = {};
     updates[`users/${USER_ID}/startmine_pages/${page.id}`] = payload;
-    db.ref().update(updates).catch((e) => console.warn('[PAGE SYNC DB]', page.id, e));
+    db.ref().update(updates)
+      .then(() => {
+        if (typeof setOwnWrite === 'function') setOwnWrite(false);
+      })
+      .catch((e) => {
+        if (typeof setOwnWrite === 'function') setOwnWrite(false);
+        console.warn('[PAGE SYNC DB]', page.id, e);
+      });
   }
 }
 
@@ -6423,6 +6404,7 @@ function buildDupReport() {
     rm.className = 'dup-rm';
     rm.textContent = 'Remove extras';
     rm.onclick = () => {
+      if (!confirm(`⚠️ هل أنت متأكد من حذف النسخ المكررة (${items.length - 1} رابط) مع الإبقاء على النسخة الأولى؟`)) return;
       removeDups(url, items);
       buildDupReport();
     };
@@ -6433,12 +6415,25 @@ function buildDupReport() {
   });
 }
 function removeDups(urlKey, items) {
-  // Keep first, remove rest
+  // Keep first, remove rest (and archive removed duplicates to Recycle Bin)
   for (let i = 1; i < items.length; i++) {
     const pg = D.pages.find((p) => p.id === items[i].pageId);
     if (!pg) continue;
     const w = (pg.widgets || []).find((x) => x.id === items[i].widgetId);
     if (!w || !w.items) continue;
+    const removedIt = w.items.find((it) => it.id === items[i].itemId);
+    if (removedIt && typeof window.addToRecycleBin === 'function') {
+      window.addToRecycleBin({
+        type: 'bookmark',
+        title: removedIt.label || removedIt.url || 'رابط مكرر',
+        url: removedIt.url || '',
+        data: removedIt,
+        sourceWid: w.id,
+        sourceWidgetTitle: w.title || '',
+        sourcePageId: pg.id,
+        sourcePageName: pg.name || ''
+      });
+    }
     w.items = w.items.filter((it) => it.id !== items[i].itemId);
   }
   sv();
@@ -6446,6 +6441,9 @@ function removeDups(urlKey, items) {
 }
 document.getElementById('dup-del-all').onclick = () => {
   const dups = findDups(_dupScope);
+  const dupCount = Object.values(dups).reduce((acc, arr) => acc + Math.max(0, arr.length - 1), 0);
+  if (dupCount === 0) return;
+  if (!confirm(`⚠️ هل أنت متأكد من حذف جميع الروابط المكررة (${dupCount} رابط) والاحتفاظ بنسخة واحدة من كل رابط؟`)) return;
   for (const url in dups) {
     removeDups(url, dups[url]);
   }
@@ -6653,16 +6651,34 @@ function delEnv(eid) {
     alert('Cannot delete the only environment.');
     return;
   }
-  if (!confirm('Delete this environment and ALL its groups and pages?')) return;
+  const envObj = D.environments.find((e) => e.id === eid);
+  const groupsToDel = D.groups.filter(g => g.envId === eid);
+  const groupIds = groupsToDel.map(g => g.id);
+  const pagesToDel = D.pages.filter((p) => groupIds.includes(p.groupId));
+  if (!confirm(`⚠️ هل أنت متأكد من حذف البيئة "${envObj ? envObj.name : eid}" بالكامل مع (${groupsToDel.length}) مجموعة و(${pagesToDel.length}) صفحة؟\n(ستبقى جميع الصفحات محفوظة في سلة المحذوفات لمدة 30 يوم)`)) return;
   const envIdx = D.environments.findIndex((e) => e.id === eid);
   if (envIdx < 0) return;
 
-  const groupsToDel = D.groups.filter(g => g.envId === eid);
-  const groupIds = groupsToDel.map(g => g.id);
-
-  // FIX: Queue deleted page IDs for Firebase cleanup
-  const pagesToDel = D.pages.filter((p) => groupIds.includes(p.groupId));
-  pagesToDel.forEach(p => _pendingDeletePageIds.push(p.id));
+  // Archive all deleted pages to Recycle Bin & queue for Firebase cleanup
+  pagesToDel.forEach(p => {
+    if ((!p.widgets || p.widgets.length === 0) && (!p.miroCards || p.miroCards.length === 0) && typeof getCachedPageDataSync === 'function') {
+      const cached = getCachedPageDataSync(p.id);
+      if (cached) {
+        p.widgets = cached.widgets || [];
+        p.miroCards = cached.miroCards || [];
+      }
+    }
+    if (typeof window.addToRecycleBin === 'function') {
+      window.addToRecycleBin({
+        type: 'page',
+        title: p.name || 'صفحة',
+        data: p,
+        sourcePageId: p.id,
+        sourcePageName: p.name
+      });
+    }
+    _pendingDeletePageIds.push(p.id);
+  });
 
   D.pages = D.pages.filter((p) => !groupIds.includes(p.groupId));
   D.groups = D.groups.filter((g) => g.envId !== eid);
@@ -6701,12 +6717,32 @@ function delGroup(gid) {
     alert('Cannot delete the only group in this environment.');
     return;
   }
-  if (!confirm('Delete this group and ALL its pages?')) return;
+  const grpObj = D.groups.find((g) => g.id === gid);
+  const pagesToDel = D.pages.filter((p) => p.groupId === gid);
+  if (!confirm(`⚠️ هل أنت متأكد من حذف المجموعة "${grpObj ? grpObj.name : gid}" وجميع صفحاتها (${pagesToDel.length} صفحة)؟\n(ستبقى جميع الصفحات محفوظة في سلة المحذوفات لمدة 30 يوم)`)) return;
   const gidx = D.groups.findIndex((g) => g.id === gid);
   if (gidx < 0) return;
 
-  // FIX: Queue deleted page IDs for Firebase cleanup
-  D.pages.filter((p) => p.groupId === gid).forEach(p => _pendingDeletePageIds.push(p.id));
+  // Archive all deleted pages to Recycle Bin & queue for Firebase cleanup
+  pagesToDel.forEach(p => {
+    if ((!p.widgets || p.widgets.length === 0) && (!p.miroCards || p.miroCards.length === 0) && typeof getCachedPageDataSync === 'function') {
+      const cached = getCachedPageDataSync(p.id);
+      if (cached) {
+        p.widgets = cached.widgets || [];
+        p.miroCards = cached.miroCards || [];
+      }
+    }
+    if (typeof window.addToRecycleBin === 'function') {
+      window.addToRecycleBin({
+        type: 'page',
+        title: p.name || 'صفحة',
+        data: p,
+        sourcePageId: p.id,
+        sourcePageName: p.name
+      });
+    }
+    _pendingDeletePageIds.push(p.id);
+  });
 
   D.pages = D.pages.filter((p) => p.groupId !== gid);
   D.groups.splice(gidx, 1);
@@ -6744,7 +6780,14 @@ function delPage(pid) {
     alert('Cannot delete the only page in this group.');
     return;
   }
-  if (!confirm('Delete this page? (ستبقى الصفحة ومحتوياتها محفوظة في سلة المحذوفات لمدة 30 يوم)')) return;
+  if (!confirm(`⚠️ هل أنت متأكد من حذف الصفحة "${pg.name || 'Untitled'}"؟\n(ستبقى الصفحة ومحتوياتها محفوظة في سلة المحذوفات لمدة 30 يوم)`)) return;
+  if ((!pg.widgets || pg.widgets.length === 0) && (!pg.miroCards || pg.miroCards.length === 0) && typeof getCachedPageDataSync === 'function') {
+    const cached = getCachedPageDataSync(pg.id);
+    if (cached) {
+      pg.widgets = cached.widgets || [];
+      pg.miroCards = cached.miroCards || [];
+    }
+  }
   if (pg && typeof window.addToRecycleBin === 'function') {
     window.addToRecycleBin({
       type: 'page',
@@ -6922,6 +6965,17 @@ function buildCols() {
   page.widgets = _ensureArr(page.widgets);
   page.miroCards = _ensureArr(page.miroCards);
   const isMiro = page.pageType === 'miro';
+
+  // Dual-view self-healing: if active view is empty while counterpart view has items (and page was not intentionally cleared), hydrate automatically
+  if (!page.id.startsWith('time_') && page.pageType !== 'slicer' && !page._bypassVersionGuard) {
+    if (isMiro && page.miroCards.length === 0 && page.widgets.length > 0 && typeof convertWidgetsToMiroCards === 'function') {
+      page.miroCards = convertWidgetsToMiroCards(page.widgets);
+      if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page.id, page);
+    } else if (!isMiro && page.widgets.length === 0 && page.miroCards.length > 0 && typeof convertMiroCardsToWidgets === 'function') {
+      page.widgets = convertMiroCardsToWidgets(page.miroCards, page.cols || 3);
+      if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page.id, page);
+    }
+  }
   
   // Diagnostic Log inside the main render function
   console.log('[RENDER] Rendering page:', page.name, 'pageType:', page.pageType, 'widgets:', page.widgets.length, 'miroCards:', page.miroCards.length);
@@ -8114,6 +8168,19 @@ function mkTodoItem(item, w) {
   rm.textContent = '✕';
   rm.onclick = () => {
     if (!w.items) return;
+    if (!confirm(`⚠️ هل أنت متأكد من حذف المهمة "${item.text || 'بدون عنوان'}"؟`)) return;
+    if (typeof window.addToRecycleBin === 'function') {
+      const curP = typeof cp === 'function' ? cp() : null;
+      window.addToRecycleBin({
+        type: 'todo_item',
+        title: item.text || 'مهمة',
+        data: item,
+        sourceWid: w.id,
+        sourceWidgetTitle: w.title || '',
+        sourcePageId: curP ? curP.id : '',
+        sourcePageName: curP ? curP.name : ''
+      });
+    }
     w.items = w.items.filter((x) => x.id !== item.id);
     sv();
     row.remove();
@@ -8478,14 +8545,26 @@ function posPv(ev) {
   pt.style.top = y + 'px';
 }
 function delWidget(wid) {
-  // Check if this widget is the last element on any page
+  let deletedWidget = null;
+  let deletedFromPage = null;
+  D.pages.forEach((p) => {
+    if (p && p.widgets) {
+      const found = p.widgets.find((w) => w && w.id === wid);
+      if (found) { deletedWidget = found; deletedFromPage = p; }
+    }
+  });
+
+  const wTitle = (deletedWidget && deletedWidget.title) || 'هذا الويدجت';
+  const wTitleNorm = wTitle.trim().toLowerCase();
+
+  // Check if this widget is the last element on any page (accounting for counterpart miroCard removal)
   let willBeEmpty = false;
   let affectedPage = null;
   D.pages.forEach((p) => {
-    if (p && p.widgets && p.widgets.some((w) => w.id === wid)) {
-      const remaining = p.widgets.filter((w) => w.id !== wid).length;
-      const hasCards = p.miroCards && p.miroCards.length > 0;
-      if (remaining === 0 && !hasCards) {
+    if (p && p.widgets && p.widgets.some((w) => w && w.id === wid)) {
+      const remainingW = p.widgets.filter((w) => w && w.id !== wid).length;
+      const remainingC = (p.miroCards || []).filter((c) => c && c.id !== wid && !(c.type === 'bwidget' && c.title && c.title.trim().toLowerCase() === wTitleNorm)).length;
+      if (remainingW === 0 && remainingC === 0) {
         willBeEmpty = true;
         affectedPage = p;
       }
@@ -8493,23 +8572,14 @@ function delWidget(wid) {
   });
 
   const promptMsg = willBeEmpty 
-    ? "هذا هو العنصر الأخير في الصفحة. حذف هذا الويدجت سيجعل الصفحة فارغة تماماً. هل تريد الاستمرار؟"
-    : "Delete this widget?";
+    ? `⚠️ الويدجت "${wTitle}" هو العنصر الأخير في الصفحة. حذفه سيجعل الصفحة فارغة تماماً. هل أنت متأكد من الحذف؟`
+    : `⚠️ هل أنت متأكد من حذف الويدجت "${wTitle}" وجميع محتوياته؟`;
 
   if (!confirm(promptMsg)) return;
 
   if (willBeEmpty && affectedPage) {
     affectedPage._bypassVersionGuard = true;
   }
-
-  let deletedWidget = null;
-  let deletedFromPage = null;
-  D.pages.forEach((p) => {
-    if (p && p.widgets) {
-      const found = p.widgets.find((w) => w.id === wid);
-      if (found) { deletedWidget = found; deletedFromPage = p; }
-    }
-  });
 
   if (deletedWidget && typeof window.addToRecycleBin === 'function') {
     window.addToRecycleBin({
@@ -8524,10 +8594,14 @@ function delWidget(wid) {
   }
 
   D.pages.forEach((p) => {
-    p.widgets = (p.widgets || []).filter((w) => w.id !== wid);
-    p.miroCards = (p.miroCards || []).filter((c) => c && c.id !== wid);
-    p.ts = Date.now();
-    if (typeof cachePageDataSafe === 'function') cachePageDataSafe(p.id, p);
+    if (!p) return;
+    const hadMatch = (p.widgets || []).some(w => w && w.id === wid) || (p.miroCards || []).some(c => c && c.id === wid);
+    p.widgets = (p.widgets || []).filter((w) => w && w.id !== wid);
+    p.miroCards = (p.miroCards || []).filter((c) => c && c.id !== wid && !(hadMatch && c.type === 'bwidget' && c.title && c.title.trim().toLowerCase() === wTitleNorm));
+    if (hadMatch) {
+      p.ts = Date.now();
+      if (typeof cachePageDataSafe === 'function') cachePageDataSafe(p.id, p);
+    }
   });
   sv(false, true);
   buildCols();
@@ -8535,8 +8609,12 @@ function delWidget(wid) {
 function rmItem(wid, itemId) {
   const w = fw(wid);
   if (!w || !w.items) return;
-  const deletedItem = w.items.find((i) => i.id === itemId);
-  if (deletedItem && typeof window.addToRecycleBin === 'function') {
+  const deletedItem = w.items.find((i) => i && i.id === itemId);
+  if (!deletedItem) return;
+  const itemLabel = deletedItem.label || deletedItem.url || 'هذا الرابط';
+  if (!confirm(`⚠️ هل أنت متأكد من حذف الرابط "${itemLabel}"؟`)) return;
+
+  if (typeof window.addToRecycleBin === 'function') {
     const curP = typeof cp === 'function' ? cp() : null;
     window.addToRecycleBin({
       type: 'bookmark',
@@ -8549,19 +8627,23 @@ function rmItem(wid, itemId) {
       sourcePageName: curP ? curP.name : ''
     });
   }
-  w.items = w.items.filter((i) => i.id !== itemId);
+  const delUrlNorm = (deletedItem.url || '').trim().toLowerCase();
+  const wTitleNorm = (w.title || '').trim().toLowerCase();
+  w.items = w.items.filter((i) => i && i.id !== itemId);
 
-  // Sync removal across dual-view if present in counterpart
+  // Sync removal across dual-view if present in counterpart (by itemId or matching URL in counterpart widget)
   const page = cp();
   if (page) {
     if (page.widgets) {
-      const matchW = page.widgets.find(x => x.id === wid || (x.items && x.items.some(i => i.id === itemId)));
-      if (matchW && matchW.items) matchW.items = matchW.items.filter(i => i.id !== itemId);
+      const matchW = page.widgets.find(x => x && (x.id === wid || (wTitleNorm && (x.title || '').trim().toLowerCase() === wTitleNorm) || (x.items && x.items.some(i => i && i.id === itemId))));
+      if (matchW && matchW.items) {
+        matchW.items = matchW.items.filter(i => i && i.id !== itemId && !(delUrlNorm && (i.url || '').trim().toLowerCase() === delUrlNorm));
+      }
     }
     if (page.miroCards) {
-      const matchC = page.miroCards.find(x => x.id === wid || (x.items && x.items.some(i => i.id === itemId)));
+      const matchC = page.miroCards.find(x => x && (x.id === wid || (wTitleNorm && (x.title || '').trim().toLowerCase() === wTitleNorm) || (x.items && x.items.some(i => i && i.id === itemId))));
       if (matchC && matchC.items) {
-        matchC.items = matchC.items.filter(i => i.id !== itemId);
+        matchC.items = matchC.items.filter(i => i && i.id !== itemId && !(delUrlNorm && (i.url || '').trim().toLowerCase() === delUrlNorm));
         const wCols = 6;
         const itemPx = 94;
         const reqRows = Math.ceil(matchC.items.length / wCols);
@@ -8669,7 +8751,7 @@ document.getElementById('ok-bm').onclick = () => {
       const matchCard = curPage.miroCards.find(c => c.id === w.id || (c.title && w.title && c.title.trim().toLowerCase() === w.title.trim().toLowerCase()));
       if (matchCard) {
         if (!Array.isArray(matchCard.items)) matchCard.items = [];
-        matchCard.items.push({ ...newItem, id: uid() });
+        matchCard.items.push({ ...newItem });
         const wCols = 6;
         const itemPx = 94;
         const reqRows = Math.ceil(matchCard.items.length / wCols);
@@ -8679,7 +8761,7 @@ document.getElementById('ok-bm').onclick = () => {
       const matchWidget = curPage.widgets.find(x => x.id === w.id || (x.title && w.title && x.title.trim().toLowerCase() === w.title.trim().toLowerCase()));
       if (matchWidget) {
         if (!Array.isArray(matchWidget.items)) matchWidget.items = [];
-        matchWidget.items.push({ ...newItem, id: uid() });
+        matchWidget.items.push({ ...newItem });
       }
     }
   }
@@ -11969,6 +12051,20 @@ window.balancePageWidgetsAcrossCols = balancePageWidgetsAcrossCols;
 window.reorderStartMeWidget = reorderStartMeWidget;
 window.getActiveViewItem = getActiveViewItem;
 window.saveCurrentEnvironmentToDrive = saveCurrentEnvironmentToDrive;
+window.openSelIO = openSelIO;
+window.closeSelIO = closeSelIO;
+window.selIOSelectAll = selIOSelectAll;
+window.doSelectiveExport = doSelectiveExport;
+window.handleSelIOImport = handleSelIOImport;
+window.doImportFromDrive = doImportFromDrive;
+if (window.SM && window.SM.ui) {
+  window.SM.ui.openSelIO = openSelIO;
+  window.SM.ui.closeSelIO = closeSelIO;
+  window.SM.ui.selIOSelectAll = selIOSelectAll;
+  window.SM.ui.doSelectiveExport = doSelectiveExport;
+  window.SM.ui.handleSelIOImport = handleSelIOImport;
+  window.SM.ui.doImportFromDrive = doImportFromDrive;
+}
 window.getWidgetDropTargetInCol = getWidgetDropTargetInCol;
 window.insertNewWidgetAt = insertNewWidgetAt;
 

@@ -313,32 +313,55 @@
   }
 
   async function getCachedPageDataAsync(pid) {
-    // 1. Check in-memory sync first
+    // 1. If active in RAM with local unsaved edits or populated items, get sync state
     const syncData = getCachedPageDataSync(pid);
-    if (syncData && (((syncData.widgets || []).length > 0) || ((syncData.miroCards || []).length > 0) || (syncData.pageType === 'slicer'))) {
+    const livePg = (window.D && window.D.pages) ? window.D.pages.find(p => p && p.id === pid) : null;
+    if (livePg && livePg._localDirtyTs && syncData) {
       return syncData;
     }
-    // 2. Check IndexedDB (larger, persistent storage)
+    const syncCount = syncData ? ((syncData.widgets || []).length + (syncData.miroCards || []).length + (syncData.customCells || []).length) : 0;
+
+    // 2. Always check IndexedDB as well so large pages (>120KB) or newer IDB entries are never missed
     const idbData = await idbGet('page_' + pid);
     if (idbData) {
-      _memoryPageCache.set(pid, idbData);
-      if (window.D && window.D.pages) {
-        const livePg = window.D.pages.find(p => p && p.id === pid);
+      const idbCount = (idbData.widgets || []).length + (idbData.miroCards || []).length + (idbData.customCells || []).length;
+      const idbTs = idbData.ts || 0;
+      const syncTs = (syncData && syncData.ts) || 0;
+      // Prefer IDB if syncData was empty, or if IDB is newer/richer and livePg wasn't intentionally cleared
+      const intentionallyCleared = livePg && livePg._bypassVersionGuard;
+      if (!intentionallyCleared && (syncCount === 0 || idbCount > syncCount || (idbTs > syncTs && idbCount >= syncCount))) {
+        _memoryPageCache.set(pid, idbData);
         if (livePg) {
           if (!livePg.widgets || livePg.widgets.length === 0) livePg.widgets = idbData.widgets || [];
           if (!livePg.miroCards || livePg.miroCards.length === 0) livePg.miroCards = idbData.miroCards || [];
+          if (idbData.vGuides !== undefined && (!livePg.vGuides || livePg.vGuides.length === 0)) livePg.vGuides = idbData.vGuides;
+          if (idbData.hGuides !== undefined && (!livePg.hGuides || livePg.hGuides.length === 0)) livePg.hGuides = idbData.hGuides;
+          if (idbData._guidesMode !== undefined && livePg._guidesMode === undefined) livePg._guidesMode = idbData._guidesMode;
+          if (idbData.lockedGuides !== undefined && (!livePg.lockedGuides || livePg.lockedGuides.length === 0)) livePg.lockedGuides = idbData.lockedGuides;
+          if (idbData.cellStates !== undefined && !livePg.cellStates) livePg.cellStates = idbData.cellStates;
+          if (idbData.mergedCells !== undefined && (!livePg.mergedCells || livePg.mergedCells.length === 0)) livePg.mergedCells = idbData.mergedCells;
+          if (idbData.customCells !== undefined && (!livePg.customCells || livePg.customCells.length === 0)) livePg.customCells = idbData.customCells;
+          if (idbData.cellGuides !== undefined && !livePg.cellGuides) livePg.cellGuides = idbData.cellGuides;
+          if (idbData._layoutGuidesMode !== undefined && livePg._layoutGuidesMode === undefined) livePg._layoutGuidesMode = idbData._layoutGuidesMode;
+          if (idbData.gridRows !== undefined && !livePg.gridRows) livePg.gridRows = idbData.gridRows;
+          if (idbData.gridCols !== undefined && !livePg.gridCols) livePg.gridCols = idbData.gridCols;
+          if (idbData.cellPages !== undefined && !livePg.cellPages) livePg.cellPages = idbData.cellPages;
+          if (idbData.slicerColSizes !== undefined && !livePg.slicerColSizes) livePg.slicerColSizes = idbData.slicerColSizes;
+          if (idbData.slicerRowSizes !== undefined && !livePg.slicerRowSizes) livePg.slicerRowSizes = idbData.slicerRowSizes;
           if (idbData.cols !== undefined) livePg.cols = idbData.cols;
+          if (idbData.pageType !== undefined && !livePg.pageType) livePg.pageType = idbData.pageType;
+          if (idbData.ts && (!livePg.ts || idbData.ts > livePg.ts)) livePg.ts = idbData.ts;
         }
+        return idbData;
       }
-      return idbData;
     }
-    return syncData;
+    return syncData || idbData || null;
   }
   function getCachedPageDataSync(pid) {
     // 1. Check active D.pages in RAM
     if (window.D && window.D.pages) {
       const livePg = window.D.pages.find(p => p && p.id === pid);
-      if (livePg && (((livePg.widgets || []).length > 0) || ((livePg.miroCards || []).length > 0) || (livePg.pageType === 'slicer') || livePg._bypassVersionGuard)) {
+      if (livePg && (((livePg.widgets || []).length > 0) || ((livePg.miroCards || []).length > 0) || ((livePg.customCells || []).length > 0) || (livePg.pageType === 'slicer') || livePg._bypassVersionGuard)) {
         return {
           widgets: livePg.widgets || [],
           miroCards: livePg.miroCards || [],
@@ -357,6 +380,7 @@
           slicerColSizes: livePg.slicerColSizes || null,
           slicerRowSizes: livePg.slicerRowSizes || null,
           cols: livePg.cols !== undefined ? livePg.cols : 3,
+          pageType: livePg.pageType || 'web',
           ts: livePg.ts || Date.now()
         };
       }

@@ -13,29 +13,21 @@
   const CARD_SELECTORS = '.miro-card, .miro-life, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed, .miro-overlay-widget';
 
   function getCardSig(card) {
-    if (!card) return '';
-    const complex = (card.items || card.columns || card.nodes || card.gridData || card.tasks || card.events)
-      ? JSON.stringify(card.items || card.columns || card.nodes || card.gridData || card.tasks || card.events)
-      : '';
-    const colorStr = card.color ? (typeof card.color === 'object' ? JSON.stringify(card.color) : String(card.color)) : '';
-    const bgStr = card.bg ? (typeof card.bg === 'object' ? JSON.stringify(card.bg) : String(card.bg)) : '';
-    const cropStr = card.cropRect ? JSON.stringify(card.cropRect) : '';
-
-    return (card.type || '') + '||' +
-      (card.locked ? '1' : '0') + '||' +
-      (card.pinned ? '1' : '0') + '||' +
-      (card.content || '') + '||' +
-      (card.label || '') + '||' +
-      (card.desc || '') + '||' +
-      (card.url || '') + '||' +
-      (card.thumbUrl || '') + '||' +
-      (card.shape || card.shapeType || '') + '||' +
-      (card.fontSize || '') + '||' +
-      colorStr + '||' +
-      bgStr + '||' +
-      cropStr + '||' +
-      complex + '||' +
-      (card._sig || card._forceRender || '');
+    if (!card || typeof card !== 'object') return '';
+    try {
+      const sigObj = {};
+      const keys = Object.keys(card).sort();
+      const includeSize = (card.type === 'shape' || card.type === 'pen' || card.type === 'grid');
+      for (let i = 0; i < keys.length; i++) {
+        const k = keys[i];
+        if (k === 'x' || k === 'y' || k === 'z' || k === 'zIndex') continue;
+        if (!includeSize && (k === 'w' || k === 'h')) continue;
+        sigObj[k] = card[k];
+      }
+      return JSON.stringify(sigObj);
+    } catch (e) {
+      return (card.type || '') + '||' + (card.id || '') + '||' + (card.text || card.content || card.title || card.label || '');
+    }
   }
 
   window.buildMiroCanvas = function buildMiroCanvas(forceFullRebuild) {
@@ -203,6 +195,7 @@
                 console.error('[RECONCILE ERROR]', card && card.type, card && card.id, err);
               }
             } else {
+              if (isEditing) existingEl.dataset.cardSig = sig;
               // Internal content unchanged: update geometric styles smoothly
               if (card.x !== undefined && existingEl.style.left !== (card.x + 'px')) existingEl.style.left = card.x + 'px';
               if (card.y !== undefined && existingEl.style.top !== (card.y + 'px')) existingEl.style.top = card.y + 'px';
@@ -696,30 +689,58 @@
   } catch (e) { /* timeout */ }
   return null;
 };
-  window.deleteMiroCard = function deleteMiroCard(cid, pageId) {
+  window.deleteMiroCard = function deleteMiroCard(cid, pageId, skipConfirm) {
     const page = pageId ? (D.pages.find(p => p.id === pageId) || cp()) : (D.pages.find(p => p.miroCards && p.miroCards.some(c => c.id === cid)) || cp());
     if (!page || !page.miroCards) return;
-    if (page.miroCards.length === 1 && (!page.widgets || page.widgets.length === 0)) {
-      const ok = confirm("هل تريد بالتأكيد حذف العنصر الأخير وجعل الصفحة فارغة تماماً؟");
-      if (!ok) return;
+    const deletedCard = page.miroCards.find((c) => c && c.id === cid);
+    if (!deletedCard) return;
+
+    const cardLabel = (deletedCard.title || deletedCard.label || deletedCard.text || deletedCard.content || deletedCard.url || deletedCard.type || 'هذا العنصر').toString().replace(/<[^>]*>/g, '').trim().slice(0, 60) || 'هذا العنصر';
+    const isLastCard = page.miroCards.length === 1;
+
+    if (!skipConfirm) {
+      const confirmMsg = isLastCard
+        ? `⚠️ العنصر "${cardLabel}" هو العنصر الأخير في اللوحة. حذفه سيجعل الصفحة فارغة تماماً. هل أنت متأكد من الحذف؟`
+        : `⚠️ هل أنت متأكد من حذف العنصر "${cardLabel}"؟`;
+      if (!confirm(confirmMsg)) return;
     }
-    const deletedCard = page.miroCards.find((c) => c.id === cid);
-    if (deletedCard && typeof window.addToRecycleBin === 'function') {
+
+    if (typeof pushUndo === 'function') {
+      try { pushUndo(); } catch (e) {}
+    }
+
+    if (typeof window.addToRecycleBin === 'function') {
       window.addToRecycleBin({
         type: 'card',
-        title: deletedCard.title || deletedCard.content || deletedCard.type || 'بطاقة ميرو',
-        url: deletedCard.url || deletedCard.linkUrl || '',
+        title: cardLabel,
+        url: deletedCard.url || deletedCard.linkUrl || deletedCard.imageUrl || '',
         data: deletedCard,
         sourcePageId: page.id,
         sourcePageName: page.name
       });
     }
 
-    page._bypassVersionGuard = true; // Bypass version guard!
-    page.miroCards = page.miroCards.filter((c) => c.id !== cid);
-    sv();
+    page.miroCards = page.miroCards.filter((c) => c && c.id !== cid);
+
+    // Dual-view sync: also remove matching counterpart widget from page.widgets so it doesn't resurrect
+    if (Array.isArray(page.widgets) && page.widgets.length > 0) {
+      const cTitleNorm = (deletedCard.title || '').trim().toLowerCase();
+      page.widgets = page.widgets.filter((w) => {
+        if (!w) return false;
+        if (w.id === cid) return false;
+        if (deletedCard.type === 'bwidget' && cTitleNorm && (w.title || '').trim().toLowerCase() === cTitleNorm) return false;
+        return true;
+      });
+    }
+
+    if (page.miroCards.length === 0 && (!page.widgets || page.widgets.length === 0)) {
+      page._bypassVersionGuard = true;
+    }
+    page.ts = Date.now();
+    if (typeof cachePageDataSafe === 'function') cachePageDataSafe(page.id, page);
+    sv(false, true);
     const curPg = cp();
-    if (curPg.pageType === 'slicer') {
+    if (curPg && curPg.pageType === 'slicer') {
       buildCols();
     } else {
       buildMiroCanvas();

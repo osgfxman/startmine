@@ -10,10 +10,17 @@
 (function() {
   const LS_CUR_PAGE = 'sm_cur_page';
   let _ownWrite = false;
+  let _activeWriteCount = 0;
   let _ownWriteTs = 0;
-  const OWN_WRITE_TIMEOUT = 5000;
+  let _ownWriteCooldownUntil = 0;
+  const OWN_WRITE_TIMEOUT = 8000;
+  const OWN_WRITE_COOLDOWN_MS = 1500;
   let _lastSanitizeSvTs = 0;
   const SANITIZE_SV_COOLDOWN = 5000; // 5s cooldown between sanitize-triggered saves
+  window._pendingCloudPageIds = window._pendingCloudPageIds || new Set();
+  window._hasPendingLocalSave = false;
+  window._lastLocalEditTs = 0;
+  window._lastLocalMetaTs = 0;
 
   // Extracted syncNow
   window.syncNow = async function () {
@@ -355,9 +362,20 @@
           groups: [{ id: 'g0', name: 'Main Group', envId: 'e0' }],
           inbox: []
         };
+        const incomingMetaTs = meta.ts || 0;
+        if (window._lastLocalMetaTs && incomingMetaTs > 0 && window._lastLocalMetaTs > incomingMetaTs) {
+          console.warn(`[SYNC META GUARD ⛔] Local metadata (${window._lastLocalMetaTs}) is newer than incoming (${incomingMetaTs}) — ignoring stale cloud meta.`);
+          return;
+        }
+        // Protect against sudden loss of environments or groups from partial/stale cloud writes
+        if (Array.isArray(D.environments) && D.environments.length > 1 && Array.isArray(meta.environments) && meta.environments.length < D.environments.length && (!incomingMetaTs || incomingMetaTs < (window._lastLocalEditTs || 0))) {
+          console.warn('[SYNC META GUARD ⛔] Refusing to shrink environments from stale meta listener.');
+          return;
+        }
         D.settings = meta.settings || { engine: 'bm', accent: '#6c8fff' };
-        D.curEnv = meta.curEnv || 'e0';
-        D.curGroup = meta.curGroup || 'g0';
+        // Do not forcibly hijack the user's current active tab/env/group after initial load if user is actively navigating locally
+        if (isFirstLoad || !D.curEnv) D.curEnv = meta.curEnv || 'e0';
+        if (isFirstLoad || !D.curGroup) D.curGroup = meta.curGroup || 'g0';
         D.environments = meta.environments || [{ id: 'e0', name: 'Main Env' }];
         D.groups = meta.groups || [{ id: 'g0', name: 'Main Group', envId: 'e0' }];
         D.inbox = meta.inbox || [];
@@ -376,7 +394,8 @@
           curGroup: D.curGroup,
           environments: D.environments,
           groups: D.groups,
-          inbox: D.inbox
+          inbox: D.inbox,
+          ts: incomingMetaTs || Date.now()
         };
         cacheMeta(sanitizedMeta); // Cache to localStorage
         
@@ -402,14 +421,16 @@
         const pagesMetaRaw = snap.val() || [{ id: 'p0', groupId: 'g0', name: 'Home', pageType: 'miro', zoom: 100, panX: 0, panY: 0, bg: '', bgType: 'none' }];
         const pagesMeta = pagesMetaRaw.filter(p => p);
 
-        // FIX: Preserve heavy data (widgets/miroCards) and guides/slices for ALL loaded pages, not just active
+        // FIX: Preserve heavy data (widgets/miroCards), guides/slices, and newer local metadata for ALL loaded pages
         const heavyDataMap = {};
+        const localPagesById = {};
         D.pages.forEach(p => {
-          if (p) {
+          if (p && p.id) {
+            localPagesById[p.id] = p;
             const hasData = (p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0);
             const hasGuides = (p.vGuides && p.vGuides.length > 0) || (p.hGuides && p.hGuides.length > 0) || p._guidesMode || (p.customCells && p.customCells.length > 0) || p._layoutGuidesMode || (p.cellGuides && Object.keys(p.cellGuides).length > 0);
             const hasSlicer = p.pageType === 'slicer' || p.gridRows !== undefined || p.cellPages !== undefined;
-            if (hasData || hasGuides || hasSlicer) {
+            if (hasData || hasGuides || hasSlicer || p._localDirtyTs) {
               heavyDataMap[p.id] = {
                 widgets: p.widgets || [],
                 miroCards: p.miroCards || [],
@@ -427,13 +448,43 @@
                 cellPages: p.cellPages || null,
                 slicerColSizes: p.slicerColSizes || null,
                 slicerRowSizes: p.slicerRowSizes || null,
-                ts: p.ts || 0
+                cols: p.cols !== undefined ? p.cols : 3,
+                ts: p.ts || 0,
+                _localDirtyTs: p._localDirtyTs || 0,
+                _hasBeenLoaded: p._hasBeenLoaded || false
               };
             }
           }
         });
 
-        D.pages = pagesMeta;
+        // Also preserve any locally created page that hasn't been synced to cloud yet
+        const incomingIds = new Set(pagesMeta.map(p => p.id));
+        D.pages.forEach(localP => {
+          if (localP && localP.id && !incomingIds.has(localP.id) && localP._localDirtyTs && (Date.now() - localP._localDirtyTs < 30000)) {
+            pagesMeta.push(localP);
+          }
+        });
+
+        D.pages = pagesMeta.map(incP => {
+          const locP = localPagesById[incP.id];
+          if (locP && (locP.ts || 0) > (incP.ts || 0)) {
+            return {
+              ...incP,
+              name: locP.name || incP.name,
+              groupId: locP.groupId || incP.groupId,
+              pageType: locP.pageType || incP.pageType,
+              zoom: locP.zoom !== undefined ? locP.zoom : incP.zoom,
+              panX: locP.panX !== undefined ? locP.panX : incP.panX,
+              panY: locP.panY !== undefined ? locP.panY : incP.panY,
+              bg: locP.bg !== undefined ? locP.bg : incP.bg,
+              bgType: locP.bgType !== undefined ? locP.bgType : incP.bgType,
+              tabColor: locP.tabColor !== undefined ? locP.tabColor : incP.tabColor,
+              cols: locP.cols !== undefined ? locP.cols : (incP.cols !== undefined ? incP.cols : 3),
+              ts: locP.ts
+            };
+          }
+          return incP;
+        });
 
         // Re-inject heavy data into ALL pages that had it loaded
         D.pages.forEach(p => {
@@ -454,7 +505,10 @@
             p.cellPages = heavyDataMap[p.id].cellPages;
             p.slicerColSizes = heavyDataMap[p.id].slicerColSizes;
             p.slicerRowSizes = heavyDataMap[p.id].slicerRowSizes;
-            if (heavyDataMap[p.id].ts) p.ts = heavyDataMap[p.id].ts;
+            if (p.cols === undefined && heavyDataMap[p.id].cols !== undefined) p.cols = heavyDataMap[p.id].cols;
+            if (heavyDataMap[p.id].ts && heavyDataMap[p.id].ts > (p.ts || 0)) p.ts = heavyDataMap[p.id].ts;
+            if (heavyDataMap[p.id]._localDirtyTs) p._localDirtyTs = heavyDataMap[p.id]._localDirtyTs;
+            if (heavyDataMap[p.id]._hasBeenLoaded) p._hasBeenLoaded = true;
           }
         });
 
@@ -463,9 +517,12 @@
         }
 
         const sanitizedMeta = D.pages.filter(p => p).map(p => ({
-          id: p.id, groupId: p.groupId, name: p.name, pageType: p.pageType,
-          zoom: p.zoom, panX: p.panX, panY: p.panY, bg: p.bg, bgType: p.bgType,
-          tabColor: p.tabColor || ''
+          id: p.id || '', groupId: p.groupId || '', name: p.name || 'Untitled Page', pageType: p.pageType || 'miro',
+          zoom: p.zoom !== undefined ? p.zoom : 100, panX: p.panX !== undefined ? p.panX : 0, panY: p.panY !== undefined ? p.panY : 0,
+          bg: p.bg || '', bgType: p.bgType || 'none',
+          tabColor: p.tabColor || '',
+          cols: p.cols !== undefined ? p.cols : 3,
+          ts: p.ts || 0
         }));
         cachePagesMeta(sanitizedMeta); // Cache to localStorage
 
@@ -562,16 +619,24 @@
   window.sv = function (saveAll = false, immediate = false) {
   if (!USER_ID) return;
 
-  // Immediately update timestamps in memory to prevent Firebase listener race conditions/reversions during debounce
+  const nowTs = Date.now();
+  window._lastLocalEditTs = nowTs;
+  window._lastLocalMetaTs = nowTs;
+  window._hasPendingLocalSave = true;
+
+  // Immediately update timestamps and dirty markers in memory to prevent Firebase listener race conditions/reversions during debounce
   const activePg = cp();
   if (activePg) {
-    const nowTs = Date.now();
     activePg.ts = nowTs;
+    activePg._localDirtyTs = nowTs;
+    window._pendingCloudPageIds.add(activePg.id);
     if (activePg.pageType === 'slicer' && activePg.cellPages) {
       Object.values(activePg.cellPages).forEach(subPid => {
         const subPg = D.pages.find(p => p && p.id === subPid);
         if (subPg) {
           subPg.ts = nowTs;
+          subPg._localDirtyTs = nowTs;
+          window._pendingCloudPageIds.add(subPid);
         }
       });
     }
@@ -580,75 +645,83 @@
   // Capture undo snapshot before saving (for Miro pages)
   if (typeof pushUndo === 'function') { try { pushUndo(); } catch(e) {} }
   if (window.SM && window.SM.events) {
-    window.SM.events.emit('data:saved', { ts: Date.now(), saveAll, immediate });
+    window.SM.events.emit('data:saved', { ts: nowTs, saveAll, immediate });
   }
 
-  // ─── Local Save Mode (Offline or SaveUpload): save to local cache only ───
-  if (_offlineMode || (_syncMode === 'saveUpload' && !window._bypassingSaveUpload)) {
-    const activePg = cp();
-    if (activePg) {
-      cachePageData(activePg.id, {
-        widgets: activePg.widgets || [],
-        miroCards: activePg.miroCards || [],
-        vGuides: activePg.vGuides || [],
-        hGuides: activePg.hGuides || [],
-        _guidesMode: activePg._guidesMode || false,
-        lockedGuides: activePg.lockedGuides || [],
-        cellStates: activePg.cellStates || {},
-        mergedCells: activePg.mergedCells || [],
-        customCells: activePg.customCells || [],
-        cellGuides: activePg.cellGuides || {},
-        _layoutGuidesMode: activePg._layoutGuidesMode || false,
-        gridRows: activePg.gridRows || null,
-        gridCols: activePg.gridCols || null,
-        cellPages: activePg.cellPages || null,
-        slicerColSizes: activePg.slicerColSizes || null,
-        slicerRowSizes: activePg.slicerRowSizes || null,
-        cols: activePg.cols !== undefined ? activePg.cols : 3,
-        ts: activePg.ts || Date.now()
+  // ─── IMMEDIATE LOCAL CACHE PERSISTENCE (ALL MODES: Realtime, SaveUpload, Offline) ───
+  // Always persist to RAM + IndexedDB + localStorage at millisecond 0 so tab switches,
+  // page switches, or network drops during the 800ms debounce never lose a single edit.
+  if (activePg) {
+    cachePageData(activePg.id, {
+      widgets: activePg.widgets || [],
+      miroCards: activePg.miroCards || [],
+      vGuides: activePg.vGuides || [],
+      hGuides: activePg.hGuides || [],
+      _guidesMode: activePg._guidesMode || false,
+      lockedGuides: activePg.lockedGuides || [],
+      cellStates: activePg.cellStates || {},
+      mergedCells: activePg.mergedCells || [],
+      customCells: activePg.customCells || [],
+      cellGuides: activePg.cellGuides || {},
+      _layoutGuidesMode: activePg._layoutGuidesMode || false,
+      gridRows: activePg.gridRows || null,
+      gridCols: activePg.gridCols || null,
+      cellPages: activePg.cellPages || null,
+      slicerColSizes: activePg.slicerColSizes || null,
+      slicerRowSizes: activePg.slicerRowSizes || null,
+      cols: activePg.cols !== undefined ? activePg.cols : 3,
+      pageType: activePg.pageType || 'miro',
+      ts: activePg.ts || nowTs,
+      _bypassVersionGuard: activePg._bypassVersionGuard || false
+    });
+
+    if (activePg.pageType === 'slicer' && activePg.cellPages) {
+      Object.values(activePg.cellPages).forEach(subPid => {
+        const subPg = D.pages.find(p => p && p.id === subPid);
+        if (subPg) {
+          cachePageData(subPid, {
+            widgets: subPg.widgets || [],
+            miroCards: subPg.miroCards || [],
+            vGuides: subPg.vGuides || [],
+            hGuides: subPg.hGuides || [],
+            _guidesMode: subPg._guidesMode || false,
+            lockedGuides: subPg.lockedGuides || [],
+            cellStates: subPg.cellStates || {},
+            mergedCells: subPg.mergedCells || [],
+            customCells: subPg.customCells || [],
+            cellGuides: subPg.cellGuides || {},
+            _layoutGuidesMode: subPg._layoutGuidesMode || false,
+            gridRows: subPg.gridRows || null,
+            gridCols: subPg.gridCols || null,
+            cellPages: subPg.cellPages || null,
+            slicerColSizes: subPg.slicerColSizes || null,
+            slicerRowSizes: subPg.slicerRowSizes || null,
+            cols: subPg.cols !== undefined ? subPg.cols : 3,
+            pageType: subPg.pageType || 'miro',
+            ts: subPg.ts || nowTs,
+            _bypassVersionGuard: subPg._bypassVersionGuard || false
+          });
+        }
       });
-
-      // Cache all subpages of the slicer page
-      if (activePg.pageType === 'slicer' && activePg.cellPages) {
-        Object.values(activePg.cellPages).forEach(subPid => {
-          const subPg = D.pages.find(p => p && p.id === subPid);
-          if (subPg) {
-            cachePageData(subPid, {
-              widgets: subPg.widgets || [],
-              miroCards: subPg.miroCards || [],
-              vGuides: subPg.vGuides || [],
-              hGuides: subPg.hGuides || [],
-              _guidesMode: subPg._guidesMode || false,
-              lockedGuides: subPg.lockedGuides || [],
-              cellStates: subPg.cellStates || {},
-              mergedCells: subPg.mergedCells || [],
-              customCells: subPg.customCells || [],
-              cellGuides: subPg.cellGuides || {},
-              _layoutGuidesMode: subPg._layoutGuidesMode || false,
-              gridRows: subPg.gridRows || null,
-              gridCols: subPg.gridCols || null,
-              cellPages: subPg.cellPages || null,
-              slicerColSizes: subPg.slicerColSizes || null,
-              slicerRowSizes: subPg.slicerRowSizes || null,
-              cols: subPg.cols !== undefined ? subPg.cols : 3,
-              ts: subPg.ts || Date.now()
-            });
-          }
-        });
-      }
     }
-    const meta = {
-      settings: D.settings, curEnv: D.curEnv, curGroup: D.curGroup,
-      environments: D.environments, groups: D.groups, inbox: D.inbox
-    };
-    cacheMeta(meta);
-    cachePagesMeta(D.pages.filter(p => p).map(p => ({
-      id: p.id, groupId: p.groupId, name: p.name, pageType: p.pageType,
-      zoom: p.zoom, panX: p.panX, panY: p.panY, bg: p.bg, bgType: p.bgType,
-      tabColor: p.tabColor || '',
-      cols: p.cols !== undefined ? p.cols : 3
-    })));
+  }
+  cacheMeta({
+    settings: D.settings, curEnv: D.curEnv, curGroup: D.curGroup,
+    environments: D.environments, groups: D.groups, inbox: D.inbox,
+    ts: nowTs
+  });
+  cachePagesMeta(D.pages.filter(p => p).map(p => ({
+    id: p.id || '', groupId: p.groupId || '', name: p.name || 'Untitled Page', pageType: p.pageType || 'miro',
+    zoom: p.zoom !== undefined ? p.zoom : 100, panX: p.panX !== undefined ? p.panX : 0, panY: p.panY !== undefined ? p.panY : 0,
+    bg: p.bg || '', bgType: p.bgType || 'none',
+    tabColor: p.tabColor || '',
+    cols: p.cols !== undefined ? p.cols : 3,
+    ts: p.ts || 0
+  })));
 
+  // ─── Local Save Mode (Offline or SaveUpload): stop after local cache save ───
+  if (_offlineMode || (_syncMode === 'saveUpload' && !window._bypassingSaveUpload)) {
+    window._hasPendingLocalSave = false;
     if (_syncMode === 'saveUpload') {
       if (activePg) {
         updateDirtyStatus(activePg.id, true);
@@ -664,6 +737,7 @@
   }
 
   const doSave = async () => {
+    window._hasPendingLocalSave = false;
     const hasPages = window.D && Array.isArray(window.D.pages) && window.D.pages.length > 0;
     if (hasPages) window._initialSyncCompleted = true;
     if (!window._initialSyncCompleted && !hasPages && !_offlineMode && !window._bypassingInitialLock) {
@@ -671,14 +745,13 @@
       return;
     }
 
-
     setOwnWrite(true);
 
     const metaRef = `users/${USER_ID}/startmine_meta`;
     const pagesMetaRef = `users/${USER_ID}/startmine_pages_meta`;
 
     // Extract metadata without payloads
-    const meta = {
+    const metaForDiff = {
       settings: D.settings,
       curEnv: D.curEnv,
       curGroup: D.curGroup,
@@ -706,9 +779,9 @@
     const updates = {};
 
     // Smart meta sync: only write if changed
-    const curMetaStr = JSON.stringify(meta);
+    const curMetaStr = JSON.stringify(metaForDiff);
     if (curMetaStr !== _lastSyncedMetaStr) {
-      updates[metaRef] = meta;
+      updates[metaRef] = { ...metaForDiff, ts: window._lastLocalMetaTs || Date.now() };
       _lastSyncedMetaStr = curMetaStr;
     }
 
@@ -754,14 +827,14 @@
     }
 
     if (saveAll) {
+      window._pendingCloudPageIds.clear();
       let _savedCount = 0, _skippedCount = 0;
-      D.pages.forEach(p => {
-        if (!p) return;
+      for (const p of D.pages) {
+        if (!p) continue;
         let widgets, miroCards, vGuides, hGuides, _guidesMode, lockedGuides, cellStates, mergedCells, customCells, ts, cellGuides, _layoutGuidesMode;
         let gridRows, gridCols, cellPages, slicerColSizes, slicerRowSizes;
         if (p.id === D.cur) {
           p.ts = Date.now(); // Update live page timestamp
-          // Active page — use live data
           widgets = p.widgets || [];
           miroCards = p.miroCards || [];
           vGuides = p.vGuides || [];
@@ -780,7 +853,7 @@
           slicerRowSizes = p.slicerRowSizes || null;
           ts = p.ts;
         } else {
-          // NON-ACTIVE page — try cache, then memory
+          // NON-ACTIVE page — hydrate asynchronously from IndexedDB + cache, then memory
           if (p._bypassVersionGuard) {
             widgets = [];
             miroCards = [];
@@ -800,14 +873,18 @@
             slicerRowSizes = null;
             ts = p.ts || Date.now();
           } else {
-            const cached = getCachedPageData(p.id);
+            const cached = typeof getCachedPageDataAsync === 'function'
+              ? await getCachedPageDataAsync(p.id)
+              : getCachedPageData(p.id);
             const hasCachedItems = cached && (
               (Array.isArray(cached.widgets) && cached.widgets.length > 0) ||
-              (Array.isArray(cached.miroCards) && cached.miroCards.length > 0)
+              (Array.isArray(cached.miroCards) && cached.miroCards.length > 0) ||
+              (Array.isArray(cached.customCells) && cached.customCells.length > 0)
             );
             const hasMemItems = (
               (Array.isArray(p.widgets) && p.widgets.length > 0) ||
-              (Array.isArray(p.miroCards) && p.miroCards.length > 0)
+              (Array.isArray(p.miroCards) && p.miroCards.length > 0) ||
+              (Array.isArray(p.customCells) && p.customCells.length > 0)
             );
             if (hasCachedItems) {
               widgets = cached.widgets || [];
@@ -849,16 +926,16 @@
               // ⛔ ABSOLUTE GUARD: Non-active page with no loaded items in memory or cache.
               // NEVER write empty shard to Firebase. Keep the existing Firebase data untouched.
               _skippedCount++;
-              return;
+              continue;
             }
           }
         }
         // ⛔ DOUBLE CHECK: Even after loading from cache, if still empty → skip
-        if (widgets.length === 0 && miroCards.length === 0 && vGuides.length === 0 && hGuides.length === 0 && !_guidesMode && customCells.length === 0 && Object.keys(cellGuides || {}).length === 0 && !_layoutGuidesMode) {
+        if (widgets.length === 0 && miroCards.length === 0 && vGuides.length === 0 && hGuides.length === 0 && !_guidesMode && customCells.length === 0 && Object.keys(cellGuides || {}).length === 0 && !_layoutGuidesMode && p.pageType !== 'slicer') {
           if (!p._bypassVersionGuard) {
             console.warn(`[SV GUARD ⛔] Page "${p.name}" resolved to 0 items — refusing to write.`);
             _skippedCount++;
-            return;
+            continue;
           }
         }
         updates[`users/${USER_ID}/startmine_pages/${p.id}`] = {
@@ -882,101 +959,113 @@
           ts
         };
         _savedCount++;
-      });
+      }
       if (_skippedCount > 0) {
         console.warn(`[SV SUMMARY] Saved: ${_savedCount} pages, Skipped (protected): ${_skippedCount} pages`);
       }
     } else {
-      // Only upload the heavy data for the active page (and subpages if active is slicer)
+      // Upload heavy data for the active page, any slicer subpages, AND any page queued in _pendingCloudPageIds during debounce
       const activePg = cp();
+      const pagesToSave = [];
+      const addPageToSave = (pgObj) => {
+        if (pgObj && !pagesToSave.some(x => x.id === pgObj.id)) {
+          pagesToSave.push(pgObj);
+        }
+      };
       if (activePg) {
-        const pagesToSave = [activePg];
+        addPageToSave(activePg);
         if (activePg.pageType === 'slicer' && activePg.cellPages) {
           Object.values(activePg.cellPages).forEach(subPid => {
             const subPg = D.pages.find(p => p && p.id === subPid);
-            if (subPg && !pagesToSave.some(p => p.id === subPid)) {
-              pagesToSave.push(subPg);
-            }
+            if (subPg) addPageToSave(subPg);
           });
         }
-
-        pagesToSave.forEach(p => {
-          if (p.id === activePg.id) {
-            // ─── DATA LOSS GUARD: Don't overwrite non-empty Firebase data with empty data ───
-            const curHasData = (activePg.widgets && activePg.widgets.length > 0) || (activePg.miroCards && activePg.miroCards.length > 0);
-            if (!curHasData && !activePg._bypassVersionGuard) {
-              const cached = typeof getCachedPageData === 'function' ? getCachedPageData(activePg.id) : null;
-              const cachedHadData = cached && (((cached.widgets || []).length > 0) || ((cached.miroCards || []).length > 0));
-              const oldHadWidgets = _lastSyncedPageData && JSON.parse(_lastSyncedPageData.widgets || '[]').length > 0;
-              const oldHadCards = _lastSyncedPageData && JSON.parse(_lastSyncedPageData.miroCards || '[]').length > 0;
-              if (oldHadWidgets || oldHadCards || cachedHadData) {
-                console.warn(`[SV GUARD ⛔] Refusing to overwrite page "${activePg.name}" with empty items — cache/cloud has items!`);
-                return;
-              }
-            }
-            trackPageVersion(activePg.id, activePg.widgets, activePg.miroCards);
-            activePg.ts = Date.now(); // Update timestamp on every save
-
-            updates[`users/${USER_ID}/startmine_pages/${activePg.id}`] = {
-              widgets: activePg.widgets || [],
-              miroCards: activePg.miroCards || [],
-              vGuides: activePg.vGuides || [],
-              hGuides: activePg.hGuides || [],
-              _guidesMode: activePg._guidesMode || false,
-              lockedGuides: activePg.lockedGuides || [],
-              cellStates: activePg.cellStates || {},
-              mergedCells: activePg.mergedCells || [],
-              customCells: activePg.customCells || [],
-              cellGuides: activePg.cellGuides || {},
-              _layoutGuidesMode: activePg._layoutGuidesMode || false,
-              gridRows: activePg.gridRows || null,
-              gridCols: activePg.gridCols || null,
-              cellPages: activePg.cellPages || null,
-              slicerColSizes: activePg.slicerColSizes || null,
-              slicerRowSizes: activePg.slicerRowSizes || null,
-              cols: activePg.cols !== undefined ? activePg.cols : 3,
-              ts: activePg.ts
-            };
-
-            _lastSyncedPageData = {
-              widgets: JSON.stringify(activePg.widgets || []),
-              miroCards: JSON.stringify(activePg.miroCards || [])
-            };
-          } else {
-            // For subpages, write their whole payload directly
-            const subHasData = (p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0);
-            if (!subHasData && !p._hasBeenLoaded && !p._bypassVersionGuard) {
-              const cached = getCachedPageData(p.id);
-              if (cached && ((cached.widgets && cached.widgets.length > 0) || (cached.miroCards && cached.miroCards.length > 0))) {
-                console.warn(`[SV GUARD ⛔] Subpage "${p.name}" (${p.id}) resolved to empty in memory but had cached data — save skipped to prevent data loss.`);
-                return;
-              }
-            }
-            trackPageVersion(p.id, p.widgets, p.miroCards);
-            p.ts = Date.now();
-
-            updates[`users/${USER_ID}/startmine_pages/${p.id}`] = {
-              widgets: p.widgets || [],
-              miroCards: p.miroCards || [],
-              vGuides: p.vGuides || [],
-              hGuides: p.hGuides || [],
-              _guidesMode: p._guidesMode || false,
-              lockedGuides: p.lockedGuides || [],
-              cellStates: p.cellStates || {},
-              mergedCells: p.mergedCells || [],
-              customCells: p.customCells || [],
-              cellGuides: p.cellGuides || {},
-              _layoutGuidesMode: p._layoutGuidesMode || false,
-              gridRows: p.gridRows || null,
-              gridCols: p.gridCols || null,
-              cellPages: p.cellPages || null,
-              slicerColSizes: p.slicerColSizes || null,
-              slicerRowSizes: p.slicerRowSizes || null,
-              ts: p.ts
-            };
-          }
-        });
       }
+      if (window._pendingCloudPageIds && window._pendingCloudPageIds.size > 0) {
+        window._pendingCloudPageIds.forEach(pid => {
+          const pendPg = D.pages.find(p => p && p.id === pid);
+          if (pendPg) addPageToSave(pendPg);
+        });
+        window._pendingCloudPageIds.clear();
+      }
+
+      pagesToSave.forEach(p => {
+        if (activePg && p.id === activePg.id) {
+          // ─── DATA LOSS GUARD: Don't overwrite non-empty Firebase data with empty data ───
+          const curHasData = (activePg.widgets && activePg.widgets.length > 0) || (activePg.miroCards && activePg.miroCards.length > 0) || (activePg.customCells && activePg.customCells.length > 0) || activePg.pageType === 'slicer';
+          if (!curHasData && !activePg._bypassVersionGuard) {
+            const cached = typeof getCachedPageData === 'function' ? getCachedPageData(activePg.id) : null;
+            const cachedHadData = cached && (((cached.widgets || []).length > 0) || ((cached.miroCards || []).length > 0));
+            const oldHadWidgets = _lastSyncedPageData && JSON.parse(_lastSyncedPageData.widgets || '[]').length > 0;
+            const oldHadCards = _lastSyncedPageData && JSON.parse(_lastSyncedPageData.miroCards || '[]').length > 0;
+            if (oldHadWidgets || oldHadCards || cachedHadData) {
+              console.warn(`[SV GUARD ⛔] Refusing to overwrite page "${activePg.name}" with empty items — cache/cloud has items!`);
+              return;
+            }
+          }
+          trackPageVersion(activePg.id, activePg.widgets, activePg.miroCards);
+          activePg.ts = Date.now(); // Update timestamp on every save
+
+          updates[`users/${USER_ID}/startmine_pages/${activePg.id}`] = {
+            widgets: activePg.widgets || [],
+            miroCards: activePg.miroCards || [],
+            vGuides: activePg.vGuides || [],
+            hGuides: activePg.hGuides || [],
+            _guidesMode: activePg._guidesMode || false,
+            lockedGuides: activePg.lockedGuides || [],
+            cellStates: activePg.cellStates || {},
+            mergedCells: activePg.mergedCells || [],
+            customCells: activePg.customCells || [],
+            cellGuides: activePg.cellGuides || {},
+            _layoutGuidesMode: activePg._layoutGuidesMode || false,
+            gridRows: activePg.gridRows || null,
+            gridCols: activePg.gridCols || null,
+            cellPages: activePg.cellPages || null,
+            slicerColSizes: activePg.slicerColSizes || null,
+            slicerRowSizes: activePg.slicerRowSizes || null,
+            cols: activePg.cols !== undefined ? activePg.cols : 3,
+            ts: activePg.ts
+          };
+
+          _lastSyncedPageData = {
+            widgets: JSON.stringify(activePg.widgets || []),
+            miroCards: JSON.stringify(activePg.miroCards || [])
+          };
+        } else {
+          // For subpages or recently switched dirty pages, write their whole payload directly
+          const subHasData = (p.widgets && p.widgets.length > 0) || (p.miroCards && p.miroCards.length > 0) || (p.customCells && p.customCells.length > 0) || p.pageType === 'slicer';
+          if (!subHasData && !p._hasBeenLoaded && !p._bypassVersionGuard) {
+            const cached = getCachedPageData(p.id);
+            if (cached && ((cached.widgets && cached.widgets.length > 0) || (cached.miroCards && cached.miroCards.length > 0))) {
+              console.warn(`[SV GUARD ⛔] Page "${p.name}" (${p.id}) resolved to empty in memory but had cached data — save skipped to prevent data loss.`);
+              return;
+            }
+          }
+          trackPageVersion(p.id, p.widgets, p.miroCards);
+          p.ts = Date.now();
+
+          updates[`users/${USER_ID}/startmine_pages/${p.id}`] = {
+            widgets: p.widgets || [],
+            miroCards: p.miroCards || [],
+            vGuides: p.vGuides || [],
+            hGuides: p.hGuides || [],
+            _guidesMode: p._guidesMode || false,
+            lockedGuides: p.lockedGuides || [],
+            cellStates: p.cellStates || {},
+            mergedCells: p.mergedCells || [],
+            customCells: p.customCells || [],
+            cellGuides: p.cellGuides || {},
+            _layoutGuidesMode: p._layoutGuidesMode || false,
+            gridRows: p.gridRows || null,
+            gridCols: p.gridCols || null,
+            cellPages: p.cellPages || null,
+            slicerColSizes: p.slicerColSizes || null,
+            slicerRowSizes: p.slicerRowSizes || null,
+            cols: p.cols !== undefined ? p.cols : 3,
+            ts: p.ts
+          };
+        }
+      });
     }
 
     // Skip empty updates (nothing changed)
@@ -991,8 +1080,9 @@
         setOwnWrite(false);
         _lastSvTs = Date.now();
         D.pages.forEach(pg => {
-          if (pg && pg._bypassVersionGuard) {
-            delete pg._bypassVersionGuard;
+          if (pg) {
+            if (pg._bypassVersionGuard) delete pg._bypassVersionGuard;
+            if (pg._localDirtyTs && pg._localDirtyTs <= _lastSvTs) delete pg._localDirtyTs;
           }
         });
         // Cache active page (and subpages if slicer) to localStorage after successful save
@@ -1026,6 +1116,7 @@
               cellPages: p.cellPages || null,
               slicerColSizes: p.slicerColSizes || null,
               slicerRowSizes: p.slicerRowSizes || null,
+              cols: p.cols !== undefined ? p.cols : 3,
               ts: p.ts
             });
           });
@@ -1049,8 +1140,15 @@
   };
 
   clearTimeout(_svTimer);
-  if (immediate) doSave();
-  else _svTimer = setTimeout(doSave, 800);
+  if (immediate) {
+    _svTimer = null;
+    doSave();
+  } else {
+    _svTimer = setTimeout(() => {
+      _svTimer = null;
+      doSave();
+    }, 800);
+  }
 };
   window.SM.data.sv = window.sv;
   window.SM.core.expose('sv', window.sv);
@@ -1078,6 +1176,8 @@
         cellPages: activePg.cellPages || null,
         slicerColSizes: activePg.slicerColSizes || null,
         slicerRowSizes: activePg.slicerRowSizes || null,
+        cols: activePg.cols !== undefined ? activePg.cols : 3,
+        pageType: activePg.pageType || 'miro',
         ts: activePg.ts || Date.now()
       });
 
@@ -1098,6 +1198,8 @@
               customCells: subPg.customCells || [],
               cellGuides: subPg.cellGuides || {},
               _layoutGuidesMode: subPg._layoutGuidesMode || false,
+              cols: subPg.cols !== undefined ? subPg.cols : 3,
+              pageType: subPg.pageType || 'miro',
               ts: subPg.ts || Date.now()
             });
           }
@@ -1106,7 +1208,8 @@
     }
     const meta = {
       settings: D.settings, curEnv: D.curEnv, curGroup: D.curGroup,
-      environments: D.environments, groups: D.groups, inbox: D.inbox
+      environments: D.environments, groups: D.groups, inbox: D.inbox,
+      ts: window._lastLocalMetaTs || Date.now()
     };
     cacheMeta(meta);
     cachePagesMeta(D.pages.filter(p => p).map(p => ({
@@ -1119,7 +1222,9 @@
       panY: p.panY !== undefined ? p.panY : 0,
       bg: p.bg || '',
       bgType: p.bgType || 'none',
-      tabColor: p.tabColor || ''
+      tabColor: p.tabColor || '',
+      cols: p.cols !== undefined ? p.cols : 3,
+      ts: p.ts || 0
     })));
   } catch(e) { console.warn('[FORCE SAVE]', e); }
 };
@@ -1128,10 +1233,11 @@
 
   // Extracted triggerManualSave
   window.triggerManualSave = function () {
+    forceLocalSave();
     if (window._syncMode === 'saveUpload') {
       const activePg = typeof cp === 'function' ? cp() : null;
       if (activePg) {
-        if (typeof showToast === 'function') showToast('☁️ Saving page to cloud...', 2000);
+        if (typeof showToast === 'function') showToast('☁️ جاري حفظ الصفحة على السحابة...', 2000);
         window._bypassingSaveUpload = true;
         sv(false, true);
         window._bypassingSaveUpload = false;
@@ -1148,31 +1254,47 @@
     } else if (window._syncMode === 'offline') {
       if (typeof syncNow === 'function') syncNow();
     } else {
-      if (typeof showToast === 'function') showToast('⚡ Realtime Mode — changes auto-saved to cloud');
+      // Realtime mode: flush any pending debounced save immediately to cloud + local cache
+      sv(false, true);
+      if (typeof showToast === 'function') showToast('⚡ تم حفظ جميع التعديلات فوراً (محلياً وعلى السحابة)');
     }
   };
   window.SM.data.triggerManualSave = window.triggerManualSave;
   window.SM.core.expose('triggerManualSave', window.triggerManualSave);
 
-  // Extracted setOwnWrite
+  // Extracted setOwnWrite (Ref-counted + cooldown window to prevent multi-path listener echo race conditions)
   window.setOwnWrite = function (val) {
-  _ownWrite = val;
-  if (val) _ownWriteTs = Date.now();
-};
+    if (val) {
+      _activeWriteCount++;
+      _ownWrite = true;
+      _ownWriteTs = Date.now();
+    } else {
+      _activeWriteCount = Math.max(0, _activeWriteCount - 1);
+      _ownWriteCooldownUntil = Date.now() + OWN_WRITE_COOLDOWN_MS;
+      if (_activeWriteCount === 0) {
+        _ownWrite = false;
+      }
+    }
+  };
   window.SM.data.setOwnWrite = window.setOwnWrite;
   window.SM.core.expose('setOwnWrite', window.setOwnWrite);
 
   // Extracted isOwnWrite
   window.isOwnWrite = function () {
-  if (!_ownWrite) return false;
-  // Safety timeout: if _ownWrite has been true for too long, auto-reset
-  if (Date.now() - _ownWriteTs > OWN_WRITE_TIMEOUT) {
-    console.warn('[DATA GUARD] _ownWrite was stuck for >5s — auto-resetting');
-    _ownWrite = false;
-    return false;
-  }
-  return true;
-};
+    // 1. If a local debounced save is waiting to fire (800ms window), block incoming listener overwrites!
+    if (window._hasPendingLocalSave) return true;
+    // 2. If we are within the post-write echo cooldown window (1.5s), block listener echoes!
+    if (Date.now() < _ownWriteCooldownUntil) return true;
+    // 3. Check active in-flight write count with safety timeout
+    if (!_ownWrite && _activeWriteCount <= 0) return false;
+    if (Date.now() - _ownWriteTs > OWN_WRITE_TIMEOUT) {
+      console.warn('[DATA GUARD] _ownWrite was stuck for >8s — auto-resetting');
+      _ownWrite = false;
+      _activeWriteCount = 0;
+      return false;
+    }
+    return true;
+  };
   window.SM.data.isOwnWrite = window.isOwnWrite;
   window.SM.core.expose('isOwnWrite', window.isOwnWrite);
 

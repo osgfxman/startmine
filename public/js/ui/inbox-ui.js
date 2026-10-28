@@ -73,6 +73,16 @@
     rm.className = 'inbox-rm';
     rm.textContent = '✕';
     rm.onclick = () => {
+      const itemLabel = item.label || item.text || item.url || 'هذا العنصر';
+      if (!confirm(`⚠️ هل أنت متأكد من حذف عنصر الـ Inbox "${itemLabel}"؟`)) return;
+      if (typeof window.addToRecycleBin === 'function') {
+        window.addToRecycleBin({
+          type: 'inbox',
+          title: itemLabel,
+          url: item.url || '',
+          data: item
+        });
+      }
       D.inbox = D.inbox.filter((x) => x.id !== item.id);
       sv(); buildInbox();
     };

@@ -3359,12 +3359,18 @@ function buildMiroGridCard(card) {
     }).sort((a, b) => b - a);
 
     if (fullRows.length > 0 && card.rows - fullRows.length >= 1) {
-      e.preventDefault(); pushUndo();
+      e.preventDefault();
+      const hasRowContent = fullRows.some(r => (card.cells[r] || []).some(val => val && String(val).trim()));
+      if (hasRowContent && !confirm(`⚠️ هل أنت متأكد من حذف ${fullRows.length} صف يحتوي على بيانات؟`)) return;
+      pushUndo();
       fullRows.forEach(r => { card.cells.splice(r, 1); card.rowHeights.splice(r, 1); card.rows--; });
       selectedCells.clear(); sv(); buildMiroCanvas(); return;
     }
     if (fullCols.length > 0 && card.cols - fullCols.length >= 1) {
-      e.preventDefault(); pushUndo();
+      e.preventDefault();
+      const hasColContent = fullCols.some(c => card.cells.some(row => row && row[c] && String(row[c]).trim()));
+      if (hasColContent && !confirm(`⚠️ هل أنت متأكد من حذف ${fullCols.length} عمود يحتوي على بيانات؟`)) return;
+      pushUndo();
       fullCols.forEach(c => { card.cells.forEach(row => row.splice(c, 1)); card.colWidths.splice(c, 1); card.cols--; });
       selectedCells.clear(); sv(); buildMiroCanvas(); return;
     }
@@ -3578,14 +3584,25 @@ function buildMiroGridCard(card) {
   // Add Row (inherit last row height)
   toolbar.appendChild(mkBtn(icons.addRow, 'Add Row', () => { pushUndo(); card.rows++; card.cells.push(Array(card.cols).fill('')); card.rowHeights.push(card.rowHeights[card.rowHeights.length - 1] || 40); sv(); buildMiroCanvas(); }));
   // Remove Row
-  toolbar.appendChild(mkBtn(icons.removeRow, 'Remove Row', () => { if (card.rows <= 1) return; pushUndo(); card.rows--; card.cells.pop(); card.rowHeights.pop(); sv(); buildMiroCanvas(); }));
+  toolbar.appendChild(mkBtn(icons.removeRow, 'Remove Row', () => {
+    if (card.rows <= 1) return;
+    const lastRow = card.cells[card.rows - 1] || [];
+    const hasContent = lastRow.some(val => val && String(val).trim());
+    if (hasContent && !confirm('⚠️ الصف الأخير يحتوي على بيانات. هل أنت متأكد من حذفه؟')) return;
+    pushUndo(); card.rows--; card.cells.pop(); card.rowHeights.pop(); sv(); buildMiroCanvas();
+  }));
 
   toolbar.appendChild(mkSep());
 
   // Add Col (inherit last col width)
   toolbar.appendChild(mkBtn(icons.addCol, 'Add Column', () => { pushUndo(); card.cols++; card.cells.forEach(r => r.push('')); card.colWidths.push(card.colWidths[card.colWidths.length - 1] || 120); sv(); buildMiroCanvas(); }));
   // Remove Col
-  toolbar.appendChild(mkBtn(icons.removeCol, 'Remove Column', () => { if (card.cols <= 1) return; pushUndo(); card.cols--; card.cells.forEach(r => r.pop()); card.colWidths.pop(); sv(); buildMiroCanvas(); }));
+  toolbar.appendChild(mkBtn(icons.removeCol, 'Remove Column', () => {
+    if (card.cols <= 1) return;
+    const hasContent = card.cells.some(r => r && r[card.cols - 1] && String(r[card.cols - 1]).trim());
+    if (hasContent && !confirm('⚠️ العمود الأخير يحتوي على بيانات. هل أنت متأكد من حذفه؟')) return;
+    pushUndo(); card.cols--; card.cells.forEach(r => r.pop()); card.colWidths.pop(); sv(); buildMiroCanvas();
+  }));
 
   toolbar.appendChild(mkSep());
 
@@ -4147,7 +4164,12 @@ function buildMiroMindMap(card) {
         addSib(card.root);
         sv(); buildMiroCanvas();
       } else if (ke.key === 'Delete' || ke.key === 'Backspace') {
-        if (depth > 0) { removeNodeById(card.root, node.id); sv(); buildMiroCanvas(); }
+        if (depth > 0) {
+          if (!confirm(`⚠️ هل أنت متأكد من حذف الفرع "${node.text || 'بدون عنوان'}" وجميع تفرعاته؟`)) return;
+          if (typeof pushUndo === 'function') pushUndo();
+          removeNodeById(card.root, node.id);
+          sv(); buildMiroCanvas();
+        }
       }
     });
 
@@ -4202,6 +4224,8 @@ function buildMiroMindMap(card) {
       rmBtn.style.cssText = 'position:absolute;left:-22px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;border:none;background:rgba(255,60,60,.8);color:#fff;font-size:.85rem;cursor:pointer;display:none;align-items:center;justify-content:center;line-height:1;';
       rmBtn.onclick = (e) => {
         e.stopPropagation();
+        if (!confirm(`⚠️ هل أنت متأكد من حذف الفرع "${node.text || 'بدون عنوان'}" وجميع تفرعاته؟`)) return;
+        if (typeof pushUndo === 'function') pushUndo();
         removeNodeById(card.root, node.id);
         sv(); buildMiroCanvas();
       };
@@ -4795,6 +4819,25 @@ function buildMiroTrello(card) {
         txt.contentEditable = 'false'; // Revert to read-only on blur
         const hasContent = txt.textContent.trim() || txt.querySelector('img');
         if (!hasContent) {
+          const hadPrevContent = !!(c.text && c.text.trim()) || !!(c.html && c.html.trim());
+          if (hadPrevContent) {
+            if (!confirm(`⚠️ لقد قمت بمسح نص البطاقة "${(c.text || '').slice(0, 40)}". هل تريد حذف هذه البطاقة؟ (اضغط Cancel لاستعادة النص السابق)`)) {
+              if (c.html) txt.innerHTML = c.html;
+              else txt.textContent = c.text || '';
+              return;
+            }
+            if (typeof pushUndo === 'function') pushUndo();
+            if (typeof window.addToRecycleBin === 'function') {
+              const curP = typeof cp === 'function' ? cp() : null;
+              window.addToRecycleBin({
+                type: 'trello_card',
+                title: c.text || 'بطاقة Trello',
+                data: c,
+                sourcePageId: curP ? curP.id : '',
+                sourcePageName: curP ? curP.name : ''
+              });
+            }
+          }
           card.cards.splice(ci, 1);
           sv(); renderCards(); updateCount(); updateProgress();
           return;
@@ -4905,6 +4948,18 @@ function buildMiroTrello(card) {
       cdel.style.color = '#e55';
       cdel.onclick = (e) => {
         e.stopPropagation();
+        if (!confirm(`⚠️ هل أنت متأكد من حذف بطاقة "${(c.text || 'بدون عنوان').slice(0, 50)}"؟`)) return;
+        if (typeof pushUndo === 'function') pushUndo();
+        if (typeof window.addToRecycleBin === 'function') {
+          const curP = typeof cp === 'function' ? cp() : null;
+          window.addToRecycleBin({
+            type: 'trello_card',
+            title: c.text || 'بطاقة Trello',
+            data: c,
+            sourcePageId: curP ? curP.id : '',
+            sourcePageName: curP ? curP.name : ''
+          });
+        }
         card.cards.splice(ci, 1);
         sv(); renderCards(); updateCount(); updateProgress();
       };
@@ -4929,6 +4984,18 @@ function buildMiroTrello(card) {
       permDel.style.color = '#e55';
       permDel.onclick = (e) => {
         e.stopPropagation();
+        if (!confirm(`⚠️ هل أنت متأكد من الحذف النهائي لبطاقة "${(c.text || 'بدون عنوان').slice(0, 50)}" من الأرشيف؟`)) return;
+        if (typeof pushUndo === 'function') pushUndo();
+        if (typeof window.addToRecycleBin === 'function') {
+          const curP = typeof cp === 'function' ? cp() : null;
+          window.addToRecycleBin({
+            type: 'trello_card',
+            title: c.text || 'بطاقة Trello مؤرشفة',
+            data: c,
+            sourcePageId: curP ? curP.id : '',
+            sourcePageName: curP ? curP.name : ''
+          });
+        }
         const idx = card.archived.indexOf(c);
         if (idx >= 0) card.archived.splice(idx, 1);
         sv(); renderArchive();

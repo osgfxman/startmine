@@ -352,6 +352,20 @@
       if (targetWidget) {
         if (!Array.isArray(targetWidget.items)) targetWidget.items = [];
         targetWidget.items.push(item.data);
+        // Also mirror to matching bwidget in miroCards if present
+        if (targetPage && Array.isArray(targetPage.miroCards)) {
+          const matchCard = targetPage.miroCards.find(c => c && c.type === 'bwidget' && (c.id === targetWidget.id || (c.title && targetWidget.title && c.title.trim().toLowerCase() === targetWidget.title.trim().toLowerCase())));
+          if (matchCard) {
+            if (!Array.isArray(matchCard.items)) matchCard.items = [];
+            if (!matchCard.items.some(bm => bm && bm.id === item.data.id)) {
+              matchCard.items.push(JSON.parse(JSON.stringify(item.data)));
+            }
+          }
+        }
+        if (targetPage) {
+          targetPage.ts = Date.now();
+          if (typeof window.cachePageDataSafe === 'function') window.cachePageDataSafe(targetPage.id, targetPage);
+        }
         restored = true;
       }
     } else if (item.type === 'widget') {
@@ -359,6 +373,12 @@
       if (targetPage) {
         if (!Array.isArray(targetPage.widgets)) targetPage.widgets = [];
         targetPage.widgets.push(item.data);
+        if (targetPage.pageType === 'miro' && typeof window.syncWidgetsBookmarksToMiro === 'function') {
+          if (!Array.isArray(targetPage.miroCards)) targetPage.miroCards = [];
+          window.syncWidgetsBookmarksToMiro([item.data], targetPage.miroCards);
+        }
+        targetPage.ts = Date.now();
+        if (typeof window.cachePageDataSafe === 'function') window.cachePageDataSafe(targetPage.id, targetPage);
         restored = true;
       }
     } else if (item.type === 'card') {
@@ -366,11 +386,28 @@
       if (targetPage) {
         if (!Array.isArray(targetPage.miroCards)) targetPage.miroCards = [];
         targetPage.miroCards.push(item.data);
+        if (item.data && item.data.type === 'bwidget' && typeof window.syncMiroBookmarksToWidgets === 'function') {
+          if (!Array.isArray(targetPage.widgets)) targetPage.widgets = [];
+          window.syncMiroBookmarksToWidgets([item.data], targetPage.widgets, targetPage.cols || 3);
+        }
+        targetPage.ts = Date.now();
+        if (typeof window.cachePageDataSafe === 'function') window.cachePageDataSafe(targetPage.id, targetPage);
         restored = true;
       }
     } else if (item.type === 'page') {
-      if (!window.D.pages.some(p => p.id === item.data.id)) {
-        window.D.pages.push(item.data);
+      const pageObj = item.data;
+      if (pageObj) {
+        if (window.D.groups && !window.D.groups.some(g => g && g.id === pageObj.groupId)) {
+          pageObj.groupId = (window.D.curGroup && window.D.curGroup !== '__all__') ? window.D.curGroup : (window.D.groups[0]?.id || 'g0');
+        }
+        pageObj.ts = Date.now();
+        const existingIdx = window.D.pages.findIndex(p => p && p.id === pageObj.id);
+        if (existingIdx === -1) {
+          window.D.pages.push(pageObj);
+        } else {
+          window.D.pages[existingIdx] = pageObj;
+        }
+        if (typeof window.cachePageDataSafe === 'function') window.cachePageDataSafe(pageObj.id, pageObj);
         restored = true;
       }
     }
