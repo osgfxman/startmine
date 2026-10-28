@@ -1783,32 +1783,39 @@ document.getElementById('miro-img-file').onchange = function (e) {
   const reader = new FileReader();
   reader.onload = (ev) => {
     const base64 = ev.target.result;
-    // Show preview
+    // Show preview immediately
     document.getElementById('miro-img-preview').style.display = 'block';
     document.getElementById('miro-img-prev-el').src = base64;
 
-    // Get natural dimensions
     const tempImg = new Image();
-    tempImg.onload = () => {
-      const natW = tempImg.naturalWidth;
-      const natH = tempImg.naturalHeight;
-
-      // Upload to ImgBB (with compression)
+    tempImg.onload = async () => {
+      const natW = tempImg.naturalWidth || 400;
+      const natH = tempImg.naturalHeight || 300;
       const btn = document.getElementById('ok-miro-image');
-      btn.textContent = 'Compressing…';
-      btn.disabled = true;
-      uploadToImgBB(base64).then(url => {
-        if (url) {
-          _miroImgData = { imgbbUrl: url, naturalW: natW, naturalH: natH };
-          btn.textContent = 'Add Image';
-          btn.disabled = false;
-        } else {
-          btn.textContent = '⚠️ Upload Failed — Pick Again';
-          btn.disabled = false;
-          _miroImgData = null;
-          if (typeof showToast === 'function') showToast('⚠️ Image upload failed. Try a smaller image or check connection.', 4000);
+
+      const compressed = await compressBase64(base64);
+      const thumbPreview = typeof window.createMicroPreview === 'function'
+        ? await window.createMicroPreview(compressed)
+        : null;
+
+      // Enable "Add Image" immediately so the user never has to wait or lose the image
+      const pendingUploadPromise = uploadImageSmart(compressed, { label: f.name || 'image' });
+      _miroImgData = {
+        compressedBase64: compressed,
+        thumbPreview,
+        naturalW: natW,
+        naturalH: natH,
+        uploadPromise: pendingUploadPromise,
+        uploadResult: null
+      };
+      btn.textContent = 'Add Image';
+      btn.disabled = false;
+
+      pendingUploadPromise.then(res => {
+        if (_miroImgData && _miroImgData.uploadPromise === pendingUploadPromise && res) {
+          _miroImgData.uploadResult = res;
         }
-      });
+      }).catch(() => {});
     };
     tempImg.src = base64;
   };
@@ -1816,8 +1823,11 @@ document.getElementById('miro-img-file').onchange = function (e) {
   this.value = '';
 };
 
-document.getElementById('ok-miro-image').onclick = () => {
+document.getElementById('ok-miro-image').onclick = async () => {
   if (!_miroImgData) return;
+  const imgData = _miroImgData;
+  _miroImgData = null;
+
   const label = document.getElementById('miro-img-label').value.trim();
   const targetPageId = window._miroAddTargetPageId || D.cur;
   const page = D.pages.find(p => p.id === targetPageId) || cp();
@@ -1835,23 +1845,38 @@ document.getElementById('ok-miro-image').onclick = () => {
 
   // Scale to max 400px wide, preserving aspect ratio
   const maxW = 400;
-  let w = _miroImgData.naturalW;
-  let h = _miroImgData.naturalH;
+  let w = imgData.naturalW;
+  let h = imgData.naturalH;
   if (w > maxW) {
     h = Math.round((h / w) * maxW);
     w = maxW;
   }
 
+  const cardId = uid();
+  if (typeof window.saveImageVaultBlob === 'function' && imgData.compressedBase64) {
+    await window.saveImageVaultBlob([`img_cid_${cardId}`], imgData.compressedBase64);
+  }
+
+  const upRes = imgData.uploadResult;
+  const initialUrl = (upRes && upRes.url) ? upRes.url : imgData.compressedBase64;
+
   const card = {
-    id: uid(),
+    id: cardId,
     type: 'image',
-    imageUrl: _miroImgData.imgbbUrl,
+    imageUrl: initialUrl,
     label: label || '',
     x: cx - w / 2,
     y: cy - h / 2,
     w,
     h,
   };
+  if (imgData.thumbPreview) card.thumbPreview = imgData.thumbPreview;
+  if (upRes) {
+    if (upRes.driveFileId) card.driveFileId = upRes.driveFileId;
+    if (upRes.driveUrl) card.driveUrl = upRes.driveUrl;
+    if (upRes.imgbbUrl) card.imgbbUrl = upRes.imgbbUrl;
+  }
+
   page.miroCards.push(card);
   sv();
   if (window._miroAddTargetPageId) {
@@ -1862,21 +1887,25 @@ document.getElementById('ok-miro-image').onclick = () => {
   if (typeof buildOutline === 'function') buildOutline();
   window._miroAddTargetPageId = null;
   closeM('m-miro-image');
-  _miroImgData = null;
+
+  if (!upRes || !upRes.url) {
+    localizeCardImageUrl(card);
+  }
 };
 
-// ─── Drag & Drop Images onto Canvas ───
+// ─── Drag & Drop & Cloud Upload Engine (Google Drive + Local Vault + ImgBB) ───
 function getImgBBKey() {
   return (window.D && D.settings && D.settings.imgbbKey) || '129f1b49da234235959ee4405ac9ebb1';
 }
 
 // Compress base64 image using Canvas before upload
 // Preserves transparency (PNG) when detected, uses JPEG for opaque images
-function compressBase64(base64, maxDim = 1000, quality = 0.75) {
+function compressBase64(base64, maxDim = 1600, quality = 0.82) {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
       let w = img.naturalWidth, h = img.naturalHeight;
+      if (!w || !h) return resolve(base64);
       // Only resize if too large
       if (w > maxDim || h > maxDim) {
         if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
@@ -1890,15 +1919,13 @@ function compressBase64(base64, maxDim = 1000, quality = 0.75) {
       const isPNG = base64.includes('data:image/png') || base64.includes('data:image/webp');
       let hasAlpha = false;
       if (isPNG) {
-        // Scan the entire canvas to accurately detect any transparent pixels
         try {
           const data = ctx.getImageData(0, 0, w, h).data;
           for (let i = 3; i < data.length; i += 4) {
             if (data[i] < 254) { hasAlpha = true; break; }
           }
-        } catch(e) { hasAlpha = isPNG; }
+        } catch (e) { hasAlpha = isPNG; }
       }
-      // PNG for transparency, JPEG for opaque (much smaller)
       const format = hasAlpha ? 'image/png' : 'image/jpeg';
       const compressed = canvas.toDataURL(format, quality);
       resolve(compressed);
@@ -1907,26 +1934,93 @@ function compressBase64(base64, maxDim = 1000, quality = 0.75) {
     img.src = base64;
   });
 }
+window.compressBase64 = compressBase64;
 
-async function uploadToImgBB(base64) {
+async function uploadToImgBBOnly(compressedBase64) {
   try {
-    // Compress first to avoid 400 errors from oversized uploads
-    const compressed = await compressBase64(base64);
-    const raw = compressed.split(',')[1];
-    if (!raw || raw.length < 100) { console.warn('[uploadToImgBB] Invalid compressed data'); return null; }
-    const sizeKB = Math.round(raw.length * 3 / 4 / 1024);
-    console.log(`[uploadToImgBB] Compressed size: ${sizeKB}KB`);
+    const raw = compressedBase64.split(',')[1];
+    if (!raw || raw.length < 100) return null;
     const fd = new FormData();
     fd.append('image', raw);
     const resp = await fetch(`https://api.imgbb.com/1/upload?key=${getImgBBKey()}`, { method: 'POST', body: fd });
     const data = await resp.json();
-    if (data.success) return data.data.url;
-    console.warn('[uploadToImgBB] API error:', JSON.stringify(data));
+    if (data && data.success && data.data && data.data.url) {
+      return data.data.url;
+    }
     return null;
   } catch (e) {
-    console.warn('[uploadToImgBB] Error:', e);
+    console.warn('[uploadToImgBBOnly] Error:', e);
     return null;
   }
+}
+
+// Smart Dual-Cloud Upload: Local IndexedDB Vault + Google Drive (Primary) + ImgBB (Mirror)
+async function uploadImageSmart(base64, opts = {}) {
+  try {
+    const compressed = base64.startsWith('data:image') ? await compressBase64(base64) : base64;
+    const raw = compressed.split(',')[1];
+    if (!raw || raw.length < 100) {
+      console.warn('[uploadImageSmart] Invalid image data');
+      return null;
+    }
+
+    const thumbPreview = typeof window.createMicroPreview === 'function'
+      ? await window.createMicroPreview(compressed)
+      : null;
+
+    if (opts.cardId && typeof window.saveImageVaultBlob === 'function') {
+      await window.saveImageVaultBlob([`img_cid_${opts.cardId}`], compressed);
+    }
+
+    // Run Google Drive upload and ImgBB upload in parallel
+    const [driveRes, imgbbUrl] = await Promise.all([
+      typeof window.uploadImageToGoogleDrive === 'function'
+        ? window.uploadImageToGoogleDrive(compressed, opts.label || opts.cardId || 'startmine_img', {
+            cardId: opts.cardId,
+            interactive: Boolean(opts.interactive)
+          })
+        : Promise.resolve(null),
+      uploadToImgBBOnly(compressed)
+    ]);
+
+    const driveUrl = driveRes ? driveRes.driveUrl : null;
+    const driveFileId = driveRes ? driveRes.driveFileId : null;
+    // Prefer Google Drive URL if available, otherwise ImgBB URL
+    const primaryUrl = driveUrl || imgbbUrl || null;
+
+    if (typeof window.saveImageVaultBlob === 'function') {
+      const keys = [
+        opts.cardId ? `img_cid_${opts.cardId}` : null,
+        driveFileId ? `img_drv_${driveFileId}` : null,
+        driveUrl,
+        imgbbUrl,
+        primaryUrl
+      ].filter(Boolean);
+      if (keys.length) {
+        await window.saveImageVaultBlob(keys, compressed);
+      }
+    }
+
+    if (!primaryUrl) return null;
+
+    return {
+      url: primaryUrl,
+      driveFileId,
+      driveUrl,
+      imgbbUrl,
+      thumbPreview,
+      compressedBase64: compressed
+    };
+  } catch (e) {
+    console.warn('[uploadImageSmart] Error:', e);
+    return null;
+  }
+}
+window.uploadImageSmart = uploadImageSmart;
+
+async function uploadToImgBB(base64, opts = {}) {
+  const res = await uploadImageSmart(base64, opts);
+  return res ? res.url : null;
 }
 
 function fetchMiroImageViaExtension(url) {
@@ -1944,8 +2038,7 @@ function fetchMiroImageViaExtension(url) {
     };
     window.addEventListener('message', handler);
     window.postMessage({ type: 'STARTMINE_FETCH_MIRO', url: url }, '*');
-    
-    // Timeout after 10 seconds
+
     setTimeout(() => {
       window.removeEventListener('message', handler);
       reject(new Error('Extension fetch timeout'));
@@ -1953,32 +2046,39 @@ function fetchMiroImageViaExtension(url) {
   });
 }
 
-// Download an external image URL, convert to base64 via canvas, upload to ImgBB
-async function fetchAndUploadToImgBB(url) {
+// Download an external image URL, convert to base64, upload to Google Drive + ImgBB
+async function fetchAndUploadToImgBB(url, opts = {}) {
   try {
     if (url.includes('miro.com/api')) {
       try {
         console.log('[fetchAndUpload] Attempting to fetch Miro image via custom extension...');
         const base64 = await fetchMiroImageViaExtension(url);
         if (base64) {
-          console.log('[fetchAndUpload] Successfully fetched Miro image via extension!');
-          const uploaded = await uploadToImgBB(base64);
-          return uploaded;
+          const uploaded = await uploadImageSmart(base64, opts);
+          return opts.returnDetails ? uploaded : (uploaded ? uploaded.url : null);
         }
       } catch (extErr) {
         console.warn('[fetchAndUpload] Extension fetch failed, falling back to canvas:', extErr.message);
-        if (typeof showToast === 'function') {
-          showToast(`⚠️ خطأ الهجرة: ${extErr.message}`, 6000);
-        }
       }
     }
 
+    // Try fetch with no-referrer first (handles ImgBB & CORS-enabled CDNs cleanly)
+    const bustUrl = /ibb\.co|imgbb\.com/i.test(url)
+      ? url + (url.includes('?') ? '&' : '?') + `_wake=${Date.now()}`
+      : url;
+
     return await new Promise((resolve) => {
       const img = new Image();
+      img.referrerPolicy = 'no-referrer';
       img.crossOrigin = url.includes('miro.com/api') ? 'use-credentials' : 'anonymous';
-      const timeout = setTimeout(() => { resolve(null); }, 15000); // 15s timeout
-      img.onload = async function() {
+      const timeout = setTimeout(() => { resolve(null); }, 15000);
+      img.onload = async function () {
         clearTimeout(timeout);
+        if (typeof window.isImgBBErrorPlaceholder === 'function' && window.isImgBBErrorPlaceholder(img.naturalWidth, img.naturalHeight)) {
+          console.warn('[fetchAndUpload] Rejected 172x96 ImgBB placeholder for:', url);
+          resolve(null);
+          return;
+        }
         try {
           const canvas = document.createElement('canvas');
           canvas.width = img.naturalWidth || img.width;
@@ -1987,10 +2087,9 @@ async function fetchAndUploadToImgBB(url) {
           ctx.drawImage(img, 0, 0);
           const base64 = canvas.toDataURL('image/png');
           if (base64 && base64.length > 100) {
-            const uploaded = await uploadToImgBB(base64);
-            resolve(uploaded);
+            const uploaded = await uploadImageSmart(base64, opts);
+            resolve(opts.returnDetails ? uploaded : (uploaded ? uploaded.url : null));
           } else {
-            console.warn('[fetchAndUpload] Canvas conversion produced empty result for:', url);
             resolve(null);
           }
         } catch (e) {
@@ -1998,12 +2097,11 @@ async function fetchAndUploadToImgBB(url) {
           resolve(null);
         }
       };
-      img.onerror = function() {
+      img.onerror = function () {
         clearTimeout(timeout);
-        console.warn('[fetchAndUpload] Failed to load image:', url);
         resolve(null);
       };
-      img.src = url;
+      img.src = bustUrl;
     });
   } catch (e) {
     console.warn('[fetchAndUpload] Error:', e);
@@ -2014,81 +2112,154 @@ window.fetchAndUploadToImgBB = fetchAndUploadToImgBB;
 window.uploadToImgBB = uploadToImgBB;
 
 (function initCanvasDragDrop() {
-  const canvas = document.getElementById('miro-canvas');
-  if (!canvas) return;
+  const handleImageFilesDrop = async (e, targetContainer, resolvedPage) => {
+    const files = e.dataTransfer && e.dataTransfer.files
+      ? [...e.dataTransfer.files].filter(f => f.type && f.type.startsWith('image/'))
+      : [];
+    if (files.length === 0) return false;
 
-  canvas.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
-  canvas.addEventListener('dragleave', (e) => { e.preventDefault(); });
-
-  canvas.addEventListener('drop', async (e) => {
     e.preventDefault();
-    const files = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
-    if (files.length === 0) return;
+    e.stopPropagation();
 
-    const page = cp();
+    const page = resolvedPage || cp();
+    if (!page) return true;
     if (!page.miroCards) page.miroCards = [];
-    const zoom = (page.zoom || 100) / 100;
-    const rect = canvas.getBoundingClientRect();
-    const baseX = (e.clientX - rect.left - (page.panX || 0)) / zoom;
-    const baseY = (e.clientY - rect.top - (page.panY || 0)) / zoom;
 
-    if (typeof showToast === 'function') showToast(`📤 Uploading ${files.length} image(s)...`, 3000);
+    const zoom = (page.zoom || 100) / 100;
+    const rect = targetContainer.getBoundingClientRect();
+    let baseX = (e.clientX - rect.left - (page.panX || 0)) / zoom;
+    let baseY = (e.clientY - rect.top - (page.panY || 0)) / zoom;
+    let targetCellKey = null;
+
+    // Check if dropped inside a Slice cell on the main Miro canvas
+    if (typeof _getTargetSliceInfo === 'function') {
+      const sliceInfo = _getTargetSliceInfo(e.clientX, e.clientY, page);
+      if (sliceInfo) {
+        targetCellKey = sliceInfo.cellKey;
+        const vpRect = sliceInfo.vp.getBoundingClientRect();
+        baseX = (e.clientX - vpRect.left - sliceInfo.panX) / sliceInfo.zoom;
+        baseY = (e.clientY - vpRect.top - sliceInfo.panY) / sliceInfo.zoom;
+      }
+    }
+
+    if (typeof showToast === 'function') showToast(`📥 جاري إضافة ورفع ${files.length} صورة...`, 2500);
 
     let offsetX = 0;
+    const addedCards = [];
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const base64 = await new Promise((resolve) => {
         const reader = new FileReader();
         reader.onload = (ev) => resolve(ev.target.result);
+        reader.onerror = () => resolve(null);
         reader.readAsDataURL(file);
       });
+      if (!base64) continue;
 
-      // Get natural dimensions
+      const compressed = await compressBase64(base64);
       const dims = await new Promise((resolve) => {
         const img = new Image();
-        img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+        img.onload = () => resolve({ w: img.naturalWidth || 400, h: img.naturalHeight || 300 });
         img.onerror = () => resolve({ w: 400, h: 300 });
-        img.src = base64;
+        img.src = compressed;
       });
 
-      // Upload to ImgBB (compressed, NO base64 fallback)
-      const imgbbUrl = await uploadToImgBB(base64);
-      if (!imgbbUrl) {
-        if (typeof showToast === 'function') showToast(`⚠️ Failed to upload "${file.name}" — skipped`, 3000);
-        continue; // Skip this image entirely
-      }
+      const thumbPreview = typeof window.createMicroPreview === 'function'
+        ? await window.createMicroPreview(compressed)
+        : null;
 
-      // Scale to max 400px wide
       let w = dims.w, h = dims.h;
       if (w > 400) { h = Math.round((h / w) * 400); w = 400; }
 
-      page.miroCards.push({
-        id: uid(), type: 'image',
-        imageUrl: imgbbUrl,
-        label: '',
-        x: baseX + offsetX, y: baseY,
-        w, h
-      });
+      const cardId = uid();
+      if (typeof window.saveImageVaultBlob === 'function') {
+        await window.saveImageVaultBlob([`img_cid_${cardId}`], compressed);
+      }
 
+      const card = {
+        id: cardId,
+        type: 'image',
+        imageUrl: compressed,
+        label: (file.name || '').replace(/\.[^/.]+$/, ''),
+        x: baseX + offsetX,
+        y: baseY,
+        w,
+        h
+      };
+      if (thumbPreview) card.thumbPreview = thumbPreview;
+      if (targetCellKey) card.cell = targetCellKey;
+
+      page.miroCards.push(card);
+      addedCards.push(card);
       offsetX += w + 20;
     }
 
-    sv(); buildMiroCanvas(); buildOutline();
-    if (typeof showToast === 'function') showToast(`✅ Images added!`, 2000);
-  });
+    if (addedCards.length > 0) {
+      sv();
+      const activePg = cp();
+      if (activePg && activePg.pageType === 'slicer') {
+        if (typeof buildCols === 'function') buildCols();
+      } else {
+        buildMiroCanvas();
+      }
+      if (typeof buildOutline === 'function') buildOutline();
+
+      // Upload all dropped images in background to Google Drive + ImgBB (never loses image!)
+      (async () => {
+        for (const c of addedCards) {
+          await localizeCardImageUrl(c);
+        }
+        if (typeof showToast === 'function') showToast(`☁️ تم حفظ ${addedCards.length} صورة على السحابة بنجاح!`, 2500);
+      })();
+    }
+    return true;
+  };
+
+  const canvas = document.getElementById('miro-canvas');
+  if (canvas) {
+    canvas.addEventListener('dragover', (e) => {
+      if (e.dataTransfer && e.dataTransfer.types && [...e.dataTransfer.types].includes('Files')) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    });
+    canvas.addEventListener('dragleave', (e) => { e.preventDefault(); });
+    canvas.addEventListener('drop', async (e) => {
+      await handleImageFilesDrop(e, canvas, cp());
+    });
+  }
+
+  // Also support dropping image files onto Slicer sub-pages (.slicer-miro-container inside #cw)
+  const cw = document.getElementById('cw');
+  if (cw) {
+    cw.addEventListener('dragover', (e) => {
+      const container = e.target.closest ? e.target.closest('.slicer-miro-container') : null;
+      if (container && e.dataTransfer && e.dataTransfer.types && [...e.dataTransfer.types].includes('Files')) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    });
+    cw.addEventListener('drop', async (e) => {
+      const container = e.target.closest ? e.target.closest('.slicer-miro-container') : null;
+      if (!container) return;
+      const pid = container.dataset.pageId;
+      const targetPage = (pid && window.D && Array.isArray(D.pages))
+        ? D.pages.find(p => p && p.id === pid)
+        : cp();
+      await handleImageFilesDrop(e, container, targetPage);
+    });
+  }
 })();
 
-// ─── Auto-fix base64 images on page load ───
-// When a page is displayed and has base64 images, upload them to ImgBB and save.
-// This is called from buildMiroCanvas after rendering.
+// ─── Auto-fix & Cloud Backup of Images on Page Load ───
 async function _fixBase64ImagesOnPage() {
   try {
     if (typeof D === 'undefined' || !D.pages) return;
     if (typeof USER_ID === 'undefined' || !USER_ID) return;
     const page = cp();
     if (!page || !page.miroCards) return;
-    
-    // Normalize miroCards to array if Firebase returned as object
+
     let cards = page.miroCards;
     if (!Array.isArray(cards)) {
       const maxIdx = Math.max(...Object.keys(cards).map(Number).filter(n => !isNaN(n)));
@@ -2101,7 +2272,7 @@ async function _fixBase64ImagesOnPage() {
     }
     if (!cards.length) return;
 
-    // ── Step 1: Try to recover lost images from IndexedDB cache ──
+    // ── Step 1: Try to recover lost images from IndexedDB page cache ──
     try {
       const cached = typeof getCachedPageDataAsync === 'function'
         ? await getCachedPageDataAsync(page.id) : null;
@@ -2110,12 +2281,14 @@ async function _fixBase64ImagesOnPage() {
         for (let i = 0; i < cards.length; i++) {
           const card = cards[i];
           if (!card) continue;
-          if (card.imageUrl && card.imageUrl !== '') continue; // has URL, skip
-          // Only try recovery for cards that should have an image
+          if (card.imageUrl && card.imageUrl !== '') continue;
           if (card.type === 'image' || card.type === 'grid') {
             const cachedCard = cachedCards.find(c => c && c.id === card.id);
-            if (cachedCard && cachedCard.imageUrl && cachedCard.imageUrl.startsWith('data:image')) {
+            if (cachedCard && cachedCard.imageUrl) {
               card.imageUrl = cachedCard.imageUrl;
+              if (cachedCard.driveFileId) card.driveFileId = cachedCard.driveFileId;
+              if (cachedCard.driveUrl) card.driveUrl = cachedCard.driveUrl;
+              if (cachedCard.imgbbUrl) card.imgbbUrl = cachedCard.imgbbUrl;
               console.log('[ImgFix] 🔄 Recovered from cache:', card.id);
             }
           }
@@ -2123,142 +2296,113 @@ async function _fixBase64ImagesOnPage() {
       }
     } catch (e) { /* cache recovery failed, continue */ }
 
-    // ── Step 2: Upload non-ImgBB images to ImgBB one by one ──
+    // ── Step 2: Upload local/unhosted images to Google Drive + ImgBB ──
     let successCount = 0;
     for (let i = 0; i < cards.length; i++) {
       const card = cards[i];
       if (!card || !card.imageUrl) continue;
-      // Skip blob URLs (session-only, can't upload)
       if (card.imageUrl.startsWith('blob:')) continue;
-      // Skip already on ImgBB
-      if (/imgbb\.com|imgur\.com|i\.ibb\.co/i.test(card.imageUrl)) continue;
-      // Skip dead Miro API URLs (permanently CORS-blocked)
       if (/miro\.com\/api/i.test(card.imageUrl)) continue;
-      
-      let url = null;
+
+      const isAlreadyCloud = /googleusercontent\.com|drive\.google\.com|imgbb\.com|imgur\.com|i\.ibb\.co/i.test(card.imageUrl);
+      if (isAlreadyCloud) continue;
+
+      let res = null;
       if (card.imageUrl.startsWith('data:image')) {
-        console.log('[ImgFix] Uploading base64:', card.id, '(index', i, ', type:', card.type, ')');
-        url = await uploadToImgBB(card.imageUrl);
+        res = await uploadImageSmart(card.imageUrl, { cardId: card.id, label: card.label });
       } else if (card.imageUrl.startsWith('http://') || card.imageUrl.startsWith('https://')) {
-        console.log('[ImgFix] Uploading external URL:', card.id, '(index', i, ', type:', card.type, ')');
-        url = await fetchAndUploadToImgBB(card.imageUrl);
+        res = await fetchAndUploadToImgBB(card.imageUrl, { cardId: card.id, label: card.label, returnDetails: true });
       }
-      
-      if (url) {
-        card.imageUrl = url;
+
+      if (res && res.url) {
+        card.imageUrl = res.url;
+        if (res.driveFileId) card.driveFileId = res.driveFileId;
+        if (res.driveUrl) card.driveUrl = res.driveUrl;
+        if (res.imgbbUrl) card.imgbbUrl = res.imgbbUrl;
+        if (res.thumbPreview) card.thumbPreview = res.thumbPreview;
         successCount++;
-        console.log('[ImgFix] ✅ Done:', card.id);
-        const imgEl = document.querySelector(`[data-cid="${card.id}"] .mi-img`) 
+
+        const imgEl = document.querySelector(`[data-cid="${card.id}"] .mi-img`)
                    || document.querySelector(`[data-cid="${card.id}"] img`);
-        if (imgEl) imgEl.src = url;
+        if (imgEl && !imgEl.src.startsWith('blob:')) imgEl.src = res.url;
+
         try {
-          const cardRef = `users/${USER_ID}/startmine_pages/${page.id}/miroCards/${i}/imageUrl`;
-          await firebase.database().ref(cardRef).set(url);
-          console.log('[ImgFix] ✅ Saved card', i, 'to Firebase');
+          const cardRef = `users/${USER_ID}/startmine_pages/${page.id}/miroCards/${i}`;
+          const patch = { imageUrl: res.url };
+          if (res.driveFileId) patch.driveFileId = res.driveFileId;
+          if (res.driveUrl) patch.driveUrl = res.driveUrl;
+          if (res.imgbbUrl) patch.imgbbUrl = res.imgbbUrl;
+          if (res.thumbPreview) patch.thumbPreview = res.thumbPreview;
+          await firebase.database().ref(cardRef).update(patch);
         } catch (e) { console.warn('[ImgFix] Card save error:', e); }
-      } else {
-        console.warn('[ImgFix] ⚠️ Upload failed for card:', card.id, '— keeping local data');
       }
     }
     if (successCount > 0) {
-      if (typeof showToast === 'function') showToast(`🔄 ${successCount} image(s) uploaded to cloud!`, 3000);
+      sv();
+      if (typeof showToast === 'function') showToast(`☁️ تم تأمين ${successCount} صورة على السحابة!`, 3000);
     }
   } catch (e) { console.warn('[ImgFix] Error:', e); }
 }
 // Run 3s after page loads
 setTimeout(() => _fixBase64ImagesOnPage(), 3000);
 
-// ─── Localize Remote Image URL ───
+// ─── Localize & Upload Card Image to Google Drive + ImgBB ───
 async function localizeCardImageUrl(card) {
   if (!card || !card.imageUrl) return;
-  if (/imgbb\.com|imgur\.com|i\.ibb\.co/i.test(card.imageUrl)) return;
+  if (/googleusercontent\.com|drive\.google\.com/i.test(card.imageUrl) && card.driveFileId) return;
+  if (/imgbb\.com|imgur\.com|i\.ibb\.co/i.test(card.imageUrl) && card.driveFileId) return;
 
-  const page = D.pages.find(p => p && p.miroCards && p.miroCards.some(c => c.id === card.id)) || cp();
+  const page = (window.D && Array.isArray(D.pages) && D.pages.find(p => p && Array.isArray(p.miroCards) && p.miroCards.some(c => c && c.id === card.id))) || cp();
   if (!page || !page.miroCards) return;
-  const idx = page.miroCards.findIndex(c => c.id === card.id);
-  if (idx === -1) return;
+
+  const applyCloudResult = async (res) => {
+    if (!res || !res.url) return false;
+    card.imageUrl = res.url;
+    if (res.driveFileId) card.driveFileId = res.driveFileId;
+    if (res.driveUrl) card.driveUrl = res.driveUrl;
+    if (res.imgbbUrl) card.imgbbUrl = res.imgbbUrl;
+    if (res.thumbPreview) card.thumbPreview = res.thumbPreview;
+
+    const idx = page.miroCards.findIndex(c => c && c.id === card.id);
+    if (idx !== -1 && typeof USER_ID !== 'undefined' && USER_ID && typeof firebase !== 'undefined') {
+      try {
+        const cardRef = `users/${USER_ID}/startmine_pages/${page.id}/miroCards/${idx}`;
+        const patch = { imageUrl: res.url };
+        if (res.driveFileId) patch.driveFileId = res.driveFileId;
+        if (res.driveUrl) patch.driveUrl = res.driveUrl;
+        if (res.imgbbUrl) patch.imgbbUrl = res.imgbbUrl;
+        if (res.thumbPreview) patch.thumbPreview = res.thumbPreview;
+        await firebase.database().ref(cardRef).update(patch);
+      } catch (e) { console.warn('[ImgLocalize] Firebase save error:', e); }
+    }
+    sv();
+    const imgEl = document.querySelector(`[data-cid="${card.id}"] .mi-img`);
+    if (imgEl && !imgEl.src.startsWith('blob:')) {
+      imgEl.src = res.url;
+    }
+    return true;
+  };
 
   if (card.imageUrl.startsWith('data:image')) {
-    console.log('[ImgLocalize] Uploading base64 image to ImgBB:', card.id);
-    const url = await uploadToImgBB(card.imageUrl);
-    if (url) {
-      card.imageUrl = url;
-      if (typeof USER_ID !== 'undefined' && USER_ID) {
-        try {
-          const cardRef = `users/${USER_ID}/startmine_pages/${page.id}/miroCards/${idx}/imageUrl`;
-          await firebase.database().ref(cardRef).set(url);
-        } catch (e) { console.warn('[ImgLocalize] Firebase save error:', e); }
-      }
-      sv();
-      const imgEl = document.querySelector(`[data-cid="${card.id}"] .mi-img`);
-      if (imgEl) imgEl.src = url;
-    }
+    const res = await uploadImageSmart(card.imageUrl, { cardId: card.id, label: card.label });
+    await applyCloudResult(res);
     return;
   }
 
   if (card.imageUrl.includes('miro.com/api')) {
     try {
-      console.log('[ImgLocalize] Fetching Miro image via custom extension...');
       const base64 = await fetchMiroImageViaExtension(card.imageUrl);
       if (base64) {
-        const url = await uploadToImgBB(base64);
-        if (url) {
-          card.imageUrl = url;
-          if (typeof USER_ID !== 'undefined' && USER_ID) {
-            try {
-              const cardRef = `users/${USER_ID}/startmine_pages/${page.id}/miroCards/${idx}/imageUrl`;
-              await firebase.database().ref(cardRef).set(url);
-            } catch (e) { console.warn('[ImgLocalize] Firebase remote save error:', e); }
-          }
-          sv();
-          const imgEl = document.querySelector(`[data-cid="${card.id}"] .mi-img`);
-          if (imgEl) imgEl.src = url;
-          console.log('[ImgLocalize] Miro image localized successfully via extension:', url);
-          return;
-        }
+        const res = await uploadImageSmart(base64, { cardId: card.id, label: card.label });
+        if (await applyCloudResult(res)) return;
       }
     } catch (extErr) {
       console.warn('[ImgLocalize] Extension fetch failed, falling back to canvas:', extErr.message);
-      if (typeof showToast === 'function') {
-        showToast(`⚠️ خطأ التوطين: ${extErr.message}`, 6000);
-      }
     }
   }
 
-  console.log('[ImgLocalize] Attempting to localize remote image URL:', card.imageUrl);
-  const img = new Image();
-  img.crossOrigin = card.imageUrl.includes('miro.com/api') ? 'use-credentials' : 'anonymous';
-  img.onload = async function() {
-    try {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth || img.width;
-      canvas.height = img.naturalHeight || img.height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-      const base64 = canvas.toDataURL('image/png');
-      if (base64 && base64.length > 100) {
-        const url = await uploadToImgBB(base64);
-        if (url) {
-          card.imageUrl = url;
-          if (typeof USER_ID !== 'undefined' && USER_ID) {
-            try {
-              const cardRef = `users/${USER_ID}/startmine_pages/${page.id}/miroCards/${idx}/imageUrl`;
-              await firebase.database().ref(cardRef).set(url);
-            } catch (e) { console.warn('[ImgLocalize] Firebase remote save error:', e); }
-          }
-          sv();
-          const imgEl = document.querySelector(`[data-cid="${card.id}"] .mi-img`);
-          if (imgEl) imgEl.src = url;
-        }
-      }
-    } catch (e) {
-      console.warn('[ImgLocalize] ⚠️ Failed to canvas-convert remote image:', e);
-    }
-  };
-  img.onerror = function(err) {
-    console.warn('[ImgLocalize] ⚠️ Failed to load remote image for localizing:', err);
-  };
-  img.src = card.imageUrl;
+  const res = await fetchAndUploadToImgBB(card.imageUrl, { cardId: card.id, label: card.label, returnDetails: true });
+  await applyCloudResult(res);
 }
 
 // ─── Text Widget ───
@@ -2931,79 +3075,135 @@ document.addEventListener('keydown', (e) => {
   // Blur any focused input to prevent typing in search box
   if (document.activeElement && document.activeElement.tagName === 'INPUT') document.activeElement.blur();
 
-  // Explicit text-paste fallback for Arabic keyboard (Ctrl+ر) because it won't trigger native OS "paste" event.
+  // Explicit paste fallback for Arabic keyboard (Ctrl+ر) because it won't trigger native OS "paste" event.
   if (isCmd && key === 'ر') {
     if (!page) return;
     if (window._lastMiroPasteTime && Date.now() - window._lastMiroPasteTime < 1000) return;
 
-    navigator.clipboard.readText().then(text => {
-      // Check again after async clipboard read just in case
-      if (window._lastMiroPasteTime && Date.now() - window._lastMiroPasteTime < 1000) return;
-
-      if (text) {
-        // Mock a minimal clipboard event structure and pass it to our paste handler if needed,
-        // or just let the user use English for image pasting. We can re-use the parsing logic:
-        let clipData = localStorage.getItem('miro_clipboard');
-        if (text.startsWith('STARTMINE_MIRO:')) clipData = text.replace('STARTMINE_MIRO:', '');
-
-        if (clipData) {
+    (async () => {
+      try {
+        // 1. Check if an image blob is in the clipboard first (when no Startmine widget text is copied)
+        if (navigator.clipboard && typeof navigator.clipboard.read === 'function') {
           try {
-            const cards = JSON.parse(clipData);
-            if (cards && cards.length > 0) {
-              e.preventDefault();
-              if (!page.miroCards) page.miroCards = [];
-              const coords = getPasteTargetCoords(page);
-              let minX = Infinity, minY = Infinity;
-              cards.forEach(c => { if (c.x < minX) minX = c.x; if (c.y < minY) minY = c.y; });
-              clearMiroSelection();
-              cards.forEach(c => {
-                const newId = uid(); c.id = newId;
-                c.x = coords.x + (c.x - minX) - (c.w || 100) / 2;
-                c.y = coords.y + (c.y - minY) - (c.h || 100) / 2;
-                if (coords.cell) {
-                  c.cell = coords.cell;
-                } else {
-                  delete c.cell;
+            const clipItems = await navigator.clipboard.read();
+            for (const item of clipItems) {
+              const imgType = item.types.find(t => t.startsWith('image/'));
+              if (imgType) {
+                const blob = await item.getType(imgType);
+                if (blob && blob.size > 0) {
+                  const base64 = await new Promise((res) => {
+                    const r = new FileReader();
+                    r.onload = () => res(r.result);
+                    r.onerror = () => res(null);
+                    r.readAsDataURL(blob);
+                  });
+                  if (base64) {
+                    const compressed = await compressBase64(base64);
+                    const dims = await new Promise((res) => {
+                      const im = new Image();
+                      im.onload = () => res({ w: im.naturalWidth || 300, h: im.naturalHeight || 220 });
+                      im.onerror = () => res({ w: 300, h: 220 });
+                      im.src = compressed;
+                    });
+                    const coords = getPasteTargetCoords(page);
+                    if (!page.miroCards) page.miroCards = [];
+                    let w = 300;
+                    let h = Math.round(300 * (dims.h / dims.w));
+                    if (dims.w > 800) { w = 800; h = Math.round(800 * (dims.h / dims.w)); }
+
+                    const cardId = uid();
+                    if (typeof window.saveImageVaultBlob === 'function') {
+                      await window.saveImageVaultBlob([`img_cid_${cardId}`], compressed);
+                    }
+                    const thumbPreview = typeof window.createMicroPreview === 'function'
+                      ? await window.createMicroPreview(compressed)
+                      : null;
+
+                    const card = { id: cardId, type: 'image', w, h, x: coords.x - w / 2, y: coords.y - h / 2, imageUrl: compressed };
+                    if (thumbPreview) card.thumbPreview = thumbPreview;
+                    if (coords.cell) card.cell = coords.cell;
+
+                    page.miroCards.push(card);
+                    sv(); buildMiroCanvas(); buildOutline();
+                    window._lastMiroPasteTime = Date.now();
+                    if (typeof showToast === 'function') showToast('📥 تم لصق الصورة وجاري حفظها سحابياً...', 2500);
+                    localizeCardImageUrl(card);
+                    return;
+                  }
                 }
-                if (c.pinned || c.type === 'dyntitle') {
-                  c._pinCellX = c.x;
-                  c._pinCellY = c.y;
-                  c._pinCellW = c.w || 200;
-                  c._pinCellH = c.h || 80;
-                }
-                page.miroCards.push(c); _miroSelected.add(c.id);
-              });
-              sv(); buildMiroCanvas(); buildOutline(); return;
+              }
             }
-          } catch (e) { }
+          } catch (clipImgErr) { /* Fall through to readText */ }
         }
 
-        // Literal text fallback
-        if (!page.miroCards) page.miroCards = [];
-        const coords = getPasteTargetCoords(page);
-        let url = text.trim();
-        if (/^(https?:\/\/[^\s]+)$/i.test(url) || /^(www\.[^\s]+)$/i.test(url)) {
-          if (!url.startsWith('http')) url = 'https://' + url;
-          const card = { id: uid(), type: 'card', url, label: domainOf(url), x: coords.x - 140, y: coords.y - 120, w: 280, h: 240 };
-          if (coords.cell) {
-            card.cell = coords.cell;
-          } else {
-            delete card.cell;
+        const text = await navigator.clipboard.readText();
+        if (window._lastMiroPasteTime && Date.now() - window._lastMiroPasteTime < 1000) return;
+
+        if (text) {
+          let clipData = localStorage.getItem('miro_clipboard');
+          if (text.startsWith('STARTMINE_MIRO:')) clipData = text.replace('STARTMINE_MIRO:', '');
+
+          if (clipData) {
+            try {
+              const cards = JSON.parse(clipData);
+              if (cards && cards.length > 0) {
+                e.preventDefault();
+                if (!page.miroCards) page.miroCards = [];
+                const coords = getPasteTargetCoords(page);
+                let minX = Infinity, minY = Infinity;
+                cards.forEach(c => { if (c.x < minX) minX = c.x; if (c.y < minY) minY = c.y; });
+                clearMiroSelection();
+                cards.forEach(c => {
+                  const newId = uid(); c.id = newId;
+                  c.x = coords.x + (c.x - minX) - (c.w || 100) / 2;
+                  c.y = coords.y + (c.y - minY) - (c.h || 100) / 2;
+                  if (coords.cell) {
+                    c.cell = coords.cell;
+                  } else {
+                    delete c.cell;
+                  }
+                  if (c.pinned || c.type === 'dyntitle') {
+                    c._pinCellX = c.x;
+                    c._pinCellY = c.y;
+                    c._pinCellW = c.w || 200;
+                    c._pinCellH = c.h || 80;
+                  }
+                  page.miroCards.push(c); _miroSelected.add(c.id);
+                });
+                sv(); buildMiroCanvas(); buildOutline(); return;
+              }
+            } catch (e) { }
           }
-          page.miroCards.push(card);
-        } else {
-          const card = { id: uid(), type: 'sticky', text: text, bg: '#ffe599', x: coords.x - 100, y: coords.y - 100, w: 200, h: 200 };
-          if (coords.cell) {
-            card.cell = coords.cell;
+
+          // Literal text fallback
+          if (!page.miroCards) page.miroCards = [];
+          const coords = getPasteTargetCoords(page);
+          let url = text.trim();
+          if (/^(https?:\/\/[^\s]+)$/i.test(url) || /^(www\.[^\s]+)$/i.test(url)) {
+            if (!url.startsWith('http')) url = 'https://' + url;
+            const card = { id: uid(), type: 'card', url, label: domainOf(url), x: coords.x - 140, y: coords.y - 120, w: 280, h: 240 };
+            if (coords.cell) {
+              card.cell = coords.cell;
+            } else {
+              delete card.cell;
+            }
+            page.miroCards.push(card);
           } else {
-            delete card.cell;
+            const card = { id: uid(), type: 'sticky', text: text, bg: '#ffe599', x: coords.x - 100, y: coords.y - 100, w: 200, h: 200 };
+            if (coords.cell) {
+              card.cell = coords.cell;
+            } else {
+              delete card.cell;
+            }
+            page.miroCards.push(card);
           }
-          page.miroCards.push(card);
+          sv(); buildMiroCanvas(); buildOutline();
+          window._lastMiroPasteTime = Date.now();
         }
-        sv(); buildMiroCanvas(); buildOutline();
-        window._lastMiroPasteTime = Date.now();
+      } catch (err) {
+        console.error(err);
       }
-    }).catch(e => console.error(e));
+    })();
   }
 
   // Other Shortcuts requiring resolved page
@@ -3953,6 +4153,7 @@ document.addEventListener('paste', (e) => {
 
       const proceedWithPaste = async (resolvedUrl) => {
         const img = new Image();
+        img.referrerPolicy = 'no-referrer';
         if (resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://')) {
           img.crossOrigin = resolvedUrl.includes('miro.com/api') ? 'use-credentials' : 'anonymous';
         }
@@ -3963,51 +4164,67 @@ document.addEventListener('paste', (e) => {
           const targetCellKey = coords.cell;
 
           if (!page.miroCards) page.miroCards = [];
+          const natW = img.naturalWidth || img.width || 300;
+          const natH = img.naturalHeight || img.height || 220;
           let w = 300;
-          let h = Math.round(300 * (img.height / img.width));
-          if (img.width > 800) { w = 800; h = Math.round(800 * (img.height / img.width)); }
+          let h = Math.round(300 * (natH / natW));
+          if (natW > 800) { w = 800; h = Math.round(800 * (natH / natW)); }
 
-          let finalUrl = resolvedUrl;
+          let initialUrl = resolvedUrl;
           if (resolvedUrl.startsWith('data:image')) {
-            if (typeof showToast === 'function') showToast('📤 Uploading pasted image...', 3000);
-            const imgbbUrl = await uploadToImgBB(resolvedUrl);
-            if (imgbbUrl) {
-              finalUrl = imgbbUrl;
-              if (typeof showToast === 'function') showToast('✅ Image pasted!', 2000);
-            } else {
-              if (typeof showToast === 'function') showToast('⚠️ Image upload failed, saved locally', 3000);
-            }
+            initialUrl = await compressBase64(resolvedUrl);
           } else if (resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://')) {
-            // External URL — convert via canvas and upload to ImgBB for cross-device access
-            if (typeof showToast === 'function') showToast('📤 Uploading external image...', 3000);
             try {
               const canvas = document.createElement('canvas');
-              canvas.width = img.naturalWidth || img.width;
-              canvas.height = img.naturalHeight || img.height;
+              canvas.width = natW;
+              canvas.height = natH;
               const ctx = canvas.getContext('2d');
               ctx.drawImage(img, 0, 0);
-              const base64 = canvas.toDataURL('image/png');
-              if (base64 && base64.length > 100) {
-                const imgbbUrl = await uploadToImgBB(base64);
-                if (imgbbUrl) {
-                  finalUrl = imgbbUrl;
-                  if (typeof showToast === 'function') showToast('✅ Image pasted!', 2000);
-                }
+              const b64 = canvas.toDataURL('image/png');
+              if (b64 && b64.length > 100) {
+                initialUrl = await compressBase64(b64);
               }
             } catch (corsErr) {
-              console.warn('[PASTE] CORS prevented canvas conversion, keeping original URL:', corsErr.message);
+              // Keep original URL if CORS prevents canvas capture
             }
           }
 
-          const card = { id: uid(), type: 'image', w, h, x: cx - w / 2, y: cy - h / 2, imageUrl: finalUrl };
+          const cardId = uid();
+          if (initialUrl.startsWith('data:image') && typeof window.saveImageVaultBlob === 'function') {
+            await window.saveImageVaultBlob([`img_cid_${cardId}`], initialUrl);
+          }
+          const thumbPreview = (initialUrl.startsWith('data:image') && typeof window.createMicroPreview === 'function')
+            ? await window.createMicroPreview(initialUrl)
+            : null;
+
+          const card = { id: cardId, type: 'image', w, h, x: cx - w / 2, y: cy - h / 2, imageUrl: initialUrl };
+          if (thumbPreview) card.thumbPreview = thumbPreview;
           if (targetCellKey) {
             card.cell = targetCellKey;
           } else {
             delete card.cell;
           }
           page.miroCards.push(card);
-          sv(); triggerRender();
-          if (finalUrl.startsWith('data:image')) {
+          sv();
+          triggerRender();
+
+          if (typeof showToast === 'function') showToast('📥 تم لصق الصورة وجاري رفعها للسحابة...', 2500);
+          localizeCardImageUrl(card).then(() => {
+            if (card.driveFileId || /googleusercontent\.com|ibb\.co|imgbb\.com/i.test(card.imageUrl || '')) {
+              if (typeof showToast === 'function') showToast('☁️ تم حفظ الصورة على السحابة بنجاح!', 2000);
+            }
+          }).catch(() => {});
+        };
+        img.onerror = async function () {
+          // If crossOrigin='anonymous' failed on an external image URL, still add the card and let loader handle it
+          if (resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://')) {
+            const coords = getPasteTargetCoords(page);
+            if (!page.miroCards) page.miroCards = [];
+            const card = { id: uid(), type: 'image', w: 300, h: 220, x: coords.x - 150, y: coords.y - 110, imageUrl: resolvedUrl };
+            if (coords.cell) card.cell = coords.cell;
+            page.miroCards.push(card);
+            sv();
+            triggerRender();
             localizeCardImageUrl(card);
           }
         };

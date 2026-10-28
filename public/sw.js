@@ -7,7 +7,7 @@
  * @safety Always test caching logic carefully. Never cache Firebase API endpoints.
  */
 /* ─── Startmine Service Worker ─── */
-const CACHE_NAME = 'startmine-1790946555';
+const CACHE_NAME = 'startmine-1793172364';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -16,34 +16,34 @@ const STATIC_ASSETS = [
   '/tomato-192.png',
   '/tomato-512.png',
   '/tomato-favicon.ico',
-  '/css/base.css?v=1790946555',
-  '/css/miro.css?v=1790946555',
-  '/css/life-widget-additions.css?v=1790946555',
-  '/js/core/namespace.js?v=1790946555',
-  '/js/core/events.js?v=1790946555',
-  '/js/core/utils.js?v=1790946555',
-  '/js/data/firebase.js?v=1790946555',
-  '/js/data/offline.js?v=1790946555',
-  '/js/data/protection.js?v=1790946555',
-  '/js/data/sync.js?v=1790946555',
-  '/js/ui/toasts.js?v=1790946555',
-  '/js/ui/modals.js?v=1790946555',
-  '/js/ui/toolbar.js?v=1790946555',
-  '/js/ui/search.js?v=1790946555',
-  '/js/ui/inbox-ui.js?v=1790946555',
-  '/js/ui/tasbeeh.js?v=1790946555',
-  '/js/miro/miro-state.js?v=1790946555',
-  '/js/miro/render/cards.js?v=1790946555',
-  '/js/miro/render/builders.js?v=1790946555',
-  '/js/miro/layout/grid.js?v=1790946555',
-  '/js/miro/layout/slices.js?v=1790946555',
-  '/js/core/health.js?v=1790946555',
-  '/js/app.js?v=1790946555',
-  '/js/miro-engine.js?v=1790946555',
-  '/js/life-widget.js?v=1790946555',
-  '/js/thumbnails.js?v=1790946555',
-  '/js/outline.js?v=1790946555',
-  '/js/alignment.js?v=1790946555',
+  '/css/base.css?v=1793172364',
+  '/css/miro.css?v=1793172364',
+  '/css/life-widget-additions.css?v=1793172364',
+  '/js/core/namespace.js?v=1793172364',
+  '/js/core/events.js?v=1793172364',
+  '/js/core/utils.js?v=1793172364',
+  '/js/data/firebase.js?v=1793172364',
+  '/js/data/offline.js?v=1793172364',
+  '/js/data/protection.js?v=1793172364',
+  '/js/data/sync.js?v=1793172364',
+  '/js/ui/toasts.js?v=1793172364',
+  '/js/ui/modals.js?v=1793172364',
+  '/js/ui/toolbar.js?v=1793172364',
+  '/js/ui/search.js?v=1793172364',
+  '/js/ui/inbox-ui.js?v=1793172364',
+  '/js/ui/tasbeeh.js?v=1793172364',
+  '/js/miro/miro-state.js?v=1793172364',
+  '/js/miro/render/cards.js?v=1793172364',
+  '/js/miro/render/builders.js?v=1793172364',
+  '/js/miro/layout/grid.js?v=1793172364',
+  '/js/miro/layout/slices.js?v=1793172364',
+  '/js/core/health.js?v=1793172364',
+  '/js/app.js?v=1793172364',
+  '/js/miro-engine.js?v=1793172364',
+  '/js/life-widget.js?v=1793172364',
+  '/js/thumbnails.js?v=1793172364',
+  '/js/outline.js?v=1793172364',
+  '/js/alignment.js?v=1793172364',
 ];
 
 // External CDN assets to cache
@@ -98,11 +98,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Skip thumbnail/metadata APIs (jsonlink, wp.com mshots, thum.io, imgbb)
+  // Skip thumbnail/metadata APIs (jsonlink, wp.com mshots, thum.io, imgbb, ibb.co, google drive images)
   if (url.hostname.includes('jsonlink.io') ||
       url.hostname.includes('wp.com') ||
       url.hostname.includes('thum.io') ||
-      url.hostname.includes('imgbb.com')) {
+      url.hostname.includes('imgbb.com') ||
+      url.hostname.includes('ibb.co') ||
+      url.hostname.includes('googleusercontent.com') ||
+      url.hostname.includes('drive.google.com')) {
     return;
   }
 

@@ -2131,35 +2131,70 @@ function buildMiroImage(card) {
   // Image element
   const img = document.createElement('img');
   img.className = 'mi-img';
-  img.src = card.imageUrl;
+  img.referrerPolicy = 'no-referrer';
   img.alt = card.label || 'Image';
   img.draggable = false;
   if (cap && cap.position === 'above') img.style.order = '2';
-  img.onerror = () => {
-    img.style.display = 'none';
-    const ph = document.createElement('div');
-    ph.className = 'mi-placeholder';
-    if (card.imageUrl && card.imageUrl.includes('miro.com/api')) {
-      ph.innerHTML = '<span style="font-size: 2rem; margin-bottom: 8px;">⚠️</span><span style="font-size: 0.8rem; font-weight: 600; text-align: center; padding: 0 10px; line-height: 1.4; direction: rtl;">صورة ميرو الأصلية (انسخ كصورة للموبايل)</span>';
-      ph.style.flexDirection = 'column';
-    } else {
-      ph.textContent = '🖼️';
-    }
-    el.insertBefore(ph, img);
-  };
+
+  if (typeof window.loadMiroCardImage === 'function') {
+    window.loadMiroCardImage(card, img, el);
+  } else {
+    img.src = card.imageUrl;
+    img.onerror = () => {
+      img.style.display = 'none';
+      const ph = document.createElement('div');
+      ph.className = 'mi-placeholder';
+      if (card.imageUrl && card.imageUrl.includes('miro.com/api')) {
+        ph.innerHTML = '<span style="font-size: 2rem; margin-bottom: 8px;">⚠️</span><span style="font-size: 0.8rem; font-weight: 600; text-align: center; padding: 0 10px; line-height: 1.4; direction: rtl;">صورة ميرو الأصلية (انسخ كصورة للموبايل)</span>';
+        ph.style.flexDirection = 'column';
+      } else {
+        ph.textContent = '🖼️';
+      }
+      el.insertBefore(ph, img);
+    };
+  }
 
   // Download button
   const dlBtn = document.createElement('button');
   dlBtn.className = 'mc-download';
   dlBtn.title = 'Download image';
   dlBtn.innerHTML = '⤓';
-  dlBtn.onclick = (e) => {
+  dlBtn.onclick = async (e) => {
     e.stopPropagation();
-    const url = card.imageUrl;
+    const url = card.imageUrl || card.driveUrl || card.imgbbUrl;
+    const fileName = (card.label || 'image') + ((url && url.includes('.png')) ? '.png' : '.jpg');
+    // 1. Try Local IndexedDB Vault or Google Drive Blob first
+    if (typeof window.getImageVaultBlob === 'function') {
+      const vaultBlob = await window.getImageVaultBlob([
+        card.id ? `img_cid_${card.id}` : null,
+        card.driveFileId ? `img_drv_${card.driveFileId}` : null,
+        card.driveUrl,
+        card.imageUrl,
+        card.imgbbUrl
+      ].filter(Boolean));
+      if (vaultBlob) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(vaultBlob);
+        a.download = fileName;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        return;
+      }
+    }
+    if (card.driveFileId && typeof window.fetchDriveImageBlob === 'function') {
+      const driveBlob = await window.fetchDriveImageBlob(card.driveFileId, true);
+      if (driveBlob) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(driveBlob);
+        a.download = fileName;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        return;
+      }
+    }
     if (!url) return;
-    const fileName = (card.label || 'image') + (url.includes('.png') ? '.png' : '.jpg');
     if (url.startsWith('http')) {
-      fetch(url, { mode: 'cors' })
+      fetch(url, { mode: 'cors', referrerPolicy: 'no-referrer' })
         .then(r => r.blob())
         .then(blob => {
           const a = document.createElement('a');
@@ -4754,11 +4789,21 @@ function buildMiroTrello(card) {
               txt.appendChild(loader);
 
               try {
-                const imgbbUrl = await window.uploadToImgBB(base64);
+                let cloudUrl = null;
+                if (typeof window.uploadImageSmart === 'function') {
+                  const res = await window.uploadImageSmart(base64);
+                  cloudUrl = res ? (res.url || res.driveUrl || res.imgbbUrl) : null;
+                } else if (typeof window.uploadToImgBB === 'function') {
+                  cloudUrl = await window.uploadToImgBB(base64);
+                }
+                if (!cloudUrl && typeof window.compressBase64 === 'function') {
+                  cloudUrl = await window.compressBase64(base64, 900, 0.75);
+                }
                 loader.remove();
-                if (imgbbUrl) {
+                if (cloudUrl) {
                   const img = document.createElement('img');
-                  img.src = imgbbUrl;
+                  img.referrerPolicy = 'no-referrer';
+                  img.src = cloudUrl;
                   txt.appendChild(img);
                   c.html = txt.innerHTML;
                   c.text = txt.textContent;
@@ -4794,11 +4839,21 @@ function buildMiroTrello(card) {
             txt.appendChild(loader);
 
             try {
-              const imgbbUrl = await window.uploadToImgBB(base64);
+              let cloudUrl = null;
+              if (typeof window.uploadImageSmart === 'function') {
+                const res = await window.uploadImageSmart(base64);
+                cloudUrl = res ? (res.url || res.driveUrl || res.imgbbUrl) : null;
+              } else if (typeof window.uploadToImgBB === 'function') {
+                cloudUrl = await window.uploadToImgBB(base64);
+              }
+              if (!cloudUrl && typeof window.compressBase64 === 'function') {
+                cloudUrl = await window.compressBase64(base64, 900, 0.75);
+              }
               loader.remove();
-              if (imgbbUrl) {
+              if (cloudUrl) {
                 const img = document.createElement('img');
-                img.src = imgbbUrl;
+                img.referrerPolicy = 'no-referrer';
+                img.src = cloudUrl;
                 txt.appendChild(img);
                 c.html = txt.innerHTML;
                 c.text = txt.textContent;

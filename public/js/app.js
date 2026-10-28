@@ -5465,10 +5465,10 @@ document.getElementById('ok-settings').onclick = () => {
 
 window.triggerImageMigration = async function () {
   if (typeof confirm === 'function') {
-    const ok = confirm('هذا الإجراء سيقوم بفحص جميع الصفحات ورفع كافة الصور المخزنة محلياً (Base64) إلى السحابة (ImgBB). هل تريد الاستمرار؟');
+    const ok = confirm('هذا الإجراء سيقوم بفحص جميع الصفحات وتأمين كافة الصور (بما فيها صور ImgBB والصور المحلية) برفعها مباشرة إلى حسابك في Google Drive (مجلد StartMe-Miro/Images) وحفظها في الخزنة المحلية للمتصفح لضمان عدم اختفائها أبداً. هل تريد الاستمرار؟');
     if (!ok) return;
   }
-  
+
   if (!USER_ID) {
     if (typeof showToast === 'function') showToast('⚠️ يرجى تسجيل الدخول أولاً');
     return;
@@ -5477,21 +5477,28 @@ window.triggerImageMigration = async function () {
   const btn = document.getElementById('migrate-images-btn');
   if (btn) {
     btn.disabled = true;
-    btn.textContent = '⏳ Scanning database...';
+    btn.textContent = '⏳ جاري الاتصال بـ Google Drive وفحص الصور...';
   }
 
   try {
-    if (typeof showToast === 'function') showToast('⏳ جاري فحص قاعدة البيانات للمزامنة...', 4000);
-    
-    // Fetch all user pages from Firebase directly
+    // Request Google Drive token interactively if not already active
+    if (typeof window.requestGoogleDriveToken === 'function') {
+      const token = await window.requestGoogleDriveToken(true);
+      if (!token) {
+        if (typeof showToast === 'function') showToast('⚠️ لم يتم منح صلاحية Google Drive — سيتم الرفع إلى السحابة الاحتياطية والخزنة المحلية', 4000);
+      }
+    }
+
+    if (typeof showToast === 'function') showToast('⏳ جاري فحص قاعدة البيانات لتأمين الصور...', 4000);
+
     const snap = await firebase.database().ref(`users/${USER_ID}/startmine_pages`).once('value');
     const allPages = snap.val();
-    
+
     if (!allPages) {
       if (typeof showToast === 'function') showToast('✅ لا توجد صفحات للفحص');
       if (btn) {
         btn.disabled = false;
-        btn.textContent = '☁️ Migrate Local Images to ImgBB';
+        btn.textContent = '☁️ تأمين ونقل جميع الصور إلى Google Drive';
       }
       return;
     }
@@ -5505,58 +5512,101 @@ window.triggerImageMigration = async function () {
     for (const [pageId, pageData] of Object.entries(allPages)) {
       if (!pageData || !pageData.miroCards) continue;
       const cardsRaw = pageData.miroCards;
-      
-      // Firebase stores arrays as objects with string keys when there are gaps
-      // So we must iterate using Object.entries, not for(i < length)
-      const cardEntries = Array.isArray(cardsRaw) 
-        ? cardsRaw.map((c, i) => [String(i), c]) 
+
+      const cardEntries = Array.isArray(cardsRaw)
+        ? cardsRaw.map((c, i) => [String(i), c])
         : Object.entries(cardsRaw);
 
       for (const [cardKey, card] of cardEntries) {
         if (!card || !card.imageUrl) continue;
-        
-        // Check ALL card types that might have imageUrl (image, grid, etc.)
-        const isAlreadyHosted = /imgbb\.com|imgur\.com|i\.ibb\.co/i.test(card.imageUrl);
-        if (isAlreadyHosted) continue;
+
+        // Skip if already backed up on Google Drive
+        const hasDriveBackup = Boolean(card.driveFileId && card.driveUrl);
+        if (hasDriveBackup) continue;
+
         const isBase64 = card.imageUrl.startsWith('data:image');
         const isBlob = card.imageUrl.startsWith('blob:');
         const isExternalUrl = card.imageUrl.startsWith('http://') || card.imageUrl.startsWith('https://');
         const isLocalPath = !isBase64 && !isBlob && !isExternalUrl;
-        
+
         if (isBlob) {
           totalSkippedBlob++;
-          console.warn(`[Migration] ⚠️ Blob URL found (cannot upload, session-only): card ${card.id} on page ${pageId}`);
           continue;
         }
-        
-        // Handle base64, local paths, AND external URLs that aren't on ImgBB
+
         if (isBase64 || isLocalPath || isExternalUrl) {
           totalFound++;
-          if (btn) btn.textContent = `⏳ Uploading ${totalFound}...`;
-          if (typeof showToast === 'function') showToast(`⏳ جاري رفع الصورة ${totalFound}...`, 2000);
-          
+          if (btn) btn.textContent = `⏳ جاري تأمين الصورة ${totalFound}...`;
+          if (typeof showToast === 'function') showToast(`⏳ جاري تأمين ورفع الصورة ${totalFound} إلى Google Drive...`, 2000);
+
           try {
-            let uploadedUrl = null;
-            if (isBase64 && typeof uploadToImgBB === 'function') {
-              uploadedUrl = await uploadToImgBB(card.imageUrl);
-            } else if ((isExternalUrl || isLocalPath) && typeof fetchAndUploadToImgBB === 'function') {
-              // Download external image, convert via canvas, upload to ImgBB
-              uploadedUrl = await fetchAndUploadToImgBB(card.imageUrl);
+            let uploadRes = null;
+
+            // 1. Check if we already have this image in the Local IndexedDB Vault
+            if (typeof window.getImageVaultBlob === 'function' && typeof window.blobToDataUrl === 'function') {
+              const vaultBlob = await window.getImageVaultBlob([
+                card.id ? `img_cid_${card.id}` : null,
+                card.imageUrl,
+                card.imgbbUrl
+              ].filter(Boolean));
+              if (vaultBlob) {
+                const b64 = await window.blobToDataUrl(vaultBlob);
+                if (b64 && typeof window.uploadImageSmart === 'function') {
+                  uploadRes = await window.uploadImageSmart(b64, { cardId: card.id, label: card.label || card.id });
+                }
+              }
             }
-            
-            if (uploadedUrl) {
-              card.imageUrl = uploadedUrl;
-              updates[`users/${USER_ID}/startmine_pages/${pageId}/miroCards/${cardKey}/imageUrl`] = uploadedUrl;
+
+            // 2. Otherwise upload from Base64 or fetch from external URL (ImgBB, etc.)
+            if (!uploadRes) {
+              if (isBase64 && typeof window.uploadImageSmart === 'function') {
+                uploadRes = await window.uploadImageSmart(card.imageUrl, { cardId: card.id, label: card.label || card.id });
+              } else if ((isExternalUrl || isLocalPath) && typeof window.fetchAndUploadToImgBB === 'function') {
+                uploadRes = await window.fetchAndUploadToImgBB(card.imageUrl, {
+                  cardId: card.id,
+                  label: card.label || card.id,
+                  returnDetails: true
+                });
+              }
+            }
+
+            const finalUrl = uploadRes && typeof uploadRes === 'object' ? uploadRes.url : uploadRes;
+            if (finalUrl) {
+              const oldUrl = card.imageUrl;
+              card.imageUrl = finalUrl;
+              const basePath = `users/${USER_ID}/startmine_pages/${pageId}/miroCards/${cardKey}`;
+              updates[`${basePath}/imageUrl`] = finalUrl;
+              if (uploadRes && typeof uploadRes === 'object') {
+                if (uploadRes.driveFileId) {
+                  card.driveFileId = uploadRes.driveFileId;
+                  updates[`${basePath}/driveFileId`] = uploadRes.driveFileId;
+                }
+                if (uploadRes.driveUrl) {
+                  card.driveUrl = uploadRes.driveUrl;
+                  updates[`${basePath}/driveUrl`] = uploadRes.driveUrl;
+                }
+                const imgbbKeep = uploadRes.imgbbUrl || (/ibb\.co|imgbb\.com/i.test(oldUrl) ? oldUrl : null);
+                if (imgbbKeep) {
+                  card.imgbbUrl = imgbbKeep;
+                  updates[`${basePath}/imgbbUrl`] = imgbbKeep;
+                }
+                if (uploadRes.thumbPreview) {
+                  card.thumbPreview = uploadRes.thumbPreview;
+                  updates[`${basePath}/thumbPreview`] = uploadRes.thumbPreview;
+                }
+              }
               totalUploaded++;
-              console.log(`[Migration] ✅ Uploaded card ${card.id} (key ${cardKey}) on page ${pageId}`);
+              console.log(`[Migration] ✅ Secured card ${card.id} (key ${cardKey}) on page ${pageId}`);
             } else {
               totalFailed++;
-              console.warn(`[Migration] ❌ Upload failed for card ${card.id} (key ${cardKey}) on page ${pageId} — URL: ${card.imageUrl.substring(0, 80)}`);
+              console.warn(`[Migration] ❌ Upload failed for card ${card.id} on page ${pageId}`);
             }
           } catch (uploadErr) {
             totalFailed++;
             console.error(`[Migration] ❌ Upload error for card ${card.id}:`, uploadErr);
           }
+          // Brief pause to avoid rate-limiting ImgBB when pulling existing images
+          await new Promise(r => setTimeout(r, 350));
         }
       }
     }
@@ -5564,26 +5614,21 @@ window.triggerImageMigration = async function () {
     console.log(`[Migration] Summary: Found=${totalFound}, Uploaded=${totalUploaded}, Failed=${totalFailed}, BlobSkipped=${totalSkippedBlob}`);
 
     if (Object.keys(updates).length > 0) {
-      // Write updates in batches to avoid Firebase payload limits
       const updateKeys = Object.keys(updates);
       const BATCH_SIZE = 50;
       for (let b = 0; b < updateKeys.length; b += BATCH_SIZE) {
         const batch = {};
         updateKeys.slice(b, b + BATCH_SIZE).forEach(k => { batch[k] = updates[k]; });
         await firebase.database().ref().update(batch);
-        console.log(`[Migration] Batch ${Math.floor(b / BATCH_SIZE) + 1} saved (${Object.keys(batch).length} items)`);
       }
-      
-      let msg = `✅ تم رفع ${totalUploaded} صورة بنجاح!`;
-      if (totalFailed > 0) msg += ` (${totalFailed} فشل)`;
-      if (totalSkippedBlob > 0) msg += ` (${totalSkippedBlob} blob تم تخطيها)`;
+
+      let msg = `✅ تم تأمين وحفظ ${totalUploaded} صورة على Google Drive والخزنة المحلية!`;
+      if (totalFailed > 0) msg += ` (${totalFailed} تعذر سحبها من المصدر)`;
       if (typeof showToast === 'function') showToast(msg, 6000);
-      
-      // Update in-memory pages and caches
+
       for (const [pageId, pageData] of Object.entries(allPages)) {
         const inMemoryPage = D.pages.find(p => p && p.id === pageId);
         if (inMemoryPage && pageData.miroCards) {
-          // Convert Firebase object back to array for in-memory use
           if (!Array.isArray(pageData.miroCards)) {
             const maxIdx = Math.max(...Object.keys(pageData.miroCards).map(Number).filter(n => !isNaN(n)));
             const arr = new Array(maxIdx + 1);
@@ -5599,25 +5644,25 @@ window.triggerImageMigration = async function () {
           cachePageData(pageId, pageData);
         }
       }
-      
-      // Force redraw active page
+
       const activePg = cp();
       if (activePg) {
         if (activePg.pageType === 'slicer') buildCols();
         else buildMiroCanvas();
       }
     } else {
-      let msg = '✅ جميع الصور مرفوعة بالفعل على السحابة!';
-      if (totalSkippedBlob > 0) msg = `⚠️ ${totalSkippedBlob} صور blob لا يمكن رفعها (مرتبطة بالجلسة فقط)`;
-      if (typeof showToast === 'function') showToast(msg, 4000);
+      let msg = totalFound === 0
+        ? '✅ جميع الصور مؤمنة ومحفوظة بالفعل على Google Drive!'
+        : `⚠️ تعذر سحب ${totalFailed} صورة من خادم المصدر حالياً — جرب تنشيطها أولاً`;
+      if (typeof showToast === 'function') showToast(msg, 5000);
     }
   } catch (err) {
     console.error('[Migration] Error during image migration:', err);
-    if (typeof showToast === 'function') showToast('⚠️ حدث خطأ أثناء المزامنة: ' + err.message, 5000);
+    if (typeof showToast === 'function') showToast('⚠️ حدث خطأ أثناء نقل الصور: ' + err.message, 5000);
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = '☁️ Migrate Local Images to ImgBB';
+      btn.textContent = '☁️ تأمين ونقل جميع الصور إلى Google Drive';
     }
   }
 };
