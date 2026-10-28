@@ -268,256 +268,56 @@
   window.SM.data.syncNow = window.syncNow;
   window.SM.core.expose('syncNow', window.syncNow);
 
-  // Cloud Self-Healing & Full Workspace Hydration Engine
+  // Cloud Self-Healing Engine (Only triggers if directory was catastrophically wiped, never chokes normal WebSocket)
   window.healWorkspaceFromCloud = async function () {
     if (!USER_ID || _offlineMode) return;
     if (window._cloudHealInFlight) return;
     if (window._cloudHealRanForUid === USER_ID) return;
-    window._cloudHealInFlight = true;
 
-    const _ensureArr = (v) => Array.isArray(v) ? v : (v && typeof v === 'object' ? Object.values(v) : []);
-    const _hasContent = (obj) => {
-      if (!obj) return false;
-      return (
-        _ensureArr(obj.widgets).length > 0 ||
-        _ensureArr(obj.miroCards).length > 0 ||
-        _ensureArr(obj.customCells).length > 0 ||
-        (obj.cellPages && typeof obj.cellPages === 'object' && Object.keys(obj.cellPages).length > 0) ||
-        Boolean(obj.gridRows)
-      );
-    };
-
-    try {
-      const [pagesSnap, snapsSnap] = await Promise.all([
-        db.ref(`users/${USER_ID}/startmine_pages`).once('value').catch(() => null),
-        db.ref(`users/${USER_ID}/startmine_snapshots`).limitToLast(5).once('value').catch(() => null)
-      ]);
-
-      const allShards = (pagesSnap && pagesSnap.val()) || {};
-      let bestSnap = null;
-      let bestScore = -1;
-
-      if (snapsSnap && snapsSnap.exists()) {
-        snapsSnap.forEach(child => {
-          const val = child.val();
-          if (!val) return;
-          const pCount = (val.pagesMeta && val.pagesMeta.length) || (val.pages && Object.keys(val.pages).length) || 0;
-          let iCount = val.itemCount || 0;
-          if (!iCount && val.pages) {
-            Object.values(val.pages).forEach(pg => {
-              if (pg) iCount += _ensureArr(pg.widgets).length + _ensureArr(pg.miroCards).length;
-            });
-          }
-          const score = (pCount * 100) + iCount;
-          if (score > bestScore) {
-            bestScore = score;
-            bestSnap = val;
-          }
-        });
-      }
-      if (bestSnap) {
-        window._bestCloudSnapshot = bestSnap;
-      }
-
-      // Collect intentionally deleted page IDs so we never resurrect deleted pages
-      const deletedPageIds = new Set(_pendingDeletePageIds || []);
-      if (Array.isArray(D.recycleBin)) {
-        D.recycleBin.forEach(item => {
-          if (!item) return;
-          if (item.type === 'page' && item.data && item.data.id) deletedPageIds.add(item.data.id);
-          if (item.pageId && item.type === 'page') deletedPageIds.add(item.pageId);
-        });
-      }
-
-      let metaHealed = false;
-      let pagesMetaHealed = false;
-      const cloudHealUpdates = {};
-
-      // 1. Heal missing environments & groups from bestSnap.meta
-      if (bestSnap && bestSnap.meta) {
-        if (Array.isArray(bestSnap.meta.environments)) {
-          const envIds = new Set((D.environments || []).map(e => e && e.id));
-          bestSnap.meta.environments.forEach(env => {
-            if (env && env.id && !envIds.has(env.id)) {
-              D.environments.push(env);
-              envIds.add(env.id);
-              metaHealed = true;
-            }
-          });
-        }
-        if (Array.isArray(bestSnap.meta.groups)) {
-          const grpIds = new Set((D.groups || []).map(g => g && g.id));
-          bestSnap.meta.groups.forEach(grp => {
-            if (grp && grp.id && !grpIds.has(grp.id)) {
-              D.groups.push(grp);
-              grpIds.add(grp.id);
-              metaHealed = true;
-            }
-          });
-        }
-      }
-
-      // 1b. Auto-purge any bogus 'Recovered Page' entries created from historical orphan shards
-      const beforePurgeLen = D.pages.length;
-      D.pages = (D.pages || []).filter(p => p && p.name !== 'Recovered Page');
-      if (D.pages.length !== beforePurgeLen) {
-        console.log(`[CLOUD SELF-HEAL 🧹] Purged ${beforePurgeLen - D.pages.length} bogus 'Recovered Page' tabs.`);
-        pagesMetaHealed = true;
-      }
-
-      // 2. Only restore pages from bestSnap.pagesMeta if D.pages was catastrophically wiped down to default pages (<= 8)
-      const existingPageIds = new Set((D.pages || []).map(p => p && p.id));
-      if (D.pages.length <= 8 && bestSnap && Array.isArray(bestSnap.pagesMeta) && bestSnap.pagesMeta.length > 15) {
-        bestSnap.pagesMeta.forEach(pm => {
-          if (pm && pm.id && pm.name !== 'Recovered Page' && !existingPageIds.has(pm.id) && !deletedPageIds.has(pm.id)) {
-            const hasShardOrSnap = _hasContent(allShards[pm.id]) || (bestSnap.pages && _hasContent(bestSnap.pages[pm.id]));
-            if (hasShardOrSnap || pm.pageType === 'slicer') {
-              D.pages.push({ ...pm, widgets: [], miroCards: [] });
-              existingPageIds.add(pm.id);
-              pagesMetaHealed = true;
-            }
-          }
-        });
-      }
-
-      // 3. Hydrate all pages in D.pages and heal any emptied shard from bestSnap
-      let activeOrSubHydrated = false;
-      const activePgNow = typeof cp === 'function' ? cp() : null;
-      const activeSubIds = new Set(
-        activePgNow && activePgNow.cellPages ? Object.values(activePgNow.cellPages) : []
-      );
-
-      for (const p of D.pages) {
-        if (!p || !p.id) continue;
-        const shard = allShards[p.id];
-        const snapPg = bestSnap && bestSnap.pages ? bestSnap.pages[p.id] : null;
-        const shardHas = _hasContent(shard);
-        const snapHas = _hasContent(snapPg);
-
-        // Fix pageType if shard/snap is clearly a slicer page
-        if ((shard && (shard.cellPages || shard.gridRows)) || (snapPg && (snapPg.cellPages || snapPg.gridRows))) {
-          if (p.pageType !== 'slicer') {
-            p.pageType = 'slicer';
-            pagesMetaHealed = true;
-          }
-        }
-
-        let source = null;
-        if (shardHas) {
-          source = shard;
-        } else if (snapHas && !p._bypassVersionGuard) {
-          source = snapPg;
-          console.warn(`[CLOUD SELF-HEAL 🛡️] Restoring emptied page "${p.name}" (${p.id}) from Golden Snapshot!`);
-          cloudHealUpdates[`users/${USER_ID}/startmine_pages/${p.id}`] = {
-            widgets: _ensureArr(snapPg.widgets),
-            miroCards: _ensureArr(snapPg.miroCards),
-            vGuides: snapPg.vGuides || [],
-            hGuides: snapPg.hGuides || [],
-            _guidesMode: snapPg._guidesMode || false,
-            lockedGuides: snapPg.lockedGuides || [],
-            cellStates: snapPg.cellStates || {},
-            mergedCells: snapPg.mergedCells || [],
-            customCells: snapPg.customCells || [],
-            cellGuides: snapPg.cellGuides || {},
-            _layoutGuidesMode: snapPg._layoutGuidesMode || false,
-            gridRows: snapPg.gridRows || null,
-            gridCols: snapPg.gridCols || null,
-            cellPages: snapPg.cellPages || null,
-            slicerColSizes: snapPg.slicerColSizes || null,
-            slicerRowSizes: snapPg.slicerRowSizes || null,
-            cols: snapPg.cols !== undefined ? snapPg.cols : (p.cols !== undefined ? p.cols : 3),
-            ts: Date.now()
-          };
-        }
-
-        if (source && (! _hasContent(p) || !p._hasBeenLoaded) && !p._localDirtyTs) {
-          p.widgets = _ensureArr(source.widgets);
-          p.miroCards = _ensureArr(source.miroCards);
-          p.vGuides = source.vGuides || [];
-          p.hGuides = source.hGuides || [];
-          p._guidesMode = source._guidesMode || false;
-          p.lockedGuides = source.lockedGuides || [];
-          p.cellStates = source.cellStates || {};
-          p.mergedCells = source.mergedCells || [];
-          p.customCells = source.customCells || [];
-          p.cellGuides = source.cellGuides || {};
-          p._layoutGuidesMode = source._layoutGuidesMode || false;
-          p.gridRows = source.gridRows !== undefined ? source.gridRows : null;
-          p.gridCols = source.gridCols !== undefined ? source.gridCols : null;
-          p.cellPages = source.cellPages !== undefined ? source.cellPages : null;
-          p.slicerColSizes = source.slicerColSizes !== undefined ? source.slicerColSizes : null;
-          p.slicerRowSizes = source.slicerRowSizes !== undefined ? source.slicerRowSizes : null;
-          if (source.cols !== undefined) p.cols = source.cols;
-          p.ts = source.ts || p.ts || Date.now();
-          p._hasBeenLoaded = true;
-
-          cachePageData(p.id, {
-            widgets: p.widgets,
-            miroCards: p.miroCards,
-            vGuides: p.vGuides,
-            hGuides: p.hGuides,
-            _guidesMode: p._guidesMode,
-            lockedGuides: p.lockedGuides,
-            cellStates: p.cellStates,
-            mergedCells: p.mergedCells,
-            customCells: p.customCells,
-            cellGuides: p.cellGuides,
-            _layoutGuidesMode: p._layoutGuidesMode,
-            gridRows: p.gridRows,
-            gridCols: p.gridCols,
-            cellPages: p.cellPages,
-            slicerColSizes: p.slicerColSizes,
-            slicerRowSizes: p.slicerRowSizes,
-            cols: p.cols !== undefined ? p.cols : 3,
-            pageType: p.pageType || 'miro',
-            ts: p.ts
-          });
-
-          if (p.id === D.cur || activeSubIds.has(p.id)) {
-            activeOrSubHydrated = true;
-          }
-        }
-      }
-
-      if (metaHealed) {
-        cloudHealUpdates[`users/${USER_ID}/startmine_meta`] = {
-          settings: D.settings,
-          curEnv: D.curEnv,
-          curGroup: D.curGroup,
-          environments: D.environments,
-          groups: D.groups,
-          inbox: D.inbox || [],
-          ts: Date.now()
-        };
-      }
-      if (pagesMetaHealed) {
-        const healedPagesMeta = D.pages.filter(p => p).map(p => ({
+    // 1. Always purge any bogus 'Recovered Page' entries locally & in cloud
+    if (Array.isArray(D.pages)) {
+      const beforeLen = D.pages.length;
+      D.pages = D.pages.filter(p => p && p.name !== 'Recovered Page');
+      if (D.pages.length !== beforeLen) {
+        const cleanedMeta = D.pages.map(p => ({
           id: p.id || '', groupId: p.groupId || '', name: p.name || 'Untitled Page', pageType: p.pageType || 'miro',
           zoom: p.zoom !== undefined ? p.zoom : 100, panX: p.panX !== undefined ? p.panX : 0, panY: p.panY !== undefined ? p.panY : 0,
           bg: p.bg || '', bgType: p.bgType || 'none', tabColor: p.tabColor || '',
           cols: p.cols !== undefined ? p.cols : 3, ts: p.ts || Date.now()
         }));
-        cloudHealUpdates[`users/${USER_ID}/startmine_pages_meta`] = healedPagesMeta;
-        cachePagesMeta(healedPagesMeta);
-        _lastSyncedPagesMetaStr = JSON.stringify(healedPagesMeta);
-      }
-
-      if (Object.keys(cloudHealUpdates).length > 0) {
+        cachePagesMeta(cleanedMeta);
+        _lastSyncedPagesMetaStr = JSON.stringify(cleanedMeta);
         setOwnWrite(true);
-        await db.ref().update(JSON.parse(JSON.stringify(cloudHealUpdates))).catch(e => console.warn('[CLOUD HEAL WRITE]', e));
-        setOwnWrite(false);
-      }
-
-      window._cloudHealRanForUid = USER_ID;
-
-      if (metaHealed || pagesMetaHealed || activeOrSubHydrated) {
+        db.ref(`users/${USER_ID}/startmine_pages_meta`).set(cleanedMeta).finally(() => setOwnWrite(false));
         renderMeta();
-        const curPg = typeof cp === 'function' ? cp() : null;
-        if (curPg && curPg.pageType === 'slicer' && typeof setupSlicerSubPageListeners === 'function') {
-          setupSlicerSubPageListeners(curPg);
-        }
-        buildCols();
       }
+    }
+
+    // 2. If workspace already has normal pages (> 8), do NOT download heavy snapshots/all-shards over WebSocket!
+    if (Array.isArray(D.pages) && D.pages.length > 8) {
+      window._cloudHealRanForUid = USER_ID;
+      return;
+    }
+
+    window._cloudHealInFlight = true;
+    const _ensureArr = (v) => Array.isArray(v) ? v : (v && typeof v === 'object' ? Object.values(v) : []);
+    try {
+      const snapsSnap = await db.ref(`users/${USER_ID}/startmine_snapshots`).limitToLast(1).once('value').catch(() => null);
+      let bestSnap = null;
+      if (snapsSnap && snapsSnap.exists()) {
+        snapsSnap.forEach(child => { bestSnap = child.val(); });
+      }
+      if (bestSnap && Array.isArray(bestSnap.pagesMeta) && bestSnap.pagesMeta.length > 15) {
+        const existingPageIds = new Set((D.pages || []).map(p => p && p.id));
+        bestSnap.pagesMeta.forEach(pm => {
+          if (pm && pm.id && pm.name !== 'Recovered Page' && !existingPageIds.has(pm.id)) {
+            D.pages.push({ ...pm, widgets: [], miroCards: [] });
+            existingPageIds.add(pm.id);
+          }
+        });
+        renderMeta();
+      }
+      window._cloudHealRanForUid = USER_ID;
     } catch (err) {
       console.warn('[CLOUD SELF-HEAL ERROR]', err);
     } finally {
@@ -1014,7 +814,8 @@
 
   const doSave = async () => {
     window._hasPendingLocalSave = false;
-    if ((!window._initialSyncCompleted || !window._cloudMetaLoaded || !window._cloudPagesMetaLoaded) && !_offlineMode && !window._bypassingInitialLock) {
+    const hasLoadedWorkspace = window._initialSyncCompleted || window._cloudPagesMetaLoaded || (window.D && Array.isArray(window.D.pages) && window.D.pages.length > 7);
+    if (!hasLoadedWorkspace && !_offlineMode && !window._bypassingInitialLock) {
       console.warn('[SV ⛔] Cloud save blocked: Initial cloud sync not yet completed.');
       return;
     }
@@ -1264,7 +1065,7 @@
       }
 
       pagesToSave.forEach(p => {
-        if (!p._hasBeenLoaded && !p._bypassVersionGuard) {
+        if (!p._hasBeenLoaded && !p._localDirtyTs && !p._bypassVersionGuard) {
           console.warn(`[SV GUARD ⛔] Page "${p.name}" (${p.id}) has not finished loading from cloud yet — skipping cloud write.`);
           return;
         }

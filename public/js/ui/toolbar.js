@@ -102,6 +102,7 @@
   document.getElementById('io-pop').classList.remove('open');
 }
   document.getElementById('add-env').onclick = () => {
+  const nowTs = Date.now();
   const id = uid();
   D.environments.push({ id, name: 'Env ' + (D.environments.length + 1) });
   const gid = uid();
@@ -123,13 +124,20 @@
     bg: '',
     bgType: 'none',
     widgets: [],
+    ts: nowTs,
+    _localDirtyTs: nowTs,
+    _hasBeenLoaded: true,
+    _bypassVersionGuard: true,
   });
   D.curEnv = id;
   D.curGroup = gid;
-  sv();
+  window._lastLocalMetaTs = nowTs;
+  window._lastLocalEditTs = nowTs;
   switchActivePage(pid);
+  sv(false, true);
 }
   document.getElementById('add-grp').onclick = () => {
+  const nowTs = Date.now();
   const id = uid();
   const targetEnv = D.curEnv === '__all__' ? D.environments[0].id : D.curEnv;
   const envGroups = D.groups.filter((g) => g.envId === targetEnv);
@@ -151,12 +159,19 @@
     bg: '',
     bgType: 'none',
     widgets: [],
+    ts: nowTs,
+    _localDirtyTs: nowTs,
+    _hasBeenLoaded: true,
+    _bypassVersionGuard: true,
   });
   D.curGroup = id;
-  sv();
+  window._lastLocalMetaTs = nowTs;
+  window._lastLocalEditTs = nowTs;
   switchActivePage(pid);
+  sv(false, true);
 }
   document.getElementById('add-pg').onclick = () => {
+  const nowTs = Date.now();
   const id = uid();
   const targetGroup = D.curGroup === '__all__' ? D.groups[0].id : D.curGroup;
   const groupPages = D.pages.filter((p) => p.groupId === targetGroup);
@@ -178,9 +193,14 @@
     bg: '',
     bgType: 'none',
     widgets: [],
+    ts: nowTs,
+    _localDirtyTs: nowTs,
+    _hasBeenLoaded: true,
+    _bypassVersionGuard: true,
   });
-  sv();
+  window._lastLocalEditTs = nowTs;
   switchActivePage(id);
+  sv(false, true);
 }
   document.getElementById('dup-btn').onclick = () => {
   _dupScope = 'page';

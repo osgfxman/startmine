@@ -1018,7 +1018,8 @@ function switchActivePage(pageId) {
   // ─── Instant render from in-memory / cache, IndexedDB fallback ───
   const livePg = cp();
   const hasSlicerCellsInRam = Boolean(livePg && livePg.pageType === 'slicer' && ((livePg.cellPages && Object.keys(livePg.cellPages).length > 0) || livePg.gridRows));
-  const hasLiveInMemory = Boolean(livePg && livePg._hasBeenLoaded && (((livePg.widgets || []).length > 0) || ((livePg.miroCards || []).length > 0) || ((livePg.customCells || []).length > 0) || hasSlicerCellsInRam));
+  const isUnhydratedSlicer = Boolean(livePg && livePg.pageType === 'slicer' && !hasSlicerCellsInRam);
+  const hasLiveInMemory = Boolean(livePg && livePg._hasBeenLoaded && !isUnhydratedSlicer);
 
   if (hasLiveInMemory) {
     // Page is already fully loaded in RAM — render immediately without risking overwrite from stale cache!
@@ -1132,9 +1133,8 @@ function switchActivePage(pageId) {
         }
       }
     });
-    if (!isMiroPage) {
-      document.getElementById('cw').innerHTML = '<div style="padding: 2rem; color: var(--mu); text-align: center;">Loading page data...</div>';
-    }
+    // Render columns (+ Add Widget button) immediately so new/empty pages are never stuck on "Loading page data..."
+    buildCols();
     }
   }
 
@@ -10453,6 +10453,7 @@ function setupSlicerSubPageListeners(slicerPage) {
 }
 
 function createBlankPageForSlicerCell(slicerPage, cellKey, pageType) {
+  const nowTs = Date.now();
   const newPid = uid();
   const targetGroup = D.curGroup === '__all__' ? D.groups[0].id : D.curGroup;
   const count = D.pages.filter(p => p.groupId === targetGroup).length;
@@ -10469,14 +10470,20 @@ function createBlankPageForSlicerCell(slicerPage, cellKey, pageType) {
     bg: '',
     bgType: 'none',
     widgets: [],
-    miroCards: []
+    miroCards: [],
+    ts: nowTs,
+    _localDirtyTs: nowTs,
+    _hasBeenLoaded: true,
+    _bypassVersionGuard: true
   };
   
   D.pages.push(newPage);
   if (!slicerPage.cellPages) slicerPage.cellPages = {};
   slicerPage.cellPages[cellKey] = newPid;
+  slicerPage._localDirtyTs = nowTs;
+  slicerPage.ts = nowTs;
   
-  sv();
+  sv(false, true);
   buildCols();
   if (typeof showToast === 'function') {
     showToast(`✅ Created blank ${pageType === 'miro' ? 'Canvas' : 'Dashboard'} "${pageName}"`);
