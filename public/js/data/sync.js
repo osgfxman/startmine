@@ -415,6 +415,7 @@
       }
 
       // Listen to Metadata (settings, environments, groups, inbox, active selections)
+      db.ref(metaRef).off();
       db.ref(metaRef).on('value', (snap) => {
         if (window._cloudMetaLoaded && isOwnWrite()) return;
         window._cloudMetaLoaded = true;
@@ -476,6 +477,7 @@
       });
 
       // Listen to Pages Directory (names, ids, group associations)
+      db.ref(pagesMetaRef).off();
       db.ref(pagesMetaRef).on('value', (snap) => {
         if (window._cloudPagesMetaLoaded && isOwnWrite()) return;
         window._cloudPagesMetaLoaded = true;
@@ -655,12 +657,34 @@
       // Ensure single listener and debounced disconnect handling to eliminate UI flash toggling
       db.ref('.info/connected').off();
       let _disconnectTimer = null;
+      let _reconnectInterval = null;
+
+      function checkAutoReconnect() {
+        if (window._isFbConnected) {
+          if (_reconnectInterval) {
+            clearInterval(_reconnectInterval);
+            _reconnectInterval = null;
+          }
+          return;
+        }
+        console.log('[SYNC] Proactive reconnect attempt...');
+        try {
+          if (window.db) {
+            window.db.goOnline();
+          }
+        } catch(e) {}
+      }
+
       db.ref('.info/connected').on('value', (snap) => {
         const isConnected = !!snap.val();
         if (isConnected) {
           if (_disconnectTimer) {
             clearTimeout(_disconnectTimer);
             _disconnectTimer = null;
+          }
+          if (_reconnectInterval) {
+            clearInterval(_reconnectInterval);
+            _reconnectInterval = null;
           }
           window._isFbConnected = true;
           console.log('[SYNC] Connected successfully');
@@ -669,10 +693,12 @@
               setSyncStatus('ok', 'Realtime Sync Active \u2713');
             }
           }
+          if (typeof updateOfflineUI === 'function') updateOfflineUI();
         } else {
-          // Grace period: debounce disconnect warning by 3.5 seconds to prevent flash toggles on brief reconnects or auth token refreshes
+          // Grace period: debounce disconnect warning by 6 seconds to prevent flash toggles on brief reconnects or auth token refreshes
           if (!_disconnectTimer) {
             _disconnectTimer = setTimeout(() => {
+              _disconnectTimer = null;
               window._isFbConnected = false;
               console.warn('[SYNC] Disconnected / Offline (grace period expired)');
               if (typeof _syncMode === 'undefined' || _syncMode === 'realtime') {
@@ -680,7 +706,13 @@
                   setSyncStatus('loading', '🔄 Disconnected \u2014 reconnecting...');
                 }
               }
-            }, 3500);
+              if (typeof updateOfflineUI === 'function') updateOfflineUI();
+
+              // Start proactive reconnect retry loop every 6 seconds
+              if (!_reconnectInterval) {
+                _reconnectInterval = setInterval(checkAutoReconnect, 6000);
+              }
+            }, 6000);
           }
         }
       });
@@ -690,6 +722,57 @@
   };
   window.SM.data.setupShardedListeners = window.setupShardedListeners;
   window.SM.core.expose('setupShardedListeners', window.setupShardedListeners);
+
+  // Global manual & auto reconnect helper with 4s cooldown
+  let _lastManualReconnectTs = 0;
+  window.reconnectFirebaseCloud = function(isUserTriggered = false) {
+    const now = Date.now();
+    if (now - _lastManualReconnectTs < 4000) {
+      console.log('[SYNC] Reconnect throttled (cooldown active)');
+      return;
+    }
+    _lastManualReconnectTs = now;
+
+    if (isUserTriggered && typeof showToast === 'function') {
+      showToast('🔄 جاري إعادة الاتصال بالسحابة ومزامنة البيانات...', 2500);
+    }
+    if (typeof setSyncStatus === 'function') {
+      setSyncStatus('loading', '🔄 Reconnecting to cloud...');
+    }
+    try {
+      if (window.db) {
+        if (isUserTriggered) {
+          window.db.goOffline();
+          setTimeout(() => {
+            try {
+              window.db.goOnline();
+            } catch(e) {}
+          }, 200);
+        } else {
+          window.db.goOnline();
+        }
+      }
+    } catch(e) {}
+  };
+  window.SM.data.reconnectFirebaseCloud = window.reconnectFirebaseCloud;
+  window.SM.core.expose('reconnectFirebaseCloud', window.reconnectFirebaseCloud);
+
+  // Network and Visibility event handlers for seamless auto-reconnection
+  if (!window._reconnectListenersAttached) {
+    window._reconnectListenersAttached = true;
+    window.addEventListener('online', () => {
+      console.log('[NETWORK] Device came online, auto-reconnecting Firebase...');
+      window.reconnectFirebaseCloud(false);
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && window._isFbConnected === false) {
+        console.log('[VISIBILITY] Tab became visible and disconnected, auto-reconnecting...');
+        try {
+          if (window.db) window.db.goOnline();
+        } catch(e) {}
+      }
+    });
+  }
 
   // Extracted sv
   window.sv = function (saveAll = false, immediate = false) {
@@ -1314,6 +1397,12 @@
 
   // Extracted triggerManualSave
   window.triggerManualSave = function () {
+    if (window._isFbConnected === false) {
+      if (typeof window.reconnectFirebaseCloud === 'function') {
+        window.reconnectFirebaseCloud(true);
+      }
+      return;
+    }
     forceLocalSave();
     if (window._syncMode === 'saveUpload') {
       const activePg = typeof cp === 'function' ? cp() : null;

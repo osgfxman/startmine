@@ -83,23 +83,53 @@
   function updateOfflineUI() {
     const select = document.getElementById('sync-mode-select');
     const syncBtn = document.getElementById('sync-now-btn');
+    const syncMsg = document.getElementById('sync-msg');
+    const syncDot = document.getElementById('sync-dot');
     if (select) select.value = window._syncMode;
     
     if (syncBtn) {
       if (window._syncMode === 'realtime') {
-        syncBtn.disabled = true;
-        syncBtn.title = 'Realtime Sync Active';
+        syncBtn.disabled = false;
+        if (window._isFbConnected === false) {
+          syncBtn.title = 'انقطع الاتصال — اضغط لإعادة الاتصال فوراً';
+          syncBtn.classList.add('pulse-reconnect');
+        } else {
+          syncBtn.title = 'حفظ ومزامنة فورية للسحابة (Ctrl+S)';
+          syncBtn.classList.remove('pulse-reconnect');
+        }
         syncBtn.textContent = '🔄';
       } else if (window._syncMode === 'saveUpload') {
         const activePg = typeof cp === 'function' ? cp() : null;
         const isDirty = activePg && window._dirtyPages && window._dirtyPages[activePg.id];
         syncBtn.disabled = false;
+        syncBtn.classList.remove('pulse-reconnect');
         syncBtn.title = isDirty ? 'Save changes to Cloud * (Ctrl+S)' : 'Save changes to Cloud (Ctrl+S)';
         syncBtn.textContent = isDirty ? '💾' : '☁️';
       } else if (window._syncMode === 'offline') {
         syncBtn.disabled = false;
+        syncBtn.classList.remove('pulse-reconnect');
         syncBtn.title = 'Sync to Cloud';
         syncBtn.textContent = '🔄';
+      }
+    }
+
+    if (window._isFbConnected === false) {
+      if (syncMsg) {
+        syncMsg.title = 'انقطع الاتصال — اضغط لإعادة الاتصال فوراً';
+        syncMsg.style.cursor = 'pointer';
+      }
+      if (syncDot) {
+        syncDot.title = 'انقطع الاتصال — اضغط لإعادة الاتصال فوراً';
+        syncDot.style.cursor = 'pointer';
+      }
+    } else {
+      if (syncMsg) {
+        syncMsg.title = 'متصل بالسحابة — المزامنة فورية وتلقائية';
+        syncMsg.style.cursor = 'default';
+      }
+      if (syncDot) {
+        syncDot.title = 'متصل بالسحابة';
+        syncDot.style.cursor = 'default';
       }
     }
 

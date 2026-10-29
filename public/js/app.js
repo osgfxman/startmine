@@ -813,64 +813,70 @@ function initDB() {
     return;
   }
 
-  // Check if legacy monolithic data exists FIRST before attaching sharded listeners
-  db.ref(DB_REF).once('value').then((snap) => {
-    const rawData = snap.val();
-    if (rawData && rawData.pages && Array.isArray(rawData.pages)) {
-      console.log('[MIGRATION] Monolithic legacy layout found. Migrating to sharded layout...');
-      const meta = {
-        settings: rawData.settings || { engine: 'bm', accent: '#6c8fff' },
-        curEnv: rawData.curEnv || 'e0',
-        curGroup: rawData.curGroup || (rawData.groups && rawData.groups[0] ? rawData.groups[0].id : 'g0'),
-        environments: rawData.environments || [{ id: 'e0', name: 'Main Env' }],
-        groups: rawData.groups || [{ id: 'g0', name: 'Main Group', envId: 'e0' }],
-        inbox: rawData.inbox || []
-      };
+  // Fast-path: ALWAYS setup sharded listeners immediately! (Loads local cache instantly without waiting for network)
+  setupShardedListeners();
 
-      // Legacy group mapping
-      meta.groups.forEach(g => {
-        if (!g.envId) g.envId = meta.environments[0].id;
-      });
+  // Background check for legacy monolithic data migration (non-blocking)
+  const migrationKey = 'sm_sharded_migrated_' + USER_ID;
+  if (!localStorage.getItem(migrationKey)) {
+    db.ref(DB_REF).once('value').then((snap) => {
+      const rawData = snap.val();
+      if (rawData && rawData.pages && Array.isArray(rawData.pages)) {
+        console.log('[MIGRATION] Monolithic legacy layout found. Migrating to sharded layout...');
+        const meta = {
+          settings: rawData.settings || { engine: 'bm', accent: '#6c8fff' },
+          curEnv: rawData.curEnv || 'e0',
+          curGroup: rawData.curGroup || (rawData.groups && rawData.groups[0] ? rawData.groups[0].id : 'g0'),
+          environments: rawData.environments || [{ id: 'e0', name: 'Main Env' }],
+          groups: rawData.groups || [{ id: 'g0', name: 'Main Group', envId: 'e0' }],
+          inbox: rawData.inbox || []
+        };
 
-      const pagesMeta = [];
-      const updates = {};
-
-      rawData.pages.forEach(p => {
-        pagesMeta.push({
-          id: p.id,
-          groupId: p.groupId || meta.curGroup,
-          name: p.name || 'Page',
-          pageType: p.pageType || 'miro',
-          zoom: p.zoom || 100,
-          panX: p.panX || 0,
-          panY: p.panY || 0,
-          bg: p.bg || '',
-          bgType: p.bgType || 'none',
-          tabColor: p.tabColor || ''
+        // Legacy group mapping
+        meta.groups.forEach(g => {
+          if (!g.envId) g.envId = meta.environments[0].id;
         });
 
-        updates[`users/${USER_ID}/startmine_pages/${p.id}`] = {
-          widgets: p.widgets || [],
-          miroCards: p.miroCards || []
-        };
-      });
+        const pagesMeta = [];
+        const updates = {};
 
-      updates[`users/${USER_ID}/startmine_meta`] = meta;
-      updates[`users/${USER_ID}/startmine_pages_meta`] = pagesMeta;
+        rawData.pages.forEach(p => {
+          pagesMeta.push({
+            id: p.id,
+            groupId: p.groupId || meta.curGroup,
+            name: p.name || 'Page',
+            pageType: p.pageType || 'miro',
+            zoom: p.zoom || 100,
+            panX: p.panX || 0,
+            panY: p.panY || 0,
+            bg: p.bg || '',
+            bgType: p.bgType || 'none',
+            tabColor: p.tabColor || ''
+          });
 
-      // Clear the old monolith
-      updates[DB_REF] = null;
+          updates[`users/${USER_ID}/startmine_pages/${p.id}`] = {
+            widgets: p.widgets || [],
+            miroCards: p.miroCards || []
+          };
+        });
 
-      return db.ref().update(updates).then(() => {
-        console.log('[MIGRATION] Legacy data migration complete!');
-      });
-    }
-  }).catch((err) => {
-    console.warn('[MIGRATION] Monolithic layout read error or permission denied (possibly already sharded):', err.message);
-  }).finally(() => {
-    // ALWAYS setup sharded listeners AFTER checking/running migration
-    setupShardedListeners();
-  });
+        updates[`users/${USER_ID}/startmine_meta`] = meta;
+        updates[`users/${USER_ID}/startmine_pages_meta`] = pagesMeta;
+
+        // Clear the old monolith
+        updates[DB_REF] = null;
+
+        return db.ref().update(updates).then(() => {
+          console.log('[MIGRATION] Legacy data migration complete!');
+          localStorage.setItem(migrationKey, 'true');
+        });
+      } else {
+        localStorage.setItem(migrationKey, 'true');
+      }
+    }).catch((err) => {
+      console.warn('[MIGRATION] Monolithic layout check ignored:', err.message);
+    });
+  }
 }
 
 let _activePageListener = null;

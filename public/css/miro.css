@@ -608,48 +608,101 @@
   display: flex !important;
   align-items: center;
   gap: 6px;
-  background: var(--s2);
-  border-top: 1px solid var(--bd);
+  background: linear-gradient(180deg, #f8fafc 0%, #edf2f7 100%);
+  border-top: 1px solid #cbd5e1;
   border-radius: 0;
   padding: 2px 10px;
   height: 28px;
   z-index: 1000;
-  box-shadow: none;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.06), inset 0 1px 0 #ffffff;
   box-sizing: border-box;
+  color: #1e293b;
 }
 
 #miro-zoom button {
-  background: none;
-  border: none;
-  color: var(--mu);
+  background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+  border: 1px solid #cbd5e1;
+  border-bottom: 2px solid #94a3b8;
+  color: #334155;
   cursor: pointer;
-  font-size: 0.75rem;
-  font-weight: 500;
-  padding: 2px 6px;
-  border-radius: 4px;
-  transition: all 0.12s;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 5px;
+  box-shadow: inset 0 1px 0 #ffffff, 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.12s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 #miro-zoom button:hover {
-  background: rgba(108, 143, 255, 0.08);
+  background: #ffffff;
   color: var(--ac);
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+}
+
+#miro-zoom button:active {
+  transform: translateY(1px);
+  border-bottom-width: 1px;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.15);
 }
 
 #miro-zoom input[type='range'] {
   width: 80px;
-  height: 2px;
+  height: 4px;
   accent-color: var(--ac);
+  cursor: pointer;
+  border-radius: 2px;
 }
 
 #miro-zoom .mz-pct {
   font-size: 0.68rem;
-  color: var(--tx);
+  color: #1e293b;
   min-width: 32px;
   text-align: center;
   font-weight: 600;
-  background: var(--s1);
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
   border-radius: 4px;
-  padding: 2px 4px;
+  padding: 2px 5px;
+}
+
+#sync-mode-select {
+  background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%) !important;
+  border: 1px solid #cbd5e1 !important;
+  border-bottom: 2px solid #94a3b8 !important;
+  color: #1e293b !important;
+  box-shadow: inset 0 1px 0 #ffffff, 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+  font-weight: 600;
+}
+
+#sync-now-btn {
+  background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%) !important;
+  border: 1px solid #cbd5e1 !important;
+  border-bottom: 2px solid #94a3b8 !important;
+  color: #334155 !important;
+  box-shadow: inset 0 1px 0 #ffffff, 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+  cursor: pointer;
+}
+
+#sync-now-btn:active {
+  transform: translateY(1px);
+  border-bottom-width: 1px;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.15) !important;
+}
+
+@keyframes pulse-reconnect-anim {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+  70% { transform: scale(1.08); box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
+.pulse-reconnect {
+  animation: pulse-reconnect-anim 1.8s infinite !important;
+  background: linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%) !important;
+  border-color: #f59e0b !important;
+  border-bottom-color: #d97706 !important;
+  color: #b45309 !important;
 }
 
 /* Miro add card floating button */
@@ -2780,17 +2833,18 @@
   left: 0;
   top: 0;
   bottom: 28px;
-  width: 32px;
+  width: 36px;
   display: none;
   flex-direction: column;
   gap: 4px;
-  background: var(--s1);
-  border-right: 1px solid var(--bd);
-  padding: 10px 2px;
-  box-shadow: none;
+  background: linear-gradient(90deg, #f8fafc 0%, #edf2f7 100%);
+  border-right: 1px solid #cbd5e1;
+  padding: 8px 2px;
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.06), inset -1px 0 0 rgba(255, 255, 255, 0.9);
   border-radius: 0;
   z-index: 1000;
   align-items: center;
+  box-sizing: border-box;
 }
 
 #miro-toolbar.show {
@@ -2801,52 +2855,79 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 6px;
-  background: none;
-  color: var(--mu);
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+  border: 1px solid #cbd5e1;
+  border-bottom: 2px solid #94a3b8;
+  color: #334155;
+  box-shadow: inset 0 1px 0 #ffffff, 0 1px 2px rgba(0, 0, 0, 0.05);
   cursor: pointer;
-  transition: all .12s;
+  transition: all 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+  position: relative;
 }
 
 .mtb-btn:hover {
-  background: rgba(108, 143, 255, 0.08);
-  color: var(--ac);
+  background: #ffffff;
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 #ffffff, 0 3px 6px rgba(0, 0, 0, 0.08);
 }
 
-.mtb-btn.sel {
-  background: rgba(108, 143, 255, 0.15);
-  color: var(--ac);
+.mtb-btn:active {
+  transform: translateY(1.5px);
+  border-bottom-width: 1px;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.mtb-btn.sel,
+.mtb-btn.active-toggle {
+  background: linear-gradient(180deg, #e0e7ff 0%, #c7d2fe 100%) !important;
+  border: 1px solid #6366f1 !important;
+  border-top: 2px solid #4338ca !important;
+  border-bottom: 1px solid #a5b4fc !important;
+  box-shadow: inset 0 2px 4px rgba(67, 56, 202, 0.25), 0 0 8px rgba(99, 102, 241, 0.3) !important;
+  color: #3730a3 !important;
+  transform: translateY(1px);
 }
 
 .mtb-btn svg {
   pointer-events: none;
   width: 18px !important;
   height: 18px !important;
+  display: block;
+}
+
+.mtb-sep {
+  width: 22px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #cbd5e1, transparent);
+  margin: 4px auto;
+  flex-shrink: 0;
 }
 
 #ribbon {
   margin-left: 0;
-  margin-right: 32px;
-  width: calc(100% - 32px);
+  margin-right: 36px;
+  width: calc(100% - 36px);
   box-sizing: border-box;
 }
 
 /* Layout shifting when Miro canvas is active */
 body.miro-active #ribbon {
-  margin-left: 32px;
-  margin-right: 32px;
-  width: calc(100% - 64px);
+  margin-left: 36px;
+  margin-right: 36px;
+  width: calc(100% - 72px);
   box-sizing: border-box;
 }
 
 body.miro-active #miro-canvas {
-  margin-left: 32px;
-  margin-right: 32px;
+  margin-left: 36px;
+  margin-right: 36px;
   margin-bottom: 28px;
-  width: calc(100% - 64px);
+  width: calc(100% - 72px);
   height: calc(100vh - 100px - 28px);
   min-height: calc(100vh - 100px - 28px);
   box-sizing: border-box;
