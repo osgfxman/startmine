@@ -3812,6 +3812,13 @@ body.tasbeeh-resizing iframe {
 
 /* Touch devices: show widget & active-tab controls without requiring mouse hover */
 @media (hover: none), (max-width: 768px) {
+  .widget {
+    overflow: visible !important;
+  }
+  .widget:hover {
+    z-index: 1 !important;
+    overflow: visible !important;
+  }
   .widget .wa {
     opacity: 0.9 !important;
   }
@@ -3856,7 +3863,7 @@ body.tasbeeh-resizing iframe {
     -webkit-overflow-scrolling: touch !important;
     overscroll-behavior-x: contain !important;
     gap: 12px !important;
-    padding: 0.5rem 8px 3.5rem 8px !important;
+    padding: 0.5rem 8px 5rem 8px !important;
     margin-left: 0 !important;
     margin-right: 28px !important;
     width: calc(100vw - 28px) !important;
@@ -3879,11 +3886,14 @@ body.tasbeeh-resizing iframe {
     max-width: calc(100vw - 56px) !important;
     scroll-snap-align: start !important;
     scroll-snap-stop: normal !important;
-    overflow-y: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    max-height: calc(100vh - 120px) !important;
-    padding-bottom: 3rem !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding-bottom: 5rem !important;
     box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.85rem !important;
   }
 
   body.left-toolbar-active #cw:not(.cw-slicer):not(.embedded-overlay) .col {
@@ -3895,6 +3905,15 @@ body.tasbeeh-resizing iframe {
 
   #cw:not(.cw-slicer):not(.embedded-overlay) .col:last-child {
     margin-right: 12px !important;
+  }
+
+  /* Widgets: fully unrolled/expanded, never squashed or flex-shrunk */
+  #cw:not(.cw-slicer):not(.embedded-overlay) .widget {
+    flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
   }
 
   #cw:not(.cw-slicer):not(.embedded-overlay)::-webkit-scrollbar {
