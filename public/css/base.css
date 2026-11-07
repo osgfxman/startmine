@@ -3852,7 +3852,11 @@ body.tasbeeh-resizing iframe {
   }
 
   /* 0. Trello-style touch horizontal column scrolling for StartMe View on Mobile */
-  #cw:not(.cw-slicer):not(.embedded-overlay) {
+  body.miro-active #cw {
+    display: none !important;
+  }
+
+  body:not(.miro-active):not(.slicer-active) #cw:not(.cw-slicer):not(.embedded-overlay) {
     display: flex !important;
     flex-direction: row !important;
     flex-wrap: nowrap !important;
@@ -3872,14 +3876,14 @@ body.tasbeeh-resizing iframe {
     align-items: flex-start !important;
   }
 
-  body.left-toolbar-active #cw:not(.cw-slicer):not(.embedded-overlay) {
+  body.left-toolbar-active:not(.miro-active):not(.slicer-active) #cw:not(.cw-slicer):not(.embedded-overlay) {
     margin-left: 28px !important;
     margin-right: 28px !important;
     width: calc(100vw - 56px) !important;
     max-width: calc(100vw - 56px) !important;
   }
 
-  #cw:not(.cw-slicer):not(.embedded-overlay) .col {
+  body:not(.miro-active):not(.slicer-active) #cw:not(.cw-slicer):not(.embedded-overlay) .col {
     flex: 0 0 calc(100vw - 56px) !important;
     width: calc(100vw - 56px) !important;
     min-width: calc(100vw - 56px) !important;
@@ -3896,19 +3900,19 @@ body.tasbeeh-resizing iframe {
     gap: 0.85rem !important;
   }
 
-  body.left-toolbar-active #cw:not(.cw-slicer):not(.embedded-overlay) .col {
+  body.left-toolbar-active:not(.miro-active):not(.slicer-active) #cw:not(.cw-slicer):not(.embedded-overlay) .col {
     flex: 0 0 calc(100vw - 84px) !important;
     width: calc(100vw - 84px) !important;
     min-width: calc(100vw - 84px) !important;
     max-width: calc(100vw - 84px) !important;
   }
 
-  #cw:not(.cw-slicer):not(.embedded-overlay) .col:last-child {
+  body:not(.miro-active):not(.slicer-active) #cw:not(.cw-slicer):not(.embedded-overlay) .col:last-child {
     margin-right: 12px !important;
   }
 
   /* Widgets: fully unrolled/expanded, never squashed or flex-shrunk */
-  #cw:not(.cw-slicer):not(.embedded-overlay) .widget {
+  body:not(.miro-active):not(.slicer-active) #cw:not(.cw-slicer):not(.embedded-overlay) .widget {
     flex: 0 0 auto !important;
     flex-shrink: 0 !important;
     height: auto !important;
@@ -3916,10 +3920,10 @@ body.tasbeeh-resizing iframe {
     overflow: visible !important;
   }
 
-  #cw:not(.cw-slicer):not(.embedded-overlay)::-webkit-scrollbar {
+  body:not(.miro-active):not(.slicer-active) #cw:not(.cw-slicer):not(.embedded-overlay)::-webkit-scrollbar {
     height: 4px !important;
   }
-  #cw:not(.cw-slicer):not(.embedded-overlay)::-webkit-scrollbar-thumb {
+  body:not(.miro-active):not(.slicer-active) #cw:not(.cw-slicer):not(.embedded-overlay)::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.25) !important;
     border-radius: 4px !important;
   }
@@ -3984,11 +3988,86 @@ body.tasbeeh-resizing iframe {
     font-size: 12px !important;
   }
 
-  /* 3. Center workspace between slim toolbars */
-  #cw.cw-slicer {
-    left: 28px !important;
-    right: 28px !important;
-    bottom: 36px !important;
+  /* 3. Center Slicer Multi-Page Grid Workspace between slim toolbars with 2D Touch Scroll */
+  body.slicer-active {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+    overscroll-behavior: none !important;
+  }
+
+  body.slicer-active #root {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  body.slicer-active #ribbon {
+    margin-left: 28px !important;
+    margin-right: 28px !important;
+    width: calc(100vw - 56px) !important;
+    max-width: calc(100vw - 56px) !important;
+    box-sizing: border-box !important;
+    flex-shrink: 0 !important;
+  }
+
+  #cw.cw-slicer,
+  body.left-toolbar-active #cw.cw-slicer,
+  body.slicer-active #cw.cw-slicer {
+    position: relative !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    margin-left: 28px !important;
+    margin-right: 28px !important;
+    margin-top: 0 !important;
+    margin-bottom: 36px !important;
+    width: calc(100vw - 56px) !important;
+    max-width: calc(100vw - 56px) !important;
+    flex: 1 1 auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain !important;
+    touch-action: pan-x pan-y !important;
+    box-sizing: border-box !important;
+  }
+
+  #cw.cw-slicer .slicer-grid-container {
+    width: 100% !important;
+    height: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain !important;
+    touch-action: pan-x pan-y !important;
+  }
+
+  #cw.cw-slicer .slicer-grid {
+    display: grid !important;
+    gap: 6px !important;
+    touch-action: pan-x pan-y !important;
+  }
+
+  #cw.cw-slicer .slicer-cell,
+  #cw.cw-slicer .slicer-cell-body,
+  #cw.cw-slicer .slicer-miro-container,
+  #cw.cw-slicer .slicer-miro-board,
+  #cw.cw-slicer .slicer-miro-board * {
+    touch-action: pan-x pan-y !important;
   }
 
   /* 4. Floating toolbar popups: center safely on mobile screen */
@@ -4048,29 +4127,6 @@ body.tasbeeh-resizing iframe {
     margin-right: 28px !important;
     width: calc(100vw - 28px) !important;
     box-sizing: border-box !important;
-  }
-
-  /* Slicer Split-Screen on Mobile: stack cells vertically so each cell has full width */
-  #cw.cw-slicer {
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  #cw.cw-slicer .slicer-grid {
-    display: flex !important;
-    flex-direction: column !important;
-    height: auto !important;
-    min-height: 100% !important;
-    gap: 8px !important;
-    padding-bottom: 40px !important;
-  }
-
-  #cw.cw-slicer .slicer-cell {
-    min-height: 52vh !important;
-    height: 52vh !important;
-    width: 100% !important;
-    flex: none !important;
   }
 
   .slicer-controls {

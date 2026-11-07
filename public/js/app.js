@@ -991,6 +991,7 @@ function switchActivePage(pageId) {
     }
   }
   D.cur = pageId;
+  window._lastBuildPageId = null;
   const activePg = D.pages.find(p => p && p.id === pageId);
   if (activePg && activePg.groupId) {
     D.curGroup = activePg.groupId;
@@ -1002,6 +1003,28 @@ function switchActivePage(pageId) {
   const envMode = typeof getEnvPageType === 'function' ? getEnvPageType(D.curEnv) : null;
   if (envMode && activePg && activePg.pageType && activePg.pageType !== envMode && activePg.pageType !== 'slicer' && !activePg.id.startsWith('time_')) {
     activePg.pageType = envMode;
+  }
+
+  // Immediately purge previous page DOM from both #cw and #miro-canvas so pages never overlap during transition
+  const _cwPre = document.getElementById('cw');
+  if (_cwPre && (!activePg || !activePg.id.startsWith('time_'))) {
+    const _rfPre = document.getElementById('miro-sel-frame');
+    const _hbPre = document.getElementById('miro-board');
+    if (_rfPre && _hbPre && _rfPre.parentNode !== _hbPre) _hbPre.appendChild(_rfPre);
+    if (_rfPre) _rfPre.style.display = 'none';
+    _cwPre.innerHTML = '';
+    _cwPre.classList.remove('cw-slicer', 'embedded-overlay');
+  }
+  const _bdPre = document.getElementById('miro-board');
+  if (_bdPre) {
+    _bdPre.querySelectorAll('[data-cid], .miro-card, .miro-life, .miro-life-widget, .miro-dyntitle, .miro-sticky, .miro-image, .miro-img, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-grid-card, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed, .miro-overlay-widget').forEach(el => el.remove());
+  }
+  const _plPre = document.getElementById('miro-pinned-layer');
+  if (_plPre) _plPre.innerHTML = '';
+  const _cvPre = document.getElementById('miro-canvas');
+  if (_cvPre) {
+    _cvPre.classList.remove('miro-slices-mobile-scroll');
+    _cvPre.querySelectorAll('.miro-cell-viewport, .miro-guide-v, .miro-guide-h, .miro-ruler, .miro-sb').forEach(el => el.remove());
   }
   try { localStorage.setItem(LS_CUR_PAGE, pageId); } catch(e) {}
   if (activePg) {
@@ -1134,6 +1157,7 @@ function switchActivePage(pageId) {
           if (pg.pageType === 'slicer') {
             setupSlicerSubPageListeners(pg);
           }
+          window._lastBuildPageId = null;
           buildCols();
           console.log(`[IDB RESTORE] Page "${pg.name}" loaded from IndexedDB (${(pg.widgets||[]).length}w + ${(pg.miroCards||[]).length}c)`);
         }
@@ -1302,6 +1326,7 @@ function switchActivePage(pageId) {
         if (pg.pageType === 'slicer') {
           setupSlicerSubPageListeners(pg);
         }
+        window._lastBuildPageId = null;
         buildCols();
       }
     }
@@ -5105,7 +5130,7 @@ function buildEnvs() {
     if (env.tabColor) {
       tab.style.borderBottomColor = env.id === D.curEnv ? env.tabColor : 'transparent';
     }
-    tab.draggable = env.id !== 'env_time';
+    tab.draggable = window.innerWidth > 768 && env.id !== 'env_time';
     tab.addEventListener('dragstart', (e) => {
       if (env.id === 'env_time') {
         e.preventDefault();
@@ -5203,7 +5228,6 @@ function buildEnvs() {
     });
     tab.onclick = () => {
       if (nm.contentEditable === 'true') return;
-      if (D.curEnv === env.id) return;
       D.curEnv = env.id;
       if (typeof updatePageTypeToggleUI === 'function') {
         updatePageTypeToggleUI(env.id);
@@ -5274,7 +5298,7 @@ function buildGroups() {
     if (g.tabColor) {
       tab.style.borderBottomColor = g.id === D.curGroup ? g.tabColor : 'transparent';
     }
-    tab.draggable = true;
+    tab.draggable = window.innerWidth > 768;
     tab.addEventListener('dragstart', (e) => {
       _dragGrpId = g.id;
       tab.classList.add('dragging');
@@ -5358,7 +5382,6 @@ function buildGroups() {
     });
     tab.onclick = () => {
       if (nm.contentEditable === 'true') return;
-      if (D.curGroup === g.id) return;
       D.curGroup = g.id;
       const firstPageInGroup = D.pages.find((p) => p.groupId === g.id);
       if (firstPageInGroup) {
@@ -6758,7 +6781,7 @@ function buildTabs() {
     if (pg.tabColor) {
       tab.style.borderColor = pg.tabColor + '66';
     }
-    tab.draggable = true;
+    tab.draggable = window.innerWidth > 768;
     tab.dataset.pid = pg.id;
     tab.addEventListener('dragstart', (e) => {
 
@@ -7200,6 +7223,7 @@ function buildCols() {
   
   const wrap = document.getElementById('cw');
   wrap.classList.remove('cw-slicer');
+  document.body.classList.remove('slicer-active');
   if (page.id.startsWith('time_')) {
     document.getElementById('miro-canvas').classList.add('hidden');
     document.body.classList.remove('miro-active');
@@ -7237,6 +7261,7 @@ function buildCols() {
   document.getElementById('cw').style.display = isMiro ? 'none' : '';
   document.getElementById('miro-canvas').classList.toggle('hidden', !isMiro);
   document.body.classList.toggle('miro-active', isMiro);
+  document.body.classList.toggle('slicer-active', page.pageType === 'slicer');
   
   const mz = document.getElementById('miro-zoom');
   if (mz) mz.classList.add('show');
@@ -7263,6 +7288,13 @@ function buildCols() {
   if (colsWrap) colsWrap.style.display = isMiro ? 'none' : 'flex';
   
   if (isMiro) {
+    // Rescue #miro-sel-frame and clear #cw so old StartMe/Slicer DOM never lingers behind #miro-canvas
+    const _rfMiro = document.getElementById('miro-sel-frame');
+    const _hbMiro = document.getElementById('miro-board');
+    if (_rfMiro && _hbMiro && _rfMiro.parentNode !== _hbMiro) {
+      _hbMiro.appendChild(_rfMiro);
+    }
+    wrap.innerHTML = '';
     page._guidesMode = false;
     page._layoutGuidesMode = false;
     if (typeof window.initMiroSlices === 'function') {
@@ -7273,6 +7305,19 @@ function buildCols() {
     if (typeof updateGuidesButtonState === 'function') updateGuidesButtonState();
     if (typeof updateLayoutGuidesButtonState === 'function') updateLayoutGuidesButtonState();
     return;
+  }
+
+  // Clear #miro-board and #miro-canvas when rendering non-Miro pages (Slicer or StartMe)
+  const _bdNonMiro = document.getElementById('miro-board');
+  if (_bdNonMiro) {
+    _bdNonMiro.querySelectorAll('[data-cid], .miro-card, .miro-life, .miro-life-widget, .miro-dyntitle, .miro-sticky, .miro-image, .miro-img, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-grid-card, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed, .miro-overlay-widget').forEach(el => el.remove());
+  }
+  const _plNonMiro = document.getElementById('miro-pinned-layer');
+  if (_plNonMiro) _plNonMiro.innerHTML = '';
+  const _cvNonMiro = document.getElementById('miro-canvas');
+  if (_cvNonMiro) {
+    _cvNonMiro.classList.remove('miro-slices-mobile-scroll');
+    _cvNonMiro.querySelectorAll('.miro-cell-viewport, .miro-guide-v, .miro-guide-h, .miro-ruler, .miro-sb').forEach(el => el.remove());
   }
   
   if (page.pageType === 'slicer') {
@@ -10707,8 +10752,32 @@ function buildSlicerPage(page, wrap) {
   // Render grid wrapper
   const gridEl = document.createElement('div');
   gridEl.className = 'slicer-grid';
-  gridEl.style.gridTemplateRows = page.slicerRowSizes.map(s => `${s}fr`).join(' ');
-  gridEl.style.gridTemplateColumns = page.slicerColSizes.map(s => `${s}fr`).join(' ');
+  const isMobileSlicer = window.innerWidth <= 768;
+  let mobileColPxList = [];
+  let mobileRowPxList = [];
+  if (isMobileSlicer) {
+    const availW = Math.max(260, window.innerWidth - 56);
+    const ribbonEl = document.getElementById('ribbon');
+    const ribbonH = ribbonEl ? ribbonEl.offsetHeight : 100;
+    const availH = Math.max(280, window.innerHeight - ribbonH - 42);
+    const baseColW = colCount > 1 ? Math.max(280, Math.round(availW * 0.86)) : availW;
+    const baseRowH = rowCount > 1 ? Math.max(250, Math.round(availH * 0.56)) : availH;
+    const avgColPct = 100 / colCount;
+    const avgRowPct = 100 / rowCount;
+    mobileColPxList = page.slicerColSizes.map(s => Math.max(220, Math.round(baseColW * (s / avgColPct))));
+    mobileRowPxList = page.slicerRowSizes.map(s => Math.max(200, Math.round(baseRowH * (s / avgRowPct))));
+    gridEl.style.gridTemplateColumns = mobileColPxList.map(px => `${px}px`).join(' ');
+    gridEl.style.gridTemplateRows = mobileRowPxList.map(px => `${px}px`).join(' ');
+    const totalW = mobileColPxList.reduce((a, b) => a + b, 0) + Math.max(0, colCount - 1) * 6;
+    const totalH = mobileRowPxList.reduce((a, b) => a + b, 0) + Math.max(0, rowCount - 1) * 6;
+    gridEl.style.width = `${totalW}px`;
+    gridEl.style.minWidth = `${totalW}px`;
+    gridEl.style.height = `${totalH}px`;
+    gridEl.style.minHeight = `${totalH}px`;
+  } else {
+    gridEl.style.gridTemplateRows = page.slicerRowSizes.map(s => `${s}fr`).join(' ');
+    gridEl.style.gridTemplateColumns = page.slicerColSizes.map(s => `${s}fr`).join(' ');
+  }
   
   const cells = getSlicerActiveCells(page);
   cells.forEach(cell => {
@@ -10780,12 +10849,33 @@ function buildSlicerPage(page, wrap) {
     if (targetPage) {
         if ((!targetPage.miroCards || targetPage.miroCards.length === 0) && (!targetPage.widgets || targetPage.widgets.length === 0) && !targetPage._bypassVersionGuard) {
           const cached = getCachedPageData(targetPageId);
-          if (cached) {
+          if (cached && ((cached.miroCards && cached.miroCards.length > 0) || (cached.widgets && cached.widgets.length > 0))) {
             targetPage.miroCards = cached.miroCards || [];
             targetPage.widgets = cached.widgets || [];
             targetPage.zoom = cached.zoom || 100;
             targetPage.panX = cached.panX || 0;
             targetPage.panY = cached.panY || 0;
+          } else if (typeof getCachedPageDataAsync === 'function' && !targetPage._idbHydrating) {
+            targetPage._idbHydrating = true;
+            getCachedPageDataAsync(targetPageId).then(idbSub => {
+              targetPage._idbHydrating = false;
+              if (idbSub && ((!targetPage.miroCards || targetPage.miroCards.length === 0) && (!targetPage.widgets || targetPage.widgets.length === 0))) {
+                const _arr = (v) => Array.isArray(v) ? v : (v && typeof v === 'object' ? Object.values(v) : []);
+                const subCards = _arr(idbSub.miroCards);
+                const subWidgets = _arr(idbSub.widgets);
+                if (subCards.length > 0 || subWidgets.length > 0) {
+                  targetPage.miroCards = subCards;
+                  targetPage.widgets = subWidgets;
+                  targetPage._hasBeenLoaded = true;
+                  if (cp() && cp().id === page.id) {
+                    clearTimeout(window._slicerSubRebuildTimer);
+                    window._slicerSubRebuildTimer = setTimeout(() => {
+                      if (cp() && cp().id === page.id) buildCols();
+                    }, 30);
+                  }
+                }
+              }
+            }).catch(() => { targetPage._idbHydrating = false; });
           }
         }
         
@@ -10988,7 +11078,7 @@ function buildSlicerPage(page, wrap) {
           bodyEl.appendChild(errorEl);
         } else if (targetPage.pageType === 'miro') {
           let state = page.cellStates[cell.key];
-          if (!state) {
+          if (!state && !isMobileSlicer) {
             setTimeout(() => {
               const cellW = bodyEl.clientWidth || 300;
               const cellH = bodyEl.clientHeight || 200;
@@ -10997,6 +11087,48 @@ function buildSlicerPage(page, wrap) {
               buildCols();
             }, 50);
             state = { zoom: 100, panX: 0, panY: 0 };
+          } else if (!state) {
+            state = { zoom: 100, panX: 0, panY: 0 };
+          }
+
+          let viewState = state;
+          if (isMobileSlicer) {
+            let cellPxW = 0;
+            for (let cIdx = cell.cStart; cIdx <= cell.cEnd; cIdx++) {
+              cellPxW += (mobileColPxList[cIdx] || 280);
+            }
+            cellPxW += Math.max(0, cell.cEnd - cell.cStart) * 6;
+            let cellPxH = 0;
+            for (let rIdx = cell.rStart; rIdx <= cell.rEnd; rIdx++) {
+              cellPxH += (mobileRowPxList[rIdx] || 250);
+            }
+            cellPxH += Math.max(0, cell.rEnd - cell.rStart) * 6;
+            const bodyPxH = Math.max(160, cellPxH - 26);
+
+            const cards = (targetPage.miroCards || []).filter(c => c && !c.pinned && c.type !== 'dyntitle');
+            if (cards.length > 0 && cellPxW > 0 && bodyPxH > 0) {
+              let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+              cards.forEach(c => {
+                const x = c.x || 0, y = c.y || 0;
+                const w = c.w || 220, h = c.h || 180;
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x + w > maxX) maxX = x + w;
+                if (y + h > maxY) maxY = y + h;
+              });
+              const bw = Math.max(100, maxX - minX);
+              const bh = Math.max(100, maxY - minY);
+              const pad = 20;
+              const fitScale = Math.min((cellPxW - pad * 2) / bw, (bodyPxH - pad * 2) / bh, 1.2);
+              const fz = Math.max(10, Math.round(fitScale * 100));
+              const s = fz / 100;
+              viewState = {
+                zoom: fz,
+                panX: Math.round((cellPxW - bw * s) / 2 - minX * s),
+                panY: Math.round((bodyPxH - bh * s) / 2 - minY * s)
+              };
+              if (zoomSpan) zoomSpan.textContent = `${fz}%`;
+            }
           }
           
           const miroContainer = document.createElement('div');
@@ -11021,8 +11153,9 @@ function buildSlicerPage(page, wrap) {
           
           const miroBoard = document.createElement('div');
           miroBoard.className = 'slicer-miro-board';
-          const zoom = (state.zoom || 100) / 100;
-          miroBoard.style.transform = `translate(${state.panX || 0}px, ${state.panY || 0}px) scale(${zoom})`;
+          const zoom = (viewState.zoom || 100) / 100;
+          miroBoard.style.transform = `translate(${viewState.panX || 0}px, ${viewState.panY || 0}px) scale(${zoom})`;
+          miroBoard.style.setProperty('--inv-zoom', 1 / zoom);
           
           const buildersMap = {
             sticky: 'buildMiroSticky',
@@ -11060,7 +11193,48 @@ function buildSlicerPage(page, wrap) {
             }
           });
           
-          updateSlicerCellGrid(miroContainer, state, targetPage);
+          updateSlicerCellGrid(miroContainer, viewState, targetPage);
+
+          // 2-finger pinch-to-zoom & pan inside individual Slicer cell on mobile, while 1-finger scrolls the 2D Slicer grid
+          let _cellPinchDist = 0, _cellPinchZoom = 100, _cellPinchPanX = 0, _cellPinchPanY = 0, _cellPinchMidX = 0, _cellPinchMidY = 0;
+          miroContainer.addEventListener('touchstart', (te) => {
+            if (te.touches.length === 2) {
+              te.preventDefault();
+              te.stopPropagation();
+              const t0 = te.touches[0], t1 = te.touches[1];
+              _cellPinchDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+              _cellPinchZoom = viewState.zoom || 100;
+              _cellPinchPanX = viewState.panX || 0;
+              _cellPinchPanY = viewState.panY || 0;
+              const r = miroContainer.getBoundingClientRect();
+              _cellPinchMidX = ((t0.clientX + t1.clientX) / 2) - r.left;
+              _cellPinchMidY = ((t0.clientY + t1.clientY) / 2) - r.top;
+            }
+          }, { passive: false });
+          miroContainer.addEventListener('touchmove', (te) => {
+            if (te.touches.length === 2 && _cellPinchDist > 0) {
+              te.preventDefault();
+              te.stopPropagation();
+              const t0 = te.touches[0], t1 = te.touches[1];
+              const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+              const r = miroContainer.getBoundingClientRect();
+              const midX = ((t0.clientX + t1.clientX) / 2) - r.left;
+              const midY = ((t0.clientY + t1.clientY) / 2) - r.top;
+              const scaleRatio = dist / _cellPinchDist;
+              const newZ = Math.max(8, Math.min(400, Math.round(_cellPinchZoom * scaleRatio)));
+              const oldS = _cellPinchZoom / 100;
+              const newS = newZ / 100;
+              const bx = (_cellPinchMidX - _cellPinchPanX) / oldS;
+              const by = (_cellPinchMidY - _cellPinchPanY) / oldS;
+              viewState.zoom = newZ;
+              viewState.panX = Math.round(midX - bx * newS);
+              viewState.panY = Math.round(midY - by * newS);
+              miroBoard.style.transform = `translate(${viewState.panX}px, ${viewState.panY}px) scale(${newS})`;
+              miroBoard.style.setProperty('--inv-zoom', 1 / newS);
+              updateSlicerCellGrid(miroContainer, viewState, targetPage);
+              if (zoomSpan) zoomSpan.textContent = `${newZ}%`;
+            }
+          }, { passive: false });
           
           let isPanning = false;
           let startX = 0, startY = 0;

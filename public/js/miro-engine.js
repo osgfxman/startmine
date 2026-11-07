@@ -1035,11 +1035,33 @@ function convertSelectedTo(targetType) {
   let _lastTouchCount = 0;
   let _touchPanStartX = 0;
   let _touchPanStartY = 0;
+  let _touchCellKey = null;
+  let _touchCellEl = null;
+  let _touchCellBoard = null;
+  let _touchCellStartPanX = 0;
+  let _touchCellStartPanY = 0;
+
+  function isInteractiveMiroTouch(target) {
+    if (!target) return false;
+    if (target.closest('input, textarea, select, .msel-resize, .mc-del, .miro-ruler, .miro-dropdown-menu, .mtb-btn, .gear-dropdown, .miro-sb, .miro-sb-thumb')) {
+      return true;
+    }
+    if ((target.isContentEditable || (target.getAttribute && target.getAttribute('contenteditable') === 'true')) && document.activeElement === target) {
+      return true;
+    }
+    return false;
+  }
 
   canvas.addEventListener('touchstart', (e) => {
-    if (e.target !== canvas && e.target.id !== 'miro-board') return;
     const page = cp();
-    if (page && (page.pageType === 'web' || page.id.startsWith('time_'))) return;
+    if (!page || (page.pageType === 'web' || page.id.startsWith('time_'))) return;
+
+    // In mobile Slices 2D scroll mode, let single-finger touches natively scroll the 2D grid
+    if (canvas.classList.contains('miro-slices-mobile-scroll') && e.touches.length === 1) {
+      _touchPanning = false;
+      _lastTouchCount = 1;
+      return;
+    }
 
     if (e.touches.length === 2) {
       // Pinch start
@@ -1054,17 +1076,39 @@ function convertSelectedTo(targetType) {
       _touchPanning = false;
       _lastTouchCount = 2;
     } else if (e.touches.length === 1) {
-      // Single finger pan
+      if (isInteractiveMiroTouch(e.target)) return;
+
+      // Only preventDefault on touchstart if not tapping a link/button so taps still fire click,
+      // while touchmove will preventDefault and pan in 2D (X and Y)
+      if (!e.target.closest('a, button, [onclick]')) {
+        e.preventDefault();
+      }
+
+      const cellVp = e.target.closest('.miro-cell-viewport');
+      if (cellVp && cellVp.dataset && cellVp.dataset.cellKey) {
+        _touchCellKey = cellVp.dataset.cellKey;
+        _touchCellEl = cellVp;
+        _touchCellBoard = cellVp.querySelector('.miro-cell-board');
+        if (!page.cellStates) page.cellStates = {};
+        const st = page.cellStates[_touchCellKey] || { zoom: 100, panX: 0, panY: 0 };
+        _touchCellStartPanX = e.touches[0].clientX - (st.panX || 0);
+        _touchCellStartPanY = e.touches[0].clientY - (st.panY || 0);
+      } else {
+        _touchCellKey = null;
+        _touchCellEl = null;
+        _touchCellBoard = null;
+        _touchPanStartX = e.touches[0].clientX - (page.panX || 0);
+        _touchPanStartY = e.touches[0].clientY - (page.panY || 0);
+      }
+
       _touchPanning = true;
-      _touchPanStartX = e.touches[0].clientX - (page.panX || 0);
-      _touchPanStartY = e.touches[0].clientY - (page.panY || 0);
       _lastTouchCount = 1;
     }
   }, { passive: false });
 
   canvas.addEventListener('touchmove', (e) => {
     const page = cp();
-    if (page && (page.pageType === 'web' || page.id.startsWith('time_'))) return;
+    if (!page || (page.pageType === 'web' || page.id.startsWith('time_'))) return;
 
     if (e.touches.length === 2) {
       e.preventDefault();
@@ -1099,15 +1143,32 @@ function convertSelectedTo(targetType) {
       page.panY = midY - rect.top - (anchorY - _touchStartPanY) * (newZoomFrac / oldZoomFrac);
       page.zoom = newZoom;
       applyZoomPan(page);
+      if (typeof updateMiroScrollbars === 'function') updateMiroScrollbars();
       _touchPanning = false;
     } else if (e.touches.length === 1 && _touchPanning) {
       e.preventDefault();
-      page.panX = e.touches[0].clientX - _touchPanStartX;
-      page.panY = e.touches[0].clientY - _touchPanStartY;
-      const zoom = (page.zoom || 100) / 100;
-      document.getElementById('miro-board').style.transform =
-        `translate(${page.panX}px,${page.panY}px) scale(${zoom})`;
-      updateMiroGrid();
+      if (_touchCellKey && _touchCellBoard && _touchCellEl) {
+        if (!page.cellStates) page.cellStates = {};
+        const st = page.cellStates[_touchCellKey];
+        if (st) {
+          st.panX = e.touches[0].clientX - _touchCellStartPanX;
+          st.panY = e.touches[0].clientY - _touchCellStartPanY;
+          const z = (st.zoom || 100) / 100;
+          _touchCellBoard.style.transform = `translate(${st.panX}px, ${st.panY}px) scale(${z})`;
+          if (typeof updateCellBackgroundGrid === 'function') updateCellBackgroundGrid(_touchCellEl, st);
+        }
+      } else {
+        page.panX = e.touches[0].clientX - _touchPanStartX;
+        page.panY = e.touches[0].clientY - _touchPanStartY;
+        const zoom = (page.zoom || 100) / 100;
+        const board = document.getElementById('miro-board');
+        if (board) {
+          board.style.transform =
+            `translate(${page.panX}px,${page.panY}px) scale(${zoom})`;
+        }
+        updateMiroGrid();
+        if (typeof updateMiroScrollbars === 'function') updateMiroScrollbars();
+      }
       _lastTouchCount = 1;
     }
   }, { passive: false });
@@ -1115,14 +1176,33 @@ function convertSelectedTo(targetType) {
   canvas.addEventListener('touchend', (e) => {
     if (e.touches.length === 0) {
       _touchPanning = false;
+      _touchCellKey = null;
+      _touchCellEl = null;
+      _touchCellBoard = null;
       _lastTouchCount = 0;
       sv();
+      if (typeof updateMiroScrollbars === 'function') updateMiroScrollbars();
     } else if (e.touches.length === 1) {
       // Switched from pinch to single finger — restart pan
       const page = cp();
+      if (!page || (page.pageType === 'web' || page.id.startsWith('time_'))) return;
       _touchPanning = true;
-      _touchPanStartX = e.touches[0].clientX - (page.panX || 0);
-      _touchPanStartY = e.touches[0].clientY - (page.panY || 0);
+      const cellVp = e.target.closest('.miro-cell-viewport');
+      if (cellVp && cellVp.dataset && cellVp.dataset.cellKey) {
+        _touchCellKey = cellVp.dataset.cellKey;
+        _touchCellEl = cellVp;
+        _touchCellBoard = cellVp.querySelector('.miro-cell-board');
+        if (!page.cellStates) page.cellStates = {};
+        const st = page.cellStates[_touchCellKey] || { zoom: 100, panX: 0, panY: 0 };
+        _touchCellStartPanX = e.touches[0].clientX - (st.panX || 0);
+        _touchCellStartPanY = e.touches[0].clientY - (st.panY || 0);
+      } else {
+        _touchCellKey = null;
+        _touchCellEl = null;
+        _touchCellBoard = null;
+        _touchPanStartX = e.touches[0].clientX - (page.panX || 0);
+        _touchPanStartY = e.touches[0].clientY - (page.panY || 0);
+      }
     }
   });
 

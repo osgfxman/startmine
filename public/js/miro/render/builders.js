@@ -10,7 +10,7 @@
 (function() {
   let _buildingCanvas = false;
 
-  const CARD_SELECTORS = '.miro-card, .miro-life, .miro-sticky, .miro-image, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed, .miro-overlay-widget';
+  const CARD_SELECTORS = '[data-cid], .miro-card, .miro-life, .miro-life-widget, .miro-dyntitle, .miro-sticky, .miro-image, .miro-img, .miro-text, .miro-shape, .miro-pen, .miro-grid, .miro-grid-card, .miro-mindmap, .miro-trello, .miro-widget, .miro-array, .miro-calendar, .miro-gantt, .miro-embed, .miro-overlay-widget';
 
   function getCardSig(card) {
     if (!card || typeof card !== 'object') return '';
@@ -84,6 +84,9 @@
         window.SM.events.emit('canvas:rendered', { pageId: page.id, mode: 'slices' });
       }
       return;
+    }
+    if (canvas) {
+      canvas.classList.remove('miro-slices-mobile-scroll');
     }
     // Clean up grid toolbars that live in document.body
     document.querySelectorAll('.mg-toolbar[data-grid-id]').forEach(t => t.remove());

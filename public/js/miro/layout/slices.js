@@ -1048,7 +1048,20 @@
     }
 
     const canvas = document.getElementById('miro-canvas');
-    const W = canvas.clientWidth, H = canvas.clientHeight;
+    const vg = [0, ...(page.vGuides || []).sort((a,b)=>a-b), 1];
+    const hg = [0, ...(page.hGuides || []).sort((a,b)=>a-b), 1];
+    const cols = vg.length - 1;
+    const rows = hg.length - 1;
+
+    const isMobileSlices = window.innerWidth <= 768 && !page._guidesMode && (cols > 1 || rows > 1 || (page.customCells && page.customCells.length > 0));
+    canvas.classList.toggle('miro-slices-mobile-scroll', isMobileSlices);
+
+    const W = isMobileSlices
+      ? Math.max(canvas.clientWidth, cols * Math.max(280, Math.round(canvas.clientWidth * 0.86)))
+      : canvas.clientWidth;
+    const H = isMobileSlices
+      ? Math.max(canvas.clientHeight, rows * Math.max(250, Math.round(canvas.clientHeight * 0.56)))
+      : canvas.clientHeight;
 
     // Set board width/height to canvas size so child percentages resolve correctly
     board.style.width = W + 'px';
@@ -1058,11 +1071,6 @@
     if (typeof window.partitionMiroCardsIntoCells === 'function') {
       window.partitionMiroCardsIntoCells(page, W, H);
     }
-
-    const vg = [0, ...(page.vGuides || []).sort((a,b)=>a-b), 1];
-    const hg = [0, ...(page.hGuides || []).sort((a,b)=>a-b), 1];
-    const cols = vg.length - 1;
-    const rows = hg.length - 1;
 
     // Ensure cellStates is initialized
     if (!page.cellStates) page.cellStates = {};
@@ -1077,10 +1085,17 @@
 
       if (isCustom) {
         cellDiv.dataset.isCustom = 'true';
-        cellDiv.style.left = (customCell.x * 100) + '%';
-        cellDiv.style.width = (customCell.w * 100) + '%';
-        cellDiv.style.top = (customCell.y * 100) + '%';
-        cellDiv.style.height = (customCell.h * 100) + '%';
+        if (isMobileSlices) {
+          cellDiv.style.left = Math.round(customCell.x * W) + 'px';
+          cellDiv.style.width = Math.round(customCell.w * W) + 'px';
+          cellDiv.style.top = Math.round(customCell.y * H) + 'px';
+          cellDiv.style.height = Math.round(customCell.h * H) + 'px';
+        } else {
+          cellDiv.style.left = (customCell.x * 100) + '%';
+          cellDiv.style.width = (customCell.w * 100) + '%';
+          cellDiv.style.top = (customCell.y * 100) + '%';
+          cellDiv.style.height = (customCell.h * 100) + '%';
+        }
         cellDiv.style.border = '3px solid rgba(255, 138, 101, 0.7)';
         cellDiv.style.borderRadius = '16px';
         cellDiv.style.boxShadow = '0 12px 48px rgba(0, 0, 0, 0.65), inset 0 0 15px rgba(255, 138, 101, 0.2)';
@@ -1095,10 +1110,17 @@
 
         cellDiv.dataset.col = c;
         cellDiv.dataset.row = r;
-        cellDiv.style.left = (vg[c] * 100) + '%';
-        cellDiv.style.width = ((vg[cEnd+1] - vg[c]) * 100) + '%';
-        cellDiv.style.top = (hg[r] * 100) + '%';
-        cellDiv.style.height = ((hg[rEnd+1] - hg[r]) * 100) + '%';
+        if (isMobileSlices) {
+          cellDiv.style.left = Math.round(vg[c] * W) + 'px';
+          cellDiv.style.width = Math.round((vg[cEnd+1] - vg[c]) * W) + 'px';
+          cellDiv.style.top = Math.round(hg[r] * H) + 'px';
+          cellDiv.style.height = Math.round((hg[rEnd+1] - hg[r]) * H) + 'px';
+        } else {
+          cellDiv.style.left = (vg[c] * 100) + '%';
+          cellDiv.style.width = ((vg[cEnd+1] - vg[c]) * 100) + '%';
+          cellDiv.style.top = (hg[r] * 100) + '%';
+          cellDiv.style.height = ((hg[rEnd+1] - hg[r]) * 100) + '%';
+        }
         cellDiv.style.border = '1px dashed rgba(108, 143, 255, 0.35)';
         cellDiv.style.borderRadius = '12px';
         cellDiv.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(108, 143, 255, 0.15)';
@@ -1334,17 +1356,44 @@
       const state = page.cellStates[cellKey];
       
       // Clamp and apply transforms
-      clampCellState(cellKey, cw, ch);
+      const cellCards = (page.miroCards || []).filter(card => card.cell === cellKey);
+      let renderState = state;
+      if (isMobileSlices) {
+        const nonPinned = cellCards.filter(card => !card.pinned && card.type !== 'dyntitle');
+        if (nonPinned.length > 0 && cw > 0 && ch > 0) {
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          nonPinned.forEach(c => {
+            const x = c.x || 0, y = c.y || 0;
+            const w = c.w || 220, h = c.h || 180;
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x + w > maxX) maxX = x + w;
+            if (y + h > maxY) maxY = y + h;
+          });
+          const bw = Math.max(100, maxX - minX);
+          const bh = Math.max(100, maxY - minY);
+          const pad = 28;
+          const fitScale = Math.min((cw - pad * 2) / bw, (ch - pad * 2) / bh, 1.2);
+          const fz = Math.max(12, Math.round(fitScale * 100));
+          const s = fz / 100;
+          renderState = {
+            zoom: fz,
+            panX: Math.round((cw - bw * s) / 2 - minX * s),
+            panY: Math.round((ch - bh * s) / 2 - minY * s)
+          };
+        }
+      } else {
+        clampCellState(cellKey, cw, ch);
+      }
 
       // Apply background grid
-      updateCellBackgroundGrid(cellDiv, state);
+      updateCellBackgroundGrid(cellDiv, renderState);
 
-      const z = state.zoom / 100;
-      cellBoard.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${z})`;
+      const z = (renderState.zoom || 100) / 100;
+      cellBoard.style.transform = `translate(${renderState.panX || 0}px, ${renderState.panY || 0}px) scale(${z})`;
       cellBoard.style.setProperty('--inv-zoom', 1 / z);
 
       // Render card child elements
-      const cellCards = (page.miroCards || []).filter(card => card.cell === cellKey);
       const buildersMap = {
         sticky: 'buildMiroSticky',
         image: 'buildMiroImage',

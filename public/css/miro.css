@@ -25,7 +25,7 @@
 }
 
 #miro-canvas.hidden {
-  display: none;
+  display: none !important;
 }
 
 #miro-board {
@@ -5640,11 +5640,101 @@ textarea.cal-form-input {
 }
 
 @media (max-width: 768px) {
+  /* Prevent whole-page vertical bouncing/scrolling in Miro mode so canvas touch gestures pan freely */
+  body.miro-active {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+    overscroll-behavior: none !important;
+    touch-action: none !important;
+  }
+
+  body.miro-active #root {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  body.miro-active #ribbon {
+    margin-left: 28px !important;
+    margin-right: 28px !important;
+    width: calc(100vw - 56px) !important;
+    max-width: calc(100vw - 56px) !important;
+    box-sizing: border-box !important;
+    flex-shrink: 0 !important;
+  }
+
   /* 1. Miro Canvas: align with 28px mobile toolbars & 36px bottom bar */
-  #miro-canvas {
-    left: 28px !important;
-    right: 28px !important;
-    bottom: 36px !important;
+  #miro-canvas,
+  body.miro-active #miro-canvas {
+    position: relative !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    margin-left: 28px !important;
+    margin-right: 28px !important;
+    margin-top: 0 !important;
+    margin-bottom: 36px !important;
+    width: calc(100vw - 56px) !important;
+    max-width: calc(100vw - 56px) !important;
+    flex: 1 1 auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    touch-action: none !important;
+    box-sizing: border-box !important;
+  }
+
+  #miro-canvas.hidden {
+    display: none !important;
+  }
+
+  /* Prevent child scrollable cards (.miro-widget .wb, etc.) from hijacking touch for vertical-only scroll on normal Miro board */
+  #miro-canvas:not(.miro-slices-mobile-scroll) #miro-board,
+  #miro-canvas:not(.miro-slices-mobile-scroll) #miro-board * {
+    touch-action: none !important;
+  }
+
+  /* Miro Slices Grid on Mobile: native 2D horizontal + vertical touch scrolling */
+  #miro-canvas.miro-slices-mobile-scroll,
+  body.miro-active #miro-canvas.miro-slices-mobile-scroll {
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain !important;
+    touch-action: pan-x pan-y !important;
+  }
+
+  #miro-canvas.miro-slices-mobile-scroll .miro-cell-viewport,
+  #miro-canvas.miro-slices-mobile-scroll .miro-cell-viewport * {
+    touch-action: pan-x pan-y !important;
+  }
+
+  /* Miro virtual scrollbars on touch mobile: enlarged touch targets */
+  .miro-sb-x {
+    height: 12px !important;
+    bottom: 3px !important;
+    touch-action: none !important;
+  }
+  .miro-sb-y {
+    width: 12px !important;
+    right: 3px !important;
+    touch-action: none !important;
+  }
+  .miro-sb-thumb {
+    touch-action: none !important;
+    background: rgba(255, 255, 255, 0.45) !important;
   }
 
   /* 2. Bottom Bar (#miro-zoom): touch-scrollable strip so no controls are clipped */

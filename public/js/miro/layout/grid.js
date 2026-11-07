@@ -3,7 +3,7 @@
  * @description Handles grid snapping, background dot rendering, and coordinate alignments
  * @namespace SM.miro.layout
  * @depends namespace.js, miro-state.js
- * @provides window.updateMiroGrid, window.snapToGrid
+ * @provides window.updateMiroGrid, window.snapToGrid, window.updateMiroScrollbars
  * @safety Performance critical during pan/zoom. Keep calculations lightweight.
  */
 // js/miro/layout/grid.js
@@ -131,26 +131,42 @@
     thumb.style.width = thumbW + 'px';
     thumb.style.transform = `translateX(${thumbLeft}px)`;
 
-    thumb.onmousedown = (e) => {
-      e.stopPropagation(); e.preventDefault();
-      const startX = e.clientX;
+    const trackW = Math.max(1, canvas.clientWidth - 8 - thumbW);
+    const startDragX = (e) => {
+      e.stopPropagation();
+      if (e.cancelable) e.preventDefault();
+      const startCoord = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
       const startPan = page.panX || 0;
-      const trackW = canvas.clientWidth - 8 - thumbW;
 
       const onMove = (me) => {
-        const dx = me.clientX - startX;
+        me.stopPropagation();
+        if (me.cancelable) me.preventDefault();
+        const curCoord = (me.touches && me.touches[0]) ? me.touches[0].clientX : me.clientX;
+        const dx = curCoord - startCoord;
         const scrollDelta = dx / trackW;
         const worldDelta = scrollDelta * (contentW - vw) * zoom;
         page.panX = startPan - worldDelta;
-        sv(); buildMiroCanvas();
+        sv();
+        buildMiroCanvas();
       };
-      const onUp = () => {
+
+      const onEnd = () => {
         document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
+        document.removeEventListener('mouseup', onEnd);
+        document.removeEventListener('touchmove', onMove);
+        document.removeEventListener('touchend', onEnd);
+        document.removeEventListener('touchcancel', onEnd);
       };
+
       document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
+      document.addEventListener('mouseup', onEnd);
+      document.addEventListener('touchmove', onMove, { passive: false });
+      document.addEventListener('touchend', onEnd);
+      document.addEventListener('touchcancel', onEnd);
     };
+
+    thumb.addEventListener('mousedown', startDragX);
+    thumb.addEventListener('touchstart', startDragX, { passive: false });
 
     sb.appendChild(thumb);
     canvas.appendChild(sb);
@@ -169,26 +185,42 @@
     thumb.style.height = thumbH + 'px';
     thumb.style.transform = `translateY(${thumbTop}px)`;
 
-    thumb.onmousedown = (e) => {
-      e.stopPropagation(); e.preventDefault();
-      const startY = e.clientY;
+    const trackH = Math.max(1, canvas.clientHeight - 8 - thumbH);
+    const startDragY = (e) => {
+      e.stopPropagation();
+      if (e.cancelable) e.preventDefault();
+      const startCoord = (e.touches && e.touches[0]) ? e.touches[0].clientY : e.clientY;
       const startPan = page.panY || 0;
-      const trackH = canvas.clientHeight - 8 - thumbH;
 
       const onMove = (me) => {
-        const dy = me.clientY - startY;
+        me.stopPropagation();
+        if (me.cancelable) me.preventDefault();
+        const curCoord = (me.touches && me.touches[0]) ? me.touches[0].clientY : me.clientY;
+        const dy = curCoord - startCoord;
         const scrollDelta = dy / trackH;
         const worldDelta = scrollDelta * (contentH - vh) * zoom;
         page.panY = startPan - worldDelta;
-        sv(); buildMiroCanvas();
+        sv();
+        buildMiroCanvas();
       };
-      const onUp = () => {
+
+      const onEnd = () => {
         document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
+        document.removeEventListener('mouseup', onEnd);
+        document.removeEventListener('touchmove', onMove);
+        document.removeEventListener('touchend', onEnd);
+        document.removeEventListener('touchcancel', onEnd);
       };
+
       document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
+      document.addEventListener('mouseup', onEnd);
+      document.addEventListener('touchmove', onMove, { passive: false });
+      document.addEventListener('touchend', onEnd);
+      document.addEventListener('touchcancel', onEnd);
     };
+
+    thumb.addEventListener('mousedown', startDragY);
+    thumb.addEventListener('touchstart', startDragY, { passive: false });
 
     sb.appendChild(thumb);
     canvas.appendChild(sb);
@@ -198,7 +230,9 @@
 SM.miro.layout = SM.miro.layout || {};
 SM.miro.layout.updateMiroGrid = typeof updateMiroGrid !== 'undefined' ? updateMiroGrid : window.updateMiroGrid;
 SM.miro.layout.snapToGrid = typeof snapToGrid !== 'undefined' ? snapToGrid : window.snapToGrid;
+SM.miro.layout.updateMiroScrollbars = typeof updateMiroScrollbars !== 'undefined' ? updateMiroScrollbars : window.updateMiroScrollbars;
 
 window.updateMiroGrid = SM.miro.layout.updateMiroGrid;
 window.snapToGrid = SM.miro.layout.snapToGrid;
+window.updateMiroScrollbars = SM.miro.layout.updateMiroScrollbars;
 })();
