@@ -5623,19 +5623,43 @@ textarea.cal-form-input {
 @media (hover: none), (max-width: 768px) {
   .miro-selected .mc-del,
   .miro-selected .mc-lock,
+  .miro-selected .mc-pin,
+  .miro-selected .ms-shape-toggle,
   .miro-selected .mc-open,
   .miro-selected .mc-download,
   .miro-selected .mc-add-item,
   .miro-selected .miro-resize,
   .miro-selected .miro-resize-r,
-  .miro-selected .miro-resize-b {
+  .miro-selected .miro-resize-b,
+  .miro-selected [class^="mc-resize-"],
+  .miro-selected [class*=" mc-resize-"] {
     opacity: 1 !important;
     pointer-events: auto !important;
   }
 
-  .miro-selected .miro-resize {
-    width: 20px !important;
-    height: 20px !important;
+  .miro-selected .miro-resize,
+  .miro-selected .mc-resize-br,
+  .miro-selected .mc-resize-bl,
+  .miro-selected .mc-resize-tr,
+  .miro-selected .mc-resize-tl {
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  .miro-sticky.miro-selected .mc-del,
+  .miro-sticky.miro-selected .mc-lock {
+    width: 24px !important;
+    height: 24px !important;
+    font-size: 0.78rem !important;
+  }
+
+  .miro-sticky.miro-selected .mc-lock {
+    right: 32px !important;
+  }
+
+  .miro-sticky.miro-selected,
+  .miro-text.miro-selected {
+    z-index: 500 !important;
   }
 }
 
@@ -5804,5 +5828,30 @@ textarea.cal-form-input {
     max-width: 92vw !important;
     overflow-x: auto !important;
     flex-wrap: nowrap !important;
+  }
+
+  /* 5. Sticky Note & Text Toolbars on Mobile: wrap compactly so all options fit on screen without clipping popups */
+  .sn-toolbar,
+  .mt-toolbar {
+    flex-wrap: wrap !important;
+    white-space: normal !important;
+    max-width: min(86vw, 330px) !important;
+    width: max-content !important;
+    justify-content: center !important;
+    row-gap: 5px !important;
+    padding: 6px 8px !important;
+    z-index: 1000 !important;
+    touch-action: manipulation !important;
+  }
+
+  .sn-toolbar *,
+  .mt-toolbar *,
+  #miro-fmt-bar *,
+  .mc-del,
+  .mc-lock,
+  .mc-pin,
+  .ms-shape-toggle,
+  [contenteditable="true"] {
+    touch-action: manipulation !important;
   }
 }

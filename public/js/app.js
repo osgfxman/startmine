@@ -11195,9 +11195,168 @@ function buildSlicerPage(page, wrap) {
           
           updateSlicerCellGrid(miroContainer, viewState, targetPage);
 
+          function handleSlicerCellCreate(e, clientX, clientY) {
+            const anyCreate = window._stickyCreateMode || window._textCreateMode || window._gridCreateMode || window._mindmapCreateMode || window._widgetCreateMode || window._trelloCreateMode || window._embedCreateMode || window._overlayPageCreateMode || window._dyntitleCreateMode;
+            if (!anyCreate) return false;
+            if (e.target && e.target.closest && e.target.closest('.slicer-cell-floating-toolbar, .slicer-cell-header, .sn-toolbar, .mt-toolbar, .mc-del')) return false;
+
+            if (e.cancelable) e.preventDefault();
+            e.stopPropagation();
+
+            window._justCreatedCard = true;
+            setTimeout(() => { window._justCreatedCard = false; }, 300);
+
+            try {
+              const currentZoom = (state.zoom || 100) / 100;
+              const rect = miroContainer.getBoundingClientRect();
+              const clickX = clientX - rect.left;
+              const clickY = clientY - rect.top;
+              const bx = (clickX - (state.panX || 0)) / currentZoom;
+              const by = (clickY - (state.panY || 0)) / currentZoom;
+
+              const tPage = D.pages.find(p => p.id === targetPageId);
+              if (!tPage) return true;
+              if (!tPage.miroCards) tPage.miroCards = [];
+
+              const newId = uid();
+
+              if (window._stickyCreateMode) {
+                tPage.miroCards.push({ id: newId, type: 'sticky', text: '', color: 'yellow', shape: 'rect', x: bx - 140, y: by - 80, w: 280, h: 160 });
+                if (typeof clearMiroSelection === 'function') clearMiroSelection();
+                if (typeof addMiroSelect === 'function') addMiroSelect(newId);
+                sv();
+                buildCols();
+                setTimeout(() => {
+                  const stickyEl = document.querySelector(`.slicer-cell[data-cell-key="${cell.key}"] [data-cid="${newId}"]`);
+                  if (stickyEl) {
+                    stickyEl.classList.add('miro-selected');
+                    const tb = stickyEl.querySelector('.sn-toolbar');
+                    if (tb) tb.classList.add('show');
+                    const el = stickyEl.querySelector('.ms-text');
+                    if (el) {
+                      el.contentEditable = true;
+                      el.focus();
+                    }
+                  }
+                }, 100);
+              } else if (window._textCreateMode) {
+                tPage.miroCards.push({ id: newId, type: 'text', text: '', x: bx - 60, y: by - 15, w: 200, h: 40, fontSize: 24, font: 'Inter', fontColor: '#333333', align: 'right' });
+                if (typeof clearMiroSelection === 'function') clearMiroSelection();
+                if (typeof addMiroSelect === 'function') addMiroSelect(newId);
+                sv();
+                buildCols();
+                setTimeout(() => {
+                  const textCardEl = document.querySelector(`.slicer-cell[data-cell-key="${cell.key}"] [data-cid="${newId}"]`);
+                  if (textCardEl) {
+                    textCardEl.classList.add('miro-selected');
+                    const tb = textCardEl.querySelector('.mt-toolbar');
+                    if (tb) tb.classList.add('show');
+                    const el = textCardEl.querySelector('.mt-text');
+                    if (el) {
+                      el.contentEditable = true;
+                      el.focus();
+                    }
+                  }
+                }, 100);
+              } else if (window._gridCreateMode) {
+                const rows = window._gridPickerRows || 3, cols = window._gridPickerCols || 3;
+                const rdInput = document.getElementById('mgp-rd');
+                const cdInput = document.getElementById('mgp-cd');
+                const rowH = rdInput ? parseInt(rdInput.value) || 40 : 40;
+                const colW = cdInput ? parseInt(cdInput.value) || 120 : 120;
+                const cellsData = [];
+                for (let r = 0; r < rows; r++) { const row = []; for (let c = 0; c < cols; c++) row.push(''); cellsData.push(row); }
+                const w = cols * colW, h = rows * rowH;
+                const colWidths = Array(cols).fill(colW);
+                const rowHeights = Array(rows).fill(rowH);
+                tPage.miroCards.push({ id: uid(), type: 'grid', rows, cols, cells: cellsData, colWidths, rowHeights, x: bx - w / 2, y: by - h / 2, w, h, headerColor: 'none', borderColor: '#555' });
+                sv();
+                buildCols();
+              } else if (window._mindmapCreateMode) {
+                const rootId = uid(), child1 = uid(), child2 = uid(), child3 = uid();
+                tPage.miroCards.push({
+                  id: uid(), type: 'mindmap', x: bx - 300, y: by - 200, w: 600, h: 400,
+                  root: {
+                    id: rootId, text: 'Main Topic', color: '#6c8fff',
+                    children: [
+                      { id: child1, text: 'Branch 1', color: '#ff6b6b', children: [] },
+                      { id: child2, text: 'Branch 2', color: '#51cf66', children: [] },
+                      { id: child3, text: 'Branch 3', color: '#ffd43b', children: [] },
+                    ],
+                  },
+                });
+                sv();
+                buildCols();
+              } else if (window._widgetCreateMode) {
+                tPage.miroCards.push({ id: uid(), type: 'bwidget', title: 'Bookmarks', emoji: '🗂️', items: [], x: bx - 160, y: by - 200, w: 320, h: 400, color: { r: 255, g: 255, b: 255, a: 1 } });
+                sv();
+                buildCols();
+              } else if (window._trelloCreateMode) {
+                const gap = 20;
+                const lw = 260, lh = 380;
+                const lists = [
+                  { title: '2Do', color: '#6c8fff' },
+                  { title: 'In Progress', color: '#ffd43b' },
+                  { title: 'Done', color: '#51cf66' }
+                ];
+                const totalW = lists.length * lw + (lists.length - 1) * gap;
+                const startX = bx - totalW / 2;
+                lists.forEach((l, i) => {
+                  tPage.miroCards.push({ id: uid(), type: 'trello', title: l.title, listColor: l.color, cards: [], x: startX + i * (lw + gap), y: by - lh / 2, w: lw, h: lh });
+                });
+                sv();
+                buildCols();
+              } else if (window._overlayPageCreateMode) {
+                const opIdx = window._overlayPageCreateIdx;
+                tPage.miroCards.push({ id: uid(), type: 'overlay-page', overlayPage: opIdx, x: bx - Math.floor(window.innerWidth*0.42), y: by - Math.floor(window.innerHeight*0.4), w: Math.floor(window.innerWidth*0.85), h: Math.floor(window.innerHeight*0.8), calOffset: 0, calTheme: 'light', ganttView: '2week', ganttRowHeight: 50 });
+                sv();
+                buildCols();
+              } else if (window._embedCreateMode) {
+                const url = prompt('🌐 Enter published URL (Google Sheets chart, web page, etc.):');
+                if (url && url.trim()) {
+                  tPage.miroCards.push({ id: uid(), type: 'embed', embedUrl: url.trim(), cropRect: null, refreshMin: 15, x: bx - 300, y: by - 200, w: 600, h: 400 });
+                  sv();
+                  buildCols();
+                }
+              } else if (window._dyntitleCreateMode) {
+                tPage.miroCards.push({
+                  id: uid(),
+                  type: 'dyntitle',
+                  title: '',
+                  dynamicType: '',
+                  pinned: true,
+                  w: 120,
+                  h: 40,
+                  _pinCellW: 120,
+                  _pinCellH: 40,
+                  x: bx - 60,
+                  y: by - 20,
+                  _pinCellX: clickX - 60,
+                  _pinCellY: clickY - 20,
+                  _pinScreenX: clickX - 60,
+                  _pinScreenY: clickY - 20,
+                  _pinScreenW: 120,
+                  _pinScreenH: 40
+                });
+                sv();
+                buildCols();
+              }
+
+              if (typeof window.setActiveTool === 'function') {
+                window.setActiveTool('select');
+              }
+            } catch (err) {
+              console.error('[SLICER TOOL CREATE ERROR]', err);
+            }
+            return true;
+          }
+
           // 2-finger pinch-to-zoom & pan inside individual Slicer cell on mobile, while 1-finger scrolls the 2D Slicer grid
           let _cellPinchDist = 0, _cellPinchZoom = 100, _cellPinchPanX = 0, _cellPinchPanY = 0, _cellPinchMidX = 0, _cellPinchMidY = 0;
           miroContainer.addEventListener('touchstart', (te) => {
+            if (te.touches.length === 1) {
+              if (handleSlicerCellCreate(te, te.touches[0].clientX, te.touches[0].clientY)) return;
+            }
             if (te.touches.length === 2) {
               te.preventDefault();
               te.stopPropagation();
@@ -11407,146 +11566,8 @@ function buildSlicerPage(page, wrap) {
               return;
             }
             
-            const anyCreate = window._stickyCreateMode || window._textCreateMode || window._gridCreateMode || window._mindmapCreateMode || window._widgetCreateMode || window._trelloCreateMode || window._embedCreateMode || window._overlayPageCreateMode || window._dyntitleCreateMode;
-            if (anyCreate) {
-              e.preventDefault();
-              e.stopPropagation();
-              
-              window._justCreatedCard = true;
-              setTimeout(() => { window._justCreatedCard = false; }, 300);
-              
-              try {
-                const rect = miroContainer.getBoundingClientRect();
-                const clickX = e.clientX - rect.left;
-                const clickY = e.clientY - rect.top;
-                const bx = (clickX - (state.panX || 0)) / currentZoom;
-                const by = (clickY - (state.panY || 0)) / currentZoom;
-                
-                const tPage = D.pages.find(p => p.id === targetPageId);
-                if (!tPage) return;
-                if (!tPage.miroCards) tPage.miroCards = [];
-                
-                const newId = uid();
-                
-                if (window._stickyCreateMode) {
-                  tPage.miroCards.push({ id: newId, type: 'sticky', text: '', color: 'yellow', shape: 'rect', x: bx - 140, y: by - 80, w: 280, h: 160 });
-                  sv();
-                  buildCols();
-                  setTimeout(() => {
-                    const el = document.querySelector(`.slicer-cell[data-cell-key="${cell.key}"] [data-cid="${newId}"] .ms-text`);
-                    if (el) {
-                      el.contentEditable = true;
-                      el.focus();
-                      const tb = el.closest('.miro-sticky')?.querySelector('.sn-toolbar');
-                      if (tb) tb.classList.add('show');
-                    }
-                  }, 100);
-                } else if (window._textCreateMode) {
-                  tPage.miroCards.push({ id: newId, type: 'text', text: '', x: bx - 60, y: by - 15, w: 200, h: 40, fontSize: 24, font: 'Inter', fontColor: '#333333', align: 'right' });
-                  sv();
-                  buildCols();
-                  setTimeout(() => {
-                    const el = document.querySelector(`.slicer-cell[data-cell-key="${cell.key}"] [data-cid="${newId}"] .mt-text`);
-                    if (el) {
-                      el.contentEditable = true;
-                      el.focus();
-                      const tb = el.closest('.miro-text')?.querySelector('.mt-toolbar');
-                      if (tb) tb.classList.add('show');
-                    }
-                  }, 100);
-                } else if (window._gridCreateMode) {
-                  const rows = window._gridPickerRows || 3, cols = window._gridPickerCols || 3;
-                  const rdInput = document.getElementById('mgp-rd');
-                  const cdInput = document.getElementById('mgp-cd');
-                  const rowH = rdInput ? parseInt(rdInput.value) || 40 : 40;
-                  const colW = cdInput ? parseInt(cdInput.value) || 120 : 120;
-                  const cellsData = [];
-                  for (let r = 0; r < rows; r++) { const row = []; for (let c = 0; c < cols; c++) row.push(''); cellsData.push(row); }
-                  const w = cols * colW, h = rows * rowH;
-                  const colWidths = Array(cols).fill(colW);
-                  const rowHeights = Array(rows).fill(rowH);
-                  tPage.miroCards.push({ id: uid(), type: 'grid', rows, cols, cells: cellsData, colWidths, rowHeights, x: bx - w / 2, y: by - h / 2, w, h, headerColor: 'none', borderColor: '#555' });
-                  sv();
-                  buildCols();
-                } else if (window._mindmapCreateMode) {
-                  const rootId = uid(), child1 = uid(), child2 = uid(), child3 = uid();
-                  tPage.miroCards.push({
-                    id: uid(), type: 'mindmap', x: bx - 300, y: by - 200, w: 600, h: 400,
-                    root: {
-                      id: rootId, text: 'Main Topic', color: '#6c8fff',
-                      children: [
-                        { id: child1, text: 'Branch 1', color: '#ff6b6b', children: [] },
-                        { id: child2, text: 'Branch 2', color: '#51cf66', children: [] },
-                        { id: child3, text: 'Branch 3', color: '#ffd43b', children: [] },
-                      ],
-                    },
-                  });
-                  sv();
-                  buildCols();
-                } else if (window._widgetCreateMode) {
-                  tPage.miroCards.push({ id: uid(), type: 'bwidget', title: 'Bookmarks', emoji: '🗂️', items: [], x: bx - 160, y: by - 200, w: 320, h: 400, color: { r: 255, g: 255, b: 255, a: 1 } });
-                  sv();
-                  buildCols();
-                } else if (window._trelloCreateMode) {
-                  const gap = 20;
-                  const lw = 260, lh = 380;
-                  const lists = [
-                    { title: '2Do', color: '#6c8fff' },
-                    { title: 'In Progress', color: '#ffd43b' },
-                    { title: 'Done', color: '#51cf66' }
-                  ];
-                  const totalW = lists.length * lw + (lists.length - 1) * gap;
-                  const startX = bx - totalW / 2;
-                  lists.forEach((l, i) => {
-                    tPage.miroCards.push({ id: uid(), type: 'trello', title: l.title, listColor: l.color, cards: [], x: startX + i * (lw + gap), y: by - lh / 2, w: lw, h: lh });
-                  });
-                  sv();
-                  buildCols();
-                } else if (window._overlayPageCreateMode) {
-                  const opIdx = window._overlayPageCreateIdx;
-                  tPage.miroCards.push({ id: uid(), type: 'overlay-page', overlayPage: opIdx, x: bx - Math.floor(window.innerWidth*0.42), y: by - Math.floor(window.innerHeight*0.4), w: Math.floor(window.innerWidth*0.85), h: Math.floor(window.innerHeight*0.8), calOffset: 0, calTheme: 'light', ganttView: '2week', ganttRowHeight: 50 });
-                  sv();
-                  buildCols();
-                } else if (window._embedCreateMode) {
-                  const url = prompt('🌐 Enter published URL (Google Sheets chart, web page, etc.):');
-                  if (url && url.trim()) {
-                    tPage.miroCards.push({ id: uid(), type: 'embed', embedUrl: url.trim(), cropRect: null, refreshMin: 15, x: bx - 300, y: by - 200, w: 600, h: 400 });
-                    sv();
-                    buildCols();
-                  }
-                } else if (window._dyntitleCreateMode) {
-                  tPage.miroCards.push({
-                    id: uid(),
-                    type: 'dyntitle',
-                    title: '',
-                    dynamicType: '',
-                    pinned: true,
-                    w: 120,
-                    h: 40,
-                    _pinCellW: 120,
-                    _pinCellH: 40,
-                    x: bx - 60,
-                    y: by - 20,
-                    _pinCellX: clickX - 60,
-                    _pinCellY: clickY - 20,
-                    _pinScreenX: clickX - 60,
-                    _pinScreenY: clickY - 20,
-                    _pinScreenW: 120,
-                    _pinScreenH: 40
-                  });
-                  sv();
-                  buildCols();
-                }
-                
-                if (typeof window.setActiveTool === 'function') {
-                  window.setActiveTool('select');
-                }
-              } catch (err) {
-                console.error('[SLICER TOOL CREATE ERROR]', err);
-              }
-              return;
-            }
-            
+            if (handleSlicerCellCreate(e, e.clientX, e.clientY)) return;
+
             e.preventDefault();
             e.stopPropagation();
 

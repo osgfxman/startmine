@@ -1040,13 +1040,16 @@ function convertSelectedTo(targetType) {
   let _touchCellBoard = null;
   let _touchCellStartPanX = 0;
   let _touchCellStartPanY = 0;
+  let _touchMoved = false;
+  let _touchTapStartX = 0;
+  let _touchTapStartY = 0;
 
   function isInteractiveMiroTouch(target) {
-    if (!target) return false;
-    if (target.closest('input, textarea, select, .msel-resize, .mc-del, .miro-ruler, .miro-dropdown-menu, .mtb-btn, .gear-dropdown, .miro-sb, .miro-sb-thumb')) {
+    if (!target || !target.closest) return false;
+    if (target.closest('input, textarea, select, option, label, .sn-toolbar, .mt-toolbar, #miro-fmt-bar, .sn-color-popup, .msel-resize, [class*="mc-resize-"], .mc-del, .mc-lock, .mc-pin, .ms-shape-toggle, .miro-ruler, .miro-dropdown-menu, .mtb-btn, .gear-dropdown, .miro-sb, .miro-sb-thumb')) {
       return true;
     }
-    if ((target.isContentEditable || (target.getAttribute && target.getAttribute('contenteditable') === 'true')) && document.activeElement === target) {
+    if (target.isContentEditable || (target.getAttribute && target.getAttribute('contenteditable') === 'true') || target.closest('[contenteditable="true"]')) {
       return true;
     }
     return false;
@@ -1056,10 +1059,23 @@ function convertSelectedTo(targetType) {
     const page = cp();
     if (!page || (page.pageType === 'web' || page.id.startsWith('time_'))) return;
 
+    // 1. Handle click-to-place tool modes (Sticky Note, Text, Grid, etc.) on mobile touch
+    if (e.touches.length === 1) {
+      const anyCreateMode = _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode || _embedCreateMode || _overlayPageCreateMode || _dyntitleCreateMode;
+      if (anyCreateMode && typeof window.handleCanvasCreateAtPoint === 'function') {
+        window.handleCanvasCreateAtPoint(e, e.touches[0].clientX, e.touches[0].clientY);
+        _touchPanning = false;
+        return;
+      }
+    }
+
     // In mobile Slices 2D scroll mode, let single-finger touches natively scroll the 2D grid
     if (canvas.classList.contains('miro-slices-mobile-scroll') && e.touches.length === 1) {
       _touchPanning = false;
       _lastTouchCount = 1;
+      _touchMoved = false;
+      _touchTapStartX = e.touches[0].clientX;
+      _touchTapStartY = e.touches[0].clientY;
       return;
     }
 
@@ -1074,9 +1090,14 @@ function convertSelectedTo(targetType) {
       _touchStartMidX = (t0.clientX + t1.clientX) / 2;
       _touchStartMidY = (t0.clientY + t1.clientY) / 2;
       _touchPanning = false;
+      _touchMoved = true;
       _lastTouchCount = 2;
     } else if (e.touches.length === 1) {
       if (isInteractiveMiroTouch(e.target)) return;
+
+      _touchMoved = false;
+      _touchTapStartX = e.touches[0].clientX;
+      _touchTapStartY = e.touches[0].clientY;
 
       // Only preventDefault on touchstart if not tapping a link/button so taps still fire click,
       // while touchmove will preventDefault and pan in 2D (X and Y)
@@ -1146,6 +1167,9 @@ function convertSelectedTo(targetType) {
       if (typeof updateMiroScrollbars === 'function') updateMiroScrollbars();
       _touchPanning = false;
     } else if (e.touches.length === 1 && _touchPanning) {
+      if (Math.hypot(e.touches[0].clientX - _touchTapStartX, e.touches[0].clientY - _touchTapStartY) > 6) {
+        _touchMoved = true;
+      }
       e.preventDefault();
       if (_touchCellKey && _touchCellBoard && _touchCellEl) {
         if (!page.cellStates) page.cellStates = {};
@@ -1170,12 +1194,32 @@ function convertSelectedTo(targetType) {
         if (typeof updateMiroScrollbars === 'function') updateMiroScrollbars();
       }
       _lastTouchCount = 1;
+    } else if (e.touches.length === 1 && !_touchPanning) {
+      if (Math.hypot(e.touches[0].clientX - _touchTapStartX, e.touches[0].clientY - _touchTapStartY) > 6) {
+        _touchMoved = true;
+      }
     }
   }, { passive: false });
 
   canvas.addEventListener('touchend', (e) => {
     if (e.touches.length === 0) {
+      // If user tapped without panning: select tapped widget or clear selection on empty canvas
+      if (!_touchMoved && _lastTouchCount === 1 && !isInteractiveMiroTouch(e.target)) {
+        const tappedCardEl = e.target.closest ? e.target.closest('[data-cid]') : null;
+        if (tappedCardEl && tappedCardEl.dataset.cid) {
+          clearMiroSelection();
+          addMiroSelect(tappedCardEl.dataset.cid);
+          updateMiroSelFrame();
+        } else if (!e.target.closest('#miro-toolbar, #miro-fmt-bar, .sn-toolbar, .mt-toolbar, a, button')) {
+          clearMiroSelection();
+          document.querySelectorAll('.sn-toolbar.show, .mt-toolbar.show').forEach(t => t.classList.remove('show'));
+          if (document.activeElement && document.activeElement.isContentEditable) {
+            document.activeElement.blur();
+          }
+        }
+      }
       _touchPanning = false;
+      _touchMoved = false;
       _touchCellKey = null;
       _touchCellEl = null;
       _touchCellBoard = null;
@@ -2622,28 +2666,27 @@ document.getElementById('mtb-widget').onclick = () => setActiveTool('widget');
 document.getElementById('mtb-trello').onclick = () => setActiveTool('trello');
 document.getElementById('mtb-dyn-title').onclick = () => setActiveTool('dyn-title');
 
-// Canvas click handler for click-to-place modes
-document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
-  if (e.button !== 0 && e.type !== 'touchstart') return;
-
+// Canvas click/tap handler for click-to-place modes
+window.handleCanvasCreateAtPoint = function handleCanvasCreateAtPoint(e, clientX, clientY) {
   // Check if ANY creation mode is active
   const anyCreateMode = _stickyCreateMode || _textCreateMode || _gridCreateMode || _mindmapCreateMode || _widgetCreateMode || _trelloCreateMode || _embedCreateMode || _overlayPageCreateMode || _dyntitleCreateMode;
-  if (!anyCreateMode) return;
+  if (!anyCreateMode) return false;
 
   // Only block clicks on toolbar controls themselves
-  if (e.target.closest('#miro-toolbar, .mc-del')) return;
+  if (e.target && e.target.closest && e.target.closest('#miro-toolbar, .mc-del, .sn-toolbar, .mt-toolbar')) return false;
 
-  e.preventDefault();
+  if (e.cancelable) e.preventDefault();
   e.stopPropagation();
 
   try {
     const page = cp();
     if (!page.miroCards) page.miroCards = [];
     const zoom = (page.zoom || 100) / 100;
-    const rect = document.getElementById('miro-canvas').getBoundingClientRect();
+    const canvasEl = document.getElementById('miro-canvas');
+    const rect = canvasEl.getBoundingClientRect();
     
-    const clickX = e.clientX - rect.left;
-    const clickY = e.clientY - rect.top;
+    const clickX = clientX - rect.left;
+    const clickY = clientY - rect.top;
     let bx = (clickX - (page.panX || 0)) / zoom;
     let by = (clickY - (page.panY || 0)) / zoom;
     let targetCell = null;
@@ -2652,68 +2695,81 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
 
     const hasSlices = page && (page._guidesMode || (page.vGuides && page.vGuides.length > 0) || (page.hGuides && page.hGuides.length > 0) || (page.customCells && page.customCells.length > 0));
     if (hasSlices) {
-      const W = rect.width, H = rect.height;
-      const pctX = clickX / W;
-      const pctY = clickY / H;
+      const hitCellVp = (e.target && e.target.closest) ? e.target.closest('.miro-cell-viewport') : null;
+      if (hitCellVp && hitCellVp.dataset && hitCellVp.dataset.cellKey) {
+        targetCell = hitCellVp.dataset.cellKey;
+        const cellRect = hitCellVp.getBoundingClientRect();
+        if (!page.cellStates) page.cellStates = {};
+        const state = page.cellStates[targetCell] || { zoom: 100, panX: 0, panY: 0 };
+        const cellZoom = (state.zoom || 100) / 100;
+        cellLeft = cellRect.left - rect.left;
+        cellTop = cellRect.top - rect.top;
+        bx = (clientX - cellRect.left - (state.panX || 0)) / cellZoom;
+        by = (clientY - cellRect.top - (state.panY || 0)) / cellZoom;
+      } else {
+        const W = rect.width, H = rect.height;
+        const pctX = clickX / W;
+        const pctY = clickY / H;
 
-      let targetCustomCell = null;
-      if (page.customCells) {
-        for (let i = page.customCells.length - 1; i >= 0; i--) {
-          const cc = page.customCells[i];
-          if (pctX >= cc.x && pctX <= (cc.x + cc.w) && pctY >= cc.y && pctY <= (cc.y + cc.h)) {
-            targetCustomCell = cc;
-            break;
+        let targetCustomCell = null;
+        if (page.customCells) {
+          for (let i = page.customCells.length - 1; i >= 0; i--) {
+            const cc = page.customCells[i];
+            if (pctX >= cc.x && pctX <= (cc.x + cc.w) && pctY >= cc.y && pctY <= (cc.y + cc.h)) {
+              targetCustomCell = cc;
+              break;
+            }
           }
         }
-      }
 
-      const vg = [0, ...(page.vGuides || []).sort((a,b)=>a-b), 1];
-      const hg = [0, ...(page.hGuides || []).sort((a,b)=>a-b), 1];
-      const hasGridGuides = page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
-      let targetGridCell = null;
+        const vg = [0, ...(page.vGuides || []).sort((a,b)=>a-b), 1];
+        const hg = [0, ...(page.hGuides || []).sort((a,b)=>a-b), 1];
+        const hasGridGuides = page.vGuides && (page.vGuides.length > 0 || (page.hGuides && page.hGuides.length > 0));
+        let targetGridCell = null;
 
-      if (!targetCustomCell && hasGridGuides) {
-        let col = vg.length - 2;
-        for (let i = 0; i < vg.length - 1; i++) {
-          if (pctX >= vg[i] && pctX < vg[i+1]) { col = i; break; }
+        if (!targetCustomCell && hasGridGuides) {
+          let col = vg.length - 2;
+          for (let i = 0; i < vg.length - 1; i++) {
+            if (pctX >= vg[i] && pctX < vg[i+1]) { col = i; break; }
+          }
+          let row = hg.length - 2;
+          for (let i = 0; i < hg.length - 1; i++) {
+            if (pctY >= hg[i] && pctY < hg[i+1]) { row = i; break; }
+          }
+
+          const mergedCell = (page.mergedCells || []).find(m => col >= m.cStart && col <= m.cEnd && row >= m.rStart && row <= m.rEnd);
+          if (mergedCell) {
+            targetGridCell = mergedCell.cStart + "_" + mergedCell.rStart + "_" + mergedCell.cEnd + "_" + mergedCell.rEnd;
+          } else {
+            targetGridCell = col + "_" + row;
+          }
         }
-        let row = hg.length - 2;
-        for (let i = 0; i < hg.length - 1; i++) {
-          if (pctY >= hg[i] && pctY < hg[i+1]) { row = i; break; }
-        }
 
-        const mergedCell = (page.mergedCells || []).find(m => col >= m.cStart && col <= m.cEnd && row >= m.rStart && row <= m.rEnd);
-        if (mergedCell) {
-          targetGridCell = mergedCell.cStart + "_" + mergedCell.rStart + "_" + mergedCell.cEnd + "_" + mergedCell.rEnd;
+        if (targetCustomCell) {
+          targetCell = targetCustomCell.id;
+        } else if (targetGridCell) {
+          targetCell = targetGridCell;
         } else {
-          targetGridCell = col + "_" + row;
+          targetCell = "0_0";
         }
+
+        const state = page.cellStates[targetCell] || { zoom: 100, panX: 0, panY: 0 };
+        const cellZoom = state.zoom / 100;
+        cellLeft = 0; cellTop = 0;
+
+        if (targetCustomCell) {
+          cellLeft = targetCustomCell.x * W;
+          cellTop = targetCustomCell.y * H;
+        } else if (targetGridCell) {
+          const parts = targetGridCell.split('_');
+          const col = parseInt(parts[0]), row = parseInt(parts[1]);
+          cellLeft = (vg[col] !== undefined ? vg[col] : 0) * W;
+          cellTop = (hg[row] !== undefined ? hg[row] : 0) * H;
+        }
+
+        bx = (clickX - cellLeft - state.panX) / cellZoom;
+        by = (clickY - cellTop - state.panY) / cellZoom;
       }
-
-      if (targetCustomCell) {
-        targetCell = targetCustomCell.id;
-      } else if (targetGridCell) {
-        targetCell = targetGridCell;
-      } else {
-        targetCell = "0_0";
-      }
-
-      const state = page.cellStates[targetCell] || { zoom: 100, panX: 0, panY: 0 };
-      const cellZoom = state.zoom / 100;
-      cellLeft = 0; cellTop = 0;
-
-      if (targetCustomCell) {
-        cellLeft = targetCustomCell.x * W;
-        cellTop = targetCustomCell.y * H;
-      } else if (targetGridCell) {
-        const parts = targetGridCell.split('_');
-        const col = parseInt(parts[0]), row = parseInt(parts[1]);
-        cellLeft = (vg[col] !== undefined ? vg[col] : 0) * W;
-        cellTop = (hg[row] !== undefined ? hg[row] : 0) * H;
-      }
-
-      bx = (clickX - cellLeft - state.panX) / cellZoom;
-      by = (clickY - cellTop - state.panY) / cellZoom;
     }
 
     const cardIndexBefore = page.miroCards.length;
@@ -2724,16 +2780,22 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
       if (targetCell) {
         page.miroCards[page.miroCards.length - 1].cell = targetCell;
       }
+      clearMiroSelection();
+      addMiroSelect(newId);
       sv(); buildMiroCanvas(); buildOutline();
       setTimeout(() => {
-        const el = document.querySelector(`.miro-sticky[data-cid="${newId}"] .ms-text`);
-        if (el) {
-          el.contentEditable = true;
-          el.focus();
-          // Show toolbar
-          const tb = el.closest('.miro-sticky')?.querySelector('.sn-toolbar');
+        const stickyEl = document.querySelector(`.miro-sticky[data-cid="${newId}"]`);
+        if (stickyEl) {
+          stickyEl.classList.add('miro-selected');
+          const tb = stickyEl.querySelector('.sn-toolbar');
           if (tb) tb.classList.add('show');
+          const el = stickyEl.querySelector('.ms-text');
+          if (el) {
+            el.contentEditable = true;
+            el.focus();
+          }
         }
+        updateMiroSelFrame();
       }, 100);
     } else if (_textCreateMode) {
       const newId = uid();
@@ -2741,16 +2803,22 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
       if (targetCell) {
         page.miroCards[page.miroCards.length - 1].cell = targetCell;
       }
+      clearMiroSelection();
+      addMiroSelect(newId);
       sv(); buildMiroCanvas(); buildOutline();
       setTimeout(() => {
-        const el = document.querySelector(`.miro-text[data-cid="${newId}"] .mt-text`);
-        if (el) {
-          el.contentEditable = true;
-          el.focus();
-          // Show toolbar
-          const tb = el.closest('.miro-text')?.querySelector('.mt-toolbar');
+        const textCardEl = document.querySelector(`.miro-text[data-cid="${newId}"]`);
+        if (textCardEl) {
+          textCardEl.classList.add('miro-selected');
+          const tb = textCardEl.querySelector('.mt-toolbar');
           if (tb) tb.classList.add('show');
+          const el = textCardEl.querySelector('.mt-text');
+          if (el) {
+            el.contentEditable = true;
+            el.focus();
+          }
         }
+        updateMiroSelFrame();
       }, 100);
     } else if (_gridCreateMode) {
       const rows = _gridPickerRows || 3, cols = _gridPickerCols || 3;
@@ -2874,6 +2942,12 @@ document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
 
   // Always reset to select mode, even on error
   setActiveTool('select');
+  return true;
+};
+
+document.getElementById('miro-canvas').addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  window.handleCanvasCreateAtPoint(e, e.clientX, e.clientY);
 });
 document.getElementById('mtb-shape').onclick = () => {
   setActiveTool('shape');

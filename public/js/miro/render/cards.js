@@ -46,21 +46,45 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
     });
   });
 
-  el.addEventListener('mousedown', (e) => {
+  function startCardDrag(e, isTouch) {
     // Middle mouse button: always let it bubble for panning
-    if (e.button === 1) return;
+    if (!isTouch && e.button === 1) return;
+    if (isTouch && (!e.touches || e.touches.length !== 1)) return;
+
+    // If any creation tool mode is active, let the event bubble to the canvas to create the item
+    const anyCreateMode = window._stickyCreateMode || window._textCreateMode || window._gridCreateMode || window._mindmapCreateMode || window._widgetCreateMode || window._trelloCreateMode || window._embedCreateMode || window._overlayPageCreateMode || window._dyntitleCreateMode || window._penMode || window._shapeMode;
+    if (anyCreateMode) return;
+
     if (card.locked) return; // Prevent drag if locked
-    if (e.target.contentEditable === 'true') return;
+    if (e.target.contentEditable === 'true' || e.target.isContentEditable) return;
     for (const sel of ignoreSelectors) {
       if (e.target.closest(sel)) return;
     }
+    if (e.target.closest('.sn-toolbar, .mt-toolbar, #miro-fmt-bar, .mc-del, .mc-lock, .mc-pin, .ms-shape-toggle, [class*="mc-resize-"]')) return;
+    if (isTouch && e.target.closest('button, input, textarea, select, option, label, a')) return;
     if (card.type === 'grid' && e.target.closest('td') && e.target.closest('td').contentEditable === 'true') return;
 
+    const wasAlreadySelected = _miroSelected.has(card.id);
+
+    // On mobile touch: allow 1-finger canvas panning when touching the body of an unselected large container widget,
+    // while immediately dragging/selecting sticky notes, text, shapes, images, cards, headers, or already-selected widgets
+    if (isTouch) {
+      const isDirectDraggableType = card.type === 'sticky' || card.type === 'text' || card.type === 'shape' || card.type === 'image' || card.type === 'pen' || !card.type || el.classList.contains('miro-sticky') || el.classList.contains('miro-text') || el.classList.contains('miro-shape') || el.classList.contains('miro-image') || el.classList.contains('miro-card');
+      const isHeaderTouch = !!e.target.closest('.wh, .tl-hdr');
+      if (!isDirectDraggableType && !wasAlreadySelected && !isHeaderTouch) {
+        return;
+      }
+    }
+
     e.stopPropagation();
+    if (isTouch) {
+      e.preventDefault();
+    }
+
     if (card.type === 'dyntitle') {
-      if (!e.ctrlKey) return;
+      if (!isTouch && !e.ctrlKey) return;
     } else {
-      if (e.ctrlKey || e.metaKey) { toggleMiroSelect(card.id); return; }
+      if (!isTouch && (e.ctrlKey || e.metaKey)) { toggleMiroSelect(card.id); return; }
     }
 
     // Group-aware selection: auto-select all group siblings unless group is "open"
@@ -87,6 +111,21 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
     }
     updateMiroSelFrame();
 
+    // Immediately show sticky/text toolbar when selected (especially important on mobile touch)
+    if (el.classList.contains('miro-sticky') || card.type === 'sticky') {
+      document.querySelectorAll('.sn-toolbar.show').forEach(t => {
+        if (!el.contains(t)) t.classList.remove('show');
+      });
+      const tb = el.querySelector('.sn-toolbar');
+      if (tb) tb.classList.add('show');
+    } else if (el.classList.contains('miro-text') || card.type === 'text') {
+      document.querySelectorAll('.mt-toolbar.show').forEach(t => {
+        if (!el.contains(t)) t.classList.remove('show');
+      });
+      const tb = el.querySelector('.mt-toolbar');
+      if (tb) tb.classList.add('show');
+    }
+
     const _canvas = document.getElementById('miro-canvas');
     if (_canvas) _canvas.classList.add('miro-dragging');
 
@@ -94,7 +133,8 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
     const page = D.pages.find(p => p.id === cardPageId) || cp();
     const isPinnedCard = card.pinned || card.type === 'dyntitle';
     const zoom = isPinnedCard ? 1 : (typeof window.getMiroCardDragZoom === 'function' ? window.getMiroCardDragZoom(card) : ((page.zoom || 100) / 100));
-    const startX = e.clientX, startY = e.clientY;
+    const startPt = isTouch ? e.touches[0] : e;
+    const startX = startPt.clientX, startY = startPt.clientY;
 
     // Set active-dragging-cell z-index boost on viewports of selected cards
     const activeViewports = new Set();
@@ -127,9 +167,17 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
     let hasCloned = false;
 
     function onMove(ev) {
+      const pt = (ev.touches && ev.touches[0]) || (ev.changedTouches && ev.changedTouches[0]) || ev;
+      const curX = pt.clientX, curY = pt.clientY;
+      if (isTouch && !moved && Math.hypot(curX - startX, curY - startY) < 5) {
+        return;
+      }
+      if (isTouch && ev.cancelable) {
+        ev.preventDefault();
+      }
       moved = true;
-      const dx = (ev.clientX - startX) / zoom;
-      const dy = (ev.clientY - startY) / zoom;
+      const dx = (curX - startX) / zoom;
+      const dy = (curY - startY) / zoom;
 
       // On first movement with Alt key, drop clones at the ORIGINAL starting positions.
       // We continue dragging the elements we originally clicked on, which conceptually "become" the clones.
@@ -394,8 +442,8 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
         const c = (page.miroCards || []).find(x => x.id === cid);
         if (!c) return;
         if (orig.pinned) {
-          const ldx = ev.clientX - startX;
-          const ldy = ev.clientY - startY;
+          const ldx = curX - startX;
+          const ldy = curY - startY;
           let nx = orig.x + ldx;
           let ny = orig.y + ldy;
           if (c.cell) {
@@ -444,9 +492,28 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
     function onUp(ev) {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
+      document.removeEventListener('touchcancel', onUp);
 
       const _canvasElement = document.getElementById('miro-canvas');
       if (_canvasElement) _canvasElement.classList.remove('miro-dragging');
+
+      // On mobile touch tap (no drag): if card was already selected (or double-tapped), enter text edit mode
+      if (isTouch && !moved) {
+        const now = Date.now();
+        const isDblTap = (el._lastTapTime && (now - el._lastTapTime) < 380);
+        el._lastTapTime = now;
+        if (wasAlreadySelected || isDblTap) {
+          const editEl = el.querySelector('.ms-text, .mt-text');
+          if (editEl && !card.locked) {
+            editEl.contentEditable = true;
+            editEl.focus();
+            const tb = el.querySelector('.sn-toolbar, .mt-toolbar');
+            if (tb) tb.classList.add('show');
+          }
+        }
+      }
 
       // Remove z-index boost class from active cell viewports
       activeViewports.forEach(cellEl => {
@@ -602,9 +669,18 @@ function miroSetupCardDrag(el, card, ignoreSelectors = ['.mc-del']) {
         });
       }
     }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  });
+      if (isTouch) {
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('touchend', onUp);
+        document.addEventListener('touchcancel', onUp);
+      } else {
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      }
+  }
+
+  el.addEventListener('mousedown', (e) => startCardDrag(e, false));
+  el.addEventListener('touchstart', (e) => startCardDrag(e, true), { passive: false });
 }
 
 /* ─── 4-Corner Resize + Sticky Notes ─── */
@@ -613,22 +689,27 @@ function attach8WayResize(el, card, minW, minH) {
   ['br', 'bl', 'tr', 'tl', 't', 'b', 'l', 'r'].forEach((handleType) => {
     const handle = document.createElement('div');
     handle.className = 'mc-resize-' + handleType;
-    handle.addEventListener('mousedown', (e) => {
+    function startResize(e, isTouch) {
       if (card.locked) return; // Prevent resize if locked
+      if (isTouch && (!e.touches || e.touches.length !== 1)) return;
       e.stopPropagation();
+      if (isTouch && e.cancelable) e.preventDefault();
       const cardPageId = el.dataset.pageId || D.cur;
       const page = D.pages.find(p => p.id === cardPageId) || cp();
       const isPinned = card.pinned || card.type === 'dyntitle';
       const zoom = isPinned ? 1 : (typeof window.getMiroCardDragZoom === 'function' ? window.getMiroCardDragZoom(card) : ((page.zoom || 100) / 100));
-      const sx = e.clientX,
-        sy = e.clientY;
+      const startPt = isTouch ? e.touches[0] : e;
+      const sx = startPt.clientX,
+        sy = startPt.clientY;
       const oX = isPinned ? (card.cell ? (card._pinCellX || 0) : (card._pinScreenX || 0)) : (card.x || 0),
         oY = isPinned ? (card.cell ? (card._pinCellY || 0) : (card._pinScreenY || 0)) : (card.y || 0),
         oW = isPinned ? (card.cell ? (card._pinCellW || card.w || 200) : (card._pinScreenW || card.w || 200)) : (card.w || 280),
         oH = isPinned ? (card.cell ? (card._pinCellH || card.h || 150) : (card._pinScreenH || card.h || 150)) : (card.h || 240);
       function onMove(ev) {
-        const dx = (ev.clientX - sx) / zoom;
-        const dy = (ev.clientY - sy) / zoom;
+        if (isTouch && ev.cancelable) ev.preventDefault();
+        const pt = (ev.touches && ev.touches[0]) || (ev.changedTouches && ev.changedTouches[0]) || ev;
+        const dx = (pt.clientX - sx) / zoom;
+        const dy = (pt.clientY - sy) / zoom;
         let nw = oW,
           nh = oH,
           nx = oX,
@@ -736,6 +817,9 @@ function attach8WayResize(el, card, minW, minH) {
       function onUp() {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
+        document.removeEventListener('touchmove', onMove);
+        document.removeEventListener('touchend', onUp);
+        document.removeEventListener('touchcancel', onUp);
         // Auto-fit height for text widgets after resize (both grow AND shrink)
         const mtText = el.querySelector('.mt-text');
         if (mtText) {
@@ -747,9 +831,17 @@ function attach8WayResize(el, card, minW, minH) {
         }
         sv();
       }
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-    });
+      if (isTouch) {
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('touchend', onUp);
+        document.addEventListener('touchcancel', onUp);
+      } else {
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      }
+    }
+    handle.addEventListener('mousedown', (e) => startResize(e, false));
+    handle.addEventListener('touchstart', (e) => startResize(e, true), { passive: false });
     el.appendChild(handle);
   });
 }
@@ -1107,6 +1199,7 @@ function buildMiroSticky(card) {
   const del = document.createElement('button');
   del.className = 'mc-del';
   del.textContent = '✕';
+  del.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
   del.onclick = (e) => {
     e.stopPropagation();
     deleteMiroCard(card.id);
@@ -1115,6 +1208,11 @@ function buildMiroSticky(card) {
   // ─── Unified Toolbar (merged color + size + rich text) ───
   const toolbar = document.createElement('div');
   toolbar.className = 'sn-toolbar';
+  toolbar.addEventListener('mousedown', (e) => e.stopPropagation());
+  toolbar.addEventListener('touchstart', (e) => {
+    saveSelection();
+    e.stopPropagation();
+  }, { passive: true });
 
   // Helper to restore selection inside contentEditable after clicking toolbar buttons
   let _savedRange = null;
@@ -1884,6 +1982,9 @@ function buildMiroSticky(card) {
   text.addEventListener('mousedown', (e) => {
     if (text.contentEditable === 'true') e.stopPropagation();
   });
+  text.addEventListener('touchstart', (e) => {
+    if (text.contentEditable === 'true') e.stopPropagation();
+  }, { passive: true });
   // Handle Escape to exit edit mode
   text.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -1900,6 +2001,7 @@ function buildMiroSticky(card) {
   toggle.className = 'ms-shape-toggle';
   toggle.textContent = (card.w || 280) > (card.h || 160) ? '■' : '▬';
   toggle.title = 'Toggle shape';
+  toggle.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
   toggle.onclick = (e) => {
     e.stopPropagation();
     if ((card.w || 280) >= (card.h || 160)) {
@@ -1976,6 +2078,14 @@ function buildMiroSticky(card) {
     requestAnimationFrame(() => autoSizeText(text, el));
   } else {
     text.style.fontSize = card.fontSizeMode + 'px';
+  }
+
+  // Restore selection & toolbar state if this sticky is currently selected (e.g. after drag/rebuild)
+  if (typeof _miroSelected !== 'undefined' && _miroSelected.has(card.id) && !card.locked) {
+    el.classList.add('miro-selected');
+    if (_miroSelected.size === 1) {
+      toolbar.classList.add('show');
+    }
   }
   return el;
 }
