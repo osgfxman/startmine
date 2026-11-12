@@ -5664,8 +5664,30 @@ window.triggerImageMigration = async function () {
       for (const [cardKey, card] of cardEntries) {
         if (!card || !card.imageUrl) continue;
 
-        const hasDriveBackup = Boolean(card.driveFileId && card.driveUrl) || /googleusercontent\.com\/d\/|drive\.google\.com/i.test(card.imageUrl);
+        const detectedDriveId = card.driveFileId
+          || (card.driveUrl && (card.driveUrl.match(/googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/) || card.driveUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/))?.[1])
+          || (card.imageUrl && (card.imageUrl.match(/googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/) || card.imageUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/))?.[1])
+          || null;
+        const hasDriveBackup = Boolean(detectedDriveId);
         if (hasDriveBackup) {
+          const canonicalDriveUrl = `https://lh3.googleusercontent.com/d/${detectedDriveId}`;
+          const basePath = `users/${USER_ID}/startmine_pages/${pageId}/miroCards/${cardKey}`;
+          if (!card.driveFileId) {
+            card.driveFileId = detectedDriveId;
+            pendingUpdates[`${basePath}/driveFileId`] = detectedDriveId;
+          }
+          if (card.driveUrl !== canonicalDriveUrl) {
+            card.driveUrl = canonicalDriveUrl;
+            pendingUpdates[`${basePath}/driveUrl`] = canonicalDriveUrl;
+          }
+          if (/ibb\.co|imgbb\.com/i.test(card.imageUrl)) {
+            if (!card.imgbbUrl) {
+              card.imgbbUrl = card.imageUrl;
+              pendingUpdates[`${basePath}/imgbbUrl`] = card.imageUrl;
+            }
+            card.imageUrl = canonicalDriveUrl;
+            pendingUpdates[`${basePath}/imageUrl`] = canonicalDriveUrl;
+          }
           totalAlreadyDrive++;
           continue;
         }
@@ -5686,10 +5708,14 @@ window.triggerImageMigration = async function () {
       }
     }
 
+    if (Object.keys(pendingUpdates).length > 0) {
+      await flushPendingUpdates();
+    }
+
     const totalFound = queue.length;
     if (totalFound === 0) {
       if (typeof showToast === 'function') {
-        showToast(`✅ جميع الصور (${totalAlreadyDrive} صورة) مؤمنة ومحفوظة بالفعل على Google Drive!`, 5000);
+        showToast(`✅ جميع الصور (${totalAlreadyDrive} صورة) مؤمنة ومحفوظة بالفعل على Google Drive كأساس!`, 5000);
       }
       return;
     }

@@ -531,6 +531,7 @@ async function _processSilentDriveBackupQueue() {
         if (item.card.imageUrl && (item.card.imageUrl.includes('ibb.co') || item.card.imageUrl.includes('imgbb.com'))) {
           item.card.imgbbUrl = item.card.imageUrl;
         }
+        item.card.imageUrl = res.driveUrl;
         // Persist metadata quietly to Firebase & local storage if user is signed in
         if (typeof window.D !== 'undefined' && Array.isArray(D.pages)) {
           const pg = D.pages.find(p => p && Array.isArray(p.miroCards) && p.miroCards.some(c => c && c.id === item.card.id));
@@ -539,9 +540,10 @@ async function _processSilentDriveBackupQueue() {
             if (idx !== -1 && typeof USER_ID !== 'undefined' && USER_ID && typeof firebase !== 'undefined') {
               const baseRef = `users/${USER_ID}/startmine_pages/${pg.id}/miroCards/${idx}`;
               firebase.database().ref(baseRef).update({
+                imageUrl: res.driveUrl,
                 driveFileId: res.driveFileId,
                 driveUrl: res.driveUrl,
-                imgbbUrl: item.card.imgbbUrl || item.card.imageUrl
+                imgbbUrl: item.card.imgbbUrl || null
               }).catch(() => {});
             }
             if (typeof window.cachePageData === 'function') {
@@ -597,13 +599,51 @@ function _extractDriveFileIdFromUrl(url) {
   return null;
 }
 
+// ─── Synchronous In-Memory Image Resolution Cache (Zero Flash on Re-Render) ───
+const _memImageSrcCache = new Map();
+
+function _getMemCachedSrc(keys) {
+  if (!Array.isArray(keys)) return null;
+  for (const k of keys) {
+    if (!k) continue;
+    const nk = _normalizeVaultKey(k);
+    if (nk && _memImageSrcCache.has(nk)) return _memImageSrcCache.get(nk);
+    if (_memImageSrcCache.has(k)) return _memImageSrcCache.get(k);
+  }
+  return null;
+}
+
+function _setMemCachedSrc(keys, src) {
+  if (!src || !Array.isArray(keys)) return;
+  for (const k of keys) {
+    if (!k) continue;
+    const nk = _normalizeVaultKey(k);
+    if (nk) _memImageSrcCache.set(nk, src);
+    _memImageSrcCache.set(k, src);
+  }
+}
+
 async function loadMiroCardImage(card, imgEl, containerEl) {
   if (!card || !imgEl) return;
   imgEl.referrerPolicy = 'no-referrer';
 
+  // Per-element sequence token to prevent stale async callbacks from overwriting/hiding a newer render
+  const seq = (imgEl._loadSeq = (imgEl._loadSeq || 0) + 1);
+  const isStale = () => imgEl._loadSeq !== seq;
+
   const rawUrl = card.imageUrl || card.driveUrl || card.imgbbUrl || '';
-  const detectedDriveId = card.driveFileId || _extractDriveFileIdFromUrl(rawUrl) || _extractDriveFileIdFromUrl(card.driveUrl);
-  if (detectedDriveId && !card.driveFileId) card.driveFileId = detectedDriveId;
+  const detectedDriveId = card.driveFileId || _extractDriveFileIdFromUrl(card.driveUrl) || _extractDriveFileIdFromUrl(rawUrl);
+  if (detectedDriveId) {
+    card.driveFileId = detectedDriveId;
+    card.driveUrl = `https://lh3.googleusercontent.com/d/${detectedDriveId}`;
+    // Ensure Google Drive is always primary on card.imageUrl, keeping ImgBB strictly as backup in card.imgbbUrl
+    if (card.imageUrl && /ibb\.co|imgbb\.com/i.test(card.imageUrl)) {
+      if (!card.imgbbUrl) card.imgbbUrl = card.imageUrl;
+      card.imageUrl = card.driveUrl;
+    } else if (!card.imageUrl) {
+      card.imageUrl = card.driveUrl;
+    }
+  }
 
   const vaultKeys = [
     card.id ? `img_cid_${card.id}` : null,
@@ -613,32 +653,50 @@ async function loadMiroCardImage(card, imgEl, containerEl) {
     card.imgbbUrl || null
   ].filter(Boolean);
 
-  // Helper to remove any existing error/wake overlay
-  const clearOverlay = () => {
-    if (!containerEl) return;
-    const oldPh = containerEl.querySelector('.mi-placeholder');
-    if (oldPh) oldPh.remove();
+  // Helper to remove any existing error/wake overlay and mark image as cleanly loaded
+  const markLoadedOk = (src) => {
+    if (isStale()) return;
+    if (containerEl) {
+      const oldPh = containerEl.querySelector('.mi-placeholder');
+      if (oldPh) oldPh.remove();
+    }
     imgEl.style.display = '';
     imgEl.style.filter = '';
+    imgEl.dataset.loadedOk = '1';
+    if (src && imgEl.src !== src) {
+      imgEl.src = src;
+    }
   };
 
-  // 1. Instant Local IndexedDB Vault (0ms, works 100% offline!)
+  // 0. Synchronous 0ms In-Memory Cache (eliminates any flash when switching tabs, panning, or rebuilding slices)
+  const memSrc = _getMemCachedSrc(vaultKeys);
+  if (memSrc) {
+    markLoadedOk(memSrc);
+    return;
+  }
+
+  // Show micro-preview synchronously BEFORE any async await if not yet loaded
+  if (card.thumbPreview && card.thumbPreview.startsWith('data:image') && imgEl.dataset.loadedOk !== '1') {
+    imgEl.src = card.thumbPreview;
+    imgEl.style.filter = 'blur(3px)';
+  }
+
+  // 1. Instant Local IndexedDB Vault (works 100% offline!)
   const localBlob = await getImageVaultBlob(vaultKeys);
+  if (isStale()) return;
   if (localBlob) {
-    clearOverlay();
     const objUrl = URL.createObjectURL(localBlob);
-    imgEl.onload = () => {
-      imgEl.style.filter = '';
-    };
-    imgEl.src = objUrl;
+    _setMemCachedSrc(vaultKeys, objUrl);
+    imgEl.onload = () => { imgEl.style.filter = ''; };
+    markLoadedOk(objUrl);
     if (!card.driveFileId) queueSilentDriveBackup(card, localBlob);
     return;
   }
 
   // 2. If base64 data URL directly on card, display & store in vault + queue Drive backup
   if (rawUrl.startsWith('data:image')) {
-    clearOverlay();
-    imgEl.src = rawUrl;
+    _setMemCachedSrc(vaultKeys, rawUrl);
+    markLoadedOk(rawUrl);
     const b = dataUrlToBlob(rawUrl);
     if (b) {
       await saveImageVaultBlob(vaultKeys, b);
@@ -647,46 +705,24 @@ async function loadMiroCardImage(card, imgEl, containerEl) {
     return;
   }
 
-  // Show micro-preview while loading from cloud if available
-  if (card.thumbPreview && card.thumbPreview.startsWith('data:image')) {
-    imgEl.src = card.thumbPreview;
-    imgEl.style.filter = 'blur(4px)';
-  }
-
-  // 3. Google Drive Primary Cloud (via authenticated API blob or lh3 CDN)
+  // 3. Google Drive Primary Cloud (Direct CDN without CORS block -> Authenticated API fallback)
   if (card.driveFileId) {
-    const driveBlob = await fetchDriveImageBlob(card.driveFileId, false);
-    if (driveBlob) {
-      clearOverlay();
-      await saveImageVaultBlob(vaultKeys, driveBlob);
-      imgEl.onload = () => { imgEl.style.filter = ''; };
-      imgEl.src = URL.createObjectURL(driveBlob);
-      return;
-    }
-
-    // Try direct Google Drive public CDN links before falling back to ImgBB
+    // 3A. Try direct Google Drive public CDN links FIRST WITHOUT crossOrigin='anonymous'
+    // (Setting crossOrigin='anonymous' on Google Drive redirects causes false CORS failures on mobile/Chrome!)
     const driveUrls = [
       `https://lh3.googleusercontent.com/d/${card.driveFileId}`,
-      `https://drive.google.com/thumbnail?id=${card.driveFileId}&sz=w2000`
+      `https://drive.google.com/thumbnail?id=${card.driveFileId}&sz=w2000`,
+      `https://drive.google.com/uc?export=view&id=${card.driveFileId}`
     ];
     for (const dUrl of driveUrls) {
+      if (isStale()) return;
       const loaded = await new Promise((resolve) => {
         const probe = new Image();
         probe.referrerPolicy = 'no-referrer';
-        probe.crossOrigin = 'anonymous';
-        const t = setTimeout(() => resolve(false), 8000);
-        probe.onload = async () => {
+        const t = setTimeout(() => resolve(false), 9000);
+        probe.onload = () => {
           clearTimeout(t);
           if (probe.naturalWidth > 0 && !isImgBBErrorPlaceholder(probe)) {
-            clearOverlay();
-            imgEl.style.filter = '';
-            imgEl.src = dUrl;
-            try {
-              const c = document.createElement('canvas');
-              c.width = probe.naturalWidth; c.height = probe.naturalHeight;
-              c.getContext('2d').drawImage(probe, 0, 0);
-              c.toBlob(b => { if (b) saveImageVaultBlob(vaultKeys, b); }, 'image/jpeg', 0.9);
-            } catch (e) { /* CORS fallback */ }
             resolve(true);
           } else {
             resolve(false);
@@ -695,32 +731,62 @@ async function loadMiroCardImage(card, imgEl, containerEl) {
         probe.onerror = () => { clearTimeout(t); resolve(false); };
         probe.src = dUrl;
       });
-      if (loaded) return;
+      if (isStale()) return;
+      if (loaded) {
+        _setMemCachedSrc(vaultKeys, dUrl);
+        markLoadedOk(dUrl);
+        // Asynchronously cache blob into IndexedDB Vault in the background (non-blocking)
+        fetchDriveImageBlob(card.driveFileId, false).then((b) => {
+          if (b) saveImageVaultBlob(vaultKeys, b);
+        }).catch(() => {});
+        return;
+      }
+    }
+
+    // 3B. If public CDN link didn't load (e.g. restricted file permission), try authenticated Google Drive API download
+    const driveBlob = await fetchDriveImageBlob(card.driveFileId, false);
+    if (isStale()) return;
+    if (driveBlob) {
+      await saveImageVaultBlob(vaultKeys, driveBlob);
+      const objUrl = URL.createObjectURL(driveBlob);
+      _setMemCachedSrc(vaultKeys, objUrl);
+      imgEl.onload = () => { imgEl.style.filter = ''; };
+      markLoadedOk(objUrl);
+      return;
     }
   }
 
-  // 4. Staggered ImgBB / External URL Loader with Cold-Storage Wake & Anti-172x96 Filter
-  const targetUrl = card.imgbbUrl || card.imageUrl;
-  if (!targetUrl) return;
+  // 4. Staggered Backup Loader (ImgBB backup or non-Drive external URL)
+  // Pick non-Drive backup URL if Drive failed, or card.imageUrl if card is not on Drive
+  const backupCandidate = (card.driveFileId && card.imgbbUrl) ? card.imgbbUrl : (card.imageUrl || card.imgbbUrl);
+  if (!backupCandidate || (!card.imgbbUrl && card.driveFileId && /googleusercontent\.com|drive\.google\.com/i.test(backupCandidate))) {
+    // No external backup URL available; keep thumbPreview if present
+    if (card.thumbPreview && card.thumbPreview.startsWith('data:image')) {
+      imgEl.style.filter = '';
+    }
+    return;
+  }
 
+  const targetUrl = backupCandidate;
   const isImgBB = /ibb\.co|imgbb\.com/i.test(targetUrl);
 
   const attemptNetworkLoad = async (maxAttempts = isImgBB ? 3 : 1) => {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (isStale()) return true;
       const success = await enqueueStaggeredImgLoad(() => new Promise((resolve) => {
-        const bustUrl = attempt === 1
+        if (isStale()) return resolve(true);
+        const bustUrl = (attempt === 1 || !isImgBB)
           ? targetUrl
           : targetUrl + (targetUrl.includes('?') ? '&' : '?') + `_wake=${Date.now()}_${attempt}`;
 
+        // Load WITHOUT crossOrigin first so display never fails due to missing CORS headers
         const probe = new Image();
         probe.referrerPolicy = 'no-referrer';
-        if (!targetUrl.includes('miro.com/api')) {
-          probe.crossOrigin = 'anonymous';
-        }
         const timer = setTimeout(() => resolve(false), 12000);
 
         probe.onload = async () => {
           clearTimeout(timer);
+          if (isStale()) return resolve(true);
           // Check if ImgBB returned its 172x96 "service unavailable" banner!
           if (isImgBB && isImgBBErrorPlaceholder(probe.naturalWidth, probe.naturalHeight)) {
             console.warn(`[ImgVault] ⚠️ Detected ImgBB 172x96 'service unavailable' placeholder on attempt ${attempt} for:`, targetUrl);
@@ -729,56 +795,30 @@ async function loadMiroCardImage(card, imgEl, containerEl) {
             return;
           }
 
-          clearOverlay();
-          imgEl.style.filter = '';
-          imgEl.src = probe.src;
+          _setMemCachedSrc(vaultKeys, probe.src);
+          markLoadedOk(probe.src);
 
-          // Cache valid image into Local IndexedDB Vault + queue silent Google Drive backup!
-          try {
-            const c = document.createElement('canvas');
-            c.width = probe.naturalWidth || probe.width;
-            c.height = probe.naturalHeight || probe.height;
-            c.getContext('2d').drawImage(probe, 0, 0);
-            c.toBlob(async (blob) => {
-              if (blob && (await isValidImageBlob(blob, targetUrl))) {
-                await saveImageVaultBlob(vaultKeys, blob);
-                if (!card.thumbPreview) {
-                  const micro = await createMicroPreview(c.toDataURL('image/jpeg', 0.5));
-                  if (micro) card.thumbPreview = micro;
-                }
-                if (!card.driveFileId) {
-                  queueSilentDriveBackup(card, blob);
+          // In background: attempt CORS fetch/canvas capture to save into Local Vault & Google Drive
+          (async () => {
+            try {
+              const resp = await fetch(probe.src, { mode: 'cors', referrerPolicy: 'no-referrer' });
+              if (resp.ok) {
+                const blob = await resp.blob();
+                if (blob && (await isValidImageBlob(blob, targetUrl))) {
+                  await saveImageVaultBlob(vaultKeys, blob);
+                  if (!card.driveFileId) {
+                    queueSilentDriveBackup(card, blob);
+                  }
                 }
               }
-            }, 'image/jpeg', 0.9);
-          } catch (corsErr) {
-            // If canvas tainted without CORS, fallback to non-anonymous display
-          }
+            } catch (e) { /* ignore background CORS capture error */ }
+          })();
+
           resolve(true);
         };
 
         probe.onerror = () => {
           clearTimeout(timer);
-          // If anonymous CORS failed on a server that blocks CORS headers, try once without crossOrigin
-          if (probe.crossOrigin) {
-            const fallbackProbe = new Image();
-            fallbackProbe.referrerPolicy = 'no-referrer';
-            const t2 = setTimeout(() => resolve(false), 10000);
-            fallbackProbe.onload = () => {
-              clearTimeout(t2);
-              if (isImgBB && isImgBBErrorPlaceholder(fallbackProbe.naturalWidth, fallbackProbe.naturalHeight)) {
-                resolve(false);
-                return;
-              }
-              clearOverlay();
-              imgEl.style.filter = '';
-              imgEl.src = fallbackProbe.src;
-              resolve(true);
-            };
-            fallbackProbe.onerror = () => { clearTimeout(t2); resolve(false); };
-            fallbackProbe.src = bustUrl;
-            return;
-          }
           resolve(false);
         };
 
@@ -794,11 +834,18 @@ async function loadMiroCardImage(card, imgEl, containerEl) {
   };
 
   const loadedOk = await attemptNetworkLoad();
+  if (isStale() || imgEl.dataset.loadedOk === '1') return;
+
   if (!loadedOk && containerEl) {
-    // Show clean interactive Rescue / Wake UI instead of the ugly 172x96 ImgBB banner
-    if (!card.thumbPreview) {
-      imgEl.style.display = 'none';
+    // If card has a valid thumbPreview, keep it visible without blur rather than hiding the image!
+    if (card.thumbPreview && card.thumbPreview.startsWith('data:image')) {
+      imgEl.src = card.thumbPreview;
+      imgEl.style.display = '';
+      imgEl.style.filter = '';
+      return;
     }
+
+    imgEl.style.display = 'none';
     const oldPh = containerEl.querySelector('.mi-placeholder');
     if (oldPh) oldPh.remove();
 
@@ -811,9 +858,9 @@ async function loadMiroCardImage(card, imgEl, containerEl) {
     } else {
       ph.innerHTML = `
         <span style="font-size:1.4rem;">☁️</span>
-        <span style="font-size:0.72rem;font-weight:600;color:#aab8ff;line-height:1.3;">خادم ImgBB في وضع الخمول المؤقت</span>
+        <span style="font-size:0.72rem;font-weight:600;color:#aab8ff;line-height:1.3;">تعذر تحميل الصورة مؤقتاً</span>
         <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:2px;">
-          <button type="button" class="mi-wake-btn" style="background:#4f6ef7;color:#fff;border:none;border-radius:5px;padding:4px 8px;font-size:0.68rem;cursor:pointer;font-weight:600;">🔄 تنشيط وتحميل</button>
+          <button type="button" class="mi-wake-btn" style="background:#4f6ef7;color:#fff;border:none;border-radius:5px;padding:4px 8px;font-size:0.68rem;cursor:pointer;font-weight:600;">🔄 إعادة المحاولة</button>
           <button type="button" class="mi-open-btn" style="background:rgba(255,255,255,0.12);color:#ddd;border:1px solid rgba(255,255,255,0.2);border-radius:5px;padding:4px 8px;font-size:0.68rem;cursor:pointer;">🌐 فتح الرابط</button>
         </div>
       `;
@@ -822,7 +869,7 @@ async function loadMiroCardImage(card, imgEl, containerEl) {
       if (wakeBtn) {
         wakeBtn.onclick = async (ev) => {
           ev.stopPropagation();
-          wakeBtn.textContent = '⏳ جاري التنشيط...';
+          wakeBtn.textContent = '⏳ جاري التحميل...';
           wakeBtn.disabled = true;
           const ok = await attemptNetworkLoad(3);
           if (!ok) {

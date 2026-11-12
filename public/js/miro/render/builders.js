@@ -21,7 +21,12 @@
       for (let i = 0; i < keys.length; i++) {
         const k = keys[i];
         if (k === 'x' || k === 'y' || k === 'z' || k === 'zIndex') continue;
+        if (k === 'driveFileId' || k === 'driveUrl' || k === 'imgbbUrl' || k === 'thumbPreview') continue;
         if (!includeSize && (k === 'w' || k === 'h')) continue;
+        if (card.type === 'image' && k === 'imageUrl') {
+          sigObj[k] = card.driveFileId ? ('drive:' + card.driveFileId) : (card[k] ? 'has_img' : '');
+          continue;
+        }
         sigObj[k] = card[k];
       }
       return JSON.stringify(sigObj);
@@ -261,8 +266,18 @@
       console.error('[BUILD MIRO CANVAS FATAL]', fatal);
       if (typeof showToast === 'function') showToast('❌ Canvas render crashed: ' + fatal.message, 8000);
     }
-    // Auto-fix any base64 images on this page
-    if (typeof _fixBase64ImagesOnPage === 'function') setTimeout(_fixBase64ImagesOnPage, 1000);
+    // Auto-fix any unhosted/base64 images on this page (only if needed)
+    if (typeof _fixBase64ImagesOnPage === 'function' && Array.isArray(page.miroCards)) {
+      const needsFix = page.miroCards.some(c => c && (c.type === 'image' || c.type === 'grid') && (
+        !c.imageUrl ||
+        c.imageUrl.startsWith('data:image') ||
+        (!c.driveFileId && !/googleusercontent\.com|drive\.google\.com/i.test(c.imageUrl))
+      ));
+      if (needsFix) {
+        clearTimeout(window._fixBase64Timer);
+        window._fixBase64Timer = setTimeout(_fixBase64ImagesOnPage, 1200);
+      }
+    }
   } finally {
     _buildingCanvas = false;
   }

@@ -2406,7 +2406,10 @@ window.uploadToImgBB = uploadToImgBB;
 })();
 
 // ─── Auto-fix & Cloud Backup of Images on Page Load ───
+let _fixingBase64InProgress = false;
 async function _fixBase64ImagesOnPage() {
+  if (_fixingBase64InProgress) return;
+  _fixingBase64InProgress = true;
   try {
     if (typeof D === 'undefined' || !D.pages) return;
     if (typeof USER_ID === 'undefined' || !USER_ID) return;
@@ -2457,6 +2460,16 @@ async function _fixBase64ImagesOnPage() {
       if (card.imageUrl.startsWith('blob:')) continue;
       if (/miro\.com\/api/i.test(card.imageUrl)) continue;
 
+      // Normalize cards that already have Google Drive backup so Drive is always primary
+      if (card.driveFileId) {
+        if (!card.driveUrl) card.driveUrl = `https://lh3.googleusercontent.com/d/${card.driveFileId}`;
+        if (/ibb\.co|imgbb\.com/i.test(card.imageUrl)) {
+          if (!card.imgbbUrl) card.imgbbUrl = card.imageUrl;
+          card.imageUrl = card.driveUrl;
+        }
+        continue;
+      }
+
       const isAlreadyCloud = /googleusercontent\.com|drive\.google\.com|imgbb\.com|imgur\.com|i\.ibb\.co/i.test(card.imageUrl);
       if (isAlreadyCloud) continue;
 
@@ -2477,7 +2490,9 @@ async function _fixBase64ImagesOnPage() {
 
         const imgEl = document.querySelector(`[data-cid="${card.id}"] .mi-img`)
                    || document.querySelector(`[data-cid="${card.id}"] img`);
-        if (imgEl && !imgEl.src.startsWith('blob:')) imgEl.src = res.url;
+        if (imgEl && imgEl.dataset.loadedOk !== '1' && !imgEl.src.startsWith('blob:') && !imgEl.src.startsWith('data:image')) {
+          imgEl.src = res.url;
+        }
 
         try {
           const cardRef = `users/${USER_ID}/startmine_pages/${page.id}/miroCards/${i}`;
@@ -2494,7 +2509,11 @@ async function _fixBase64ImagesOnPage() {
       sv();
       if (typeof showToast === 'function') showToast(`☁️ تم تأمين ${successCount} صورة على السحابة!`, 3000);
     }
-  } catch (e) { console.warn('[ImgFix] Error:', e); }
+  } catch (e) {
+    console.warn('[ImgFix] Error:', e);
+  } finally {
+    _fixingBase64InProgress = false;
+  }
 }
 // Run 3s after page loads
 setTimeout(() => _fixBase64ImagesOnPage(), 3000);
@@ -2502,8 +2521,15 @@ setTimeout(() => _fixBase64ImagesOnPage(), 3000);
 // ─── Localize & Upload Card Image to Google Drive + ImgBB ───
 async function localizeCardImageUrl(card) {
   if (!card || !card.imageUrl) return;
-  if (/googleusercontent\.com|drive\.google\.com/i.test(card.imageUrl) && card.driveFileId) return;
-  if (/imgbb\.com|imgur\.com|i\.ibb\.co/i.test(card.imageUrl) && card.driveFileId) return;
+  if (card.driveFileId) {
+    if (!card.driveUrl) card.driveUrl = `https://lh3.googleusercontent.com/d/${card.driveFileId}`;
+    if (/ibb\.co|imgbb\.com/i.test(card.imageUrl)) {
+      if (!card.imgbbUrl) card.imgbbUrl = card.imageUrl;
+      card.imageUrl = card.driveUrl;
+    }
+    return;
+  }
+  if (/googleusercontent\.com|drive\.google\.com/i.test(card.imageUrl)) return;
 
   const page = (window.D && Array.isArray(D.pages) && D.pages.find(p => p && Array.isArray(p.miroCards) && p.miroCards.some(c => c && c.id === card.id))) || cp();
   if (!page || !page.miroCards) return;
@@ -2530,7 +2556,7 @@ async function localizeCardImageUrl(card) {
     }
     sv();
     const imgEl = document.querySelector(`[data-cid="${card.id}"] .mi-img`);
-    if (imgEl && !imgEl.src.startsWith('blob:')) {
+    if (imgEl && imgEl.dataset.loadedOk !== '1' && !imgEl.src.startsWith('blob:') && !imgEl.src.startsWith('data:image')) {
       imgEl.src = res.url;
     }
     return true;
